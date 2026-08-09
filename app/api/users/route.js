@@ -47,7 +47,7 @@ export async function POST(request) {
     }
 
     // --- SOLUCIÓN: Encriptar la contraseña ---
-    const hashedPassword = await bcrypt.hash(password, parseInt(process.env.NEXT_PUBLIC_SALT_ROUNDS));
+    const hashedPassword = await bcrypt.hash(password, parseInt(process.env.SALT_ROUNDS));
 
     // Creamos el usuario, pero sobreescribimos el password con la versión hasheada
     let nuevoUsuario = await User.create({
