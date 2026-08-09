@@ -49,31 +49,6 @@ export async function GET(request) {
       }
     ];
 
- 
-
-    if (includeParam.includes('cuentasBancarias')) {
-      includeOptions.push({
-        model: db.CuentaTerceros,
-        as: 'cuentasBancarias'
-      });
-    }
-
-    if (includeParam.includes('pagosMoviles')) {
-      includeOptions.push({
-        model: db.PagoMovil,
-        as: 'pagosMoviles'
-      });
-    }
-
-    if (includeParam.includes('pagos')) {
-      includeOptions.push({
-        model: db.GastoVariable,
-        as: 'pagos'
-      });
-    }
-    // Puedes agregar más condiciones aquí en el futuro
-    // if (includeParam.includes('documentos')) { ... }
-
 
     // -----------------------------------------------------------------------
     // 3. PAGINACIÓN Y CONSULTA

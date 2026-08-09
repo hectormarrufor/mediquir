@@ -2,7 +2,7 @@
 const db = require('./models'); // Ajusta esta ruta si es necesario
 
 // 🔥 VARIABLE MÁGICA: Escribe aquí el nombre exacto del modelo que quieres actualizar
-const nombreModelo = 'GrupoEquivalencia'; // Ejemplo: 'VehiculoNaviero', 'Ingreso', 'MenuPermission', etc.
+const nombreModelo = 'Empleado'; // Ejemplo: 'VehiculoNaviero', 'Ingreso', 'MenuPermission', etc.
 
 async function sincronizarModeloDinámico() {
     try {

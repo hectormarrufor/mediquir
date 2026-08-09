@@ -26,17 +26,10 @@ export function EmpleadoForm({ initialData = null }) {
       direccion: initialData?.direccion || '',
       fechaIngreso: initialData?.fechaIngreso ? new Date(initialData.fechaIngreso) : null,
       fechaNacimiento: initialData?.fechaNacimiento ? new Date(initialData.fechaNacimiento) : null,
-      fechaRetorno: initialData?.fechaRetorno ? new Date(initialData.fechaRetorno) : null,
       estado: initialData?.estado || 'Activo',
       puestos: initialData?.puestos.map(puesto => String(puesto.id)) || [],
       
-      // Sueldos
-      sueldo: initialData?.sueldo || 0,
-      sueldoDiario: "", // Se calculan visualmente, aunque podrías inicializarlos si los guardas
-      sueldoHorario: "",
-      sueldoSemanal: "",
-      sueldoMensual: "",
-      tasaSueldo: initialData?.tasaSueldo || 'bcv',
+
       
       genero: initialData?.genero || '',
       notas: initialData?.notas || "",
@@ -54,12 +47,8 @@ export function EmpleadoForm({ initialData = null }) {
       apellido: (value) => value ? null : 'El apellido es requerido',
       telefono: (value) => (/^\d{4}\d{7}$/.test(value) ? null : 'Formato inválido (ej. 0412-1234567)'),
       fechaIngreso: (value) => value ? null : 'Fecha de contratación requerida',
-      sueldo: (value) => value > 0 ? null : 'Sueldo debe ser mayor a 0',
       estado: (value) => value ? null : 'Estado requerido',
-      fechaRetorno: (value, values) =>
-        values.estado == 'Vacaciones' || values.estado == 'Permiso' || values.estado == 'Suspendido' ? (value ? null : 'Fecha de retorno requerida si el empleado está en Vacaciones, Permiso o Suspendido') : null,
       genero: (value) => (value === 'Masculino' || value === 'Femenino' ? null : 'Selecciona el género'),
-      tasaSueldo: (value) => (value === 'bcv' || value === 'euro' || value === 'usdt' ? null : 'Selecciona la tasa de sueldo'),
     },
   });
 
@@ -84,6 +73,7 @@ export function EmpleadoForm({ initialData = null }) {
   // useEffect(() => { console.log(form.values); }, [form])
 
   const handleSubmit = async (values) => {
+
     setIsLoading(true);
     let payload = {
       ...values,
@@ -142,15 +132,7 @@ export function EmpleadoForm({ initialData = null }) {
     }
   }
 
-  const handleSueldo = (campo, valor) => {
-    const {mensual, semanal, diario, horario} = actualizarSueldos(campo, valor)
-    form.setValues({
-      sueldo: mensual,
-      sueldoDiario: diario,
-      sueldoSemanal: semanal,
-      sueldoHorario: horario,
-    })
-  }
+
 
   return (
     <Box maw={800} mx="auto">
@@ -190,55 +172,9 @@ export function EmpleadoForm({ initialData = null }) {
               />}
             </Grid.Col>
 
-            {/* --- SUELDOS --- */}
-            <Grid.Col span={12}>
-              <NumberInput 
-                label="Sueldo Mensual" 
-                min={0} 
-                step={1} 
-                {...form.getInputProps('sueldo')} 
-                onChange={(value) => handleSueldo("mensual", value)}
-              />
-            </Grid.Col>
-            <Grid.Col span={12}>
-              <Select
-                label="Tasa de Sueldo"
-                placeholder="Selecciona la tasa de sueldo"
-                data={[
-                  { value: 'bcv', label: 'BCV' },
-                  { value: 'euro', label: 'Euro' },
-                  { value: 'usdt', label: 'USDT' },
-                ]}
-                {...form.getInputProps('tasaSueldo')}
-              />
-            </Grid.Col>
-            <Grid.Col span={12}>
-              <NumberInput
-                label="Sueldo por hora" 
-                min={0} 
-                step={1} 
-                {...form.getInputProps('sueldoHorario')} 
-                onChange={(value) => handleSueldo("horario", value)}
-              />
-            </Grid.Col>
-            <Grid.Col span={12}>
-              <NumberInput 
-                label="Sueldo por dia" 
-                min={0} 
-                step={1} 
-                {...form.getInputProps('sueldoDiario')}
-                onChange={(value) => handleSueldo("diario", value)}
-              />
-            </Grid.Col>
-            <Grid.Col span={12}>
-              <NumberInput 
-                label="Sueldo por semana" 
-                min={0} 
-                step={1} 
-                {...form.getInputProps('sueldoSemanal')} 
-                onChange={(value) => handleSueldo("semanal", value)}
-              />
-            </Grid.Col>
+
+        
+
 
             {/* --- OTROS --- */}
             <Grid.Col span={12}>

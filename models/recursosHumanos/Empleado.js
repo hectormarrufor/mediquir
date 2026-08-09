@@ -42,15 +42,6 @@ const Empleado = sequelize.define('Empleado', {
     type: DataTypes.STRING,
     allowNull: true,
   },
-  sueldo: { // Sueldo total del empleado, independiente de los puestos
-    type: DataTypes.DECIMAL(15, 2),
-    allowNull: true,
-  },
-  tasaSueldo: {
-    type: DataTypes.ENUM('bcv', 'euro', 'usdt'),
-    allowNull: true,
-    defaultValue: 'bcv',
-  },
   fechaIngreso: {
     type: DataTypes.DATEONLY,
     defaultValue: DataTypes.NOW, // Fecha actual por defecto, pero modificable
