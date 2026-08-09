@@ -35,13 +35,12 @@ export default function CrearUsuarioClienteModal({ cliente, opened, onClose, onU
     const handleSubmit = async (values) => {
         const { confirmPassword, password, ...payload } = values;
         // Reutilizamos la lógica correcta de encriptado que trabajamos antes
-        const encryptedPassword = await bcrypt.hash(confirmPassword, 10);
 
         try {
             const response = await fetch('/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: encryptedPassword, ...payload }),
+                body: JSON.stringify({ password: confirmPassword, ...payload }),
             });
             if (!response.ok) {
                 const errorData = await response.json();

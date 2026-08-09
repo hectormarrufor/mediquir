@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
-import db from "@/models"; // <--- 1. IMPORTANTE: Importar modelos
+import { Cliente , User, Empleado } from '@/models';
 import { notificarCabezas } from '@/app/handlers/notificar';
 
 export async function GET(request) {
@@ -17,9 +17,11 @@ export async function GET(request) {
 
     // 2. VERIFICACIÓN DE VIDA (LO NUEVO)
     // Buscamos si el usuario realmente existe en la BD y si está activo
-    const usuarioDb = await db.User.findByPk(decoded.id, {
+    const usuarioDb = await User.findByPk(decoded.id, {
         attributes: ['id'], // Solo traemos lo necesario para ser rápidos
-        include: [{model: db.Empleado, as: 'empleado', attributes: ["estado", "nombre", "apellido", "id"]}] // Ejemplo si necesitas incluir relaciones
+        include: [{model: Empleado, as: 'empleado', attributes: ["estado", "nombre", "apellido", "id"]},
+      { model: Cliente, as: 'cliente', attributes: ['id', 'nombre'] }
+      ] // Ejemplo si necesitas incluir relaciones
     });
 
     // Si no existe (fue borrado) o está inactivo -> ERROR 401
@@ -45,6 +47,9 @@ export async function GET(request) {
       apellido: decoded.apellido, 
       isAuthenticated: decoded.isAuthenticated, 
       isAdmin: decoded.isAdmin, 
+      clienteId: usuarioDb.cliente?.id,
+      isCliente: Boolean(usuarioDb.cliente?.id),
+      empleadoId: usuarioDb.empleado?.id,
       departamentos: decoded.departamentos.length > 0 ? decoded.departamentos?.map(departamento => departamento.nombre) : [], 
       puestos: decoded.puestos.length > 0 ? decoded.puestos?.map(puesto => puesto.nombre) : []
     }, 

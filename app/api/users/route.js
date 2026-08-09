@@ -30,7 +30,7 @@ export async function POST(request) {
   
   try {
     const usuario = await request.json();
-    const {user, password, empleadoId, isAdmin} = usuario;
+    const {user, password, empleadoId, isAdmin, clienteId} = usuario;
     
     // Validación básica
     if (!user) {

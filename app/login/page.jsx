@@ -12,7 +12,7 @@ import { pedirPermisoPush } from '../handlers/push';
 const page = () => {
   const router = useRouter();
   const [hayAdmin, setHayAdmin] = useState(true);
-  const { login, isAuthenticated } = useAuth(); // Asegúrate de importar el hook useAuth correctamente
+  const { login, isAuthenticated , user } = useAuth(); // Asegúrate de importar el hook useAuth correctamente
   const form = useForm({
     initialValues: {
       user: '',
@@ -27,17 +27,22 @@ const page = () => {
     },
   });
 
-  // NUEVO: Efecto para escuchar la sesión. Si entras al login estando logueado, te redirige al dashboard.
   useEffect(() => {
     if (isAuthenticated) {
-      router.push('/superuser');
+      // Redirección dinámica basada en el rol/perfil
+      if (user?.clienteId) {
+        router.push('/tienda');
+      } else {
+        router.push('/superuser');
+      }
+
       notifications.show({
         title: 'Sesión Activa',
         message: 'Ya estás autenticado, redirigiendo...',
         color: 'blue',
       });
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, user, router]);
 
   useEffect(() => {
     const fetchAdminUser = async () => {

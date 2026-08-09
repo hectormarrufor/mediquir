@@ -41,13 +41,12 @@ export default function CrearUsuarioModal({ empleado, opened, onClose, onUserCre
     const handleSubmit = async (values) => {
         // Excluimos confirmPassword del objeto que se envía a la API
         const { confirmPassword, password, ...payload } = values;
-        const encryptedPassword = await bcrypt.hash(confirmPassword, 10);
 
         try {
             const response = await fetch('/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({password: encryptedPassword, ...payload}),
+                body: JSON.stringify({password: confirmPassword, ...payload}),
             });
             if (!response.ok) {
                 const errorData = await response.json();

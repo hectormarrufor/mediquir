@@ -1,8 +1,8 @@
+// app/api/pedidos/route.js
 import { NextResponse } from 'next/server';
 import { Pedido, PedidoRenglon, Cliente, Producto } from '@/models';
 import sequelize from '@/sequelize'; // Importamos la instancia para usar Transacciones
 
-// GET: Listar todos los pedidos (Ideal para tu panel de control)
 export async function GET() {
     try {
         const pedidos = await Pedido.findAll({
@@ -11,6 +11,16 @@ export async function GET() {
                     model: Cliente,
                     as: 'cliente',
                     attributes: ['id', 'identificacion', 'nombre', 'razonSocial'] 
+                },
+                // AGREGAMOS LOS RENGLONES Y EL PRODUCTO PARA REVISAR EL STOCK
+                {
+                    model: PedidoRenglon,
+                    as: 'renglones',
+                    include: [{
+                        model: Producto,
+                        as: 'producto',
+                        attributes: ['id', 'stockAlmacen']
+                    }]
                 }
             ],
             order: [['createdAt', 'DESC']]
@@ -26,15 +36,14 @@ export async function GET() {
 // POST: Crear un nuevo pedido con sus renglones
 export async function POST(req) {
     // Iniciamos una transacción para asegurar que se guarde todo o no se guarde nada
-    const t = await sequelize.transaction(); 
-    
+    const t = await sequelize.transaction();
+
     try {
         const body = await req.json();
         const { clienteId, esFacturado, costoFlete, quienRetira, fechaHoraRetiro, renglones } = body;
-        
-        // Validación básica
-        if (!clienteId || !quienRetira || !fechaHoraRetiro || !renglones || renglones.length === 0) {
-            return NextResponse.json({ error: 'Faltan datos obligatorios o el pedido no tiene productos' }, { status: 400 });
+
+        if (!clienteId || !renglones || renglones.length === 0) {
+            return NextResponse.json({ error: 'Debe seleccionar un cliente y agregar al menos un producto' }, { status: 400 });
         }
 
         let subtotalAcumulado = 0;
@@ -44,17 +53,17 @@ export async function POST(req) {
         // 1. Procesar cada renglón validando precios y calculando totales
         for (const item of renglones) {
             const producto = await Producto.findByPk(item.productoId, { transaction: t });
-            
+
             if (!producto) {
                 throw new Error(`El producto con ID ${item.productoId} ya no existe en el inventario`);
             }
 
             const precioBase = parseFloat(producto.precio);
             const cantidad = parseInt(item.cantidadSolicitada);
-            
+
             // Si el pedido es facturado, leemos el IVA del producto, si no, es 0
             const porcentajeIvaApli = esFacturado ? parseFloat(producto.porcentajeIva || 16.00) : 0;
-            
+
             const renglonSubtotal = precioBase * cantidad;
             const renglonIva = renglonSubtotal * (porcentajeIvaApli / 100);
 
@@ -66,7 +75,7 @@ export async function POST(req) {
                 productoId: producto.id,
                 cantidadSolicitada: cantidad,
                 cantidadDespachada: 0, // Siempre inicia en 0
-                precioFijo: precioBase, 
+                precioFijo: precioBase,
                 porcentajeIvaFijo: porcentajeIvaApli
             });
         }
@@ -93,7 +102,7 @@ export async function POST(req) {
 
         // Si todo salió bien, confirmamos los cambios en la base de datos
         await t.commit();
-        
+
         return NextResponse.json(nuevoPedido, { status: 201 });
     } catch (error) {
         // Si algo falla, revertimos cualquier cambio hecho durante este proceso

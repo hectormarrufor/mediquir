@@ -49,10 +49,9 @@ export function AuthProvider({ children }) {
     }, []);
 
     // ✨ NUEVA FUNCIÓN DE LOGIN ✨
-    const login = async (user, password) => {
+   const login = async (user, password) => {
         setLoading(true);
         try {
-
             const response = await fetch('/api/users/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -64,34 +63,39 @@ export function AuthProvider({ children }) {
                 throw new Error(errorData.message || 'Error al iniciar sesión');
             }
 
-            // Si el login fue exitoso, volvemos a buscar los datos del usuario.
             notifications.show({
                 title: 'Inicio de sesión exitoso',
                 message: 'Bienvenido de nuevo',
                 color: 'green',
             });
             setLoading(false);
-            // Esto actualizará el estado y re-renderizará todo automáticamente.
+            
+            // Volvemos a buscar los datos del usuario frescos desde la sesión
             const fetched = await fetchUser();
 
             try {
                 await suscribirsePush(fetched);
-                console.log("suscripcion exitosa");
             } catch (e) {
                 console.error('Push subscribe failed', e);
             }
-            // Verificar si es chofer
-            const esChofer = fetched.puestos?.some(p => p.nombre === 'Chofer');
 
-            if (esChofer) {
-                router.push(`/superuser/flota/activos`);
+            // --- 🚀 NUEVA LÓGICA DE REDIRECCIÓN INTELIGENTE ---
+            if (fetched?.clienteId) {
+                // Si el usuario tiene un cliente asociado, va directo a la tienda
+                router.push('/tienda');
             } else {
+                // Verificamos si es chofer o superusuario administrativo
+
+            if (fetched?.clienteId) {
+                router.push('/tienda'); // Redirige al portal del cliente
+            }  else {
                 router.push('/superuser');
+            }
             }
 
         } catch (error) {
             setLoading(false);
-            throw error; // Lanza el error para que el formulario de login lo muestre
+            throw error;
         }
     };
 
@@ -127,6 +131,9 @@ export function AuthProvider({ children }) {
         departamentos: user?.departamentos || [],
         puestos: user?.puestos ? user.puestos : [],
         isAdmin: user?.isAdmin || null,
+        isCliente: user?.isCliente, 
+        clienteId: user?.clienteId || null,
+        empleadoId: user?.empleadoId || null,
         loading: loading,
         login,
         logout,

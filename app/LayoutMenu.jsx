@@ -1,11 +1,14 @@
+'use client';
+
 import React, { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Avatar, Button, Group, Menu, Text, UnstyledButton, rem } from '@mantine/core';
 import { IconKey, IconLogout, IconChevronDown, IconLayoutDashboard } from '@tabler/icons-react';
-import ChangePasswordForm from './ChangePasswordForm'; // Asumo que este componente existe y funciona
+import ChangePasswordForm from './ChangePasswordForm';
 
 const LayoutMenu = ({ router }) => {
-    const { isAuthenticated, logout, nombre, imagen, changePassword, userId, loading } = useAuth();
+    // Extraemos clienteId del hook de autenticación
+    const { isAuthenticated, logout, nombre, imagen, changePassword, userId, loading, clienteId } = useAuth();
     const [passwordModalOpen, setPasswordModalOpen] = useState(false);
 
     if (loading) return null; 
@@ -13,24 +16,32 @@ const LayoutMenu = ({ router }) => {
     if (!isAuthenticated) {
         return (
             <Button onClick={() => router.push("/login")} variant="filled" color="blue" radius="xl">
-                Intranet
+                Iniciar sesión
             </Button>
         );
     }
+
+    // Lógica dinámica para el botón de Menú Principal
+    const handleMainMenuClick = () => {
+        if (clienteId) {
+            router.push('/tienda'); // Si es cliente, va a su tienda
+        } else {
+            router.push('/superuser'); // Si es empleado/admin, va al panel general
+        }
+    };
 
     // Estado: Autenticado
     return (
         <>
             <Group gap="xs">
-                {/* Botón directo al Dashboard/Menú Principal */}
-                            
+                {/* Botón dinámico al Menú Principal / Tienda */}
                 <Button 
                     variant="subtle" 
                     color="gray" 
-                    onClick={() => router.push('/superuser')}
+                    onClick={handleMainMenuClick}
                     leftSection={<IconLayoutDashboard size={18} />}
                 >
-                    Menú Principal
+                    {clienteId ? 'Ir a Tienda' : 'Menú Principal'}
                 </Button>
 
                 {/* Dropdown de Usuario */}
@@ -57,7 +68,7 @@ const LayoutMenu = ({ router }) => {
                                 </Avatar>
                                 <div style={{ flex: 1 }}>
                                     <Text size="sm" fw={500} lh={1} mr={5}>
-                                        {nombre?.split(' ')[0]} {/* Solo primer nombre para ahorrar espacio */}
+                                        {nombre?.split(' ')[0]}
                                     </Text>
                                 </div>
                                 <IconChevronDown size={14} stroke={1.5} color="gray" />
