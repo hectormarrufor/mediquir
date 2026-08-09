@@ -1,22 +1,18 @@
 import { NextResponse } from 'next/server';
-import { Producto, Categoria, Tag } from '@/models';
+import { Producto, Categoria, Marca, GrupoEquivalencia, Tag } from '@/models';
+import sequelize from '@/sequelize';
 
-// GET: Listar todos los productos con su categoría y sus tags
+// =======================================================================
+// GET: Listar todo el inventario con sus relaciones completas
+// =======================================================================
 export async function GET() {
     try {
         const productos = await Producto.findAll({
             include: [
-                {
-                    model: Categoria,
-                    as: 'categoria',
-                    attributes: ['id', 'nombre']
-                },
-                {
-                    model: Tag,
-                    as: 'tags',
-                    attributes: ['id', 'nombre'],
-                    through: { attributes: [] } // Oculta los campos de la tabla intermedia
-                }
+                { model: Categoria, as: 'categoria', attributes: ['id', 'nombre'] },
+                { model: Marca, as: 'marca', attributes: ['id', 'nombre', 'imagen'] },
+                { model: GrupoEquivalencia, as: 'grupoEquivalencia', attributes: ['id', 'nombre', 'stockMinimoGlobal', 'imagen'] },
+                { model: Tag, as: 'tags', attributes: ['id', 'nombre'], through: { attributes: [] } } // through vacío para no traer la tabla puente
             ],
             order: [['createdAt', 'DESC']]
         });
@@ -24,58 +20,75 @@ export async function GET() {
         return NextResponse.json(productos, { status: 200 });
     } catch (error) {
         console.error("Error al obtener productos:", error);
-        return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
+        return NextResponse.json({ error: 'Error interno del servidor al cargar inventario' }, { status: 500 });
     }
 }
 
-// POST: Crear un nuevo producto y asociarle tags
+// =======================================================================
+// POST: Crear nuevo producto (Operación Transaccional Segura)
+// =======================================================================
 export async function POST(req) {
+    const t = await sequelize.transaction();
+
     try {
         const body = await req.json();
-        const { tags, ...productoData } = body; // Separamos los tags del resto de datos
         
-        if (!productoData.nombre || !productoData.categoriaId || productoData.precio === undefined) {
-            return NextResponse.json({ error: 'Faltan campos obligatorios' }, { status: 400 });
+        // Extraemos los tags del cuerpo del mensaje, el resto de los datos quedan en productData
+        const { tags, ...productData } = body;
+
+        // 1. Validaciones básicas de seguridad en backend
+        if (!productData.nombre || !productData.codigo || !productData.categoriaId || !productData.marcaId) {
+            throw new Error('Faltan datos obligatorios (Nombre, Código, Categoría o Marca)');
         }
 
-        // 1. Crear el producto
-        const nuevoProducto = await Producto.create(productoData);
+        // 2. Crear el Producto en la base de datos dentro de la transacción
+        const nuevoProducto = await Producto.create({
+            ...productData,
+            // Aseguramos formatos numéricos
+            costoUsd: parseFloat(productData.costoUsd || 0),
+            precio6: parseFloat(productData.precio6 || 0),
+            stockAlmacen: parseFloat(productData.stockAlmacen || 0),
+            stockMinimo: parseFloat(productData.stockMinimo || 0),
+            unidadesPorCaja: productData.presentacion === 'caja' ? parseInt(productData.unidadesPorCaja) : null,
+            unidadesPorBulto: parseInt(productData.unidadesPorBulto || 1)
+        }, { transaction: t });
 
-        // 2. Gestionar y asociar los tags si fueron enviados
+        // 3. Lógica Inteligente de Tags (Etiquetas)
         if (tags && Array.isArray(tags) && tags.length > 0) {
-            const tagInstances = [];
-
-            for (const tagInput of tags) {
-                // Si el valor es numérico (ID existente) o texto (nuevo tag por crear)
-                if (!isNaN(tagInput)) {
-                    tagInstances.push(Number(tagInput));
-                } else {
-                    // Si el usuario escribió un tag nuevo que no estaba en la lista
-                    const [tagCriado] = await Tag.findOrCreate({
-                        where: { nombre: tagInput.trim() }
+            // Buscamos o creamos cada tag (doble blindaje por si el front falló)
+            const tagInstances = await Promise.all(
+                tags.map(async (nombreTag) => {
+                    const cleanName = nombreTag.trim().toLowerCase();
+                    const [tag] = await Tag.findOrCreate({
+                        where: { nombre: cleanName },
+                        transaction: t
                     });
-                    tagInstances.push(tagCriado.id);
-                }
-            }
-
-            // Asociar los tags al producto usando Sequelize
-            await nuevoProducto.setTags(tagInstances);
+                    return tag;
+                })
+            );
+            
+            // Sequelize asocia automáticamente los tags al producto en la tabla puente (ProductoTags)
+            await nuevoProducto.setTags(tagInstances, { transaction: t });
         }
 
-        // Volver a consultar el producto con sus asociaciones para retornarlo completo
-        const productoCompleto = await Producto.findByPk(nuevoProducto.id, {
-            include: [
-                { model: Categoria, as: 'categoria', attributes: ['id', 'nombre'] },
-                { model: Tag, as: 'tags', attributes: ['id', 'nombre'], through: { attributes: [] } }
-            ]
-        });
+        // 4. Si todo salió perfecto, confirmamos (Commit)
+        await t.commit();
         
-        return NextResponse.json(productoCompleto, { status: 201 });
+        return NextResponse.json({ 
+            message: 'Producto creado exitosamente', 
+            producto: nuevoProducto 
+        }, { status: 201 });
+
     } catch (error) {
-        console.error("Error al crear producto:", error);
+        // Si ALGO falla (un dato mal, un tag duplicado, etc.), revertimos todo (Rollback)
+        await t.rollback();
+        
+        // Manejo de errores específicos de base de datos (Ej: Código duplicado)
         if (error.name === 'SequelizeUniqueConstraintError') {
-            return NextResponse.json({ error: 'Ya existe un producto con este nombre' }, { status: 409 });
+            return NextResponse.json({ error: 'Ya existe un producto con ese Nombre o Código' }, { status: 400 });
         }
-        return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
+        
+        console.error("Error crítico al crear producto:", error);
+        return NextResponse.json({ error: error.message || 'Error interno del servidor' }, { status: 500 });
     }
 }

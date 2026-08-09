@@ -2,22 +2,22 @@ const { DataTypes } = require('sequelize');
 const sequelize = require('../../sequelize');
 
 const Tag = sequelize.define('Tag', {
-    nombre: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        unique: true, // Ej: "Estéril", "Descartable", "Pediátrico"
+    nombre: { 
+        type: DataTypes.STRING, 
+        allowNull: false, 
+        unique: true 
     }
-}, {
-    tableName: 'Tags',
-    timestamps: false, // Los tags suelen ser estáticos, no necesitan createdAt/updatedAt
+}, { 
+    tableName: 'Tags', 
+    timestamps: true 
 });
 
 Tag.associate = (models) => {
-    // Un Tag pertenece a muchos Productos a través de una tabla intermedia
+    // Relación Muchos a Muchos con Producto
     Tag.belongsToMany(models.Producto, { 
         through: 'ProductoTags', 
-        as: 'productos',
-        foreignKey: 'tagId' 
+        foreignKey: 'tagId', 
+        as: 'productos' 
     });
 };
 

@@ -2,6 +2,8 @@
 const sequelize = require('../sequelize');
 
 const db = {
+    Marca: require('./inventario/Marca'),
+    GrupoEquivalencia: require('./inventario/GrupoEquivalencia'),
     CategoriaFinanciera: require('./finanzas/CategoriaFinanciera'),
     MovimientoFinanciero: require('./finanzas/MovimientoFinanciero'),
     Abono: require('./facturacion/Abono'),

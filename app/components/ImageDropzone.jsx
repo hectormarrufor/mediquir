@@ -31,7 +31,8 @@ export default function ImageDropzone({ label, form, fieldPath }) {
             return;
         }
 
-        if (typeof currentValue === 'object' && currentValue instanceof File) {
+        // 🔥 SOLUCIÓN: Agregamos "instanceof Blob" porque el compresor devuelve un Blob
+        if (typeof currentValue === 'object' && (currentValue instanceof File || currentValue instanceof Blob)) {
              const objectUrl = URL.createObjectURL(currentValue);
              setPreview(objectUrl);
              return () => URL.revokeObjectURL(objectUrl);
@@ -45,7 +46,7 @@ export default function ImageDropzone({ label, form, fieldPath }) {
             setPreview(`${baseUrl}/${currentValue}?v=${version}`);
         }
     }, [currentValue]);
-
+    
     const processFile = (file) => {
         if (!file) return;
         const imageDataUrl = URL.createObjectURL(file);
