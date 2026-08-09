@@ -7,12 +7,14 @@ export async function middleware(request) {
     
     // Preparamos la URL de Login
     const loginUrl = new URL('/login', request.url);
-    // AGREGADO: Guardamos dónde quería ir el usuario para devolverlo después
     loginUrl.searchParams.set('callbackUrl', pathname);
 
-    // 1. Si no hay token, fuera.
+    // 1. Si no hay token y la ruta es protegida (/superuser), fuera al login.
     if (!token) {
-        return NextResponse.redirect(loginUrl);
+        if (pathname.startsWith('/superuser')) {
+            return NextResponse.redirect(loginUrl);
+        }
+        return NextResponse.next();
     }
 
     try {
@@ -20,6 +22,15 @@ export async function middleware(request) {
         const { payload } = await jwtVerify(token, secret);
 
         if (payload && payload.isAuthenticated) {
+            // Verificamos si el token pertenece a un cliente (asumiendo que guardas clienteId o un rol en el payload del JWT)
+            // Nota: Asegúrate de incluir 'clienteId' o 'isCliente' al firmar el token en tu API de login backend.
+            const esCliente = Boolean(payload.clienteId);
+
+            // 2. REGLA PARA CLIENTES: Si es cliente y está en la raíz (/) o fuera de /tienda, mandarlo a /tienda
+            if (esCliente && (pathname === '/' || !pathname.startsWith('/tienda'))) {
+                return NextResponse.redirect(new URL('/tienda', request.url));
+            }
+
             return NextResponse.next();
         } else {
             return NextResponse.redirect(loginUrl);
@@ -34,6 +45,6 @@ export async function middleware(request) {
 }
 
 export const config = {
-    // Asegúrate de incluir todas las rutas privadas
-    matcher: ['/superuser/:path*'],
+    // Ampliamos el matcher para que el middleware revise tanto /superuser como la raíz (/) u otras rutas públicas si lo deseas
+    matcher: ['/', '/superuser/:path*'],
 };
