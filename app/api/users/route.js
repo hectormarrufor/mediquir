@@ -1,5 +1,6 @@
 // app/api/users/route.js
 import { Empleado, User } from '@/models';
+import bcrypt from 'bcryptjs'; // No olvides importar bcrypt
 
 // GET /api/users - Obtener todos los usuarios
 export async function GET() {
@@ -23,26 +24,36 @@ export async function GET() {
   }
 }
 
+
 // POST /api/users - Crear un nuevo usuario
 export async function POST(request) {
   
   try {
     const usuario = await request.json();
     const {user, password, empleadoId, isAdmin} = usuario;
+    
     // Validación básica
     if (!user) {
-      console.log(`\x1b[41m [ERROR]: Se reguiere ingresar un usuario \x1b[0m`);
+      console.log(`\x1b[41m [ERROR]: Se requiere ingresar un usuario \x1b[0m`);
       throw new Error('Usuario es requerido');
     }
     if (!password) {
-      console.log(`\x1b[41m [ERROR]: Se reguiere ingresar una contraseña \x1b[0m`);
+      console.log(`\x1b[41m [ERROR]: Se requiere ingresar una contraseña \x1b[0m`);
       throw new Error('Contraseña es requerida');
     }
     if (!empleadoId && !isAdmin) {
       console.log(`\x1b[41m [ERROR]: El id de empleado es requerido \x1b[0m`);
       throw new Error('El empleadoId es requerido');
     }
-    let nuevoUsuario = await User.create(usuario);
+
+    // --- SOLUCIÓN: Encriptar la contraseña ---
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Creamos el usuario, pero sobreescribimos el password con la versión hasheada
+    let nuevoUsuario = await User.create({
+        ...usuario, // Trae todos los demás campos (user, empleadoId, etc.)
+        password: hashedPassword // Reemplaza la contraseña en texto plano
+    });
    
     return Response.json(nuevoUsuario, { status: 201 });
   } catch (error) {

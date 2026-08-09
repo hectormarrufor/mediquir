@@ -33,7 +33,7 @@ export async function POST(req) {
     }
 
     // Encriptar nueva contraseña
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await bcrypt.hash(newPassword, parseInt(process.env.NEXT_PUBLIC_SALT_ROUNDS) || 10);
 
     // Actualizar en la base de datos
     await user.update({ password: hashedPassword });

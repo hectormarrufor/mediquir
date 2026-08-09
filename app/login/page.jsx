@@ -68,7 +68,7 @@ const page = () => {
       pedirPermisoPush();
       // Llama a la función centralizada de login. Ella manejará su propia redirección.
       await login(values.user, values.password);
-      
+
     } catch (error) {
       notifications.show({
         title: 'Error de Autenticación',
@@ -89,12 +89,13 @@ const page = () => {
           Bienvenido/a
         </Title>
 
-        <Paper  shadow="md" p={30} mt={30} radius="md">
+        <Paper shadow="md" p={30} mt={30} radius="md">
           <form onSubmit={form.onSubmit(handleSubmit)}>
             <TextInput
               label="Usuario"
               placeholder="escribe tu usuario"
               required
+              autoCapitalize="none"
               {...form.getInputProps('user')}
             />
 
