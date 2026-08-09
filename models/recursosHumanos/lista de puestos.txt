@@ -1,0 +1,47 @@
+lista de puestos sugeridas:
+
+Basado en tu descripción, aquí hay una lista de puestos que deberías crear en tu sistema:
+
+    Puestos de Oficina/Soporte:
+
+Administrador de Contratos
+
+Encargado de Logística
+
+Coordinador de Recursos Humanos
+
+Asistente Administrativo
+
+Gerente General
+
+    Puestos de Campo - Operaciones de Taladro:
+
+Supervisor de Operaciones (general del pozo)
+
+Perforador (quien manipula el taladro directamente)
+
+Encuellador (ayudante en la torre de perforación)
+
+Llavero (opera la llave de potencia en la mesa rotatoria)
+
+Cuñero (maneja las cuñas para sostener la tubería)
+
+    Puestos de Campo - Mantenimiento/Mecánica/Logística de Equipo:
+
+Mecánico Diesel (para vehículos y maquinaria pesada)
+
+Montacargista (opera montacargas)
+
+Chofer de Vehículo Liviano (para traslados de personal, repuestos)
+
+Chofer de Equipo Pesado (para camiones, grúas, maquinaria de mudanza)
+
+Operador de Grúa (si es un puesto distinto al Chofer de Equipo Pesado)
+
+    Puestos de Soporte en Campo:
+
+Ayudante de Campo (personal de apoyo general)
+
+Personal de Cocina / Alimentación (si la empresa provee catering en sitio)
+
+Personal de Seguridad

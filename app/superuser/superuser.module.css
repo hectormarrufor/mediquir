@@ -1,0 +1,32 @@
+/* Estilo para las tarjetas del menú */
+.item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    border-radius: var(--mantine-radius-md);
+    height: rem(160px);
+    background-color: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+    transition: box-shadow 150ms ease, transform 150ms ease;
+    border: rem(1px) solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-6));
+    padding: var(--mantine-spacing-md);
+    text-decoration: none; /* Asegurarse de que no haya subrayado */
+}
+
+/* Efecto hover para las tarjetas */
+.item:hover {
+    box-shadow: var(--mantine-shadow-lg);
+    transform: scale(1.03);
+}
+
+/* Clase para el Paper con fondo translúcido */
+.paper_translucent {
+    /* Fondo blanco con 85% de opacidad */
+    background-color: rgba(238, 16, 16, 0.85);
+    
+    /* Efecto de desenfoque para el fondo (vidrio esmerilado) */
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+}
+

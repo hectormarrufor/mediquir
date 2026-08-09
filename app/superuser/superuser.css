@@ -1,0 +1,49 @@
+.superuser-button {
+    height: 80px;
+    padding: var(--mantine-spacing-md);
+    border-radius: var(--mantine-radius-md); /* Bordes redondeados */
+    box-shadow: var(--mantine-shadow-md) !important;
+    border: 1px solid var(--mantine-color-gray-2); /* Borde de bajo contraste */
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    background-color: rgba(243, 243, 243, 0.452);
+}
+
+/* Contenedor interno del botón de Mantine */
+.superuser-button .mantine-Button-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--mantine-spacing-xs);
+    height: 100%;
+    width: 100%;
+    overflow: hidden; /* Evita que el texto se salga */
+}
+
+.superuser-button:not(:disabled):hover {
+    transform: translateY(-4px) scale(1.02); /* Efecto de crecimiento y elevación */
+    box-shadow: var(--mantine-shadow-md); /* Sombra más pronunciada */
+    background-color: rgba(255, 255, 255, 0.644);
+}
+
+.superuser-button:disabled,
+.superuser-button[data-disabled] {
+    /* background-color: rgb(104, 207, 104); */
+    background-color: var(--mantine-color-gray-1) !important;
+    color: var(--mantine-color-gray-5) !important;
+    border-color: var(--mantine-color-gray-2) !important;
+    box-shadow: var(--mantine-shadow-xl) !important;
+    transform: none !important;
+}
+
+/* Asegura que el icono dentro del botón deshabilitado también se vea gris */
+.superuser-button:disabled svg,
+.superuser-button:disabled .mantine-Text-root {
+    color: var(--mantine-color-gray-5) !important;
+}
+
+.root{
+    background-color: "white";
+    color:antiquewhite;
+}
+

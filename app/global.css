@@ -1,0 +1,38 @@
+@font-face {
+  font-family: 'Bank Gothic';
+  src: url('/fonts/bankgothic.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+/* Agrega esto a tu CSS global o styles.css */
+@keyframes pulse-yellow {
+  0% { box-shadow: 0 0 0 0 rgba(250, 176, 5, 0.7); }
+  70% { box-shadow: 0 0 0 6px rgba(250, 176, 5, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(250, 176, 5, 0); }
+}
+
+.pulsing-badge {
+  animation: pulse-yellow 2s infinite;
+}
+
+/* app/global.css o similar */
+
+.rbc-calendar {
+  min-height: 500px; /* Seguridad */
+}
+
+.rbc-event {
+  background-color: var(--mantine-color-blue-filled);
+  border-radius: 6px !important;
+}
+
+.rbc-today {
+  background-color: var(--mantine-color-blue-light) !important;
+}
+
+.rbc-header {
+  padding: 8px 0 !important;
+  font-weight: 700 !important;
+  color: var(--mantine-color-dimmed);
+}
