@@ -10,8 +10,8 @@ import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
 import '@mantine/dates/styles.css';
-import ImageDropzone from '../../flota/activos/components/ImageDropzone';
 import { actualizarSueldos } from '@/app/helpers/calcularSueldo';
+import ImageDropzone from '@/app/components/ImageDropzone';
 
 export function EmpleadoForm({ initialData = null }) {
   const [puestos, setPuestos] = useState(null)
