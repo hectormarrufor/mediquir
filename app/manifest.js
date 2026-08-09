@@ -1,11 +1,11 @@
 export default function manifest() {
-  const clientId = process.env.NEXT_PUBLIC_CLIENT_ID || 'dadica';
-  const isDadica = clientId === 'dadica';
+  const clientId = process.env.NEXT_PUBLIC_CLIENT_ID || 'mediquir';
+  const isMediquir = clientId === 'mediquir';
 
   return {
-    name: isDadica ? 'Dadica App' : 'Forsumaca App',
-    short_name: isDadica ? 'Dadica' : 'Forsumaca',
-    description: isDadica ? 'App para gestión de transporte industrial Dadica' : 'App para gestión logística Forsumaca',
+    name: isMediquir ? 'Mediquir App' : 'Generic App',
+    short_name: isMediquir ? 'Mediquir' : 'Generic',
+    description: isMediquir ? 'App para venta de insumos medicos Mediquir' : 'App para gestión logística Genérica',
     start_url: '/',
     display: 'standalone',
     background_color: '#808080',

@@ -1,6 +1,6 @@
 import Dexie from 'dexie';
 
-export const localDB = new Dexie('DadicaDB');
+export const localDB = new Dexie('MediquirDB');
 
 localDB.version(1).stores({
   fletes: '++id, codigo, clienteId, estado, createdAt, synced',
