@@ -8,7 +8,7 @@ import {
     checkRequisicionesPorAprobar,
     checkPendingCustodySignatures // 🔥 IMPORTADO
 } from './services'; 
-import { notificarCabezas, notificarUsuarioEspecifico } from '@/app/handlers/notificar'; 
+import { notificarCabezas, notificarUsuario } from '@/app/handlers/notificar'; 
 // Nota: Si no tienes configurado notificarUsuarioEspecifico en tu handler, puedes usar notificarCabezas para el aviso.
 
 export const dynamic = 'force-dynamic';
@@ -125,7 +125,7 @@ export async function GET(request) {
             const retrasos = custodiasPendientes.value;
             for (const item of retrasos) {
                 // Alerta dirigida directamente al Administrador/Usuario que entregó la mercancía
-                await notificarUsuarioEspecifico(item.entregadoPorId, {
+                await notificarUsuario(item.entregadoPorId, {
                     title: `⚠️ Alerta: Firma Excedida`,
                     body: `Han pasado más de 24 horas y ${item.receptorNombre} no ha firmado digitalmente la recepción de materiales de la ${item.requisicionCodigo}.`,
                     url: `/superuser/entregas`,

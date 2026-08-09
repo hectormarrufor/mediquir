@@ -44,17 +44,17 @@ const Empleado = sequelize.define('Empleado', {
   },
   sueldo: { // Sueldo total del empleado, independiente de los puestos
     type: DataTypes.DECIMAL(15, 2),
-    allowNull: false,
+    allowNull: true,
   },
   tasaSueldo: {
     type: DataTypes.ENUM('bcv', 'euro', 'usdt'),
-    allowNull: false,
+    allowNull: true,
     defaultValue: 'bcv',
   },
   fechaIngreso: {
     type: DataTypes.DATEONLY,
     defaultValue: DataTypes.NOW, // Fecha actual por defecto, pero modificable
-    allowNull: false,
+    allowNull: true,
   },
   estado: {
     type: DataTypes.ENUM('Activo', 'Inactivo', 'Suspendido', "Reposo Medico", 'Vacaciones', 'Permiso', 'Retirado'),
@@ -93,18 +93,8 @@ Empleado.associate = (models) => {
   });
   Empleado.hasOne(models.User, { foreignKey: 'empleadoId', as: 'usuario' });
   Empleado.hasMany(models.DocumentoEmpleado, { foreignKey: "empleadoId", as: "documentos" });
-  Empleado.hasMany(models.HorasTrabajadas, {
-    foreignKey: "creadorId",
-    as: "horasCreadas"
-  });
-  Empleado.hasMany(models.HorasTrabajadas, { foreignKey: "empleadoId" });
+ 
 
-
-  // Un Empleado puede ser el Supervisor de muchas Operaciones de Campo
-  // Empleado.hasMany(models.OperacionCampo, { foreignKey: 'supervisorId', as: 'operacionesSupervisadas' });
-  // Un Empleado puede ser el Mecánico asignado a muchas Operaciones de Campo
-  // Empleado.hasMany(models.OperacionCampo, { foreignKey: 'mecanicoId', as: 'operacionesMecanico' });
-  // Y así sucesivamente para cada rol en OperacionCampo, Mudanza, etc.
 };
 
 module.exports = Empleado;
