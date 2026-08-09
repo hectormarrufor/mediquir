@@ -22,7 +22,6 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useMediaQuery } from "@mantine/hooks"; // <--- IMPORTANTE
 import calcularEdad from "@/app/helpers/calcularEdad";
-import { actualizarSueldos } from "@/app/helpers//calcularSueldo";
 
 // Modales
 import ModalCuentaBancaria from "./ModalCuentaBancaria";
