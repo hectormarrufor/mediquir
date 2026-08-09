@@ -104,53 +104,31 @@ export default function Page({ params }) {
 
     // Estados de Datos
     const [empleado, setEmpleado] = useState(null)
-    const [bcvPrecio, setBcvPrecio] = useState(0);
     const [cargando, setCargando] = useState(true);
 
-    // Estados Calculados
-    const [horasEstaSemana, setHorasEstaSemana] = useState(0);
-    const [horasExtraEstaSemana, setHorasExtraEstaSemana] = useState(0);
 
     // Estados de UI
     const { rol } = useAuth();
     const [activeTab, setActiveTab] = useState('banco');
 
     // Modales
-    const [modalCrearHora, setModalCrearHora] = useState(false);
     const [modalCuenta, setModalCuenta] = useState(false);
     const [modalPagoMovil, setModalPagoMovil] = useState(false);
-    const [selectedHora, setSelectedHora] = useState(null);
 
     useEffect(() => {
         let mounted = true
         async function cargar() {
             try {
                 const res = fetch(`/api/rrhh/empleados/${id}`).then(r => r.json())
-                const bcv = fetch(`/api/bcv`).then(r => r.json())
 
-                const [empleadofetched, bcvres] = await Promise.all([res, bcv]);
+                const empleadofetched = await res;
 
                 if (!mounted) return;
-
-
-
-                setBcvPrecio(empleadofetched.tasaSueldo === "bcv" ? bcvres.precio : empleadofetched.tasaSueldo === "euro" ? bcvres.eur : bcvres.usdt);
-
-                // Cálculos de horas
-                const horasTotal = empleadofetched.HorasTrabajadas?.reduce((total, hora) => total + hora.horas, 0) || 0;
-                setHorasEstaSemana(empleadofetched.id === 6 || empleadofetched.id === 3 ? horasTotal + 16 :horasTotal);
-
-                const horasExtra = empleadofetched.HorasTrabajadas?.reduce((total, hora) => {
-                    return hora.horas > 8 ? total + (hora.horas - 8) : total;
-                }, 0) || 0;
-                setHorasExtraEstaSemana(horasExtra);
 
                 setEmpleado({
                     ...empleadofetched,
                     edad: calcularEdad(empleadofetched.fechaNacimiento),
-                    horario: actualizarSueldos("mensual", empleadofetched.sueldo).horario,
-                    diario: actualizarSueldos("mensual", empleadofetched.sueldo).diario,
-                    semanal: actualizarSueldos("mensual", empleadofetched.sueldo).semanal,
+                  
                 });
 
             } catch (err) {
@@ -168,27 +146,7 @@ export default function Page({ params }) {
         console.log(empleado);
     }, [empleado]);
 
-    // Función para borrar horas (Faltaba en tu código original)
-    const handleDeleteHora = async (horaId) => {
-        if (!confirm("¿Estás seguro de eliminar este registro de horas?")) return;
-        
-        try {
-            const res = await fetch(`/api/rrhh/horas-manuales/${horaId}`, { method: 'DELETE' });
-            if (res.ok) {
-                notifications.show({ title: 'Eliminado', message: 'Registro eliminado', color: 'green' });
-                // Actualizar estado localmente para no recargar toda la página
-                setEmpleado(prev => ({
-                    ...prev,
-                    HorasTrabajadas: prev.HorasTrabajadas.filter(h => h.id !== horaId)
-                }));
-            } else {
-                notifications.show({ title: 'Error', message: 'No se pudo eliminar', color: 'red' });
-            }
-        } catch (error) {
-            console.error(error);
-            notifications.show({ title: 'Error', message: 'Error de conexión', color: 'red' });
-        }
-    };
+ 
 
     if (cargando) {
         return (
@@ -463,113 +421,12 @@ export default function Page({ params }) {
                             puestos={empleado.puestos || []}
                         />
 
-                        {/* 3. HISTORIAL DE HORAS (RESPONSIVE) */}
-                        <Paper withBorder radius="md" p="md">
-                            <Group justify="space-between" mb="md">
-                                <Title order={4}>Historial</Title>
-                                <Button size="sm" onClick={() => setModalCrearHora(true)}>+ Horas</Button>
-                            </Group>
-
-                            {empleado.HorasTrabajadas?.length === 0 ? (
-                                <Center p="xl" bg="gray.0" style={{ borderRadius: 8 }}>
-                                    <Text c="dimmed">No hay registros.</Text>
-                                </Center>
-                            ) : (
-                                <>
-                                    {/* VISTA MÓVIL: CARDS */}
-                                    {isMobile ? (
-                                        <Box>
-                                            {empleado.HorasTrabajadas?.map((h) => (
-                                                <MobileWorkLogCard 
-                                                    key={h.id} 
-                                                    log={h}
-                                                    // Pasamos las funciones de editar y borrar
-                                                    onEdit={() => {
-                                                        setSelectedHora(h);
-                                                        setModalCrearHora(true);
-                                                    }}
-                                                    onDelete={() => handleDeleteHora(h.id)}
-                                                />
-                                            ))}
-                                        </Box>
-                                    ) : (
-                                        /* VISTA DESKTOP: TABLE */
-                                        <ScrollArea h={300} type="auto">
-                                            <Table striped highlightOnHover verticalSpacing="xs">
-                                                <Table.Thead>
-                                                    <Table.Tr>
-                                                        <Table.Th>Fecha</Table.Th>
-                                                        <Table.Th>Horas</Table.Th>
-                                                        <Table.Th>Origen</Table.Th>
-                                                        <Table.Th>Observaciones</Table.Th>
-                                                        <Table.Th>Acciones</Table.Th>
-                                                    </Table.Tr>
-                                                </Table.Thead>
-                                                <Table.Tbody>
-                                                    {empleado.HorasTrabajadas?.map((h) => (
-                                                        <Table.Tr key={h.id}>
-                                                            <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                                                                {formatDateLong(h.fecha)}
-                                                            </Table.Td>
-                                                            <Table.Td>
-                                                                <Badge color={h.horas > 8 ? 'orange' : 'blue'} variant="light">
-                                                                    {h.horas}
-                                                                </Badge>
-                                                            </Table.Td>
-                                                            <Table.Td>
-                                                                {h.origen === "odt" ? (
-                                                                    <Link href={`/superuser/odt/${h.odtId}`} style={{ textDecoration: 'none', color: '#228be6', fontWeight: 500 }}>
-                                                                        {h.observaciones.match(/ODT\s+#(\d+)/)?.[0] || 'ODT'}
-                                                                    </Link>
-                                                                ) : (
-                                                                    <Badge variant="outline" color="gray" size="sm">{h.origen}</Badge>
-                                                                )}
-                                                            </Table.Td>
-                                                            <Table.Td style={{ minWidth: 200 }}>
-                                                                <Text size="sm" lineClamp={2}>{h.observaciones}</Text>
-                                                            </Table.Td>
-                                                            <Table.Td>
-                                                                {/* Aquí puedes agregar botones de acción si es necesario */}
-                                                                <ActionIcon size="sm" variant="light" color="red" onClick={() => { handleDeleteHora(h.id) }}>
-                                                                    <IconTrash size={16} />
-                                                                </ActionIcon>
-                                                                <ActionIcon size="sm" variant="light" color="blue" onClick={() => {
-                                                                    setSelectedHora(h);
-                                                                    setModalCrearHora(true)
-                                                                }}>
-                                                                    <IconEdit size={16} />
-                                                                </ActionIcon>
-
-                                                            </Table.Td>
-                                                        </Table.Tr>
-                                                    ))}
-                                                </Table.Tbody>
-                                            </Table>
-                                        </ScrollArea>
-                                    )}
-                                </>
-                            )}
-                        </Paper>
+                   
 
                     </Stack>
                 </Grid.Col>
             </Grid>
 
-            {/* Modales */}
-            <ModalCrearHora
-                initialValues={selectedHora}
-                opened={modalCrearHora}
-                onClose={(e) => {
-                    setModalCrearHora(false)
-                    setSelectedHora(null);
-                    e && setEmpleado(prev => ({
-                        ...prev,
-                        HorasTrabajadas: [...prev.HorasTrabajadas, e]
-                    }))
-                }
-                }
-                empleadoId={id}
-                onCreated={() => router.refresh()} />
             <ModalCuentaBancaria opened={modalCuenta} onClose={() => setModalCuenta(false)} tipoEntidad="empleado" entidadId={id} onCreated={() => router.refresh()} />
             <ModalPagoMovil opened={modalPagoMovil} onClose={() => setModalPagoMovil(false)} tipoEntidad="empleado" entidadId={id} onCreated={() => router.refresh()} />
         </Paper>

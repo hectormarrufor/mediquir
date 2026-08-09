@@ -44,19 +44,7 @@ export async function GET(request, { params }) {
         { model: db.Puesto, as: 'puestos', through: { attributes: [] } },
         { model: db.CuentaTerceros, as: 'cuentasBancarias' },
         { model: db.PagoMovil, as: 'pagosMoviles' },
-        {
-          model: db.HorasTrabajadas,
-          // FILTRO AJUSTADO:
-          where: {
-            fecha: {
-              [db.Sequelize.Op.gte]: fechaInicio, // >= Viernes pasado (00:00:00)
-              [db.Sequelize.Op.lt]: fechaCorte    // <  Este Viernes (00:00:00) -> O sea, hasta Jueves 23:59:59
-            }
-          },
-          order: [['fecha', 'ASC']],
-          separate: true,
-          required: false 
-        },
+      
         { model: db.DocumentoEmpleado, as: 'documentos' },
       ],
     });

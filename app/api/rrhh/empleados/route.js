@@ -31,7 +31,6 @@ export async function GET(request) {
     // -----------------------------------------------------------------------
     // 2. LÓGICA DE INCLUDES
     // -----------------------------------------------------------------------
-    // Formato esperado: ?include=horasTrabajadas
     const includeParam = searchParams.get('include') || '';
     
     // Definimos includes BASE (Información que casi siempre quieres ver)
@@ -50,14 +49,7 @@ export async function GET(request) {
       }
     ];
 
-    // Agregamos includes dinámicos según el parámetro
-    if (includeParam.includes('horasTrabajadas')) {
-      includeOptions.push({
-        model: db.HorasTrabajadas,
-        // Nota: En tu modelo no definiste alias 'as' para esta relación, 
-        // así que no lo ponemos aquí para evitar error de Sequelize.
-      });
-    }
+ 
 
     if (includeParam.includes('cuentasBancarias')) {
       includeOptions.push({
