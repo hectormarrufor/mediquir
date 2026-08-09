@@ -41,9 +41,9 @@ export async function POST(request) {
       console.log(`\x1b[41m [ERROR]: Se requiere ingresar una contraseña \x1b[0m`);
       throw new Error('Contraseña es requerida');
     }
-    if (!empleadoId && !isAdmin) {
-      console.log(`\x1b[41m [ERROR]: El id de empleado es requerido \x1b[0m`);
-      throw new Error('El empleadoId es requerido');
+   if (!empleadoId && !clienteId && !isAdmin) {
+      console.log(`\x1b[41m [ERROR]: Se requiere al menos un empleadoId, clienteId o isAdmin \x1b[0m`);
+      throw new Error('Se requiere al menos un empleadoId, clienteId o isAdmin');
     }
 
     // --- SOLUCIÓN: Encriptar la contraseña ---

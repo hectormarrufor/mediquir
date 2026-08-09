@@ -1,7 +1,7 @@
 'use client';
 
-import { 
-    Title, Stack, Box, Text, Flex, Loader, Paper, UnstyledButton, Group, 
+import {
+    Title, Stack, Box, Text, Flex, Loader, Paper, UnstyledButton, Group,
     ThemeIcon, Card, SimpleGrid, Button, Modal, MultiSelect, ActionIcon, Grid, Badge,
     Alert, Textarea
 } from '@mantine/core';
@@ -9,10 +9,10 @@ import { useMediaQuery } from '@mantine/hooks';
 import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
 import {
-    IconTruck, IconCash, IconArchive, IconUser, IconClock2,
-    IconClipboardText, IconBuildingBank, IconChartBar, IconShoppingCart, 
-    IconAlertTriangle, IconGasStation, IconMapPin, IconEyeDollar, 
-    IconSettings, IconCurrencyDollar, IconTool, IconCheck, IconX,
+    IconArchive, IconUser,
+    IconShoppingCart,
+    IconAlertTriangle,
+    IconSettings, IconCurrencyDollar, IconCheck,
     IconPackage
 } from '@tabler/icons-react';
 import './superuser.css';
@@ -22,7 +22,7 @@ import { notifications } from '@mantine/notifications';
 
 // --- CONSTANTES DE DISEÑO ---
 const bgPattern = {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#7f9bb854',
     backgroundImage: 'radial-gradient(#E5E7EB 1.5px, transparent 1.5px)',
     backgroundSize: '24px 24px',
     minHeight: '100vh',
@@ -37,10 +37,11 @@ const glassCardStyle = {
 };
 
 const menuOptions = [
-    { title: 'Nómina', href: '/superuser/pagar', description: 'Pagos semanales.', icon: IconCash, color: 'green' },
+    { title: 'Clientes', href: '/superuser/clientes', description: 'Gestión de clientes', icon: IconUser, color: 'green' },
     { title: 'Inventario', href: '/superuser/inventario', description: 'Control almacén.', icon: IconArchive, color: 'indigo' },
     { title: 'Personal', href: '/superuser/rrhh', description: 'RRHH y empleados.', icon: IconUser, color: 'cyan' },
-    { title: 'Pizarra', href: '/superuser/pizarra', description: 'Actividades.', icon: IconClipboardText, color: 'grape' },
+    { title: 'Pedidos', href: '/superuser/pedidos', description: 'Gestión de pedidos.', icon: IconShoppingCart, color: 'grape' },
+    { title: 'Finanzas', href: '/superuser/finanzas', description: 'Gestión de finanzas.', icon: IconCurrencyDollar, color: 'grape' },
 ];
 
 const FadeInSection = ({ children, delay = 0 }) => {
@@ -78,13 +79,13 @@ const FadeInSection = ({ children, delay = 0 }) => {
 export default function SuperUserHome() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    
-    const { isAdmin, departamentos, departamento, rol, userId } = useAuth(); 
+
+    const { isAdmin, departamentos, departamento, rol, userId } = useAuth();
 
     const [precioBCV, setPrecioBCV] = useState(0);
     const [modalAbierto, setModalAbierto] = useState(false);
     const [permisosDinamicos, setPermisosDinamicos] = useState({});
-    
+
     const [departamentosList, setDepartamentosList] = useState([]);
     const [puestosList, setPuestosList] = useState([]);
     const [usuariosList, setUsuariosList] = useState([]);
@@ -202,27 +203,27 @@ export default function SuperUserHome() {
         const usuariosPermitidos = configModulo.usuarios || [];
 
         const userDeptValue = departamentos || departamento;
-        const userDepsArray = Array.isArray(userDeptValue) 
-            ? userDeptValue 
+        const userDepsArray = Array.isArray(userDeptValue)
+            ? userDeptValue
             : (typeof userDeptValue === 'string' ? [userDeptValue] : []);
 
-        const userRolArray = Array.isArray(rol) 
-            ? rol 
+        const userRolArray = Array.isArray(rol)
+            ? rol
             : (typeof rol === 'string' ? [rol] : []);
 
         // Añadida validación de tipo para evitar errores de undefined en toLowerCase
-        const tieneDepartamento = depsPermitidos.some(dep => 
+        const tieneDepartamento = depsPermitidos.some(dep =>
             dep && typeof dep === 'string' && userDepsArray.some(d => d && typeof d === 'string' && d.toLowerCase().includes(dep.toLowerCase()))
         );
 
         // Añadida validación de tipo para evitar errores de undefined en toLowerCase
-        const tienePuesto = puestosPermitidos.some(puesto => 
+        const tienePuesto = puestosPermitidos.some(puesto =>
             puesto && typeof puesto === 'string' && userRolArray.some(r => r && typeof r === 'string' && r.toLowerCase().includes(puesto.toLowerCase()))
         );
 
         // Validación por ID específico de usuario
         const tieneUsuario = usuariosPermitidos.includes(String(userId));
-        
+
         return tieneDepartamento || tienePuesto || tieneUsuario;
     };
 
@@ -231,7 +232,7 @@ export default function SuperUserHome() {
     // 🔥 FUNCIÓN PARA CONFIRMAR O RECHAZAR EL MATERIAL DESDE EL DASHBOARD 🔥
     const handleFirmar = async (id, accion) => {
         if (accion === 'Rechazar' && !motivoRechazo) return notifications.show({ message: 'Escribe un motivo de rechazo', color: 'orange' });
-        
+
         setProcesandoFirma(true);
         try {
             const res = await fetch(`/api/inventario/salidas/${id}/firmar`, {
@@ -268,14 +269,14 @@ export default function SuperUserHome() {
     return (
         <Box style={bgPattern}>
             <Box maw={1600} mx="auto" px="md" pt="sm">
-                
+
                 <Modal opened={modalAbierto} onClose={() => setModalAbierto(false)} title={<Text fw={700} size="md">Control de Accesos</Text>} size="xl">
                     <Stack gap="xs">
                         <Box style={{ maxHeight: '65vh', overflowY: 'auto', paddingRight: '5px' }}>
                             {menuOptions.map((opt) => (
                                 <Paper key={opt.href} withBorder p="xs" radius="sm" mb="xs" bg="gray.0">
                                     <Group mb="xs" gap="xs">
-                                        <ThemeIcon size="sm" variant="light" color={opt.color}><opt.icon size={14}/></ThemeIcon>
+                                        <ThemeIcon size="sm" variant="light" color={opt.color}><opt.icon size={14} /></ThemeIcon>
                                         <Text fw={600} size="sm">{opt.title}</Text>
                                     </Group>
                                     <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs">
@@ -292,13 +293,13 @@ export default function SuperUserHome() {
 
                 {/* MODAL DE RECHAZO DE FIRMA */}
                 <Modal opened={modalRechazo} onClose={() => setModalRechazo(false)} title="Rechazar Recepción de Material" centered>
-                    <Textarea 
-                        label="¿Por qué no aceptas este material?" 
+                    <Textarea
+                        label="¿Por qué no aceptas este material?"
                         description="Este mensaje será enviado a gerencia y almacén de forma inmediata."
-                        placeholder="Ej: La pieza está rota, me entregaron el repuesto equivocado..." 
-                        value={motivoRechazo} 
-                        onChange={(e) => setMotivoRechazo(e.currentTarget.value)} 
-                        required 
+                        placeholder="Ej: La pieza está rota, me entregaron el repuesto equivocado..."
+                        value={motivoRechazo}
+                        onChange={(e) => setMotivoRechazo(e.currentTarget.value)}
+                        required
                     />
                     <Button fullWidth color="red" mt="md" onClick={() => handleFirmar(selectedItemFirma?.id, 'Rechazar')} loading={procesandoFirma}>
                         Confirmar Rechazo
@@ -312,7 +313,7 @@ export default function SuperUserHome() {
                             <Title order={5} fw={800} c="dark.8" tt="uppercase" lts={1}>
                                 DASHBOARD OPERATIVO
                             </Title>
-                            
+
                             <Badge component={Link} href="/superuser/bcv" size="lg" variant="filled" color="teal.6" radius="sm" leftSection={<IconCurrencyDollar size={14} />} style={{ cursor: 'pointer', textTransform: 'none' }}>
                                 BCV Oficial: {precioBCV ? `${precioBCV} Bs.` : "Cargando..."}
                             </Badge>
@@ -347,7 +348,7 @@ export default function SuperUserHome() {
                                             <Button variant="subtle" color="red" size="xs" onClick={() => { setSelectedItemFirma(item); setModalRechazo(true); }}>
                                                 Rechazar
                                             </Button>
-                                            <Button color="orange.7" size="xs" leftSection={<IconCheck size={14}/>} onClick={() => handleFirmar(item.id, 'Aceptar')} loading={procesandoFirma}>
+                                            <Button color="orange.7" size="xs" leftSection={<IconCheck size={14} />} onClick={() => handleFirmar(item.id, 'Aceptar')} loading={procesandoFirma}>
                                                 Firmar Recibido
                                             </Button>
                                         </Group>
@@ -360,7 +361,7 @@ export default function SuperUserHome() {
 
                 {/* --- CUERPO PRINCIPAL --- */}
                 <Grid gutter="md" align="flex-start">
-                    
+
                     {/* COLUMNA IZQUIERDA: Módulos */}
                     <Grid.Col span={{ base: 12, lg: 5, xl: 6 }}>
                         <Title order={6} mb="xs" c="gray.5" tt="uppercase" fz={11} lts={1}>Accesos Directos</Title>

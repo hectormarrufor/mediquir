@@ -32,33 +32,16 @@ export default function InventarioDashboardPage() {
                         { maxWidth: 'md', cols: 1 },
                     ]}
                 >
-                    <Button fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/consumibles')}>
-                        Gestión de Consumibles 📦
+                    <Button fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/productos')}>
+                        Lista y creación de Productos 📦
                     </Button>
-                    <Button fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/entradas')}>
+                    <Button disabled fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/entradas')}>
                         Entradas de Inventario 📥
                     </Button>
-                    <Button fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/salidas')}>
+                    <Button disabled fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/salidas')}>
                         Salidas de Inventario 📤
                     </Button>
-                    <Button fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/consumibles-usados')}>
-                        Consumibles Usados 🛠️
-                    </Button>
-                    <Button fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/tipos-consumibles')}>
-                        Editar Tipos de Consumibles 🛠️
-                    </Button>
-                    
-                    {/* 🔥 NUEVO ACCESO A SUBSISTEMAS 🔥 */}
-                    <Button 
-                        fullWidth 
-                        variant="light" 
-                        color="orange.7" 
-                        size="md" 
-                        leftSection={<IconEngine size={20} />}
-                        onClick={() => router.push('/superuser/inventario/subsistemas')}
-                    >
-                        Plantillas de Subsistemas
-                    </Button>
+                 
                 </SimpleGrid>
 
                 <Group justify="flex-end" mt="xl">

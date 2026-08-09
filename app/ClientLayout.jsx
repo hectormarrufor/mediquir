@@ -22,6 +22,12 @@ import ReactQueryProvider from './QueryProvider';
 import Image from 'next/image';
 import { tenant } from '@/config/tenant';
 import { IconShoppingCart } from '@tabler/icons-react';
+// En tu archivo ClientLayout.js
+import dayjs from 'dayjs';
+import 'dayjs/locale/es';
+
+// Configuración global para toda la app
+dayjs.locale('es');
 
 const theme = createTheme(themeConfig);
 
@@ -80,16 +86,14 @@ export default function ClientLayout({ children }) {
   <Group h="100%" px="md" justify="space-between" wrap="nowrap">
     {/* 1. SECCIÓN LOGO */}
     <UnstyledButton onClick={() => router.push('/')}>
-      <Box w={140} h={60} style={{ display: 'flex', alignItems: 'center' }}>
+      <Box w={140} h={60} style={{ display: 'flex', alignItems: 'center'}}>
         <img
           src={tenant.assets.logo}
           alt={`Logo ${tenant.name}`}
           fetchPriority="high"
           style={{
-            maxHeight: '60px',
-            width: 'auto',
-            maxWidth: '200px',
-            objectFit: 'contain'
+            maxHeight: '55px',
+            width: '100px',
           }}
         />
       </Box>

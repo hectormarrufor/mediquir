@@ -16,6 +16,7 @@ if (!globalForDb.sequelize) {
     dialect: 'postgres',
     dialectModule: pgModule,
     logging: false,
+    timezone: '-04:00',
     pool: {
       max: 1,           // 🔥 CRÍTICO: 1 contenedor Vercel = 1 conexión. No más.
       min: 0,           // Siempre 0.
@@ -23,6 +24,8 @@ if (!globalForDb.sequelize) {
       acquire: 20000,
     },
     dialectOptions: {
+      useUTC: false,
+      timezone: 'America/Caracas',
       ssl: {
         require: true,
         rejectUnauthorized: false
@@ -32,6 +35,10 @@ if (!globalForDb.sequelize) {
       // -c idle_session_timeout=5000: Si el contenedor de Vercel se congela y deja la conexión Idle, Aiven la destruye a los 5 segundos.
       // -c statement_timeout=20000: Cancela queries que tarden más de 20s.
       options: "-c idle_session_timeout=5000 -c statement_timeout=20000"
+    },
+    define: {
+      // 2. Opcional pero recomendado: evita que cambie los nombres de tablas a plurales automáticos si ya los tienes definidos
+      freezeTableName: true 
     }
   });
 }

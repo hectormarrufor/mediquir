@@ -1,4 +1,4 @@
-// app/superuser/flota/components/ImageDropzone.jsx
+//app/components/ImageDropzone.jsx
 'use client';
 
 import { useState, useEffect, useRef } from 'react';

@@ -68,6 +68,11 @@ User.associate = (models) => {
     foreignKey: 'empleadoId',
     as: 'empleado' // Un usuario pertenece a un empleado
   });
+  User.belongsTo(models.Cliente, {
+    foreignKey: 'clienteId',
+    as: 'cliente' // Un usuario puede pertenecer a un cliente
+  });
+  User.hasMany(models.MenuPermission, { foreignKey: 'userId', as: 'menuPermissions' });
   User.hasMany(models.Tarea, { foreignKey: 'creadoPorId', as: 'tareasCreadas' });
   User.hasMany(models.Tarea, { foreignKey: 'asignadoAId', as: 'tareasAsignadas' });
 

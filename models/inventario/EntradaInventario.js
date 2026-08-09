@@ -32,9 +32,9 @@ const EntradaInventario = sequelize.define('EntradaInventario', {
 });
 
 EntradaInventario.associate = (models) => {
-    EntradaInventario.belongsTo(models.Consumible, {
-        foreignKey: 'consumibleId',
-        as: 'consumible'
+    EntradaInventario.belongsTo(models.Producto, {
+        foreignKey: 'productoId',
+        as: 'producto'
     });
     EntradaInventario.belongsTo(models.User, {
         foreignKey: 'usuarioId',

@@ -26,8 +26,14 @@ const Cliente = sequelize.define('Cliente', {
     defaultValue: false
   },
   retencionIvaPorDefecto: {
-    type: DataTypes.ENUM('75', '100'),
-    defaultValue: '75'
+    type: DataTypes.INTEGER, // Si solo usarás enteros
+    defaultValue: 75,
+    validate: {
+      isIn: {
+        args: [[75, 100]],
+        msg: "El porcentaje de retención solo puede ser 75 o 100"
+      }
+    }
   },
   email: {
     type: DataTypes.STRING,
@@ -61,6 +67,10 @@ const Cliente = sequelize.define('Cliente', {
 
 // Este `associate` se llamará desde `models/index.js`
 Cliente.associate = (models) => {
+  // Un cliente puede tener un usuario (o varios si a futuro le das acceso a varios de sus empleados)
+  Cliente.hasMany(models.User, { foreignKey: 'clienteId', as: 'usuarios' });
+  // Un cliente tiene muchos pedidos
+  Cliente.hasMany(models.Pedido, { foreignKey: 'clienteId', as: 'pedidos' });
 };
 
 module.exports = Cliente;

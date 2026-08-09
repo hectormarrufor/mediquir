@@ -2,6 +2,14 @@
 const sequelize = require('../sequelize');
 
 const db = {
+    CategoriaFinanciera: require('./finanzas/CategoriaFinanciera'),
+    MovimientoFinanciero: require('./finanzas/MovimientoFinanciero'),
+    Abono: require('./facturacion/Abono'),
+    Pedido: require('./facturacion/Pedido'),
+    PedidoRenglon: require('./facturacion/PedidoRenglon'),
+    Cliente: require('./Cliente'),
+    Tag: require('./inventario/Tag'),
+    Categoria: require('./inventario/Categoria'),
     MenuPermission: require('./MenuPermission'),
     Tarea: require('./recursosHumanos/Tarea'),
     BcvPrecioHistorico: require('./BcvPrecioHistorico'),
@@ -16,8 +24,7 @@ const db = {
     Departamento: require('./recursosHumanos/Departamento'),
     PushSubscription: require('./pushSubscription'),
 
-    Consumible: require('./inventario/Consumible'),
-    ConsumibleSerializado: require('./inventario/ConsumibleSerializado'),
+    Producto: require('./inventario/Producto'),
     EntradaInventario: require('./inventario/EntradaInventario'),
     SalidaInventario: require('./inventario/SalidaInventario'),
     

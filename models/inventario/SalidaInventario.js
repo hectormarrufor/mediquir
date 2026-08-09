@@ -46,9 +46,9 @@ const SalidaInventario = sequelize.define('SalidaInventario', {
 });
 
 SalidaInventario.associate = (models) => {
-    SalidaInventario.belongsTo(models.Consumible, {
-        foreignKey: 'consumibleId',
-        as: 'consumible'
+    SalidaInventario.belongsTo(models.Producto, {
+        foreignKey: 'productoId',
+        as: 'producto'
     });
     SalidaInventario.belongsTo(models.User, {
         foreignKey: 'solicitadoPorId',
