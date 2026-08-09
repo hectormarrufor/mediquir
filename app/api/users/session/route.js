@@ -24,8 +24,12 @@ export async function GET(request) {
       ] // Ejemplo si necesitas incluir relaciones
     });
 
+    if (usuarioDb.cliente?.id) {
+      console.log(`\x1b[44m [DEBUG] Usuario es cliente con ID: ${usuarioDb.cliente.id} \x1b[0m`);
+    }
+
     // Si no existe (fue borrado) o está inactivo -> ERROR 401
-    if (decoded.id !== 1) {if (!usuarioDb || usuarioDb.empleado?.estado !== 'Activo') {
+    else if (decoded.id !== 1) {if (!usuarioDb || usuarioDb.empleado?.estado !== 'Activo') {
       notificarCabezas({
         title: 'Alerta de Seguridad',
         body: `Usuario ${usuarioDb.empleado?.nombre} ${usuarioDb.empleado?.apellido} intentó acceder pero está BORRADO o INACTIVO.`,
