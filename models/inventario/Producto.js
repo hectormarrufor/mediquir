@@ -5,7 +5,7 @@ const Producto = sequelize.define('Producto', {
     nombre: { 
         type: DataTypes.STRING, 
         allowNull: false, 
-        unique: true, 
+        unique: false, 
     },
     imagen: { 
         type: DataTypes.STRING, 

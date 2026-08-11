@@ -23,8 +23,6 @@ export default function NuevoProducto() {
     const [modalMarca, setModalMarca] = useState(false);
     const [modalGrupo, setModalGrupo] = useState(false);
 
-    const [nuevoDictValor, setNuevoDictValor] = useState('');
-    const [nuevoGrupoStock, setNuevoGrupoStock] = useState(0);
 
     // --- FETCH DE DICCIONARIOS ---
     const fetchSelect = async (endpoint) => {
@@ -91,6 +89,13 @@ export default function NuevoProducto() {
         initialValues: { nombre: '', stockMinimoGlobal: 0, imagen: null },
         validate: { nombre: (val) => (val.trim().length < 2 ? 'Nombre muy corto' : null) }
     });
+
+    const formCategoria = useForm({
+        initialValues: { nombre: '' },
+        validate: { nombre: (val) => (val.trim().length < 2 ? 'Nombre muy corto' : null) }
+    });
+
+
     const handleSubmitDiccionario = async (endpoint, queryKey, fieldName, values, extraData = {}, formInstance, closeModalFn) => {
         try {
             let payload = { nombre: values.nombre, ...extraData, stockMinimoGlobal: values.stockMinimoGlobal };
@@ -368,10 +373,14 @@ export default function NuevoProducto() {
                 </Stack>
             </form>
 
-            {/* --- MODALES DINÁMICOS REUTILIZABLES --- */}
-            <Modal opened={modalCat} onClose={() => setModalCat(false)} title={<Title order={4}>Nueva Categoría</Title>} centered>
-                <TextInput label="Nombre" placeholder="Ej. Descartables" value={nuevoDictValor} onChange={(e) => setNuevoDictValor(e.currentTarget.value)} autoFocus />
-                <Button fullWidth mt="md" onClick={() => handleCrearDiccionario('/api/categorias', 'categorias', 'categoriaId')}>Guardar</Button>
+            {/* MODAL DE CATEGORÍA */}
+            <Modal opened={modalCat} onClose={() => { setModalCat(false); formCategoria.reset(); }} title={<Title order={4}>Nueva Categoría</Title>} centered>
+                <form onSubmit={formCategoria.onSubmit((values) => handleSubmitDiccionario('/api/categorias', 'categorias', 'categoriaId', values, {}, formCategoria, setModalCat))}>
+                    <Stack gap="md">
+                        <TextInput label="Nombre" placeholder="Ej. Descartables" {...formCategoria.getInputProps('nombre')} autoFocus />
+                        <Button type="submit" fullWidth color="blue">Guardar Categoría</Button>
+                    </Stack>
+                </form>
             </Modal>
 
             {/* MODAL DE MARCA */}
