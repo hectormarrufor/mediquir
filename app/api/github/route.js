@@ -27,7 +27,7 @@ export async function POST(req) {
             const shortHash = headCommit.id.substring(0, 7);
             
             // Lógica de URL con filtro de seguridad
-            let targetUrl = '/superuser'; // Default por defecto
+            let targetUrl = '/superuser/notificaciones'; // Default por defecto
 
             const urlMatch = commitMessage.match(/URL_DESTINO:\s*(\S+)/);
             if (urlMatch) {
@@ -35,7 +35,7 @@ export async function POST(req) {
                 
                 // Filtro: Si empieza por /api/ o es igual a /api, redirigimos a /superuser
                 if (extractedUrl.startsWith('/api') || extractedUrl === '/api') {
-                    targetUrl = '/superuser';
+                    targetUrl = '/superuser/notificaciones';
                 } else {
                     targetUrl = extractedUrl;
                 }
