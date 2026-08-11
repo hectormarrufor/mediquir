@@ -47,6 +47,7 @@ export async function POST(req) {
             // Aseguramos formatos numéricos
             costoUsd: parseFloat(productData.costoUsd || 0),
             precio6: parseFloat(productData.precio6 || 0),
+            precio7: parseFloat(productData.precio7 || 0),
             stockAlmacen: parseFloat(productData.stockAlmacen || 0),
             stockMinimo: parseFloat(productData.stockMinimo || 0),
             unidadesPorCaja: productData.presentacion === 'caja' ? parseInt(productData.unidadesPorCaja) : null,

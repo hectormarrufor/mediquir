@@ -2,15 +2,16 @@
 
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-    Box, Button, Group, Title, Table, Badge, ActionIcon,
-    Loader, Center, Text, Paper, Avatar, TextInput, Select,
-    ScrollArea, Stack, Tooltip, Card, Grid, Divider, ThemeIcon, Progress
+import { 
+    Box, Button, Group, Title, Table, Badge, ActionIcon, 
+    Loader, Center, Text, Paper, Avatar, TextInput, Select, 
+    ScrollArea, Stack, Tooltip, Card, Grid, Divider, ThemeIcon, Progress, 
+    Modal 
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import {
-    IconPlus, IconEdit, IconTrash, IconSearch,
-    IconFilter, IconBox, IconTags, IconSitemap
+import { 
+    IconPlus, IconEdit, IconTrash, IconSearch, 
+    IconFilter, IconBox, IconTags, IconSitemap, IconX 
 } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { notifications } from '@mantine/notifications';
@@ -18,7 +19,7 @@ import { notifications } from '@mantine/notifications';
 // =======================================================================
 // 1. TARJETA MÓVIL INDIVIDUAL
 // =======================================================================
-const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete }) => {
+const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClick }) => {
     let isCritico = false;
     if (prod.grupoEquivalenciaId) {
         const totalGrupo = stockPorGrupos[prod.grupoEquivalenciaId] || 0;
@@ -27,23 +28,31 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete }) => {
         isCritico = Number(prod.stockAlmacen) <= Number(prod.stockMinimo);
     }
 
-    // Lógica de Fallback de Imagen
-    const imgSrc = prod.imagen
-        ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}`
+    const imgSrc = prod.imagen 
+        ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}` 
         : (prod.marca?.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.marca.imagen}` : null);
 
     return (
         <Card withBorder radius="md" p="md" shadow="sm" bg="white">
             <Group wrap="nowrap" align="flex-start" justify="space-between" mb="sm">
                 <Group wrap="nowrap" gap="sm" style={{ flex: 1 }}>
-                    <Avatar src={imgSrc} alt={prod.nombre} radius="sm" size="lg" color="blue">
+                    <Avatar 
+                        src={imgSrc} 
+                        alt={prod.nombre} 
+                        radius="sm" 
+                        size="lg" 
+                        color="blue"
+                        styles={{ image: { objectFit: 'contain' } }}
+                        style={{ cursor: imgSrc ? 'pointer' : 'default' }}
+                        onClick={() => imgSrc && onImageClick(imgSrc)}
+                    >
                         {prod.nombre.charAt(0)}
                     </Avatar>
                     <Box style={{ flex: 1 }}>
                         <Text fw={700} size="sm" lh={1.2} lineClamp={2}>{prod.nombre}</Text>
                         <Group gap={4} mt={4}>
                             <Text size="xs" c="dimmed">{prod.codigo}</Text>
-                            {prod.marca && <Badge size="xl" variant="dot" color="grape">{prod.marca.nombre}</Badge>}
+                            {prod.marca && <Badge size="xs" variant="dot" color="grape">{prod.marca.nombre}</Badge>}
                         </Group>
                     </Box>
                 </Group>
@@ -54,25 +63,42 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete }) => {
 
             <Divider variant="dotted" mb="sm" />
 
-            <Grid gutter="xs" mb="sm">
+           <Grid gutter="xs" mb="sm">
                 <Grid.Col span={6}>
                     <Text size="xs" c="dimmed">Presentación</Text>
                     <Text size="sm" tt="capitalize" fw={500} lh={1.1}>
-                        {prod.presentacion}
+                        {prod.presentacion} 
                         {prod.presentacion === 'caja' && prod.unidadesPorCaja && <Text span size="xs" c="dimmed"> ({prod.unidadesPorCaja}u)</Text>}
-                    </Text>
-                </Grid.Col>
-                <Grid.Col span={6}>
-                    <Text size="xs" c="dimmed">Costo (USD)</Text>
-                    <Text size="sm" fw={700} c="green.8" lh={1.1}>
-                        ${Number(prod.costoUsd).toFixed(2)} <Text span size="xs" c="dimmed" fw={400}>(IVA {prod.porcentajeIva}%)</Text>
                     </Text>
                 </Grid.Col>
                 <Grid.Col span={6}>
                     <Text size="xs" c="dimmed">Unds x Bulto</Text>
                     <Text size="sm" fw={500} lh={1.1}>{prod.unidadesPorBulto}</Text>
                 </Grid.Col>
-                <Grid.Col span={6}>
+
+                {/* 🔥 NUEVA FILA DE FINANZAS (Costo, P6, P7) 🔥 */}
+                <Grid.Col span={8}>
+                    <Group gap="md">
+                        <Box>
+                            <Text size="xs" c="dimmed">Costo</Text>
+                            <Text size="sm" fw={700} c="green.8" lh={1.1}>${Number(prod.costoUsd).toFixed(2)}</Text>
+                        </Box>
+                        {Number(prod.precio6) > 0 && (
+                            <Box>
+                                <Text size="xs" c="dimmed">P6</Text>
+                                <Text size="sm" fw={600} c="blue.7" lh={1.1}>${Number(prod.precio6).toFixed(2)}</Text>
+                            </Box>
+                        )}
+                        {Number(prod.precio7) > 0 && (
+                            <Box>
+                                <Text size="xs" c="dimmed">P7</Text>
+                                <Text size="sm" fw={600} c="grape.7" lh={1.1}>${Number(prod.precio7).toFixed(2)}</Text>
+                            </Box>
+                        )}
+                    </Group>
+                </Grid.Col>
+
+                <Grid.Col span={4}>
                     <Text size="xs" c="dimmed">Stock Actual</Text>
                     <Text size="sm" fw={900} lh={1.1}>{Number(prod.stockAlmacen)}</Text>
                 </Grid.Col>
@@ -95,14 +121,15 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete }) => {
 // =======================================================================
 // 2. COMPONENTE RENDERIZADOR (Tabla en Desktop, Cards en Móvil)
 // =======================================================================
-const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete }) => {
+const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onImageClick }) => {
     if (isMobile) {
         return (
             <Stack gap="xs">
                 {items.map((prod) => (
-                    <ProductoCardMovil
-                        key={prod.id} prod={prod} stockPorGrupos={stockPorGrupos}
-                        onEdit={() => onEdit(prod.id)} onDelete={() => onDelete(prod.id, prod.nombre)}
+                    <ProductoCardMovil 
+                        key={prod.id} prod={prod} stockPorGrupos={stockPorGrupos} 
+                        onEdit={() => onEdit(prod.id)} onDelete={() => onDelete(prod.id, prod.nombre)} 
+                        onImageClick={onImageClick}
                     />
                 ))}
             </Stack>
@@ -118,7 +145,7 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete }) =
                         <Table.Th>Producto y Marca</Table.Th>
                         <Table.Th>Presentación</Table.Th>
                         <Table.Th>Etiquetas</Table.Th>
-                        <Table.Th>Costo (USD)</Table.Th>
+                        <Table.Th>Finanzas (USD)</Table.Th>
                         <Table.Th>Stock Actual</Table.Th>
                         <Table.Th>Estado Alerta</Table.Th>
                         <Table.Th ta="center">Acciones</Table.Th>
@@ -134,15 +161,23 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete }) =
                             isCritico = Number(prod.stockAlmacen) <= Number(prod.stockMinimo);
                         }
 
-                        // Lógica de Fallback de Imagen
-                        const imgSrc = prod.imagen
-                            ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}`
+                        const imgSrc = prod.imagen 
+                            ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}` 
                             : (prod.marca?.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.marca.imagen}` : null);
 
                         return (
                             <Table.Tr key={prod.id}>
                                 <Table.Td>
-                                    <Avatar src={imgSrc} alt={prod.nombre} radius="sm" size="lg" color="blue">
+                                    <Avatar 
+                                        src={imgSrc} 
+                                        alt={prod.nombre} 
+                                        radius="sm" 
+                                        size="lg" 
+                                        color="blue"
+                                        styles={{ image: { objectFit: 'contain' } }}
+                                        style={{ cursor: imgSrc ? 'pointer' : 'default' }}
+                                        onClick={() => imgSrc && onImageClick(imgSrc)}
+                                    >
                                         {prod.nombre.charAt(0)}
                                     </Avatar>
                                 </Table.Td>
@@ -151,7 +186,7 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete }) =
                                         <Text fw={700} size="sm" lh={1.1}>{prod.nombre}</Text>
                                         <Group gap="xs">
                                             <Text size="xs" c="dimmed">{prod.codigo}</Text>
-                                            {prod.marca && <Badge size="lg" variant="dot" color="grape">{prod.marca.nombre}</Badge>}
+                                            {prod.marca && <Badge size="xs" variant="dot" color="grape">{prod.marca.nombre}</Badge>}
                                         </Group>
                                     </Stack>
                                 </Table.Td>
@@ -166,9 +201,25 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete }) =
                                         {(!prod.tags || prod.tags.length === 0) && <Text size="xs" c="dimmed">-</Text>}
                                     </Group>
                                 </Table.Td>
+                                {/* 🔥 COLUMNA FINANZAS MULTIPRECIO 🔥 */}
                                 <Table.Td>
-                                    <Text fw={600} c="green.8">${Number(prod.costoUsd).toFixed(2)}</Text>
-                                    <Text size="xs" c="dimmed">IVA: {prod.porcentajeIva}%</Text>
+                                    <Text fw={700} c="green.8" title="Costo Base">
+                                        C: ${Number(prod.costoUsd).toFixed(2)}
+                                    </Text>
+                                    
+                                    {Number(prod.precio6) > 0 && (
+                                        <Text size="xs" fw={600} c="blue.7" title="Precio 6 Manual">
+                                            P6: ${Number(prod.precio6).toFixed(2)}
+                                        </Text>
+                                    )}
+                                    
+                                    {Number(prod.precio7) > 0 && (
+                                        <Text size="xs" fw={600} c="grape.7" title="Precio 7 Manual">
+                                            P7: ${Number(prod.precio7).toFixed(2)}
+                                        </Text>
+                                    )}
+                                    
+                                    <Text size="xs" c="dimmed" mt={4}>IVA: {prod.porcentajeIva}%</Text>
                                 </Table.Td>
                                 <Table.Td>
                                     <Text fw={800} size="md">{Number(prod.stockAlmacen)}</Text>
@@ -207,6 +258,9 @@ export default function ListaProductos() {
     const [search, setSearch] = useState('');
     const [filterMarca, setFilterMarca] = useState(null);
     const [filterTag, setFilterTag] = useState(null);
+    
+    // Estado para el Visor de Imágenes (Lightbox)
+    const [imagenAmpliada, setImagenAmpliada] = useState(null);
 
     const { data: productos, isLoading, isError } = useQuery({
         queryKey: ['productos'],
@@ -257,7 +311,7 @@ export default function ListaProductos() {
     const inventarioAnidado = useMemo(() => {
         return productosFiltrados.reduce((acc, producto) => {
             const catNombre = producto.categoria?.nombre || 'Sin Categoría';
-
+            
             if (!acc[catNombre]) {
                 acc[catNombre] = { grupos: {}, sinGrupo: [] };
             }
@@ -322,7 +376,7 @@ export default function ListaProductos() {
             ) : (
                 Object.entries(inventarioAnidado).map(([categoria, contenido]) => (
                     <Box key={categoria} mb={isMobile ? "xl" : 40}>
-
+                        
                         <Group mb="md" gap="xs">
                             <IconBox color="#1971c2" size={28} />
                             <Title order={3} c="blue.9">{categoria}</Title>
@@ -341,21 +395,20 @@ export default function ListaProductos() {
                             return (
                                 <Paper key={grupo.info.id} withBorder p={isMobile ? "sm" : "md"} mb="lg" radius="md" bg="gray.0">
                                     <Group justify="space-between" mb="xs">
-                                        <Group justify="space-between" mb="xs">
-                                            <Group gap="xs">
-                                                {/* 🔥 Avatar del Grupo (Con fallback automático a la inicial) 🔥 */}
-                                                <Avatar
-                                                    src={grupo.info.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${grupo.info.imagen}` : null}
-                                                    radius="md"
-                                                    size="xl"
-                                                    color="teal"
-                                                >
-                                                    {grupo.info.nombre?.charAt(0).toUpperCase()}
-                                                </Avatar>
-                                                <Title order={5} c="teal.9">Grupo: {grupo.info.nombre}</Title>
-                                            </Group>
-
-                                            
+                                        <Group gap="xs">
+                                            {/* Avatar del Grupo adaptado para Lightbox */}
+                                            <Avatar 
+                                                src={grupo.info.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${grupo.info.imagen}` : null} 
+                                                radius="md" 
+                                                size="md"
+                                                color="teal"
+                                                styles={{ image: { objectFit: 'contain' } }}
+                                                style={{ cursor: grupo.info.imagen ? 'pointer' : 'default' }}
+                                                onClick={() => grupo.info.imagen && setImagenAmpliada(`${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${grupo.info.imagen}`)}
+                                            >
+                                                {grupo.info.nombre?.charAt(0).toUpperCase()}
+                                            </Avatar>
+                                            <Title order={5} c="teal.9">Grupo: {grupo.info.nombre}</Title>
                                         </Group>
                                         <Group gap="sm">
                                             <Text size="sm" fw={600} c={isCritico ? 'red.7' : 'teal.7'}>
@@ -369,10 +422,11 @@ export default function ListaProductos() {
 
                                     <Progress value={porcentaje} color={isCritico ? 'red' : 'teal'} size="sm" mb="md" radius="xl" striped={!isCritico} />
 
-                                    <ProductosVista
+                                    <ProductosVista 
                                         items={grupo.productos} stockPorGrupos={stockPorGrupos} isMobile={isMobile}
                                         onEdit={(id) => router.push(`/superuser/inventario/productos/${id}/editar`)}
                                         onDelete={eliminarProducto}
+                                        onImageClick={setImagenAmpliada}
                                     />
                                 </Paper>
                             );
@@ -386,16 +440,56 @@ export default function ListaProductos() {
                                         Productos Individuales
                                     </Title>
                                 )}
-                                <ProductosVista
+                                <ProductosVista 
                                     items={contenido.sinGrupo} stockPorGrupos={stockPorGrupos} isMobile={isMobile}
                                     onEdit={(id) => router.push(`/superuser/inventario/productos/${id}/editar`)}
                                     onDelete={eliminarProducto}
+                                    onImageClick={setImagenAmpliada}
                                 />
                             </Box>
                         )}
                     </Box>
                 ))
             )}
+
+            {/* 🔥 VISOR DE IMÁGENES (LIGHTBOX TIPO FACEBOOK) 🔥 */}
+            <Modal
+                opened={!!imagenAmpliada}
+                onClose={() => setImagenAmpliada(null)}
+                size="auto"
+                centered
+                withCloseButton={false}
+                styles={{
+                    root: { zIndex: 9999 },
+                    content: { backgroundColor: 'transparent', boxShadow: 'none' }, // Fondo transparente
+                    body: { padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' }
+                }}
+            >
+                {imagenAmpliada && (
+                    <Box pos="relative">
+                        {/* Botón Flotante para Cerrar */}
+                        <ActionIcon 
+                            onClick={() => setImagenAmpliada(null)} 
+                            radius="xl" 
+                            color="dark" 
+                            variant="filled" 
+                            pos="absolute" 
+                            top={-15} 
+                            right={-15}
+                            style={{ zIndex: 10, border: '2px solid white' }}
+                        >
+                            <IconX size={16} />
+                        </ActionIcon>
+                        {/* Imagen Expandida (Sin deformarse) */}
+                        <img 
+                            src={imagenAmpliada} 
+                            alt="Vista ampliada" 
+                            style={{ maxWidth: '100vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: '8px' }} 
+                        />
+                    </Box>
+                )}
+            </Modal>
+
         </Box>
     );
 }

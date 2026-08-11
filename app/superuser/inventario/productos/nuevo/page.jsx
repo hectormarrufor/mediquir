@@ -53,6 +53,7 @@ export default function NuevoProducto() {
             tags: [],
             costoUsd: '',
             precio6: '',
+            precio7: '',
             porcentajeIva: 16,
             presentacion: 'unidad',
             unidadesPorCaja: '',
@@ -73,6 +74,7 @@ export default function NuevoProducto() {
             marcaId: (value) => (!value ? 'Seleccione una marca' : null),
             costoUsd: (value) => (value === '' || Number(value) <= 0 ? 'Debe ser mayor a 0' : null),
             precio6: (value) => (value !== '' && Number(value) < -1 ? 'No puede ser negativo' : null),
+            precio7: (value) => (value !== '' && Number(value) < -1 ? 'No puede ser negativo' : null),
             stockAlmacen: (value) => (value === '' || Number(value) < 0 ? 'No puede ser negativo' : null),
             unidadesPorCaja: (value, values) => (values.presentacion === 'caja' && (!value || Number(value) <= 0) ? 'Debe ser mayor a 0' : null),
             unidadesPorBulto: (value) => (!value || Number(value) < 1 ? 'Mínimo 1 unidad por bulto' : null),
@@ -132,6 +134,7 @@ export default function NuevoProducto() {
                 grupoEquivalenciaId: values.grupoEquivalenciaId ? Number(values.grupoEquivalenciaId) : null,
                 costoUsd: Number(values.costoUsd),
                 precio6: values.precio6 ? Number(values.precio6) : 0,
+                precio7: values.precio7 ? Number(values.precio7) : 0,
                 unidadesPorCaja: values.presentacion === 'caja' ? Number(values.unidadesPorCaja) : null,
             };
 
@@ -282,33 +285,24 @@ export default function NuevoProducto() {
                         </Grid>
                     </Paper>
 
-                    {/* SECCIÓN 2: FINANZAS Y PRECIOS */}
+                  {/* SECCIÓN 2: FINANZAS Y PRECIOS */}
                     <Paper withBorder shadow="sm" p="xl" radius="md" bg="gray.0">
-                        <Group mb="md" gap="xs">
-                            <IconCalculator color="#1971c2" />
-                            <Title order={4} c="blue.7">2. Estructura de Precios (Ref USD)</Title>
-                        </Group>
+                        <Group mb="md" gap="xs"><IconCalculator color="#1971c2" /><Title order={4} c="blue.7">2. Estructura de Precios (Ref USD)</Title></Group>
                         <Grid>
-                            <Grid.Col span={{ base: 12, md: 4 }}>
-                                <NumberInput withAsterisk label="Costo (USD)" placeholder="Costo de compra" decimalScale={3} prefix="$ " {...form.getInputProps('costoUsd')} />
-                            </Grid.Col>
-                            <Grid.Col span={{ base: 12, md: 4 }}>
-                                <NumberInput label="Precio 6 Manual (USD)" placeholder="Opcional" decimalScale={3} prefix="$ " {...form.getInputProps('precio6')} />
-                            </Grid.Col>
-                            <Grid.Col span={{ base: 12, md: 4 }}>
-                                <NumberInput withAsterisk label="% de IVA" defaultValue={16} min={0} suffix=" %" {...form.getInputProps('porcentajeIva')} />
-                            </Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput withAsterisk label="Costo (USD)" decimalScale={2} prefix="$ " {...form.getInputProps('costoUsd')} /></Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput label="Precio 6 (Manual USD)" decimalScale={2} prefix="$ " {...form.getInputProps('precio6')} /></Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput label="Precio 7 (Manual USD)" decimalScale={2} prefix="$ " {...form.getInputProps('precio7')} /></Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput withAsterisk label="% de IVA" min={0} suffix=" %" {...form.getInputProps('porcentajeIva')} /></Grid.Col>
                         </Grid>
-
-                        {/* Visualizador Predictivo (Para que veas cuánto ganarás) */}
                         {form.values.costoUsd > 0 && (
                             <Group mt="md" bg="blue.1" p="sm" style={{ borderRadius: 8 }}>
                                 <Text size="sm" fw={600} c="blue.9">Proyecciones automáticas:</Text>
-                                <Badge color="green" variant="light" size="lg">Precio 1 (35%): ${(form.values.costoUsd * 1.35).toFixed(3)}</Badge>
-                                <Badge color="teal" variant="light" size="lg">Precio 4/7 (50%): ${(form.values.costoUsd * 1.50).toFixed(3)}</Badge>
+                                <Badge color="green" variant="light" size="lg">Precio 1 (35%): ${(form.values.costoUsd * 1.35).toFixed(2)}</Badge>
+                                <Badge color="teal" variant="light" size="lg">Precio 4 (50%): ${(form.values.costoUsd * 1.50).toFixed(2)}</Badge>
                             </Group>
                         )}
                     </Paper>
+                
 
                     {/* SECCIÓN 3: LOGÍSTICA E INVENTARIO */}
                     <Paper withBorder shadow="sm" p="xl" radius="md" bg="white">

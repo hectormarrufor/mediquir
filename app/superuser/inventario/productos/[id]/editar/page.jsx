@@ -4,9 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from '@mantine/form';
 import { useParams, useRouter } from 'next/navigation';
-import { 
-    Box, Button, Group, Title, TextInput, NumberInput, 
-    Select, TagsInput, Paper, Stack, Grid, Modal, ActionIcon, 
+import {
+    Box, Button, Group, Title, TextInput, NumberInput,
+    Select, TagsInput, Paper, Stack, Grid, Modal, ActionIcon,
     Text, Divider, Badge, Center, Loader
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
@@ -18,7 +18,7 @@ export default function EditarProducto() {
     const { id } = useParams(); // Obtenemos el ID de la URL
     const queryClient = useQueryClient();
     const [isSubmitting, setIsSubmitting] = useState(false);
-    
+
     // Estados Modales
     const [modalCat, setModalCat] = useState(false);
     const [modalMarca, setModalMarca] = useState(false);
@@ -54,7 +54,7 @@ export default function EditarProducto() {
     const form = useForm({
         initialValues: {
             nombre: '', codigo: '', categoriaId: '', marcaId: '', grupoEquivalenciaId: '',
-            tags: [], costoUsd: '', precio6: '', porcentajeIva: 16, presentacion: 'unidad',
+            tags: [], costoUsd: '', precio6: '', precio7: '', porcentajeIva: 16, presentacion: 'unidad',
             unidadesPorCaja: '', unidadesPorBulto: 1, stockAlmacen: '', stockMinimo: '', imagen: null
         },
         validate: {
@@ -81,6 +81,7 @@ export default function EditarProducto() {
                 tags: productoDB.tags ? productoDB.tags.map(t => t.nombre) : [],
                 costoUsd: Number(productoDB.costoUsd),
                 precio6: Number(productoDB.precio6) || '',
+                precio7: Number(productoDB.precio7) || '',
                 porcentajeIva: Number(productoDB.porcentajeIva),
                 presentacion: productoDB.presentacion,
                 unidadesPorCaja: productoDB.unidadesPorCaja || '',
@@ -126,10 +127,10 @@ export default function EditarProducto() {
                 notifications.show({ id: 'uploading-image', title: 'Subiendo imagen...', message: 'Espera...', loading: true });
                 const fileExt = values.imagen.name.split('.').pop();
                 const uniqueFilename = `${values.codigo.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}.${fileExt}`;
-                
+
                 const response = await fetch(`/api/upload?filename=${encodeURIComponent(uniqueFilename)}`, { method: 'POST', body: values.imagen });
                 if (!response.ok) throw new Error('Falló la subida de la imagen');
-                
+
                 payload.imagen = uniqueFilename;
                 notifications.update({ id: 'uploading-image', title: 'Éxito', message: 'Imagen subida', color: 'green' });
             }
@@ -140,14 +141,14 @@ export default function EditarProducto() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            
+
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Error al actualizar');
 
             notifications.show({ title: 'Éxito', message: 'Producto actualizado correctamente', color: 'green' });
             queryClient.invalidateQueries({ queryKey: ['productos'] });
             router.push('/superuser/inventario/productos');
-            
+
         } catch (error) {
             notifications.show({ title: 'Error', message: error.message, color: 'red' });
         } finally {
@@ -166,7 +167,7 @@ export default function EditarProducto() {
 
             <form onSubmit={form.onSubmit(handleSubmitProducto)}>
                 <Stack gap="xl">
-                    
+
                     {/* SECCIÓN 1: DATOS COMERCIALES */}
                     <Paper withBorder shadow="sm" p="xl" radius="md" bg="white">
                         <Title order={4} mb="md" c="gray.7">1. Datos Comerciales y Clasificación</Title>
@@ -175,8 +176,8 @@ export default function EditarProducto() {
                                 <TextInput withAsterisk label="Nombre del Producto" {...form.getInputProps('nombre')} />
                             </Grid.Col>
                             <Grid.Col span={{ base: 12, md: 4 }}>
-                                <TextInput 
-                                    withAsterisk label="Código" 
+                                <TextInput
+                                    withAsterisk label="Código"
                                     autoCapitalize="characters"
                                     value={form.values.codigo}
                                     onChange={(e) => form.setFieldValue('codigo', e.currentTarget.value.toUpperCase())}
@@ -219,7 +220,7 @@ export default function EditarProducto() {
                                         const normalized = values.map(v => v.trim().toLowerCase().replace(/[\s\-]/g, ''));
                                         const unique = [...new Set(normalized)];
                                         const nuevosTags = unique.filter(v => !tagOptionsStr.includes(v));
-                                        
+
                                         nuevosTags.forEach(nuevo => {
                                             fetch('/api/tags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nombre: nuevo }) })
                                                 .then(() => queryClient.invalidateQueries({ queryKey: ['tags'] }));
@@ -236,15 +237,16 @@ export default function EditarProducto() {
                     <Paper withBorder shadow="sm" p="xl" radius="md" bg="gray.0">
                         <Group mb="md" gap="xs"><IconCalculator color="#1971c2" /><Title order={4} c="blue.7">2. Estructura de Precios (Ref USD)</Title></Group>
                         <Grid>
-                            <Grid.Col span={{ base: 12, md: 4 }}><NumberInput withAsterisk label="Costo (USD)" decimalScale={3} prefix="$ " {...form.getInputProps('costoUsd')} /></Grid.Col>
-                            <Grid.Col span={{ base: 12, md: 4 }}><NumberInput label="Precio 6 Manual (USD)" decimalScale={3} prefix="$ " {...form.getInputProps('precio6')} /></Grid.Col>
-                            <Grid.Col span={{ base: 12, md: 4 }}><NumberInput withAsterisk label="% de IVA" min={0} suffix=" %" {...form.getInputProps('porcentajeIva')} /></Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput withAsterisk label="Costo (USD)" decimalScale={2} prefix="$ " {...form.getInputProps('costoUsd')} /></Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput label="Precio 6 (Manual USD)" decimalScale={2} prefix="$ " {...form.getInputProps('precio6')} /></Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput label="Precio 7 (Manual USD)" decimalScale={2} prefix="$ " {...form.getInputProps('precio7')} /></Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput withAsterisk label="% de IVA" min={0} suffix=" %" {...form.getInputProps('porcentajeIva')} /></Grid.Col>
                         </Grid>
                         {form.values.costoUsd > 0 && (
                             <Group mt="md" bg="blue.1" p="sm" style={{ borderRadius: 8 }}>
                                 <Text size="sm" fw={600} c="blue.9">Proyecciones automáticas:</Text>
-                                <Badge color="green" variant="light" size="lg">Precio 1 (35%): ${(form.values.costoUsd * 1.35).toFixed(3)}</Badge>
-                                <Badge color="teal" variant="light" size="lg">Precio 4/7 (50%): ${(form.values.costoUsd * 1.50).toFixed(3)}</Badge>
+                                <Badge color="green" variant="light" size="lg">Precio 1 (35%): ${(form.values.costoUsd * 1.35).toFixed(2)}</Badge>
+                                <Badge color="teal" variant="light" size="lg">Precio 4 (50%): ${(form.values.costoUsd * 1.50).toFixed(2)}</Badge>
                             </Group>
                         )}
                     </Paper>
