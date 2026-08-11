@@ -24,7 +24,7 @@ export async function crearYNotificar(data) {
     const t = await sequelize.transaction();
     const resultados = { exitosos: 0, fallidos: 0 };
 
-    const clientId = process.env.NEXT_PUBLIC_CLIENT_ID || 'dadica';
+    const clientId = process.env.NEXT_PUBLIC_CLIENT_ID || 'mediquir';
     const basePathIcons = `/tenants/${clientId}/icons`;
 
     try {
@@ -188,7 +188,7 @@ export async function crearSinNotificar(data) {
 }
 
 export async function notificarSinGuardarEnDB(data) {
-    const clientId = process.env.NEXT_PUBLIC_CLIENT_ID || 'dadica';
+    const clientId = process.env.NEXT_PUBLIC_CLIENT_ID || 'mediquir';
     const basePathIcons = `/tenants/${clientId}/icons`;
 
     try {

@@ -1,21 +1,24 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { 
-    Box, Button, Group, Title, Table, Badge, ActionIcon, 
-    Loader, Center, Text, Paper, Avatar, TextInput, Select, 
-    ScrollArea, Stack, Tooltip, Card, Grid, Divider, ThemeIcon, Progress, 
-    Modal 
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+    Box, Button, Group, Title, Table, Badge, ActionIcon,
+    Loader, Center, Text, Paper, Avatar, TextInput, Select,
+    ScrollArea, Stack, Tooltip, Card, Grid, Divider, ThemeIcon, Progress,
+    Modal,
+    NumberInput
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { 
-    IconPlus, IconEdit, IconTrash, IconSearch, 
+import {
+    IconPlus, IconEdit, IconTrash, IconSearch,
     IconFilter, IconBox, IconTags, IconSitemap, IconX, IconSortAscending, IconCalendar
 } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { notifications } from '@mantine/notifications';
 import dayjs from 'dayjs';
+import { useForm } from '@mantine/form';
+import ImageDropzone from '@/app/components/ImageDropzone';
 
 // =======================================================================
 // 1. TARJETA MÓVIL INDIVIDUAL
@@ -24,15 +27,15 @@ import dayjs from 'dayjs';
 const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClick, esGrupo }) => {
     const isCriticoIndividual = Number(prod.stockAlmacen) <= Number(prod.stockMinimo);
 
-    const imgSrc = prod.imagen 
-        ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}` 
+    const imgSrc = prod.imagen
+        ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}`
         : (prod.marca?.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.marca.imagen}` : null);
 
     return (
         <Card withBorder radius="md" p="md" shadow="sm" bg="white">
             <Group wrap="nowrap" align="flex-start" justify="space-between" mb="sm">
                 <Group wrap="nowrap" gap="sm" style={{ flex: 1 }}>
-                    <Avatar 
+                    <Avatar
                         src={imgSrc} alt={prod.nombre} radius="sm" size="lg" color="blue"
                         styles={{ image: { objectFit: 'contain' } }}
                         style={{ cursor: imgSrc ? 'pointer' : 'default' }}
@@ -61,7 +64,7 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
                 <Grid.Col span={6}>
                     <Text size="xs" c="dimmed">Presentación</Text>
                     <Text size="sm" tt="capitalize" fw={500} lh={1.1}>
-                        {prod.presentacion} 
+                        {prod.presentacion}
                         {prod.presentacion === 'caja' && prod.unidadesPorCaja && <Text span size="xs" c="dimmed"> ({prod.unidadesPorCaja}u)</Text>}
                     </Text>
                 </Grid.Col>
@@ -126,9 +129,9 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
         return (
             <Stack gap="xs">
                 {items.map((prod) => (
-                    <ProductoCardMovil 
-                        key={prod.id} prod={prod} stockPorGrupos={stockPorGrupos} 
-                        onEdit={() => onEdit(prod.id)} onDelete={() => onDelete(prod.id, prod.nombre)} 
+                    <ProductoCardMovil
+                        key={prod.id} prod={prod} stockPorGrupos={stockPorGrupos}
+                        onEdit={() => onEdit(prod.id)} onDelete={() => onDelete(prod.id, prod.nombre)}
                         onImageClick={onImageClick} esGrupo={esGrupo}
                     />
                 ))}
@@ -161,7 +164,7 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                         return (
                             <Table.Tr key={prod.id}>
                                 <Table.Td>
-                                    <Avatar 
+                                    <Avatar
                                         src={imgSrc} alt={prod.nombre} radius="sm" size="lg" color="blue"
                                         styles={{ image: { objectFit: 'contain' } }}
                                         style={{ cursor: imgSrc ? 'pointer' : 'default' }}
@@ -199,7 +202,7 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                                 <Table.Td>
                                     <Text fw={800} size="md">{Number(prod.stockAlmacen)}</Text>
                                 </Table.Td>
-                                
+
                                 {!esGrupo && (
                                     <Table.Td>
                                         <Badge color={isCriticoIndividual ? 'red' : 'green'} variant="light">
@@ -258,6 +261,73 @@ export default function ListaProductos() {
         { value: 'precioDesc', label: 'Mayor Costo' }
     ];
 
+   // --- LÓGICA DEL ATAJO PARA EDITAR GRUPO ---
+    const queryClient = useQueryClient();
+    const [modalEditGrupo, setModalEditGrupo] = useState(false);
+    const [grupoSeleccionado, setGrupoSeleccionado] = useState(null);
+    const [isSubmittingGrupo, setIsSubmittingGrupo] = useState(false);
+
+    const formGrupo = useForm({
+        initialValues: { nombre: '', stockMinimoGlobal: 0, categoriaId: '', imagen: null },
+        validate: { 
+            nombre: (val) => (val.trim().length < 2 ? 'Mínimo 2 caracteres' : null),
+            categoriaId: (val) => (!val ? 'Selecciona una categoría' : null)
+        }
+    });
+
+    const abrirModalGrupo = (grupo) => {
+        setGrupoSeleccionado(grupo);
+        formGrupo.setValues({ 
+            nombre: grupo.nombre, 
+            stockMinimoGlobal: grupo.stockMinimoGlobal || 0,
+            categoriaId: grupo.categoriaId ? grupo.categoriaId.toString() : '',
+            imagen: grupo.imagen || null 
+        });
+        setModalEditGrupo(true);
+    };
+
+    const handleActualizarGrupoRapido = async (values) => {
+        setIsSubmittingGrupo(true);
+        try {
+            // 🔥 Ahora enviamos todos los datos completos 🔥
+            let payload = { 
+                nombre: values.nombre,
+                stockMinimoGlobal: Number(values.stockMinimoGlobal),
+                categoriaId: Number(values.categoriaId)
+            };
+
+            if (values.imagen && typeof values.imagen.arrayBuffer === 'function') {
+                notifications.show({ id: 'upload-g', title: 'Subiendo...', message: 'Espera...', loading: true });
+                const fileExt = values.imagen.name.split('.').pop();
+                const uniqueFilename = `grupo_${Date.now()}.${fileExt}`;
+                
+                const response = await fetch(`/api/upload?filename=${encodeURIComponent(uniqueFilename)}`, { method: 'POST', body: values.imagen });
+                if (!response.ok) throw new Error('Falló la subida');
+                
+                payload.imagen = uniqueFilename;
+                notifications.update({ id: 'upload-g', title: 'Éxito', message: 'Imagen subida', color: 'green' });
+            }
+
+            const res = await fetch(`/api/grupos-equivalencia/${grupoSeleccionado.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) throw new Error('Error al actualizar');
+
+            queryClient.invalidateQueries({ queryKey: ['productos'] }); 
+            setModalEditGrupo(false);
+            notifications.show({ title: 'Éxito', message: 'Grupo actualizado', color: 'green' });
+        } catch (error) {
+            notifications.show({ title: 'Error', message: error.message, color: 'red' });
+        } finally {
+            setIsSubmittingGrupo(false);
+        }
+    };
+
+
+
     const { data: productos, isLoading, isError } = useQuery({
         queryKey: ['productos'],
         queryFn: async () => {
@@ -266,6 +336,17 @@ export default function ListaProductos() {
             return res.json();
         }
     });
+
+    // 🔥 NUEVO: Fetch de categorías para el modal de edición de grupos 🔥
+    const { data: categorias } = useQuery({
+        queryKey: ['categorias'],
+        queryFn: async () => {
+            const res = await fetch('/api/categorias');
+            if (!res.ok) return [];
+            return res.json();
+        }
+    });
+    const catOptions = categorias?.map(c => ({ value: c.id.toString(), label: c.nombre })) || [];
 
     const stockPorGrupos = useMemo(() => {
         if (!productos) return {};
@@ -284,10 +365,10 @@ export default function ListaProductos() {
             if (p.marca?.nombre) marcasSet.add(p.marca.nombre);
             p.tags?.forEach(t => tagsSet.add(t.nombre));
         });
-        return { 
-            categorias: Array.from(catSet).sort(), 
-            marcas: Array.from(marcasSet).sort(), 
-            tags: Array.from(tagsSet).sort() 
+        return {
+            categorias: Array.from(catSet).sort(),
+            marcas: Array.from(marcasSet).sort(),
+            tags: Array.from(tagsSet).sort()
         };
     }, [productos]);
 
@@ -391,7 +472,7 @@ export default function ListaProductos() {
                 // Ordenamos las categorías alfabéticamente para mantener consistencia
                 Object.entries(inventarioAnidado).sort(([catA], [catB]) => catA.localeCompare(catB)).map(([categoria, contenido]) => (
                     <Box key={categoria} mb={isMobile ? "xl" : 40}>
-                        
+
                         <Group mb="md" gap="xs">
                             <IconBox color="#1971c2" size={28} />
                             <Title order={3} c="blue.9">{categoria}</Title>
@@ -411,8 +492,8 @@ export default function ListaProductos() {
                                 <Paper key={grupo.info.id} withBorder p={isMobile ? "sm" : "md"} mb="lg" radius="md" bg="gray.0">
                                     <Group justify="space-between" mb="xs">
                                         <Group gap="xs">
-                                            <Avatar 
-                                                src={grupo.info.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${grupo.info.imagen}` : null} 
+                                            <Avatar
+                                                src={grupo.info.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${grupo.info.imagen}` : null}
                                                 radius="md" size="md" color="teal"
                                                 styles={{ image: { objectFit: 'contain' } }}
                                                 style={{ cursor: grupo.info.imagen ? 'pointer' : 'default' }}
@@ -421,6 +502,9 @@ export default function ListaProductos() {
                                                 {grupo.info.nombre?.charAt(0).toUpperCase()}
                                             </Avatar>
                                             <Title order={5} c="teal.9">Grupo: {grupo.info.nombre}</Title>
+                                            <ActionIcon variant="light" color="teal" size="sm" onClick={() => abrirModalGrupo(grupo.info)} title="Editar Grupo">
+                                                <IconEdit size={14} />
+                                            </ActionIcon>
                                         </Group>
                                         <Group gap="sm">
                                             <Text size="sm" fw={600} c={isCritico ? 'red.7' : 'teal.7'}>
@@ -434,7 +518,7 @@ export default function ListaProductos() {
 
                                     <Progress value={porcentaje} color={isCritico ? 'red' : 'teal'} size="sm" mb="md" radius="xl" striped={!isCritico} />
 
-                                    <ProductosVista 
+                                    <ProductosVista
                                         items={grupo.productos} stockPorGrupos={stockPorGrupos} isMobile={isMobile}
                                         onEdit={(id) => router.push(`/superuser/inventario/productos/${id}/editar`)}
                                         onDelete={eliminarProducto} onImageClick={setImagenAmpliada} esGrupo={true}
@@ -451,7 +535,7 @@ export default function ListaProductos() {
                                         Productos Individuales
                                     </Title>
                                 )}
-                                <ProductosVista 
+                                <ProductosVista
                                     items={contenido.sinGrupo} stockPorGrupos={stockPorGrupos} isMobile={isMobile}
                                     onEdit={(id) => router.push(`/superuser/inventario/productos/${id}/editar`)}
                                     onDelete={eliminarProducto} onImageClick={setImagenAmpliada} esGrupo={false}
@@ -472,6 +556,21 @@ export default function ListaProductos() {
                         <img src={imagenAmpliada} alt="Vista ampliada" style={{ maxWidth: '100vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: '8px' }} />
                     </Box>
                 )}
+            </Modal>
+
+            {/* 🔥 MODAL DE EDICIÓN COMPLETA DE GRUPO 🔥 */}
+            <Modal opened={modalEditGrupo} onClose={() => setModalEditGrupo(false)} title={<Title order={4}>Editar Grupo de Equivalencia</Title>} centered>
+                <form onSubmit={formGrupo.onSubmit(handleActualizarGrupoRapido)}>
+                    <Stack gap="md">
+                        <TextInput label="Nombre del Grupo" {...formGrupo.getInputProps('nombre')} autoFocus />
+                        <Select label="Categoría Padre" data={catOptions} searchable {...formGrupo.getInputProps('categoriaId')} />
+                        <NumberInput label="Stock Mínimo Global" min={0} {...formGrupo.getInputProps('stockMinimoGlobal')} />
+                        <ImageDropzone label="Imagen de Portada (Opcional)" form={formGrupo} fieldPath="imagen" />
+                        <Button type="submit" loading={isSubmittingGrupo} color="teal" fullWidth size="md">
+                            Guardar Cambios
+                        </Button>
+                    </Stack>
+                </form>
             </Modal>
         </Box>
     );

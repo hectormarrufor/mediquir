@@ -99,7 +99,7 @@ export default function NuevoProducto() {
     const handleSubmitDiccionario = async (endpoint, queryKey, fieldName, values, extraData = {}, formInstance, closeModalFn) => {
         try {
             let payload = { nombre: values.nombre, ...extraData, stockMinimoGlobal: values.stockMinimoGlobal };
-          
+
 
             // Si subió una imagen para la Marca o Grupo, la procesamos
             if (values.imagen && typeof values.imagen.arrayBuffer === 'function') {
@@ -226,11 +226,31 @@ export default function NuevoProducto() {
 
                             <Grid.Col span={{ base: 12, md: 4 }}>
                                 <Group align="flex-end" gap="xs" wrap="nowrap">
-                                    <Select style={{ flex: 1 }} label="Grupo Equivalencia" description="Para stock global" data={mapOptions(grupos)} searchable clearable {...form.getInputProps('grupoEquivalenciaId')} />
+                                    <Select
+                                        style={{ flex: 1 }}
+                                        label="Grupo Equivalencia"
+                                        description="Para stock global"
+                                        data={mapOptions(grupos)}
+                                        searchable
+                                        clearable
+                                        {...form.getInputProps('grupoEquivalenciaId')}
+                                        // 🔥 MAGIA DE AUTOMATIZACIÓN AQUÍ 🔥
+                                        onChange={(val) => {
+                                            // 1. Actualizamos el valor del select en el formulario
+                                            form.setFieldValue('grupoEquivalenciaId', val);
+
+                                            // 2. Si el usuario seleccionó un grupo, buscamos su nombre y lo inyectamos
+                                            if (val) {
+                                                const grupoSeleccionado = grupos.find(g => g.id.toString() === val);
+                                                if (grupoSeleccionado) {
+                                                    form.setFieldValue('nombre', grupoSeleccionado.nombre);
+                                                }
+                                            }
+                                        }}
+                                    />
                                     <ActionIcon
                                         size="lg" color="teal" variant="light" mb={22}
                                         onClick={() => {
-                                            // Validación inteligente: Obligamos a seleccionar categoría primero
                                             if (!form.values.categoriaId) {
                                                 notifications.show({ title: 'Aviso', message: 'Selecciona primero una Categoría para que el grupo la herede.', color: 'orange' });
                                                 return;
@@ -290,7 +310,7 @@ export default function NuevoProducto() {
                         </Grid>
                     </Paper>
 
-                  {/* SECCIÓN 2: FINANZAS Y PRECIOS */}
+                    {/* SECCIÓN 2: FINANZAS Y PRECIOS */}
                     <Paper withBorder shadow="sm" p="xl" radius="md" bg="gray.0">
                         <Group mb="md" gap="xs"><IconCalculator color="#1971c2" /><Title order={4} c="blue.7">2. Estructura de Precios (Ref USD)</Title></Group>
                         <Grid>
@@ -307,7 +327,7 @@ export default function NuevoProducto() {
                             </Group>
                         )}
                     </Paper>
-                
+
 
                     {/* SECCIÓN 3: LOGÍSTICA E INVENTARIO */}
                     <Paper withBorder shadow="sm" p="xl" radius="md" bg="white">
