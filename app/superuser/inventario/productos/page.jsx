@@ -11,22 +11,18 @@ import {
 import { useMediaQuery } from '@mantine/hooks';
 import { 
     IconPlus, IconEdit, IconTrash, IconSearch, 
-    IconFilter, IconBox, IconTags, IconSitemap, IconX 
+    IconFilter, IconBox, IconTags, IconSitemap, IconX, IconSortAscending, IconCalendar
 } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { notifications } from '@mantine/notifications';
+import dayjs from 'dayjs';
 
 // =======================================================================
 // 1. TARJETA MÓVIL INDIVIDUAL
 // =======================================================================
-const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClick }) => {
-    let isCritico = false;
-    if (prod.grupoEquivalenciaId) {
-        const totalGrupo = stockPorGrupos[prod.grupoEquivalenciaId] || 0;
-        isCritico = totalGrupo <= prod.grupoEquivalencia.stockMinimoGlobal;
-    } else {
-        isCritico = Number(prod.stockAlmacen) <= Number(prod.stockMinimo);
-    }
+
+const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClick, esGrupo }) => {
+    const isCriticoIndividual = Number(prod.stockAlmacen) <= Number(prod.stockMinimo);
 
     const imgSrc = prod.imagen 
         ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}` 
@@ -37,11 +33,7 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
             <Group wrap="nowrap" align="flex-start" justify="space-between" mb="sm">
                 <Group wrap="nowrap" gap="sm" style={{ flex: 1 }}>
                     <Avatar 
-                        src={imgSrc} 
-                        alt={prod.nombre} 
-                        radius="sm" 
-                        size="lg" 
-                        color="blue"
+                        src={imgSrc} alt={prod.nombre} radius="sm" size="lg" color="blue"
                         styles={{ image: { objectFit: 'contain' } }}
                         style={{ cursor: imgSrc ? 'pointer' : 'default' }}
                         onClick={() => imgSrc && onImageClick(imgSrc)}
@@ -56,14 +48,16 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
                         </Group>
                     </Box>
                 </Group>
-                <Badge color={isCritico ? 'red' : (prod.grupoEquivalenciaId ? 'teal' : 'green')} variant={prod.grupoEquivalenciaId ? 'filled' : 'light'} size="xs">
-                    {isCritico ? 'Crítico' : 'Óptimo'}
-                </Badge>
+                {!esGrupo && (
+                    <Badge color={isCriticoIndividual ? 'red' : 'green'} variant="light" size="xs">
+                        {isCriticoIndividual ? 'Crítico' : 'Óptimo'}
+                    </Badge>
+                )}
             </Group>
 
             <Divider variant="dotted" mb="sm" />
 
-           <Grid gutter="xs" mb="sm">
+            <Grid gutter="xs" mb="sm">
                 <Grid.Col span={6}>
                     <Text size="xs" c="dimmed">Presentación</Text>
                     <Text size="sm" tt="capitalize" fw={500} lh={1.1}>
@@ -76,7 +70,6 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
                     <Text size="sm" fw={500} lh={1.1}>{prod.unidadesPorBulto}</Text>
                 </Grid.Col>
 
-                {/* 🔥 NUEVA FILA DE FINANZAS (Costo, P6, P7) 🔥 */}
                 <Grid.Col span={8}>
                     <Group gap="md">
                         <Box>
@@ -105,10 +98,18 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
             </Grid>
 
             {prod.tags && prod.tags.length > 0 && (
-                <Group gap={4} mb="md">
+                <Group gap={4} mb="sm">
                     {prod.tags.map(t => <Badge key={t.id} size="xs" color="gray" variant="light" style={{ textTransform: 'lowercase' }}>#{t.nombre}</Badge>)}
                 </Group>
             )}
+
+            {/* 🔥 Pie de página con la Fecha de Modificación 🔥 */}
+            <Group justify="space-between" align="center" mt="sm" mb="sm">
+                <Group gap={4}>
+                    <IconCalendar size={14} color="gray" />
+                    <Text size="xs" c="dimmed">Modificado: {dayjs(prod.updatedAt).format('DD/MM/YY HH:mm')}</Text>
+                </Group>
+            </Group>
 
             <Group grow gap="xs">
                 <Button variant="light" color="blue" size="xs" leftSection={<IconEdit size={16} />} onClick={onEdit}>Editar</Button>
@@ -117,11 +118,10 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
         </Card>
     );
 };
-
 // =======================================================================
-// 2. COMPONENTE RENDERIZADOR (Tabla en Desktop, Cards en Móvil)
+// 2. COMPONENTE RENDERIZADOR DE LISTA
 // =======================================================================
-const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onImageClick }) => {
+const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onImageClick, esGrupo }) => {
     if (isMobile) {
         return (
             <Stack gap="xs">
@@ -129,7 +129,7 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                     <ProductoCardMovil 
                         key={prod.id} prod={prod} stockPorGrupos={stockPorGrupos} 
                         onEdit={() => onEdit(prod.id)} onDelete={() => onDelete(prod.id, prod.nombre)} 
-                        onImageClick={onImageClick}
+                        onImageClick={onImageClick} esGrupo={esGrupo}
                     />
                 ))}
             </Stack>
@@ -147,33 +147,22 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                         <Table.Th>Etiquetas</Table.Th>
                         <Table.Th>Finanzas (USD)</Table.Th>
                         <Table.Th>Stock Actual</Table.Th>
-                        <Table.Th>Estado Alerta</Table.Th>
+                        {!esGrupo && <Table.Th>Estado Alerta</Table.Th>}
+                        {/* 🔥 NUEVA COLUMNA EXCLUSIVA 🔥 */}
+                        <Table.Th>Modificado</Table.Th>
                         <Table.Th ta="center">Acciones</Table.Th>
                     </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
                     {items.map((prod) => {
-                        let isCritico = false;
-                        if (prod.grupoEquivalenciaId) {
-                            const totalGrupo = stockPorGrupos[prod.grupoEquivalenciaId] || 0;
-                            isCritico = totalGrupo <= prod.grupoEquivalencia.stockMinimoGlobal;
-                        } else {
-                            isCritico = Number(prod.stockAlmacen) <= Number(prod.stockMinimo);
-                        }
-
-                        const imgSrc = prod.imagen 
-                            ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}` 
-                            : (prod.marca?.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.marca.imagen}` : null);
+                        const isCriticoIndividual = Number(prod.stockAlmacen) <= Number(prod.stockMinimo);
+                        const imgSrc = prod.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}` : (prod.marca?.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.marca.imagen}` : null);
 
                         return (
                             <Table.Tr key={prod.id}>
                                 <Table.Td>
                                     <Avatar 
-                                        src={imgSrc} 
-                                        alt={prod.nombre} 
-                                        radius="sm" 
-                                        size="lg" 
-                                        color="blue"
+                                        src={imgSrc} alt={prod.nombre} radius="sm" size="lg" color="blue"
                                         styles={{ image: { objectFit: 'contain' } }}
                                         style={{ cursor: imgSrc ? 'pointer' : 'default' }}
                                         onClick={() => imgSrc && onImageClick(imgSrc)}
@@ -201,38 +190,35 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                                         {(!prod.tags || prod.tags.length === 0) && <Text size="xs" c="dimmed">-</Text>}
                                     </Group>
                                 </Table.Td>
-                                {/* 🔥 COLUMNA FINANZAS MULTIPRECIO 🔥 */}
                                 <Table.Td>
-                                    <Text fw={700} c="green.8" title="Costo Base">
-                                        C: ${Number(prod.costoUsd).toFixed(2)}
-                                    </Text>
-                                    
-                                    {Number(prod.precio6) > 0 && (
-                                        <Text size="xs" fw={600} c="blue.7" title="Precio 6 Manual">
-                                            P6: ${Number(prod.precio6).toFixed(2)}
-                                        </Text>
-                                    )}
-                                    
-                                    {Number(prod.precio7) > 0 && (
-                                        <Text size="xs" fw={600} c="grape.7" title="Precio 7 Manual">
-                                            P7: ${Number(prod.precio7).toFixed(2)}
-                                        </Text>
-                                    )}
-                                    
+                                    <Text fw={700} c="green.8" title="Costo Base">C: ${Number(prod.costoUsd).toFixed(2)}</Text>
+                                    {Number(prod.precio6) > 0 && <Text size="xs" fw={600} c="blue.7">P6: ${Number(prod.precio6).toFixed(2)}</Text>}
+                                    {Number(prod.precio7) > 0 && <Text size="xs" fw={600} c="grape.7">P7: ${Number(prod.precio7).toFixed(2)}</Text>}
                                     <Text size="xs" c="dimmed" mt={4}>IVA: {prod.porcentajeIva}%</Text>
                                 </Table.Td>
                                 <Table.Td>
                                     <Text fw={800} size="md">{Number(prod.stockAlmacen)}</Text>
                                 </Table.Td>
+                                
+                                {!esGrupo && (
+                                    <Table.Td>
+                                        <Badge color={isCriticoIndividual ? 'red' : 'green'} variant="light">
+                                            {isCriticoIndividual ? 'Crítico' : 'Óptimo'}
+                                        </Badge>
+                                    </Table.Td>
+                                )}
+
+                                {/* 🔥 CELDA EXCLUSIVA PARA LA FECHA 🔥 */}
                                 <Table.Td>
-                                    {prod.grupoEquivalenciaId ? (
-                                        <Tooltip label={`Total del Grupo: ${stockPorGrupos[prod.grupoEquivalenciaId]}. Mínimo exigido: ${prod.grupoEquivalencia.stockMinimoGlobal}`}>
-                                            <Badge color={isCritico ? 'red' : 'teal'} variant="filled" style={{ cursor: 'help' }}>{isCritico ? 'Crítico (G)' : 'Óptimo (G)'}</Badge>
-                                        </Tooltip>
-                                    ) : (
-                                        <Badge color={isCritico ? 'red' : 'green'} variant="light">{isCritico ? 'Crítico' : 'Óptimo'}</Badge>
-                                    )}
+                                    <Group gap={4} wrap="nowrap">
+                                        <IconCalendar size={14} color="gray" />
+                                        <Box>
+                                            <Text size="sm" fw={500}>{dayjs(prod.updatedAt).format('DD/MM/YY')}</Text>
+                                            <Text size="xs" c="dimmed">{dayjs(prod.updatedAt).format('hh:mm A')}</Text>
+                                        </Box>
+                                    </Group>
                                 </Table.Td>
+
                                 <Table.Td ta="center">
                                     <Group gap="xs" justify="center" wrap="nowrap">
                                         <ActionIcon variant="light" color="blue" title="Editar" onClick={() => onEdit(prod.id)}><IconEdit size={16} /></ActionIcon>
@@ -249,18 +235,28 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
 };
 
 // =======================================================================
-// 3. COMPONENTE PRINCIPAL DE LA PÁGINA
+// 3. COMPONENTE PRINCIPAL
 // =======================================================================
 export default function ListaProductos() {
     const router = useRouter();
     const isMobile = useMediaQuery('(max-width: 768px)');
 
+    // --- ESTADOS DE FILTROS Y ORDEN ---
     const [search, setSearch] = useState('');
+    const [filterCategoria, setFilterCategoria] = useState(null);
     const [filterMarca, setFilterMarca] = useState(null);
     const [filterTag, setFilterTag] = useState(null);
-    
-    // Estado para el Visor de Imágenes (Lightbox)
+    const [sortBy, setSortBy] = useState('fechaDesc'); // Por defecto los actualizados recientemente
     const [imagenAmpliada, setImagenAmpliada] = useState(null);
+
+    const sortOptions = [
+        { value: 'fechaDesc', label: 'Más recientes (Act.)' },
+        { value: 'fechaAsc', label: 'Más antiguos (Act.)' },
+        { value: 'nombreAsc', label: 'Nombre (A-Z)' },
+        { value: 'nombreDesc', label: 'Nombre (Z-A)' },
+        { value: 'precioAsc', label: 'Menor Costo' },
+        { value: 'precioDesc', label: 'Mayor Costo' }
+    ];
 
     const { data: productos, isLoading, isError } = useQuery({
         queryKey: ['productos'],
@@ -275,59 +271,71 @@ export default function ListaProductos() {
         if (!productos) return {};
         const sums = {};
         productos.forEach(p => {
-            if (p.grupoEquivalencia) {
-                sums[p.grupoEquivalencia.id] = (sums[p.grupoEquivalencia.id] || 0) + Number(p.stockAlmacen);
-            }
+            if (p.grupoEquivalencia) sums[p.grupoEquivalencia.id] = (sums[p.grupoEquivalencia.id] || 0) + Number(p.stockAlmacen);
         });
         return sums;
     }, [productos]);
 
     const filterOptions = useMemo(() => {
-        if (!productos) return { marcas: [], tags: [] };
-        const marcasSet = new Set(), tagsSet = new Set();
+        if (!productos) return { categorias: [], marcas: [], tags: [] };
+        const catSet = new Set(), marcasSet = new Set(), tagsSet = new Set();
         productos.forEach(p => {
+            if (p.categoria?.nombre) catSet.add(p.categoria.nombre);
             if (p.marca?.nombre) marcasSet.add(p.marca.nombre);
             p.tags?.forEach(t => tagsSet.add(t.nombre));
         });
-        return { marcas: Array.from(marcasSet).sort(), tags: Array.from(tagsSet).sort() };
+        return { 
+            categorias: Array.from(catSet).sort(), 
+            marcas: Array.from(marcasSet).sort(), 
+            tags: Array.from(tagsSet).sort() 
+        };
     }, [productos]);
 
+    // --- 1. FILTRADO ---
     const productosFiltrados = useMemo(() => {
         if (!productos) return [];
         let filtrados = productos;
         if (search) {
             const lowerSearch = search.toLowerCase();
-            filtrados = filtrados.filter(p => {
-                const nombreMatch = p.nombre ? p.nombre.toLowerCase().includes(lowerSearch) : false;
-                const codigoMatch = p.codigo ? p.codigo.toLowerCase().includes(lowerSearch) : false;
-                return nombreMatch || codigoMatch;
-            });
+            filtrados = filtrados.filter(p => (p.nombre?.toLowerCase().includes(lowerSearch) || p.codigo?.toLowerCase().includes(lowerSearch)));
         }
+        if (filterCategoria) filtrados = filtrados.filter(p => p.categoria?.nombre === filterCategoria);
         if (filterMarca) filtrados = filtrados.filter(p => p.marca?.nombre === filterMarca);
         if (filterTag) filtrados = filtrados.filter(p => p.tags?.some(t => t.nombre === filterTag));
         return filtrados;
-    }, [productos, search, filterMarca, filterTag]);
+    }, [productos, search, filterCategoria, filterMarca, filterTag]);
 
+    // --- 2. ORDENAMIENTO (Antes de Agrupar) ---
+    const productosOrdenados = useMemo(() => {
+        let result = [...productosFiltrados];
+        switch (sortBy) {
+            case 'nombreAsc': result.sort((a, b) => a.nombre.localeCompare(b.nombre)); break;
+            case 'nombreDesc': result.sort((a, b) => b.nombre.localeCompare(a.nombre)); break;
+            case 'precioAsc': result.sort((a, b) => Number(a.costoUsd) - Number(b.costoUsd)); break;
+            case 'precioDesc': result.sort((a, b) => Number(b.costoUsd) - Number(a.costoUsd)); break;
+            case 'fechaAsc': result.sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt)); break;
+            case 'fechaDesc':
+            default: result.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)); break;
+        }
+        return result;
+    }, [productosFiltrados, sortBy]);
+
+    // --- 3. AGRUPACIÓN ANIDADA ---
     const inventarioAnidado = useMemo(() => {
-        return productosFiltrados.reduce((acc, producto) => {
+        return productosOrdenados.reduce((acc, producto) => {
             const catNombre = producto.categoria?.nombre || 'Sin Categoría';
-            
-            if (!acc[catNombre]) {
-                acc[catNombre] = { grupos: {}, sinGrupo: [] };
-            }
+            if (!acc[catNombre]) acc[catNombre] = { grupos: {}, sinGrupo: [] };
 
             if (producto.grupoEquivalencia) {
                 const gId = producto.grupoEquivalencia.id;
-                if (!acc[catNombre].grupos[gId]) {
-                    acc[catNombre].grupos[gId] = { info: producto.grupoEquivalencia, productos: [] };
-                }
+                if (!acc[catNombre].grupos[gId]) acc[catNombre].grupos[gId] = { info: producto.grupoEquivalencia, productos: [] };
                 acc[catNombre].grupos[gId].productos.push(producto);
             } else {
                 acc[catNombre].sinGrupo.push(producto);
             }
             return acc;
         }, {});
-    }, [productosFiltrados]);
+    }, [productosOrdenados]);
 
     const eliminarProducto = async (id, nombre) => {
         if (confirm(`¿Estás seguro de eliminar "${nombre}"? Esta acción no se puede deshacer.`)) {
@@ -355,26 +363,33 @@ export default function ListaProductos() {
                 </Button>
             </Group>
 
-            {/* FILTROS */}
+            {/* PANEL DE FILTROS AVANZADO Y ORDENAMIENTO */}
             <Paper p="md" radius="md" withBorder bg="gray.0" mb="xl">
                 <Grid align="flex-end">
                     <Grid.Col span={{ base: 12, md: 4 }}>
                         <TextInput label="Buscar" placeholder="Nombre o SKU..." leftSection={<IconSearch size={16} />} value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
                     </Grid.Col>
-                    <Grid.Col span={{ base: 6, md: 4 }}>
+                    <Grid.Col span={{ base: 6, md: 2 }}>
+                        <Select label="Categoría" placeholder="Todas" data={filterOptions.categorias} value={filterCategoria} onChange={setFilterCategoria} clearable searchable leftSection={<IconBox size={16} />} />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 6, md: 2 }}>
                         <Select label="Marca" placeholder="Todas" data={filterOptions.marcas} value={filterMarca} onChange={setFilterMarca} clearable searchable leftSection={<IconFilter size={16} />} />
                     </Grid.Col>
-                    <Grid.Col span={{ base: 6, md: 4 }}>
-                        <Select label="Etiqueta" placeholder="Todos los tags" data={filterOptions.tags} value={filterTag} onChange={setFilterTag} clearable searchable leftSection={<IconTags size={16} />} />
+                    <Grid.Col span={{ base: 6, md: 2 }}>
+                        <Select label="Etiqueta" placeholder="Todas" data={filterOptions.tags} value={filterTag} onChange={setFilterTag} clearable searchable leftSection={<IconTags size={16} />} />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 6, md: 2 }}>
+                        <Select label="Ordenar por" data={sortOptions} value={sortBy} onChange={setSortBy} leftSection={<IconSortAscending size={16} />} allowDeselect={false} />
                     </Grid.Col>
                 </Grid>
             </Paper>
 
             {/* RENDERIZADO ANIDADO */}
             {Object.keys(inventarioAnidado || {}).length === 0 ? (
-                <Paper p="xl" withBorder ta="center" radius="md"><Text c="dimmed">No se encontraron productos.</Text></Paper>
+                <Paper p="xl" withBorder ta="center" radius="md"><Text c="dimmed">No se encontraron productos con esos filtros.</Text></Paper>
             ) : (
-                Object.entries(inventarioAnidado).map(([categoria, contenido]) => (
+                // Ordenamos las categorías alfabéticamente para mantener consistencia
+                Object.entries(inventarioAnidado).sort(([catA], [catB]) => catA.localeCompare(catB)).map(([categoria, contenido]) => (
                     <Box key={categoria} mb={isMobile ? "xl" : 40}>
                         
                         <Group mb="md" gap="xs">
@@ -396,12 +411,9 @@ export default function ListaProductos() {
                                 <Paper key={grupo.info.id} withBorder p={isMobile ? "sm" : "md"} mb="lg" radius="md" bg="gray.0">
                                     <Group justify="space-between" mb="xs">
                                         <Group gap="xs">
-                                            {/* Avatar del Grupo adaptado para Lightbox */}
                                             <Avatar 
                                                 src={grupo.info.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${grupo.info.imagen}` : null} 
-                                                radius="md" 
-                                                size="md"
-                                                color="teal"
+                                                radius="md" size="md" color="teal"
                                                 styles={{ image: { objectFit: 'contain' } }}
                                                 style={{ cursor: grupo.info.imagen ? 'pointer' : 'default' }}
                                                 onClick={() => grupo.info.imagen && setImagenAmpliada(`${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${grupo.info.imagen}`)}
@@ -425,8 +437,7 @@ export default function ListaProductos() {
                                     <ProductosVista 
                                         items={grupo.productos} stockPorGrupos={stockPorGrupos} isMobile={isMobile}
                                         onEdit={(id) => router.push(`/superuser/inventario/productos/${id}/editar`)}
-                                        onDelete={eliminarProducto}
-                                        onImageClick={setImagenAmpliada}
+                                        onDelete={eliminarProducto} onImageClick={setImagenAmpliada} esGrupo={true}
                                     />
                                 </Paper>
                             );
@@ -443,8 +454,7 @@ export default function ListaProductos() {
                                 <ProductosVista 
                                     items={contenido.sinGrupo} stockPorGrupos={stockPorGrupos} isMobile={isMobile}
                                     onEdit={(id) => router.push(`/superuser/inventario/productos/${id}/editar`)}
-                                    onDelete={eliminarProducto}
-                                    onImageClick={setImagenAmpliada}
+                                    onDelete={eliminarProducto} onImageClick={setImagenAmpliada} esGrupo={false}
                                 />
                             </Box>
                         )}
@@ -452,44 +462,17 @@ export default function ListaProductos() {
                 ))
             )}
 
-            {/* 🔥 VISOR DE IMÁGENES (LIGHTBOX TIPO FACEBOOK) 🔥 */}
-            <Modal
-                opened={!!imagenAmpliada}
-                onClose={() => setImagenAmpliada(null)}
-                size="auto"
-                centered
-                withCloseButton={false}
-                styles={{
-                    root: { zIndex: 9999 },
-                    content: { backgroundColor: 'transparent', boxShadow: 'none' }, // Fondo transparente
-                    body: { padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' }
-                }}
-            >
+            {/* LIGHTBOX */}
+            <Modal opened={!!imagenAmpliada} onClose={() => setImagenAmpliada(null)} size="auto" centered withCloseButton={false} styles={{ root: { zIndex: 9999 }, content: { backgroundColor: 'transparent', boxShadow: 'none' }, body: { padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' } }}>
                 {imagenAmpliada && (
                     <Box pos="relative">
-                        {/* Botón Flotante para Cerrar */}
-                        <ActionIcon 
-                            onClick={() => setImagenAmpliada(null)} 
-                            radius="xl" 
-                            color="dark" 
-                            variant="filled" 
-                            pos="absolute" 
-                            top={-15} 
-                            right={-15}
-                            style={{ zIndex: 10, border: '2px solid white' }}
-                        >
+                        <ActionIcon onClick={() => setImagenAmpliada(null)} radius="xl" color="dark" variant="filled" pos="absolute" top={-15} right={-15} style={{ zIndex: 10, border: '2px solid white' }}>
                             <IconX size={16} />
                         </ActionIcon>
-                        {/* Imagen Expandida (Sin deformarse) */}
-                        <img 
-                            src={imagenAmpliada} 
-                            alt="Vista ampliada" 
-                            style={{ maxWidth: '100vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: '8px' }} 
-                        />
+                        <img src={imagenAmpliada} alt="Vista ampliada" style={{ maxWidth: '100vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: '8px' }} />
                     </Box>
                 )}
             </Modal>
-
         </Box>
     );
 }
