@@ -2,40 +2,36 @@
 
 import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-    Box, Button, Group, Title, Table, Badge, ActionIcon,
-    Loader, Center, Text, Paper, Avatar, TextInput, Select,
-    ScrollArea, Stack, Tooltip, Card, Grid, Divider, ThemeIcon, Progress,
-    Modal,
+import { useForm } from '@mantine/form';
+import ImageDropzone from '@/app/components/ImageDropzone';
+import { 
+    Box, Button, Group, Title, Table, Badge, ActionIcon, 
+    Loader, Center, Text, Paper, Avatar, TextInput, Select, 
+    ScrollArea, Stack, Tooltip, Card, Grid, Divider, ThemeIcon, Progress, 
+    Modal, 
     NumberInput
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import {
-    IconPlus, IconEdit, IconTrash, IconSearch,
+import { 
+    IconPlus, IconEdit, IconTrash, IconSearch, 
     IconFilter, IconBox, IconTags, IconSitemap, IconX, IconSortAscending, IconCalendar
 } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { notifications } from '@mantine/notifications';
 import dayjs from 'dayjs';
-import { useForm } from '@mantine/form';
-import ImageDropzone from '@/app/components/ImageDropzone';
 
 // =======================================================================
 // 1. TARJETA MÓVIL INDIVIDUAL
 // =======================================================================
-
 const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClick, esGrupo }) => {
     const isCriticoIndividual = Number(prod.stockAlmacen) <= Number(prod.stockMinimo);
-
-    const imgSrc = prod.imagen
-        ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}`
-        : (prod.marca?.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.marca.imagen}` : null);
+    const imgSrc = prod.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}` : (prod.marca?.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.marca.imagen}` : null);
 
     return (
         <Card withBorder radius="md" p="md" shadow="sm" bg="white">
             <Group wrap="nowrap" align="flex-start" justify="space-between" mb="sm">
                 <Group wrap="nowrap" gap="sm" style={{ flex: 1 }}>
-                    <Avatar
+                    <Avatar 
                         src={imgSrc} alt={prod.nombre} radius="sm" size="lg" color="blue"
                         styles={{ image: { objectFit: 'contain' } }}
                         style={{ cursor: imgSrc ? 'pointer' : 'default' }}
@@ -64,7 +60,7 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
                 <Grid.Col span={6}>
                     <Text size="xs" c="dimmed">Presentación</Text>
                     <Text size="sm" tt="capitalize" fw={500} lh={1.1}>
-                        {prod.presentacion}
+                        {prod.presentacion} 
                         {prod.presentacion === 'caja' && prod.unidadesPorCaja && <Text span size="xs" c="dimmed"> ({prod.unidadesPorCaja}u)</Text>}
                     </Text>
                 </Grid.Col>
@@ -106,7 +102,6 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
                 </Group>
             )}
 
-            {/* 🔥 Pie de página con la Fecha de Modificación 🔥 */}
             <Group justify="space-between" align="center" mt="sm" mb="sm">
                 <Group gap={4}>
                     <IconCalendar size={14} color="gray" />
@@ -121,6 +116,7 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
         </Card>
     );
 };
+
 // =======================================================================
 // 2. COMPONENTE RENDERIZADOR DE LISTA
 // =======================================================================
@@ -129,9 +125,9 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
         return (
             <Stack gap="xs">
                 {items.map((prod) => (
-                    <ProductoCardMovil
-                        key={prod.id} prod={prod} stockPorGrupos={stockPorGrupos}
-                        onEdit={() => onEdit(prod.id)} onDelete={() => onDelete(prod.id, prod.nombre)}
+                    <ProductoCardMovil 
+                        key={prod.id} prod={prod} stockPorGrupos={stockPorGrupos} 
+                        onEdit={() => onEdit(prod.id)} onDelete={() => onDelete(prod.id, prod.nombre)} 
                         onImageClick={onImageClick} esGrupo={esGrupo}
                     />
                 ))}
@@ -151,7 +147,6 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                         <Table.Th>Finanzas (USD)</Table.Th>
                         <Table.Th>Stock Actual</Table.Th>
                         {!esGrupo && <Table.Th>Estado Alerta</Table.Th>}
-                        {/* 🔥 NUEVA COLUMNA EXCLUSIVA 🔥 */}
                         <Table.Th>Modificado</Table.Th>
                         <Table.Th ta="center">Acciones</Table.Th>
                     </Table.Tr>
@@ -164,7 +159,7 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                         return (
                             <Table.Tr key={prod.id}>
                                 <Table.Td>
-                                    <Avatar
+                                    <Avatar 
                                         src={imgSrc} alt={prod.nombre} radius="sm" size="lg" color="blue"
                                         styles={{ image: { objectFit: 'contain' } }}
                                         style={{ cursor: imgSrc ? 'pointer' : 'default' }}
@@ -202,7 +197,6 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                                 <Table.Td>
                                     <Text fw={800} size="md">{Number(prod.stockAlmacen)}</Text>
                                 </Table.Td>
-
                                 {!esGrupo && (
                                     <Table.Td>
                                         <Badge color={isCriticoIndividual ? 'red' : 'green'} variant="light">
@@ -210,8 +204,6 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                                         </Badge>
                                     </Table.Td>
                                 )}
-
-                                {/* 🔥 CELDA EXCLUSIVA PARA LA FECHA 🔥 */}
                                 <Table.Td>
                                     <Group gap={4} wrap="nowrap">
                                         <IconCalendar size={14} color="gray" />
@@ -221,7 +213,6 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                                         </Box>
                                     </Group>
                                 </Table.Td>
-
                                 <Table.Td ta="center">
                                     <Group gap="xs" justify="center" wrap="nowrap">
                                         <ActionIcon variant="light" color="blue" title="Editar" onClick={() => onEdit(prod.id)}><IconEdit size={16} /></ActionIcon>
@@ -242,6 +233,7 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
 // =======================================================================
 export default function ListaProductos() {
     const router = useRouter();
+    const queryClient = useQueryClient();
     const isMobile = useMediaQuery('(max-width: 768px)');
 
     // --- ESTADOS DE FILTROS Y ORDEN ---
@@ -249,8 +241,13 @@ export default function ListaProductos() {
     const [filterCategoria, setFilterCategoria] = useState(null);
     const [filterMarca, setFilterMarca] = useState(null);
     const [filterTag, setFilterTag] = useState(null);
-    const [sortBy, setSortBy] = useState('fechaDesc'); // Por defecto los actualizados recientemente
+    const [sortBy, setSortBy] = useState('fechaDesc');
     const [imagenAmpliada, setImagenAmpliada] = useState(null);
+
+    // --- ESTADOS PARA MODAL DE EDICIÓN DE GRUPO ---
+    const [modalEditGrupo, setModalEditGrupo] = useState(false);
+    const [grupoSeleccionado, setGrupoSeleccionado] = useState(null);
+    const [isSubmittingGrupo, setIsSubmittingGrupo] = useState(false);
 
     const sortOptions = [
         { value: 'fechaDesc', label: 'Más recientes (Act.)' },
@@ -261,11 +258,25 @@ export default function ListaProductos() {
         { value: 'precioDesc', label: 'Mayor Costo' }
     ];
 
-   // --- LÓGICA DEL ATAJO PARA EDITAR GRUPO ---
-    const queryClient = useQueryClient();
-    const [modalEditGrupo, setModalEditGrupo] = useState(false);
-    const [grupoSeleccionado, setGrupoSeleccionado] = useState(null);
-    const [isSubmittingGrupo, setIsSubmittingGrupo] = useState(false);
+    // --- FETCHES ---
+    const { data: productos, isLoading, isError } = useQuery({
+        queryKey: ['productos'],
+        queryFn: async () => {
+            const res = await fetch('/api/productos');
+            if (!res.ok) throw new Error('Error al cargar los productos');
+            return res.json();
+        }
+    });
+
+    const { data: categorias } = useQuery({
+        queryKey: ['categorias'],
+        queryFn: async () => {
+            const res = await fetch('/api/categorias');
+            if (!res.ok) return [];
+            return res.json();
+        }
+    });
+    const catOptions = categorias?.map(c => ({ value: c.id.toString(), label: c.nombre })) || [];
 
     const formGrupo = useForm({
         initialValues: { nombre: '', stockMinimoGlobal: 0, categoriaId: '', imagen: null },
@@ -275,8 +286,145 @@ export default function ListaProductos() {
         }
     });
 
+    // --- 1. LÓGICAS DERIVADAS Y CÁLCULOS ---
+    const stockPorGrupos = useMemo(() => {
+        if (!productos) return {};
+        const sums = {};
+        productos.forEach(p => {
+            if (p.grupoEquivalencia) sums[p.grupoEquivalencia.id] = (sums[p.grupoEquivalencia.id] || 0) + Number(p.stockAlmacen);
+        });
+        return sums;
+    }, [productos]);
+
+    const filterOptions = useMemo(() => {
+        if (!productos) return { categorias: [], marcas: [], tags: [] };
+        const catSet = new Set(), marcasSet = new Set(), tagsSet = new Set();
+        productos.forEach(p => {
+            if (p.categoria?.nombre) catSet.add(p.categoria.nombre);
+            if (p.marca?.nombre) marcasSet.add(p.marca.nombre);
+            p.tags?.forEach(t => tagsSet.add(t.nombre));
+        });
+        return { 
+            categorias: Array.from(catSet).sort(), 
+            marcas: Array.from(marcasSet).sort(), 
+            tags: Array.from(tagsSet).sort() 
+        };
+    }, [productos]);
+
+    // --- 2. FILTRADO Y ORDENAMIENTO DE PRODUCTOS BASE ---
+    const productosFiltrados = useMemo(() => {
+        if (!productos) return [];
+        let filtrados = productos;
+        if (search) {
+            const lowerSearch = search.toLowerCase();
+            filtrados = filtrados.filter(p => (p.nombre?.toLowerCase().includes(lowerSearch) || p.codigo?.toLowerCase().includes(lowerSearch)));
+        }
+        if (filterCategoria) filtrados = filtrados.filter(p => p.categoria?.nombre === filterCategoria);
+        if (filterMarca) filtrados = filtrados.filter(p => p.marca?.nombre === filterMarca);
+        if (filterTag) filtrados = filtrados.filter(p => p.tags?.some(t => t.nombre === filterTag));
+        return filtrados;
+    }, [productos, search, filterCategoria, filterMarca, filterTag]);
+
+    const productosOrdenados = useMemo(() => {
+        let result = [...productosFiltrados];
+        switch (sortBy) {
+            case 'nombreAsc': result.sort((a, b) => a.nombre.localeCompare(b.nombre)); break;
+            case 'nombreDesc': result.sort((a, b) => b.nombre.localeCompare(a.nombre)); break;
+            case 'precioAsc': result.sort((a, b) => Number(a.costoUsd) - Number(b.costoUsd)); break;
+            case 'precioDesc': result.sort((a, b) => Number(b.costoUsd) - Number(a.costoUsd)); break;
+            case 'fechaAsc': result.sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt)); break;
+            case 'fechaDesc':
+            default: result.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)); break;
+        }
+        return result;
+    }, [productosFiltrados, sortBy]);
+
+    // --- 3. AGRUPACIÓN DINÁMICA CON "INTELIGENCIA DE FECHAS" (Convertido a Array) ---
+    const inventarioAnidado = useMemo(() => {
+        const agrupado = productosOrdenados.reduce((acc, producto) => {
+            const catNombre = producto.categoria?.nombre || 'Sin Categoría';
+            const timestamp = new Date(producto.updatedAt).getTime();
+
+            // Si la categoría no existe en el acumulador, la creamos con sus fechas base
+            if (!acc[catNombre]) {
+                acc[catNombre] = {
+                    nombre: catNombre,
+                    grupos: {},
+                    sinGrupo: [],
+                    maxDate: timestamp,
+                    minDate: timestamp,
+                };
+            } else {
+                acc[catNombre].maxDate = Math.max(acc[catNombre].maxDate, timestamp);
+                acc[catNombre].minDate = Math.min(acc[catNombre].minDate, timestamp);
+            }
+
+            if (producto.grupoEquivalencia) {
+                const gId = producto.grupoEquivalencia.id;
+                // Si el grupo no existe, lo creamos
+                if (!acc[catNombre].grupos[gId]) {
+                    acc[catNombre].grupos[gId] = {
+                        // 🔥 INYECTAMOS categoriaId DEL PRODUCTO PARA AUTO-RELLENAR EL MODAL 🔥
+                        info: { ...producto.grupoEquivalencia, categoriaId: producto.categoriaId },
+                        productos: [],
+                        maxDate: timestamp,
+                        minDate: timestamp,
+                    };
+                } else {
+                    acc[catNombre].grupos[gId].maxDate = Math.max(acc[catNombre].grupos[gId].maxDate, timestamp);
+                    acc[catNombre].grupos[gId].minDate = Math.min(acc[catNombre].grupos[gId].minDate, timestamp);
+                }
+                acc[catNombre].grupos[gId].productos.push(producto);
+            } else {
+                acc[catNombre].sinGrupo.push(producto);
+            }
+            return acc;
+        }, {});
+
+        // Convertimos el Diccionario a un Arreglo para poder ordenarlo
+        const categoriasArray = Object.values(agrupado);
+
+        // 1. Ordenar las Categorías según el parámetro
+        if (sortBy === 'fechaDesc') {
+            categoriasArray.sort((a, b) => b.maxDate - a.maxDate);
+        } else if (sortBy === 'fechaAsc') {
+            categoriasArray.sort((a, b) => a.minDate - b.minDate);
+        } else {
+            categoriasArray.sort((a, b) => a.nombre.localeCompare(b.nombre));
+        }
+
+        // 2. Convertir a Array y Ordenar los Grupos internos de cada categoría
+        categoriasArray.forEach(cat => {
+            cat.gruposArray = Object.values(cat.grupos);
+            if (sortBy === 'fechaDesc') {
+                cat.gruposArray.sort((a, b) => b.maxDate - a.maxDate);
+            } else if (sortBy === 'fechaAsc') {
+                cat.gruposArray.sort((a, b) => a.minDate - b.minDate);
+            } else {
+                cat.gruposArray.sort((a, b) => a.info.nombre.localeCompare(b.info.nombre));
+            }
+        });
+
+        return categoriasArray;
+    }, [productosOrdenados, sortBy]);
+
+    // --- ACCIONES Y HANDLERS ---
+    const eliminarProducto = async (id, nombre) => {
+        if (confirm(`¿Estás seguro de eliminar "${nombre}"? Esta acción no se puede deshacer.`)) {
+            try {
+                const res = await fetch(`/api/productos/${id}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error('Error al eliminar');
+                notifications.show({ title: 'Éxito', message: 'Producto eliminado', color: 'green' });
+                queryClient.invalidateQueries({ queryKey: ['productos'] });
+            } catch (error) {
+                notifications.show({ title: 'Error', message: error.message, color: 'red' });
+            }
+        }
+    };
+
     const abrirModalGrupo = (grupo) => {
         setGrupoSeleccionado(grupo);
+        // 🔥 El grupo ahora SÍ trae el categoriaId heredado del producto 🔥
         formGrupo.setValues({ 
             nombre: grupo.nombre, 
             stockMinimoGlobal: grupo.stockMinimoGlobal || 0,
@@ -289,7 +437,6 @@ export default function ListaProductos() {
     const handleActualizarGrupoRapido = async (values) => {
         setIsSubmittingGrupo(true);
         try {
-            // 🔥 Ahora enviamos todos los datos completos 🔥
             let payload = { 
                 nombre: values.nombre,
                 stockMinimoGlobal: Number(values.stockMinimoGlobal),
@@ -326,113 +473,13 @@ export default function ListaProductos() {
         }
     };
 
-
-
-    const { data: productos, isLoading, isError } = useQuery({
-        queryKey: ['productos'],
-        queryFn: async () => {
-            const res = await fetch('/api/productos');
-            if (!res.ok) throw new Error('Error al cargar los productos');
-            return res.json();
-        }
-    });
-
-    // 🔥 NUEVO: Fetch de categorías para el modal de edición de grupos 🔥
-    const { data: categorias } = useQuery({
-        queryKey: ['categorias'],
-        queryFn: async () => {
-            const res = await fetch('/api/categorias');
-            if (!res.ok) return [];
-            return res.json();
-        }
-    });
-    const catOptions = categorias?.map(c => ({ value: c.id.toString(), label: c.nombre })) || [];
-
-    const stockPorGrupos = useMemo(() => {
-        if (!productos) return {};
-        const sums = {};
-        productos.forEach(p => {
-            if (p.grupoEquivalencia) sums[p.grupoEquivalencia.id] = (sums[p.grupoEquivalencia.id] || 0) + Number(p.stockAlmacen);
-        });
-        return sums;
-    }, [productos]);
-
-    const filterOptions = useMemo(() => {
-        if (!productos) return { categorias: [], marcas: [], tags: [] };
-        const catSet = new Set(), marcasSet = new Set(), tagsSet = new Set();
-        productos.forEach(p => {
-            if (p.categoria?.nombre) catSet.add(p.categoria.nombre);
-            if (p.marca?.nombre) marcasSet.add(p.marca.nombre);
-            p.tags?.forEach(t => tagsSet.add(t.nombre));
-        });
-        return {
-            categorias: Array.from(catSet).sort(),
-            marcas: Array.from(marcasSet).sort(),
-            tags: Array.from(tagsSet).sort()
-        };
-    }, [productos]);
-
-    // --- 1. FILTRADO ---
-    const productosFiltrados = useMemo(() => {
-        if (!productos) return [];
-        let filtrados = productos;
-        if (search) {
-            const lowerSearch = search.toLowerCase();
-            filtrados = filtrados.filter(p => (p.nombre?.toLowerCase().includes(lowerSearch) || p.codigo?.toLowerCase().includes(lowerSearch)));
-        }
-        if (filterCategoria) filtrados = filtrados.filter(p => p.categoria?.nombre === filterCategoria);
-        if (filterMarca) filtrados = filtrados.filter(p => p.marca?.nombre === filterMarca);
-        if (filterTag) filtrados = filtrados.filter(p => p.tags?.some(t => t.nombre === filterTag));
-        return filtrados;
-    }, [productos, search, filterCategoria, filterMarca, filterTag]);
-
-    // --- 2. ORDENAMIENTO (Antes de Agrupar) ---
-    const productosOrdenados = useMemo(() => {
-        let result = [...productosFiltrados];
-        switch (sortBy) {
-            case 'nombreAsc': result.sort((a, b) => a.nombre.localeCompare(b.nombre)); break;
-            case 'nombreDesc': result.sort((a, b) => b.nombre.localeCompare(a.nombre)); break;
-            case 'precioAsc': result.sort((a, b) => Number(a.costoUsd) - Number(b.costoUsd)); break;
-            case 'precioDesc': result.sort((a, b) => Number(b.costoUsd) - Number(a.costoUsd)); break;
-            case 'fechaAsc': result.sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt)); break;
-            case 'fechaDesc':
-            default: result.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)); break;
-        }
-        return result;
-    }, [productosFiltrados, sortBy]);
-
-    // --- 3. AGRUPACIÓN ANIDADA ---
-    const inventarioAnidado = useMemo(() => {
-        return productosOrdenados.reduce((acc, producto) => {
-            const catNombre = producto.categoria?.nombre || 'Sin Categoría';
-            if (!acc[catNombre]) acc[catNombre] = { grupos: {}, sinGrupo: [] };
-
-            if (producto.grupoEquivalencia) {
-                const gId = producto.grupoEquivalencia.id;
-                if (!acc[catNombre].grupos[gId]) acc[catNombre].grupos[gId] = { info: producto.grupoEquivalencia, productos: [] };
-                acc[catNombre].grupos[gId].productos.push(producto);
-            } else {
-                acc[catNombre].sinGrupo.push(producto);
-            }
-            return acc;
-        }, {});
-    }, [productosOrdenados]);
-
-    const eliminarProducto = async (id, nombre) => {
-        if (confirm(`¿Estás seguro de eliminar "${nombre}"? Esta acción no se puede deshacer.`)) {
-            try {
-                const res = await fetch(`/api/productos/${id}`, { method: 'DELETE' });
-                if (!res.ok) throw new Error('Error al eliminar');
-                notifications.show({ title: 'Éxito', message: 'Producto eliminado', color: 'green' });
-                router.refresh();
-            } catch (error) {
-                notifications.show({ title: 'Error', message: error.message, color: 'red' });
-            }
-        }
-    };
-
     if (isLoading) return <Center h="50vh"><Loader size="lg" /></Center>;
     if (isError) return <Center h="50vh"><Text c="red">Error al cargar inventario.</Text></Center>;
+
+    // Variables de Estadísticas / KPIs
+    const kpiTotalProductos = productos?.length || 0;
+    const kpiMostrados = productosFiltrados?.length || 0;
+    const kpiGrupos = Object.keys(stockPorGrupos).length;
 
     return (
         <Box p={isMobile ? "xs" : "md"} maw={1400} mx="auto">
@@ -443,6 +490,43 @@ export default function ListaProductos() {
                     {isMobile ? 'Nuevo' : 'Nuevo Producto'}
                 </Button>
             </Group>
+
+            {/* 🔥 KPIs / ESTADÍSTICAS 🔥 */}
+            <Grid mb="xl">
+                <Grid.Col span={{ base: 12, md: 4 }}>
+                    <Paper withBorder p="md" radius="md" shadow="sm" bg="blue.0">
+                        <Group align="center">
+                            <ThemeIcon color="blue" size="xl" radius="md" variant="light"><IconBox size={24} /></ThemeIcon>
+                            <Box>
+                                <Text size="xs" c="blue.9" tt="uppercase" fw={700}>Total Registrados</Text>
+                                <Text size="xl" fw={900} c="blue.9">{kpiTotalProductos} Productos</Text>
+                            </Box>
+                        </Group>
+                    </Paper>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, md: 4 }}>
+                    <Paper withBorder p="md" radius="md" shadow="sm" bg="teal.0">
+                        <Group align="center">
+                            <ThemeIcon color="teal" size="xl" radius="md" variant="light"><IconSitemap size={24} /></ThemeIcon>
+                            <Box>
+                                <Text size="xs" c="teal.9" tt="uppercase" fw={700}>Grupos de Equivalencia</Text>
+                                <Text size="xl" fw={900} c="teal.9">{kpiGrupos} Grupos</Text>
+                            </Box>
+                        </Group>
+                    </Paper>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, md: 4 }}>
+                    <Paper withBorder p="md" radius="md" shadow="sm" bg="gray.0">
+                        <Group align="center">
+                            <ThemeIcon color="gray" size="xl" radius="md" variant="light"><IconFilter size={24} /></ThemeIcon>
+                            <Box>
+                                <Text size="xs" c="gray.7" tt="uppercase" fw={700}>Resultados del Filtro</Text>
+                                <Text size="xl" fw={900} c="gray.9">{kpiMostrados} Coincidencias</Text>
+                            </Box>
+                        </Group>
+                    </Paper>
+                </Grid.Col>
+            </Grid>
 
             {/* PANEL DE FILTROS AVANZADO Y ORDENAMIENTO */}
             <Paper p="md" radius="md" withBorder bg="gray.0" mb="xl">
@@ -465,24 +549,23 @@ export default function ListaProductos() {
                 </Grid>
             </Paper>
 
-            {/* RENDERIZADO ANIDADO */}
-            {Object.keys(inventarioAnidado || {}).length === 0 ? (
+            {/* RENDERIZADO ANIDADO (Ahora recorremos el Array ordenado) */}
+            {inventarioAnidado.length === 0 ? (
                 <Paper p="xl" withBorder ta="center" radius="md"><Text c="dimmed">No se encontraron productos con esos filtros.</Text></Paper>
             ) : (
-                // Ordenamos las categorías alfabéticamente para mantener consistencia
-                Object.entries(inventarioAnidado).sort(([catA], [catB]) => catA.localeCompare(catB)).map(([categoria, contenido]) => (
-                    <Box key={categoria} mb={isMobile ? "xl" : 40}>
-
+                inventarioAnidado.map((catData) => (
+                    <Box key={catData.nombre} mb={isMobile ? "xl" : 40}>
+                        
                         <Group mb="md" gap="xs">
                             <IconBox color="#1971c2" size={28} />
-                            <Title order={3} c="blue.9">{categoria}</Title>
+                            <Title order={3} c="blue.9">{catData.nombre}</Title>
                             <Badge color="blue" variant="light" radius="xl" size="lg">
-                                {Object.values(contenido.grupos).reduce((sum, g) => sum + g.productos.length, 0) + contenido.sinGrupo.length}
+                                {catData.gruposArray.reduce((sum, g) => sum + g.productos.length, 0) + catData.sinGrupo.length}
                             </Badge>
                         </Group>
 
                         {/* GRUPOS DE EQUIVALENCIA */}
-                        {Object.values(contenido.grupos).map(grupo => {
+                        {catData.gruposArray.map(grupo => {
                             const totalGrupo = stockPorGrupos[grupo.info.id] || 0;
                             const minimoGlobal = grupo.info.stockMinimoGlobal;
                             const isCritico = totalGrupo <= minimoGlobal;
@@ -492,8 +575,8 @@ export default function ListaProductos() {
                                 <Paper key={grupo.info.id} withBorder p={isMobile ? "sm" : "md"} mb="lg" radius="md" bg="gray.0">
                                     <Group justify="space-between" mb="xs">
                                         <Group gap="xs">
-                                            <Avatar
-                                                src={grupo.info.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${grupo.info.imagen}` : null}
+                                            <Avatar 
+                                                src={grupo.info.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${grupo.info.imagen}` : null} 
                                                 radius="md" size="md" color="teal"
                                                 styles={{ image: { objectFit: 'contain' } }}
                                                 style={{ cursor: grupo.info.imagen ? 'pointer' : 'default' }}
@@ -518,7 +601,7 @@ export default function ListaProductos() {
 
                                     <Progress value={porcentaje} color={isCritico ? 'red' : 'teal'} size="sm" mb="md" radius="xl" striped={!isCritico} />
 
-                                    <ProductosVista
+                                    <ProductosVista 
                                         items={grupo.productos} stockPorGrupos={stockPorGrupos} isMobile={isMobile}
                                         onEdit={(id) => router.push(`/superuser/inventario/productos/${id}/editar`)}
                                         onDelete={eliminarProducto} onImageClick={setImagenAmpliada} esGrupo={true}
@@ -528,15 +611,15 @@ export default function ListaProductos() {
                         })}
 
                         {/* PRODUCTOS SIN GRUPO */}
-                        {contenido.sinGrupo.length > 0 && (
-                            <Box mt="md" pl={Object.keys(contenido.grupos).length > 0 ? "md" : 0}>
-                                {Object.keys(contenido.grupos).length > 0 && (
+                        {catData.sinGrupo.length > 0 && (
+                            <Box mt="md" pl={catData.gruposArray.length > 0 ? "md" : 0}>
+                                {catData.gruposArray.length > 0 && (
                                     <Title order={6} mb="sm" c="gray.6" tt="uppercase" lts={1}>
                                         Productos Individuales
                                     </Title>
                                 )}
-                                <ProductosVista
-                                    items={contenido.sinGrupo} stockPorGrupos={stockPorGrupos} isMobile={isMobile}
+                                <ProductosVista 
+                                    items={catData.sinGrupo} stockPorGrupos={stockPorGrupos} isMobile={isMobile}
                                     onEdit={(id) => router.push(`/superuser/inventario/productos/${id}/editar`)}
                                     onDelete={eliminarProducto} onImageClick={setImagenAmpliada} esGrupo={false}
                                 />
@@ -558,7 +641,7 @@ export default function ListaProductos() {
                 )}
             </Modal>
 
-            {/* 🔥 MODAL DE EDICIÓN COMPLETA DE GRUPO 🔥 */}
+            {/* MODAL DE EDICIÓN COMPLETA DE GRUPO */}
             <Modal opened={modalEditGrupo} onClose={() => setModalEditGrupo(false)} title={<Title order={4}>Editar Grupo de Equivalencia</Title>} centered>
                 <form onSubmit={formGrupo.onSubmit(handleActualizarGrupoRapido)}>
                     <Stack gap="md">

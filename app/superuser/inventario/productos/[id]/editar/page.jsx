@@ -172,6 +172,50 @@ export default function EditarProducto() {
                     <Paper withBorder shadow="sm" p="xl" radius="md" bg="white">
                         <Title order={4} mb="md" c="gray.7">1. Datos Comerciales y Clasificación</Title>
                         <Grid>
+                            <Grid.Col span={{ base: 12, md: 4 }}>
+                                <Group align="flex-end" gap="xs" wrap="nowrap">
+                                    <Select style={{ flex: 1 }} withAsterisk label="Categoría" data={mapOptions(categorias)} searchable {...form.getInputProps('categoriaId')} />
+                                    <ActionIcon size="lg" color="blue" variant="light" onClick={() => setModalCat(true)}><IconPlus size={18} /></ActionIcon>
+                                </Group>
+                            </Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 4 }}>
+                                <Group align="flex-end" gap="xs" wrap="nowrap">
+                                    <Select
+                                        style={{ flex: 1 }}
+                                        label="Grupo Equivalencia"
+                                        description="Para stock global"
+                                        data={mapOptions(grupos)}
+                                        searchable
+                                        clearable
+                                        {...form.getInputProps('grupoEquivalenciaId')}
+                                        // 🔥 MAGIA DE AUTOMATIZACIÓN REPLICADA 🔥
+                                        onChange={(val) => {
+                                            // 1. Guardamos el ID del grupo en el formulario
+                                            form.setFieldValue('grupoEquivalenciaId', val);
+
+                                            // 2. Buscamos el nombre y lo inyectamos automáticamente
+                                            if (val) {
+                                                const grupoSeleccionado = grupos.find(g => g.id.toString() === val);
+                                                if (grupoSeleccionado) {
+                                                    form.setFieldValue('nombre', grupoSeleccionado.nombre);
+                                                }
+                                            }
+                                        }}
+                                    />
+                                    <ActionIcon
+                                        size="lg" color="teal" variant="light" mb={22}
+                                        onClick={() => {
+                                            if (!form.values.categoriaId) {
+                                                notifications.show({ title: 'Aviso', message: 'Selecciona una Categoría primero.', color: 'orange' });
+                                                return;
+                                            }
+                                            setModalGrupo(true);
+                                        }}
+                                    >
+                                        <IconPlus size={18} />
+                                    </ActionIcon>
+                                </Group>
+                            </Grid.Col>
                             <Grid.Col span={{ base: 12, md: 8 }}>
                                 <TextInput withAsterisk label="Nombre del Producto" {...form.getInputProps('nombre')} />
                             </Grid.Col>
@@ -185,12 +229,7 @@ export default function EditarProducto() {
                                 />
                             </Grid.Col>
 
-                            <Grid.Col span={{ base: 12, md: 4 }}>
-                                <Group align="flex-end" gap="xs" wrap="nowrap">
-                                    <Select style={{ flex: 1 }} withAsterisk label="Categoría" data={mapOptions(categorias)} searchable {...form.getInputProps('categoriaId')} />
-                                    <ActionIcon size="lg" color="blue" variant="light" onClick={() => setModalCat(true)}><IconPlus size={18} /></ActionIcon>
-                                </Group>
-                            </Grid.Col>
+                            
 
                             <Grid.Col span={{ base: 12, md: 4 }}>
                                 <Group align="flex-end" gap="xs" wrap="nowrap">
@@ -199,15 +238,7 @@ export default function EditarProducto() {
                                 </Group>
                             </Grid.Col>
 
-                            <Grid.Col span={{ base: 12, md: 4 }}>
-                                <Group align="flex-end" gap="xs" wrap="nowrap">
-                                    <Select style={{ flex: 1 }} label="Grupo Equivalencia" description="Para stock global" data={mapOptions(grupos)} searchable clearable {...form.getInputProps('grupoEquivalenciaId')} />
-                                    <ActionIcon size="lg" color="teal" variant="light" onClick={() => {
-                                        if (!form.values.categoriaId) return notifications.show({ title: 'Aviso', message: 'Selecciona una Categoría primero.', color: 'orange' });
-                                        setModalGrupo(true);
-                                    }} mb={22}><IconPlus size={18} /></ActionIcon>
-                                </Group>
-                            </Grid.Col>
+                            
 
                             <Grid.Col span={12}>
                                 <TagsInput

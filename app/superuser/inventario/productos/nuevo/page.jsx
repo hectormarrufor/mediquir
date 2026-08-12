@@ -193,22 +193,6 @@ export default function NuevoProducto() {
                     <Paper withBorder shadow="sm" p="xl" radius="md" bg="white">
                         <Title order={4} mb="md" c="gray.7">1. Datos Comerciales y Clasificación</Title>
                         <Grid>
-                            <Grid.Col span={{ base: 12, md: 8 }}>
-                                <TextInput withAsterisk label="Nombre del Producto" placeholder="Ej. Inyectadora 3ml" {...form.getInputProps('nombre')} />
-                            </Grid.Col>
-                            <Grid.Col span={{ base: 12, md: 4 }}>
-                                <TextInput
-                                    withAsterisk
-                                    label="Código"
-                                    placeholder="Ej. INY-3ML-01"
-                                    // 1. Forzamos la capitalización en dispositivos móviles y teclados
-                                    autoCapitalize="characters"
-                                    // 2. Forzamos que cualquier texto ingresado se convierta a mayúsculas en tiempo real
-                                    value={form.values.codigo}
-                                    onChange={(event) => form.setFieldValue('codigo', event.currentTarget.value.toUpperCase())}
-                                    error={form.errors.codigo}
-                                />
-                            </Grid.Col>
 
                             <Grid.Col span={{ base: 12, md: 4 }}>
                                 <Group align="flex-end" gap="xs" wrap="nowrap">
@@ -216,15 +200,7 @@ export default function NuevoProducto() {
                                     <ActionIcon size="lg" color="blue" variant="light" onClick={() => setModalCat(true)}><IconPlus size={18} /></ActionIcon>
                                 </Group>
                             </Grid.Col>
-
-                            <Grid.Col span={{ base: 12, md: 4 }}>
-                                <Group align="flex-end" gap="xs" wrap="nowrap">
-                                    <Select style={{ flex: 1 }} withAsterisk label="Marca" data={mapOptions(marcas)} searchable {...form.getInputProps('marcaId')} />
-                                    <ActionIcon size="lg" color="grape" variant="light" onClick={() => setModalMarca(true)}><IconPlus size={18} /></ActionIcon>
-                                </Group>
-                            </Grid.Col>
-
-                            <Grid.Col span={{ base: 12, md: 4 }}>
+                              <Grid.Col span={{ base: 12, md: 4 }}>
                                 <Group align="flex-end" gap="xs" wrap="nowrap">
                                     <Select
                                         style={{ flex: 1 }}
@@ -262,6 +238,33 @@ export default function NuevoProducto() {
                                     </ActionIcon>
                                 </Group>
                             </Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 8 }}>
+                                <TextInput withAsterisk label="Nombre del Producto" placeholder="Ej. Inyectadora 3ml" {...form.getInputProps('nombre')} />
+                            </Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 4 }}>
+                                <TextInput
+                                    withAsterisk
+                                    label="Código"
+                                    placeholder="Ej. INY-3ML-01"
+                                    // 1. Forzamos la capitalización en dispositivos móviles y teclados
+                                    autoCapitalize="characters"
+                                    // 2. Forzamos que cualquier texto ingresado se convierta a mayúsculas en tiempo real
+                                    value={form.values.codigo}
+                                    onChange={(event) => form.setFieldValue('codigo', event.currentTarget.value.toUpperCase())}
+                                    error={form.errors.codigo}
+                                />
+                            </Grid.Col>
+
+                            
+
+                            <Grid.Col span={{ base: 12, md: 4 }}>
+                                <Group align="flex-end" gap="xs" wrap="nowrap">
+                                    <Select style={{ flex: 1 }} withAsterisk label="Marca" data={mapOptions(marcas)} searchable {...form.getInputProps('marcaId')} />
+                                    <ActionIcon size="lg" color="grape" variant="light" onClick={() => setModalMarca(true)}><IconPlus size={18} /></ActionIcon>
+                                </Group>
+                            </Grid.Col>
+
+                          
 
                             <Grid.Col span={12}>
                                 {/* EL SÚPER TAGS-INPUT INTELIGENTE */}
