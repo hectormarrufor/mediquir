@@ -317,16 +317,16 @@ export default function NuevoProducto() {
                     <Paper withBorder shadow="sm" p="xl" radius="md" bg="gray.0">
                         <Group mb="md" gap="xs"><IconCalculator color="#1971c2" /><Title order={4} c="blue.7">2. Estructura de Precios (Ref USD)</Title></Group>
                         <Grid>
-                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput withAsterisk label="Costo (USD)" decimalScale={2} prefix="$ " {...form.getInputProps('costoUsd')} /></Grid.Col>
-                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput label="Precio 6 (Manual USD)" decimalScale={2} prefix="$ " {...form.getInputProps('precio6')} /></Grid.Col>
-                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput label="Precio 7 (Manual USD)" decimalScale={2} prefix="$ " {...form.getInputProps('precio7')} /></Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput withAsterisk label="Costo (USD)" decimalScale={3} prefix="$ " {...form.getInputProps('costoUsd')} /></Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput label="Precio 6 (Manual USD)" decimalScale={3} prefix="$ " {...form.getInputProps('precio6')} /></Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput label="Precio 7 (Manual USD)" decimalScale={3} prefix="$ " {...form.getInputProps('precio7')} /></Grid.Col>
                             <Grid.Col span={{ base: 12, md: 3 }}><NumberInput withAsterisk label="% de IVA" min={0} suffix=" %" {...form.getInputProps('porcentajeIva')} /></Grid.Col>
                         </Grid>
                         {form.values.costoUsd > 0 && (
                             <Group mt="md" bg="blue.1" p="sm" style={{ borderRadius: 8 }}>
                                 <Text size="sm" fw={600} c="blue.9">Proyecciones automáticas:</Text>
-                                <Badge color="green" variant="light" size="lg">Precio 1 (35%): ${(form.values.costoUsd * 1.35).toFixed(2)}</Badge>
-                                <Badge color="teal" variant="light" size="lg">Precio 4 (50%): ${(form.values.costoUsd * 1.50).toFixed(2)}</Badge>
+                                <Badge color="green" variant="light" size="lg">Precio 1 (35%): ${(form.values.costoUsd * 1.35).toFixed(3)}</Badge>
+                                <Badge color="teal" variant="light" size="lg">Precio 4 (50%): ${(form.values.costoUsd * 1.50).toFixed(3)}</Badge>
                             </Group>
                         )}
                     </Paper>

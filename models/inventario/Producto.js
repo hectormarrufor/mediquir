@@ -45,7 +45,7 @@ const Producto = sequelize.define('Producto', {
         defaultValue: 0.00 // Precio manual en USD
     },
     precio7: { // 🔥 NUEVO CAMPO MANUAL
-        type: DataTypes.DECIMAL(10, 2), 
+        type: DataTypes.DECIMAL(10, 3), 
         allowNull: true, 
         defaultValue: 0.00 // Precio manual en USD
     },
