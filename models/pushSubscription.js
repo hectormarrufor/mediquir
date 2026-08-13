@@ -31,5 +31,8 @@ const PushSubscription = sequelize.define('PushSubscription', {
     environment: {
         type: DataTypes.STRING, // 'development' o 'production'
     },
+}, {
+    tableName: 'PushSubscriptions', // 🔥 Obligamos a que use el plural siempre
+    timestamps: true,
 });
 module.exports = PushSubscription;

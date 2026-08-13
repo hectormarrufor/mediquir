@@ -70,7 +70,7 @@ const page = () => {
 
   const handleSubmit = async (values) => {
     try {
-      pedirPermisoPush();
+      await pedirPermisoPush();
       // Llama a la función centralizada de login. Ella manejará su propia redirección.
       await login(values.user, values.password);
 
