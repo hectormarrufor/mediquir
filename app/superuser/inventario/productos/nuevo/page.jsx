@@ -58,7 +58,8 @@ export default function NuevoProducto() {
             unidadesPorBulto: 1,
             stockAlmacen: '',
             stockMinimo: '',
-            imagen: null
+            imagen: null,
+            porcentajeDescuento: 0 // 🔥 Nuevo campo agregado
         },
         validate: {
             nombre: (value) => (!value || value.trim().length < 3 ? 'Mínimo 3 caracteres' : null),
@@ -76,6 +77,7 @@ export default function NuevoProducto() {
             stockAlmacen: (value) => (value === '' || Number(value) < 0 ? 'No puede ser negativo' : null),
             unidadesPorCaja: (value, values) => (values.presentacion === 'caja' && (!value || Number(value) <= 0) ? 'Debe ser mayor a 0' : null),
             unidadesPorBulto: (value) => (!value || Number(value) < 1 ? 'Mínimo 1 unidad por bulto' : null),
+
         }
     });
 
@@ -142,6 +144,13 @@ export default function NuevoProducto() {
                 precio7: values.precio7 ? Number(values.precio7) : 0,
                 unidadesPorCaja: values.presentacion === 'caja' ? Number(values.unidadesPorCaja) : null,
             };
+
+            if (Number(values.porcentajeDescuento) > 0 && Number(values.precio7) > 0) {
+                const descuento = Number(values.precio7) * (Number(values.porcentajeDescuento) / 100);
+                payload.precioDescuento = Number(values.precio7) - descuento;
+            } else {
+                payload.precioDescuento = null;
+            }
 
             // Lógica de subida de imagen
             if (values.imagen && typeof values.imagen.arrayBuffer === 'function') {
@@ -321,6 +330,26 @@ export default function NuevoProducto() {
                             <Grid.Col span={{ base: 12, md: 3 }}><NumberInput label="Precio 6 (Manual USD)" decimalScale={3} prefix="$ " {...form.getInputProps('precio6')} /></Grid.Col>
                             <Grid.Col span={{ base: 12, md: 3 }}><NumberInput label="Precio 7 (Manual USD)" decimalScale={3} prefix="$ " {...form.getInputProps('precio7')} /></Grid.Col>
                             <Grid.Col span={{ base: 12, md: 3 }}><NumberInput withAsterisk label="% de IVA" min={0} suffix=" %" {...form.getInputProps('porcentajeIva')} /></Grid.Col>
+                        </Grid>
+                        {/* 🔥 NUEVO BLOQUE DE DESCUENTOS 🔥 */}
+                        <Divider label="Promociones E-commerce" labelPosition="center" my="lg" />
+                        <Grid align="flex-end">
+                            <Grid.Col span={{ base: 12, md: 4 }}>
+                                <NumberInput 
+                                    label="% Descuento sobre Precio 7" 
+                                    description="Se activará como Oferta en la Landing Page"
+                                    suffix="%" 
+                                    min={0} max={99} 
+                                    {...form.getInputProps('porcentajeDescuento')} 
+                                />
+                            </Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 8 }}>
+                                {form.values.porcentajeDescuento > 0 && form.values.precio7 > 0 && (
+                                    <Badge color="red" size="xl" variant="light" h={40} mb={6}>
+                                        Precio Final Público: ${(form.values.precio7 - (form.values.precio7 * (form.values.porcentajeDescuento / 100))).toFixed(2)}
+                                    </Badge>
+                                )}
+                            </Grid.Col>
                         </Grid>
                         {form.values.costoUsd > 0 && (
                             <Group mt="md" bg="blue.1" p="sm" style={{ borderRadius: 8 }}>

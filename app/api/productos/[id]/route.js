@@ -28,9 +28,8 @@ export async function GET(req, { params }) {
     }
 }
 
-// =======================================================================
-// PUT: Actualizar el producto (Transaccional)
-// =======================================================================
+
+
 export async function PUT(req, { params }) {
     const t = await sequelize.transaction();
     try {
@@ -38,37 +37,34 @@ export async function PUT(req, { params }) {
         const body = await req.json();
         const { tags, ...productData } = body;
 
-        // 🔥 CORRECCIÓN CRÍTICA: Añadimos { transaction: t } aquí para evitar el bloqueo
         const producto = await Producto.findByPk(id, { transaction: t });
         if (!producto) throw new Error('Producto no encontrado');
 
-        // 1. Actualizamos los campos básicos del producto
-        await producto.update({
-            ...productData,
-            costoUsd: parseFloat(productData.costoUsd || 0),
-            precio6: parseFloat(productData.precio6 || 0),
-            precio7: parseFloat(productData.precio7 || 0),
-            stockAlmacen: parseFloat(productData.stockAlmacen || 0),
-            stockMinimo: parseFloat(productData.stockMinimo || 0),
-            unidadesPorCaja: productData.presentacion === 'caja' ? parseInt(productData.unidadesPorCaja) : null,
-            unidadesPorBulto: parseInt(productData.unidadesPorBulto || 1)
-        }, { transaction: t });
+        // 🔥 1. ACTUALIZACIÓN DINÁMICA (Tu idea brillante) 🔥
+        // Sequelize es inteligente: si productData solo trae { stockAlmacen: 50 }, 
+        // solo hará el UPDATE de esa columna y dejará el resto intacto.
+        if (Object.keys(productData).length > 0) {
+            await producto.update(productData, { transaction: t });
+        }
 
-        // 2. Sincronizamos las Etiquetas (Tags)
-        if (tags && Array.isArray(tags)) {
-            const tagInstances = await Promise.all(
-                tags.map(async (nombreTag) => {
-                    const cleanName = nombreTag.trim().toLowerCase();
-                    const [tag] = await Tag.findOrCreate({
-                        where: { nombre: cleanName },
-                        transaction: t
-                    });
-                    return tag;
-                })
-            );
-            await producto.setTags(tagInstances, { transaction: t });
-        } else {
-            await producto.setTags([], { transaction: t });
+        // 2. Sincronizamos las Etiquetas SÓLO si vienen explícitamente en el body
+        if (tags !== undefined) {
+            if (Array.isArray(tags) && tags.length > 0) {
+                const tagInstances = await Promise.all(
+                    tags.map(async (nombreTag) => {
+                        const cleanName = nombreTag.trim().toLowerCase();
+                        const [tag] = await Tag.findOrCreate({
+                            where: { nombre: cleanName },
+                            transaction: t
+                        });
+                        return tag;
+                    })
+                );
+                await producto.setTags(tagInstances, { transaction: t });
+            } else {
+                // Solo si el frontend envía explícitamente un array vacío (tags: []) borramos todo
+                await producto.setTags([], { transaction: t });
+            }
         }
 
         await t.commit();

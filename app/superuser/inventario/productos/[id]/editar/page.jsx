@@ -15,7 +15,7 @@ import ImageDropzone from '@/app/components/ImageDropzone';
 
 export default function EditarProducto() {
     const router = useRouter();
-    const { id } = useParams(); // Obtenemos el ID de la URL
+    const { id } = useParams(); 
     const queryClient = useQueryClient();
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -55,7 +55,8 @@ export default function EditarProducto() {
         initialValues: {
             nombre: '', codigo: '', categoriaId: '', marcaId: '', grupoEquivalenciaId: '',
             tags: [], costoUsd: '', precio6: '', precio7: '', porcentajeIva: 16, presentacion: 'unidad',
-            unidadesPorCaja: '', unidadesPorBulto: 1, stockAlmacen: '', stockMinimo: '', imagen: null
+            unidadesPorCaja: '', unidadesPorBulto: 1, stockAlmacen: '', stockMinimo: '', imagen: null,
+            porcentajeDescuento: 0 // 🔥 Nuevo campo agregado
         },
         validate: {
             nombre: (value) => (!value || value.trim().length < 3 ? 'Mínimo 3 caracteres' : null),
@@ -68,16 +69,21 @@ export default function EditarProducto() {
         }
     });
 
-    // 🔥 PRECARGA DE DATOS (HIDRATACIÓN) 🔥
+    // 🔥 PRECARGA DE DATOS (HIDRATACIÓN MATEMÁTICA) 🔥
     useEffect(() => {
         if (productoDB) {
+            // Calculamos el % de descuento si existe
+            let porcentajeActual = 0;
+            if (Number(productoDB.precioDescuento) > 0 && Number(productoDB.precio7) > 0) {
+                porcentajeActual = Math.round(((Number(productoDB.precio7) - Number(productoDB.precioDescuento)) / Number(productoDB.precio7)) * 100);
+            }
+
             form.setValues({
                 nombre: productoDB.nombre,
                 codigo: productoDB.codigo,
                 categoriaId: productoDB.categoriaId?.toString() || '',
                 marcaId: productoDB.marcaId?.toString() || '',
                 grupoEquivalenciaId: productoDB.grupoEquivalenciaId?.toString() || '',
-                // Transformamos el array de objetos tags a un array de strings simples
                 tags: productoDB.tags ? productoDB.tags.map(t => t.nombre) : [],
                 costoUsd: Number(productoDB.costoUsd),
                 precio6: Number(productoDB.precio6) || '',
@@ -88,13 +94,14 @@ export default function EditarProducto() {
                 unidadesPorBulto: productoDB.unidadesPorBulto || 1,
                 stockAlmacen: Number(productoDB.stockAlmacen),
                 stockMinimo: Number(productoDB.stockMinimo),
-                imagen: productoDB.imagen || null // Pasamos el string de la DB (ImageDropzone lo entenderá)
+                imagen: productoDB.imagen || null,
+                porcentajeDescuento: porcentajeActual // 🔥 Inyectamos el cálculo
             });
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [productoDB]);
 
-    // Mutación Modales (Igual que en crear)
+    // Mutación Modales
     const handleCrearDiccionario = async (endpoint, queryKey, fieldName, extraData = {}) => {
         if (nuevoDictValor.trim().length < 2) return notifications.show({ title: 'Aviso', message: 'Nombre muy corto', color: 'yellow' });
         try {
@@ -122,7 +129,14 @@ export default function EditarProducto() {
                 unidadesPorCaja: values.presentacion === 'caja' ? Number(values.unidadesPorCaja) : null,
             };
 
-            // Lógica de Imagen: Solo subimos si es un File nuevo (arrayBuffer function)
+            // 🔥 Transformamos el % de descuento a Dinero real (precioDescuento)
+            if (Number(values.porcentajeDescuento) > 0 && Number(values.precio7) > 0) {
+                const descuento = Number(values.precio7) * (Number(values.porcentajeDescuento) / 100);
+                payload.precioDescuento = Number(values.precio7) - descuento;
+            } else {
+                payload.precioDescuento = null;
+            }
+
             if (values.imagen && typeof values.imagen.arrayBuffer === 'function') {
                 notifications.show({ id: 'uploading-image', title: 'Subiendo imagen...', message: 'Espera...', loading: true });
                 const fileExt = values.imagen.name.split('.').pop();
@@ -135,7 +149,6 @@ export default function EditarProducto() {
                 notifications.update({ id: 'uploading-image', title: 'Éxito', message: 'Imagen subida', color: 'green' });
             }
 
-            // Hacemos un PUT a la ruta del [id]
             const res = await fetch(`/api/productos/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -188,17 +201,11 @@ export default function EditarProducto() {
                                         searchable
                                         clearable
                                         {...form.getInputProps('grupoEquivalenciaId')}
-                                        // 🔥 MAGIA DE AUTOMATIZACIÓN REPLICADA 🔥
                                         onChange={(val) => {
-                                            // 1. Guardamos el ID del grupo en el formulario
                                             form.setFieldValue('grupoEquivalenciaId', val);
-
-                                            // 2. Buscamos el nombre y lo inyectamos automáticamente
                                             if (val) {
                                                 const grupoSeleccionado = grupos.find(g => g.id.toString() === val);
-                                                if (grupoSeleccionado) {
-                                                    form.setFieldValue('nombre', grupoSeleccionado.nombre);
-                                                }
+                                                if (grupoSeleccionado) form.setFieldValue('nombre', grupoSeleccionado.nombre);
                                             }
                                         }}
                                     />
@@ -229,16 +236,12 @@ export default function EditarProducto() {
                                 />
                             </Grid.Col>
 
-                            
-
                             <Grid.Col span={{ base: 12, md: 4 }}>
                                 <Group align="flex-end" gap="xs" wrap="nowrap">
                                     <Select style={{ flex: 1 }} withAsterisk label="Marca" data={mapOptions(marcas)} searchable {...form.getInputProps('marcaId')} />
                                     <ActionIcon size="lg" color="grape" variant="light" onClick={() => setModalMarca(true)}><IconPlus size={18} /></ActionIcon>
                                 </Group>
                             </Grid.Col>
-
-                            
 
                             <Grid.Col span={12}>
                                 <TagsInput
@@ -273,9 +276,31 @@ export default function EditarProducto() {
                             <Grid.Col span={{ base: 12, md: 3 }}><NumberInput label="Precio 7 (Manual USD)" decimalScale={3} prefix="$ " {...form.getInputProps('precio7')} /></Grid.Col>
                             <Grid.Col span={{ base: 12, md: 3 }}><NumberInput withAsterisk label="% de IVA" min={0} suffix=" %" {...form.getInputProps('porcentajeIva')} /></Grid.Col>
                         </Grid>
+                        
+                        {/* 🔥 SECCIÓN DE DESCUENTOS 🔥 */}
+                        <Divider label="Promociones E-commerce" labelPosition="center" my="lg" />
+                        <Grid align="flex-end">
+                            <Grid.Col span={{ base: 12, md: 4 }}>
+                                <NumberInput 
+                                    label="% Descuento sobre Precio 7" 
+                                    description="Se activará como Oferta en la Landing Page"
+                                    suffix="%" 
+                                    min={0} max={99} 
+                                    {...form.getInputProps('porcentajeDescuento')} 
+                                />
+                            </Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 8 }}>
+                                {form.values.porcentajeDescuento > 0 && form.values.precio7 > 0 && (
+                                    <Badge color="red" size="xl" variant="light" h={40} mb={6}>
+                                        Precio Final Público: ${(form.values.precio7 - (form.values.precio7 * (form.values.porcentajeDescuento / 100))).toFixed(2)}
+                                    </Badge>
+                                )}
+                            </Grid.Col>
+                        </Grid>
+
                         {form.values.costoUsd > 0 && (
-                            <Group mt="md" bg="blue.1" p="sm" style={{ borderRadius: 8 }}>
-                                <Text size="sm" fw={600} c="blue.9">Proyecciones automáticas:</Text>
+                            <Group mt="xl" bg="blue.1" p="sm" style={{ borderRadius: 8 }}>
+                                <Text size="sm" fw={600} c="blue.9">Proyecciones automáticas de Costo:</Text>
                                 <Badge color="green" variant="light" size="lg">Precio 1 (35%): ${(form.values.costoUsd * 1.35).toFixed(3)}</Badge>
                                 <Badge color="teal" variant="light" size="lg">Precio 4 (50%): ${(form.values.costoUsd * 1.50).toFixed(3)}</Badge>
                             </Group>
@@ -311,13 +336,13 @@ export default function EditarProducto() {
                     <Group justify="flex-end" mt="md">
                         <Button variant="light" color="gray" onClick={() => router.back()} disabled={isSubmitting}>Cancelar</Button>
                         <Button type="submit" size="lg" color="green.8" leftSection={<IconDeviceFloppy size={20} />} loading={isSubmitting}>
-                            Actualizar Producto
+                            Actualizar Producto Completo
                         </Button>
                     </Group>
                 </Stack>
             </form>
 
-            {/* MODALES REUTILIZABLES... */}
+            {/* MODALES REUTILIZABLES */}
             <Modal opened={modalCat} onClose={() => setModalCat(false)} title={<Title order={4}>Nueva Categoría</Title>} centered><Stack gap="md"><TextInput label="Nombre" value={nuevoDictValor} onChange={(e) => setNuevoDictValor(e.currentTarget.value)} autoFocus /><Button fullWidth onClick={() => handleCrearDiccionario('/api/categorias', 'categorias', 'categoriaId')}>Guardar</Button></Stack></Modal>
             <Modal opened={modalMarca} onClose={() => setModalMarca(false)} title={<Title order={4}>Nueva Marca</Title>} centered><Stack gap="md"><TextInput label="Nombre" value={nuevoDictValor} onChange={(e) => setNuevoDictValor(e.currentTarget.value)} autoFocus /><Button fullWidth color="grape" onClick={() => handleCrearDiccionario('/api/marcas', 'marcas', 'marcaId')}>Guardar</Button></Stack></Modal>
             <Modal opened={modalGrupo} onClose={() => setModalGrupo(false)} title={<Title order={4}>Nuevo Grupo</Title>} centered><Stack gap="md"><TextInput label="Nombre" value={nuevoDictValor} onChange={(e) => setNuevoDictValor(e.currentTarget.value)} autoFocus /><NumberInput label="Stock Mínimo Global" value={nuevoGrupoStock} onChange={setNuevoGrupoStock} /><Button fullWidth color="teal" onClick={() => handleCrearDiccionario('/api/grupos-equivalencia', 'grupos', 'grupoEquivalenciaId', { stockMinimoGlobal: nuevoGrupoStock, categoriaId: form.values.categoriaId })}>Guardar Grupo</Button></Stack></Modal>

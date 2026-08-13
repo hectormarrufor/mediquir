@@ -49,6 +49,16 @@ const Producto = sequelize.define('Producto', {
         allowNull: true, 
         defaultValue: 0.00 // Precio manual en USD
     },
+    precioDescuento: { 
+        type: DataTypes.DECIMAL(10, 2), 
+        allowNull: true, // Si es null, no tiene descuento
+        defaultValue: null
+    },
+    nroVentas: { 
+        type: DataTypes.INTEGER, 
+        allowNull: false, 
+        defaultValue: 0 // Inicia en 0 y va subiendo con cada pedido
+    },
     // --- LOGÍSTICA B2B ---
     presentacion: {
         type: DataTypes.ENUM('unidad', 'par', 'paqx2', 'paqx4', 'caja'),

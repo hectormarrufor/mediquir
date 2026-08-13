@@ -4,26 +4,28 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from '@mantine/form';
 import ImageDropzone from '@/app/components/ImageDropzone';
-import { 
-    Box, Button, Group, Title, Table, Badge, ActionIcon, 
-    Loader, Center, Text, Paper, Avatar, TextInput, Select, 
-    ScrollArea, Stack, Tooltip, Card, Grid, Divider, ThemeIcon, Progress, 
-    Modal, 
+import {
+    Box, Button, Group, Title, Table, Badge, ActionIcon,
+    Loader, Center, Text, Paper, Avatar, TextInput, Select,
+    ScrollArea, Stack, Tooltip, Card, Grid, Divider, ThemeIcon, Progress,
+    Modal,
     NumberInput
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { 
-    IconPlus, IconEdit, IconTrash, IconSearch, 
+import {
+    IconPlus, IconEdit, IconTrash, IconSearch,
     IconFilter, IconBox, IconTags, IconSitemap, IconX, IconSortAscending, IconCalendar
 } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { notifications } from '@mantine/notifications';
 import dayjs from 'dayjs';
+import { useAuth } from '../../../../hooks/useAuth';
 
 // =======================================================================
 // 1. TARJETA MÓVIL INDIVIDUAL
 // =======================================================================
-const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClick, esGrupo }) => {
+const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClick, esGrupo, onEditFinanzas, onEditStock }) => {
+    const { isAdmin } = useAuth(); // 🔥 Extraemos el rol también en móvil
     const isCriticoIndividual = Number(prod.stockAlmacen) <= Number(prod.stockMinimo);
     const imgSrc = prod.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}` : (prod.marca?.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.marca.imagen}` : null);
 
@@ -31,7 +33,7 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
         <Card withBorder radius="md" p="md" shadow="sm" bg="white">
             <Group wrap="nowrap" align="flex-start" justify="space-between" mb="sm">
                 <Group wrap="nowrap" gap="sm" style={{ flex: 1 }}>
-                    <Avatar 
+                    <Avatar
                         src={imgSrc} alt={prod.nombre} radius="sm" size="lg" color="blue"
                         styles={{ image: { objectFit: 'contain' } }}
                         style={{ cursor: imgSrc ? 'pointer' : 'default' }}
@@ -60,7 +62,7 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
                 <Grid.Col span={6}>
                     <Text size="xs" c="dimmed">Presentación</Text>
                     <Text size="sm" tt="capitalize" fw={500} lh={1.1}>
-                        {prod.presentacion} 
+                        {prod.presentacion}
                         {prod.presentacion === 'caja' && prod.unidadesPorCaja && <Text span size="xs" c="dimmed"> ({prod.unidadesPorCaja}u)</Text>}
                     </Text>
                 </Grid.Col>
@@ -69,30 +71,35 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
                     <Text size="sm" fw={500} lh={1.1}>{prod.unidadesPorBulto}</Text>
                 </Grid.Col>
 
+                {/* 🔥 FINANZAS CON EDICIÓN RÁPIDA MÓVIL 🔥 */}
                 <Grid.Col span={8}>
-                    <Group gap="md">
+                    <Group gap="xs" align="flex-start">
                         <Box>
-                            <Text size="xs" c="dimmed">Costo</Text>
-                            <Text size="sm" fw={700} c="green.8" lh={1.1}>${Number(prod.costoUsd).toFixed(2)}</Text>
+                            <Text size="xs" c="dimmed">Finanzas</Text>
+                            <Text size="xs" fw={700} c="green.8" lh={1.1}>C: ${Number(prod.costoUsd).toFixed(2)}</Text>
+                            {Number(prod.precio6) > 0 && <Text size="xs" fw={600} c="blue.7" lh={1.1}>P6: ${Number(prod.precio6).toFixed(3)}</Text>}
+                            {Number(prod.precio7) > 0 && <Text size="xs" fw={600} c="grape.7" lh={1.1}>P7: ${Number(prod.precio7).toFixed(3)}</Text>}
+                            {Number(prod.precioDescuento) > 0 && <Badge color="red" size="xs" mt={2} variant="filled">OFERTA: ${Number(prod.precioDescuento).toFixed(2)}</Badge>}
                         </Box>
-                        {Number(prod.precio6) > 0 && (
-                            <Box>
-                                <Text size="xs" c="dimmed">P6</Text>
-                                <Text size="sm" fw={600} c="blue.7" lh={1.1}>${Number(prod.precio6).toFixed(2)}</Text>
-                            </Box>
-                        )}
-                        {Number(prod.precio7) > 0 && (
-                            <Box>
-                                <Text size="xs" c="dimmed">P7</Text>
-                                <Text size="sm" fw={600} c="grape.7" lh={1.1}>${Number(prod.precio7).toFixed(2)}</Text>
-                            </Box>
+                        {isAdmin && (
+                            <ActionIcon variant="light" color="blue" size="sm" onClick={() => onEditFinanzas(prod)} mt={16}>
+                                <IconEdit size={14} />
+                            </ActionIcon>
                         )}
                     </Group>
                 </Grid.Col>
 
+                {/* 🔥 STOCK CON EDICIÓN RÁPIDA MÓVIL 🔥 */}
                 <Grid.Col span={4}>
                     <Text size="xs" c="dimmed">Stock Actual</Text>
-                    <Text size="sm" fw={900} lh={1.1}>{Number(prod.stockAlmacen)}</Text>
+                    <Group gap={4} align="center" mt={2}>
+                        <Text size="sm" fw={900} lh={1.1}>{Number(prod.stockAlmacen)}</Text>
+                        {isAdmin && (
+                            <ActionIcon variant="light" color="teal" size="xs" onClick={() => onEditStock(prod)}>
+                                <IconEdit size={12} />
+                            </ActionIcon>
+                        )}
+                    </Group>
                 </Grid.Col>
             </Grid>
 
@@ -110,7 +117,7 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
             </Group>
 
             <Group grow gap="xs">
-                <Button variant="light" color="blue" size="xs" leftSection={<IconEdit size={16} />} onClick={onEdit}>Editar</Button>
+                <Button variant="light" color="blue" size="xs" leftSection={<IconEdit size={16} />} onClick={onEdit}>Editar Completo</Button>
                 <Button variant="light" color="red" size="xs" leftSection={<IconTrash size={16} />} onClick={onDelete}>Eliminar</Button>
             </Group>
         </Card>
@@ -120,7 +127,8 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
 // =======================================================================
 // 2. COMPONENTE RENDERIZADOR DE LISTA
 // =======================================================================
-const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onImageClick, esGrupo }) => {
+const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onImageClick, esGrupo, onEditFinanzas, onEditStock }) => {
+    const { isAdmin } = useAuth();
     if (isMobile) {
         return (
             <Stack gap="xs">
@@ -129,6 +137,9 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                         key={prod.id} prod={prod} stockPorGrupos={stockPorGrupos} 
                         onEdit={() => onEdit(prod.id)} onDelete={() => onDelete(prod.id, prod.nombre)} 
                         onImageClick={onImageClick} esGrupo={esGrupo}
+                        // 🔥 INYECTAMOS LAS FUNCIONES AQUÍ TAMBIÉN 🔥
+                        onEditFinanzas={onEditFinanzas}
+                        onEditStock={onEditStock}
                     />
                 ))}
             </Stack>
@@ -159,7 +170,7 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                         return (
                             <Table.Tr key={prod.id}>
                                 <Table.Td>
-                                    <Avatar 
+                                    <Avatar
                                         src={imgSrc} alt={prod.nombre} radius="sm" size="lg" color="blue"
                                         styles={{ image: { objectFit: 'contain' } }}
                                         style={{ cursor: imgSrc ? 'pointer' : 'default' }}
@@ -189,13 +200,31 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                                     </Group>
                                 </Table.Td>
                                 <Table.Td>
-                                    <Text fw={700} c="green.8" title="Costo Base">C: ${Number(prod.costoUsd).toFixed(2)}</Text>
-                                    {Number(prod.precio6) > 0 && <Text size="xs" fw={600} c="blue.7">P6: ${Number(prod.precio6).toFixed(2)}</Text>}
-                                    {Number(prod.precio7) > 0 && <Text size="xs" fw={600} c="grape.7">P7: ${Number(prod.precio7).toFixed(2)}</Text>}
-                                    <Text size="xs" c="dimmed" mt={4}>IVA: {prod.porcentajeIva}%</Text>
+                                    <Group justify="space-between" align="flex-start" wrap="nowrap">
+                                        <Box>
+                                            <Text fw={700} c="green.8" title="Costo Base">C: ${Number(prod.costoUsd).toFixed(2)}</Text>
+                                            {Number(prod.precio6) > 0 && <Text size="xs" fw={600} c="blue.7">P6: ${Number(prod.precio6).toFixed(3)}</Text>}
+                                            {Number(prod.precio7) > 0 && <Text size="xs" fw={600} c="grape.7">P7: ${Number(prod.precio7).toFixed(3)}</Text>}
+                                            {Number(prod.precioDescuento) > 0 && <Badge color="red" size="xs" mt={4} variant="filled">OFERTA: ${Number(prod.precioDescuento).toFixed(2)}</Badge>}
+                                        </Box>
+                                        {isAdmin && (
+                                            /* 🔥 AQUÍ USAMOS LA PROP QUE LLEGA DESDE EL PADRE */
+                                            <ActionIcon variant="light" color="blue" size="sm" onClick={() => onEditFinanzas(prod)}>
+                                                <IconEdit size={14} />
+                                            </ActionIcon>
+                                        )}
+                                    </Group>
                                 </Table.Td>
                                 <Table.Td>
-                                    <Text fw={800} size="md">{Number(prod.stockAlmacen)}</Text>
+                                    <Group gap="xs" wrap="nowrap">
+                                        <Text fw={900} size="md">{Number(prod.stockAlmacen)}</Text>
+                                        {isAdmin && (
+                                            /* 🔥 AQUÍ TAMBIÉN USAMOS LA PROP QUE LLEGA DESDE EL PADRE */
+                                            <ActionIcon variant="light" color="teal" size="sm" onClick={() => onEditStock(prod)}>
+                                                <IconEdit size={14} />
+                                            </ActionIcon>
+                                        )}
+                                    </Group>
                                 </Table.Td>
                                 {!esGrupo && (
                                     <Table.Td>
@@ -241,6 +270,7 @@ export default function ListaProductos() {
     const [filterCategoria, setFilterCategoria] = useState(null);
     const [filterMarca, setFilterMarca] = useState(null);
     const [filterTag, setFilterTag] = useState(null);
+    const [filterDescuento, setFilterDescuento] = useState(null);
     const [sortBy, setSortBy] = useState('fechaDesc');
     const [imagenAmpliada, setImagenAmpliada] = useState(null);
 
@@ -248,6 +278,24 @@ export default function ListaProductos() {
     const [modalEditGrupo, setModalEditGrupo] = useState(false);
     const [grupoSeleccionado, setGrupoSeleccionado] = useState(null);
     const [isSubmittingGrupo, setIsSubmittingGrupo] = useState(false);
+
+    // --- NUEVOS ESTADOS PARA EDICIÓN RÁPIDA ---
+    const [modalFinanzas, setModalFinanzas] = useState(false);
+    const [modalStock, setModalStock] = useState(false);
+    const [prodEditando, setProdEditando] = useState(null);
+    const [isUpdatingRapido, setIsUpdatingRapido] = useState(false);
+
+    const formFinanzas = useForm({
+        initialValues: { costoUsd: 0, precio6: 0, precio7: 0, porcentajeDescuento: 0 },
+        validate: {
+            costoUsd: (value) => (Number(value) <= 0 ? 'Debe ser mayor a 0' : null)
+        }
+    });
+
+    const formStock = useForm({
+        initialValues: { stockAlmacen: 0 },
+        validate: { stockAlmacen: (value) => (Number(value) < 0 ? 'No puede ser negativo' : null) }
+    });
 
     const sortOptions = [
         { value: 'fechaDesc', label: 'Más recientes (Act.)' },
@@ -280,7 +328,7 @@ export default function ListaProductos() {
 
     const formGrupo = useForm({
         initialValues: { nombre: '', stockMinimoGlobal: 0, categoriaId: '', imagen: null },
-        validate: { 
+        validate: {
             nombre: (val) => (val.trim().length < 2 ? 'Mínimo 2 caracteres' : null),
             categoriaId: (val) => (!val ? 'Selecciona una categoría' : null)
         }
@@ -304,17 +352,17 @@ export default function ListaProductos() {
             if (p.marca?.nombre) marcasSet.add(p.marca.nombre);
             p.tags?.forEach(t => tagsSet.add(t.nombre));
         });
-        return { 
-            categorias: Array.from(catSet).sort(), 
-            marcas: Array.from(marcasSet).sort(), 
-            tags: Array.from(tagsSet).sort() 
+        return {
+            categorias: Array.from(catSet).sort(),
+            marcas: Array.from(marcasSet).sort(),
+            tags: Array.from(tagsSet).sort()
         };
     }, [productos]);
 
-    // --- 2. FILTRADO Y ORDENAMIENTO DE PRODUCTOS BASE ---
-    const productosFiltrados = useMemo(() => {
+   const productosFiltrados = useMemo(() => {
         if (!productos) return [];
         let filtrados = productos;
+        
         if (search) {
             const lowerSearch = search.toLowerCase();
             filtrados = filtrados.filter(p => (p.nombre?.toLowerCase().includes(lowerSearch) || p.codigo?.toLowerCase().includes(lowerSearch)));
@@ -322,8 +370,16 @@ export default function ListaProductos() {
         if (filterCategoria) filtrados = filtrados.filter(p => p.categoria?.nombre === filterCategoria);
         if (filterMarca) filtrados = filtrados.filter(p => p.marca?.nombre === filterMarca);
         if (filterTag) filtrados = filtrados.filter(p => p.tags?.some(t => t.nombre === filterTag));
+
+        // 🔥 Lógica del filtro de descuento 🔥
+        if (filterDescuento === 'con_descuento') {
+            filtrados = filtrados.filter(p => Number(p.precioDescuento) > 0);
+        } else if (filterDescuento === 'sin_descuento') {
+            filtrados = filtrados.filter(p => !p.precioDescuento || Number(p.precioDescuento) <= 0);
+        }
+
         return filtrados;
-    }, [productos, search, filterCategoria, filterMarca, filterTag]);
+    }, [productos, search, filterCategoria, filterMarca, filterTag, filterDescuento]);
 
     const productosOrdenados = useMemo(() => {
         let result = [...productosFiltrados];
@@ -422,14 +478,79 @@ export default function ListaProductos() {
         }
     };
 
+    const abrirModalFinanzas = (prod) => {
+        setProdEditando(prod);
+        // Calculamos a la inversa el % de descuento si ya tenía un precioDescuento
+        let porcentajeActual = 0;
+        if (prod.precioDescuento > 0 && prod.precio7 > 0) {
+            porcentajeActual = Math.round(((prod.precio7 - prod.precioDescuento) / prod.precio7) * 100);
+        }
+
+        formFinanzas.setValues({
+            costoUsd: Number(prod.costoUsd),
+            precio6: Number(prod.precio6),
+            precio7: Number(prod.precio7),
+            porcentajeDescuento: porcentajeActual
+        });
+        setModalFinanzas(true);
+    };
+
+    const abrirModalStock = (prod) => {
+        setProdEditando(prod);
+        formStock.setValues({ stockAlmacen: Number(prod.stockAlmacen) });
+        setModalStock(true);
+    };
+
+    const handleActualizarRapido = async (tipo, values) => {
+        setIsUpdatingRapido(true);
+        try {
+            let payload = {};
+
+            if (tipo === 'finanzas') {
+                payload = {
+                    costoUsd: Number(values.costoUsd),
+                    precio6: Number(values.precio6),
+                    precio7: Number(values.precio7)
+                };
+
+                // Si le puso un % de descuento, calculamos el precio final restándole ese % al precio 7
+                if (Number(values.porcentajeDescuento) > 0 && Number(values.precio7) > 0) {
+                    const descuento = Number(values.precio7) * (Number(values.porcentajeDescuento) / 100);
+                    payload.precioDescuento = Number(values.precio7) - descuento;
+                } else {
+                    payload.precioDescuento = null; // Quitamos el descuento si le pone 0%
+                }
+            } else if (tipo === 'stock') {
+                payload = { stockAlmacen: Number(values.stockAlmacen) };
+            }
+
+            const res = await fetch(`/api/productos/${prodEditando.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) throw new Error('Error al actualizar');
+
+            notifications.show({ title: 'Éxito', message: 'Actualizado correctamente', color: 'green' });
+            queryClient.invalidateQueries({ queryKey: ['productos'] });
+            setModalFinanzas(false);
+            setModalStock(false);
+        } catch (error) {
+            notifications.show({ title: 'Error', message: error.message, color: 'red' });
+        } finally {
+            setIsUpdatingRapido(false);
+        }
+    };
+
     const abrirModalGrupo = (grupo) => {
         setGrupoSeleccionado(grupo);
         // 🔥 El grupo ahora SÍ trae el categoriaId heredado del producto 🔥
-        formGrupo.setValues({ 
-            nombre: grupo.nombre, 
+        formGrupo.setValues({
+            nombre: grupo.nombre,
             stockMinimoGlobal: grupo.stockMinimoGlobal || 0,
             categoriaId: grupo.categoriaId ? grupo.categoriaId.toString() : '',
-            imagen: grupo.imagen || null 
+            imagen: grupo.imagen || null
         });
         setModalEditGrupo(true);
     };
@@ -437,7 +558,7 @@ export default function ListaProductos() {
     const handleActualizarGrupoRapido = async (values) => {
         setIsSubmittingGrupo(true);
         try {
-            let payload = { 
+            let payload = {
                 nombre: values.nombre,
                 stockMinimoGlobal: Number(values.stockMinimoGlobal),
                 categoriaId: Number(values.categoriaId)
@@ -447,10 +568,10 @@ export default function ListaProductos() {
                 notifications.show({ id: 'upload-g', title: 'Subiendo...', message: 'Espera...', loading: true });
                 const fileExt = values.imagen.name.split('.').pop();
                 const uniqueFilename = `grupo_${Date.now()}.${fileExt}`;
-                
+
                 const response = await fetch(`/api/upload?filename=${encodeURIComponent(uniqueFilename)}`, { method: 'POST', body: values.imagen });
                 if (!response.ok) throw new Error('Falló la subida');
-                
+
                 payload.imagen = uniqueFilename;
                 notifications.update({ id: 'upload-g', title: 'Éxito', message: 'Imagen subida', color: 'green' });
             }
@@ -463,7 +584,7 @@ export default function ListaProductos() {
 
             if (!res.ok) throw new Error('Error al actualizar');
 
-            queryClient.invalidateQueries({ queryKey: ['productos'] }); 
+            queryClient.invalidateQueries({ queryKey: ['productos'] });
             setModalEditGrupo(false);
             notifications.show({ title: 'Éxito', message: 'Grupo actualizado', color: 'green' });
         } catch (error) {
@@ -531,7 +652,7 @@ export default function ListaProductos() {
             {/* PANEL DE FILTROS AVANZADO Y ORDENAMIENTO */}
             <Paper p="md" radius="md" withBorder bg="gray.0" mb="xl">
                 <Grid align="flex-end">
-                    <Grid.Col span={{ base: 12, md: 4 }}>
+                    <Grid.Col span={{ base: 12, md: 3 }}>
                         <TextInput label="Buscar" placeholder="Nombre o SKU..." leftSection={<IconSearch size={16} />} value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
                     </Grid.Col>
                     <Grid.Col span={{ base: 6, md: 2 }}>
@@ -543,7 +664,24 @@ export default function ListaProductos() {
                     <Grid.Col span={{ base: 6, md: 2 }}>
                         <Select label="Etiqueta" placeholder="Todas" data={filterOptions.tags} value={filterTag} onChange={setFilterTag} clearable searchable leftSection={<IconTags size={16} />} />
                     </Grid.Col>
-                    <Grid.Col span={{ base: 6, md: 2 }}>
+                    
+                    {/* 🔥 NUEVO SELECT DE FILTRO DE DESCUENTO 🔥 */}
+                    <Grid.Col span={{ base: 6, md: 1.5 }}>
+                        <Select 
+                            label="Ofertas" 
+                            placeholder="Todos" 
+                            data={[
+                                { value: 'con_descuento', label: 'Con Descuento' },
+                                { value: 'sin_descuento', label: 'Sin Descuento' }
+                            ]} 
+                            value={filterDescuento} 
+                            onChange={setFilterDescuento} 
+                            clearable 
+                            allowDeselect 
+                        />
+                    </Grid.Col>
+
+                    <Grid.Col span={{ base: 12, md: 1.5 }}>
                         <Select label="Ordenar por" data={sortOptions} value={sortBy} onChange={setSortBy} leftSection={<IconSortAscending size={16} />} allowDeselect={false} />
                     </Grid.Col>
                 </Grid>
@@ -555,7 +693,7 @@ export default function ListaProductos() {
             ) : (
                 inventarioAnidado.map((catData) => (
                     <Box key={catData.nombre} mb={isMobile ? "xl" : 40}>
-                        
+
                         <Group mb="md" gap="xs">
                             <IconBox color="#1971c2" size={28} />
                             <Title order={3} c="blue.9">{catData.nombre}</Title>
@@ -575,8 +713,8 @@ export default function ListaProductos() {
                                 <Paper key={grupo.info.id} withBorder p={isMobile ? "sm" : "md"} mb="lg" radius="md" bg="gray.0">
                                     <Group justify="space-between" mb="xs">
                                         <Group gap="xs">
-                                            <Avatar 
-                                                src={grupo.info.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${grupo.info.imagen}` : null} 
+                                            <Avatar
+                                                src={grupo.info.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${grupo.info.imagen}` : null}
                                                 radius="md" size="md" color="teal"
                                                 styles={{ image: { objectFit: 'contain' } }}
                                                 style={{ cursor: grupo.info.imagen ? 'pointer' : 'default' }}
@@ -601,10 +739,13 @@ export default function ListaProductos() {
 
                                     <Progress value={porcentaje} color={isCritico ? 'red' : 'teal'} size="sm" mb="md" radius="xl" striped={!isCritico} />
 
-                                    <ProductosVista 
+                                    <ProductosVista
                                         items={grupo.productos} stockPorGrupos={stockPorGrupos} isMobile={isMobile}
                                         onEdit={(id) => router.push(`/superuser/inventario/productos/${id}/editar`)}
                                         onDelete={eliminarProducto} onImageClick={setImagenAmpliada} esGrupo={true}
+                                        // 🔥 INYECTAMOS LAS FUNCIONES AQUÍ 🔥
+                                        onEditFinanzas={abrirModalFinanzas}
+                                        onEditStock={abrirModalStock}
                                     />
                                 </Paper>
                             );
@@ -618,10 +759,13 @@ export default function ListaProductos() {
                                         Productos Individuales
                                     </Title>
                                 )}
-                                <ProductosVista 
+                                <ProductosVista
                                     items={catData.sinGrupo} stockPorGrupos={stockPorGrupos} isMobile={isMobile}
                                     onEdit={(id) => router.push(`/superuser/inventario/productos/${id}/editar`)}
                                     onDelete={eliminarProducto} onImageClick={setImagenAmpliada} esGrupo={false}
+                                    // 🔥 Y LAS INYECTAMOS AQUÍ TAMBIÉN 🔥
+                                    onEditFinanzas={abrirModalFinanzas}
+                                    onEditStock={abrirModalStock}
                                 />
                             </Box>
                         )}
@@ -654,6 +798,68 @@ export default function ListaProductos() {
                         </Button>
                     </Stack>
                 </form>
+            </Modal>
+
+            {/* 🔥 MODAL DE EDICIÓN RÁPIDA: FINANZAS 🔥 */}
+            <Modal opened={modalFinanzas} onClose={() => setModalFinanzas(false)} title={<Title order={4}>Actualizar Finanzas</Title>} centered>
+                {prodEditando && (
+                    <form onSubmit={formFinanzas.onSubmit((v) => handleActualizarRapido('finanzas', v))}>
+                        <Stack gap="md">
+                            <Text fw={600} c="blue.9" mb="xs">{prodEditando.nombre}</Text>
+                            <NumberInput label="Costo (USD)" prefix="$" decimalScale={2} withAsterisk {...formFinanzas.getInputProps('costoUsd')} />
+                            <Grid>
+                                <Grid.Col span={6}>
+                                    <NumberInput label="Precio 6 (Mayor)" prefix="$" decimalScale={2} {...formFinanzas.getInputProps('precio6')} />
+                                </Grid.Col>
+                                <Grid.Col span={6}>
+                                    <NumberInput label="Precio 7 (Detal)" prefix="$" decimalScale={2} {...formFinanzas.getInputProps('precio7')} />
+                                </Grid.Col>
+                            </Grid>
+
+                            <Divider label="Promociones E-commerce" labelPosition="center" my="sm" />
+
+                            <NumberInput
+                                label="% Descuento sobre Precio 7"
+                                description="Al aplicar un % se activará la oferta en la Landing Page."
+                                suffix="%"
+                                min={0}
+                                max={99}
+                                {...formFinanzas.getInputProps('porcentajeDescuento')}
+                            />
+
+                            {/* Previsualización del precio con descuento */}
+                            {formFinanzas.values.porcentajeDescuento > 0 && formFinanzas.values.precio7 > 0 && (
+                                <Badge color="red" size="lg" variant="light" fullWidth>
+                                    Precio en Tienda: ${(formFinanzas.values.precio7 - (formFinanzas.values.precio7 * (formFinanzas.values.porcentajeDescuento / 100))).toFixed(2)}
+                                </Badge>
+                            )}
+
+                            <Button type="submit" loading={isUpdatingRapido} color="blue" fullWidth mt="md">
+                                Guardar Finanzas
+                            </Button>
+                        </Stack>
+                    </form>
+                )}
+            </Modal>
+
+            {/* 🔥 MODAL DE EDICIÓN RÁPIDA: STOCK 🔥 */}
+            <Modal opened={modalStock} onClose={() => setModalStock(false)} title={<Title order={4}>Ajuste Rápido de Stock</Title>} centered size="sm">
+                {prodEditando && (
+                    <form onSubmit={formStock.onSubmit((v) => handleActualizarRapido('stock', v))}>
+                        <Stack gap="md">
+                            <Text fw={600} ta="center" c="teal.9">{prodEditando.nombre}</Text>
+                            <NumberInput
+                                label="Stock Físico Disponible"
+                                size="lg"
+                                min={0}
+                                {...formStock.getInputProps('stockAlmacen')}
+                            />
+                            <Button type="submit" loading={isUpdatingRapido} color="teal" fullWidth mt="sm" size="md">
+                                Confirmar Inventario
+                            </Button>
+                        </Stack>
+                    </form>
+                )}
             </Modal>
         </Box>
     );
