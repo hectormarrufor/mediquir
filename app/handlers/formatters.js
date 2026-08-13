@@ -41,3 +41,17 @@ export const capitalizarPalabras = (texto) => {
 
 // Aquí puedes ir agregando a futuro más funciones globales, como:
 // export const formatearMoneda = (numero) => { ... }
+
+// 🔥 FORMATEADOR VISUAL AVANZADO CON 3 DECIMALES Y SEPARADORES
+export const formatearPrecio = (valor) => {
+    const numero = Number(valor);
+    if (isNaN(numero)) return '0.000';
+
+    // Usamos el formato internacional adaptado para mostrar siempre 3 decimales
+    // 'en-US' usa comas para miles y punto para decimales (ej: 1,234.500)
+    // Si prefieres el formato latino (1.234,500), puedes cambiar 'en-US' por 'es-VE'
+    return new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 3,
+        maximumFractionDigits: 3,
+    }).format(numero);
+};

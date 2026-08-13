@@ -17,7 +17,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { formatDateLong, formatDateShort } from '../helpers/dateUtils';
 
 export default function DashboardTareas({ glassStyle }) {
-    const { user, nombre, rol, departamentos, userId } = useAuth();
+    const { user, nombre, rol, departamentos, userId, isAdmin } = useAuth();
     
     const containerStyle = glassStyle || {
         backgroundColor: 'rgba(255, 255, 255, 0.7)',
@@ -50,6 +50,7 @@ export default function DashboardTareas({ glassStyle }) {
         userId === 1 || 
         rol?.toLowerCase().includes('presidente') || 
         rol?.toLowerCase().includes('admin') || 
+        isAdmin ||
         departamentos?.some(dep => dep.toLowerCase().includes('presidencia')); 
 
     const tienePermisoAsignar = () => {

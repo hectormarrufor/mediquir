@@ -32,14 +32,21 @@ const Abono = sequelize.define('Abono', {
     notas: {
         type: DataTypes.TEXT,
         allowNull: true
-    }
+    },
+    ventaId: {
+        type: DataTypes.UUID,
+        allowNull: false
+    },
+    montoUsd: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+    montoBs: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0.00 },
+    tasaCambio: { type: DataTypes.DECIMAL(10, 2), allowNull: false }
 }, {
     tableName: 'Abonos',
     timestamps: true
 });
 
 Abono.associate = (models) => {
-    Abono.belongsTo(models.Pedido, { foreignKey: 'pedidoId', as: 'pedido' });
+    Abono.belongsTo(models.Venta, { foreignKey: 'ventaId', as: 'venta' });
 };
 
 module.exports = Abono;

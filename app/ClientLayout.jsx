@@ -101,21 +101,7 @@ export default function ClientLayout({ children }) {
 
     {/* 2. SECCIÓN DERECHA (Carrito + Notificaciones + Menú) */}
     <Group wrap="nowrap" gap="sm">
-      {/* Botón Carrito Desktop */}
-      <Button
-          variant="light" 
-          color="blue" 
-          radius="xl" 
-          leftSection={<IconShoppingCart size={20} />}
-          visibleFrom="sm"
-      >
-          Carrito
-      </Button>
-
-      {/* Botón Carrito Móvil (Solo el ícono para ahorrar espacio) */}
-      <ActionIcon hiddenFrom="sm" variant="light" color="blue" size="lg" radius="xl">
-          <IconShoppingCart size={20} />
-      </ActionIcon>
+     
 
       <NotificationBell />
       

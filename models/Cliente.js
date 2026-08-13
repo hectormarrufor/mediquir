@@ -8,14 +8,14 @@ const Cliente = sequelize.define('Cliente', {
     primaryKey: true,
     autoIncrement: true,
   },
-  identificacion: { // RIF, cedula
+  identificacion: { 
     type: DataTypes.STRING,
     allowNull: false,
     unique: true,
   },
-  nombre: { // Nombre de la empresa o persona jurídica
+  nombre: { 
     type: DataTypes.STRING,
-    allowNull: true, // Puede ser nulo si es persona natural
+    allowNull: true, 
   },
   telefono: {
     type: DataTypes.STRING,
@@ -26,7 +26,7 @@ const Cliente = sequelize.define('Cliente', {
     defaultValue: false
   },
   retencionIvaPorDefecto: {
-    type: DataTypes.INTEGER, // Si solo usarás enteros
+    type: DataTypes.INTEGER, 
     defaultValue: 75,
     validate: {
       isIn: {
@@ -39,8 +39,7 @@ const Cliente = sequelize.define('Cliente', {
     type: DataTypes.STRING,
     allowNull: true,
     set(value) {
-      // Si el valor es una cadena vacía o solo espacios, guarda NULL
-      this.setDataValue('email', value === "" ? null : value);
+      this.setDataValue('email', value === "" ? null : value.trim());
     },
     validate: {
       isEmail: {
@@ -62,15 +61,15 @@ const Cliente = sequelize.define('Cliente', {
   },
 }, {
   tableName: 'Clientes',
-  timestamps: true, // createdAt, updatedAt
+  timestamps: true,
 });
 
-// Este `associate` se llamará desde `models/index.js`
 Cliente.associate = (models) => {
-  // Un cliente puede tener un usuario (o varios si a futuro le das acceso a varios de sus empleados)
-  Cliente.hasMany(models.User, { foreignKey: 'clienteId', as: 'usuarios' });
-  // Un cliente tiene muchos pedidos
-  Cliente.hasMany(models.Pedido, { foreignKey: 'clienteId', as: 'pedidos' });
+  // 🔥 CORRECCIÓN 1: Un cliente solo tiene UN usuario asociado
+  Cliente.hasOne(models.User, { foreignKey: 'clienteId', as: 'usuario' });
+  
+  // 🔥 CORRECCIÓN 2: Semántica perfecta. El modelo es Venta, pero para el cliente son sus "pedidos"
+  Cliente.hasMany(models.Venta, { foreignKey: 'clienteId', as: 'pedidos' });
 };
 
 module.exports = Cliente;

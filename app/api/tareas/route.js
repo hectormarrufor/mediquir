@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/models';
 import { Op } from 'sequelize';
-import { notificarAdmins, notificarAdminsYUnUsuario } from '@/app/handlers/notificar';
+import { notificarAdmins, notificarUsuario } from '@/app/handlers/notificar';
 
 export async function GET(request) {
     try {
@@ -79,8 +79,10 @@ export async function POST(request) {
                 estado: 'Pendiente'
             }, { transaction });
 
+            
+            await transaction.commit();
             if (asignadoAId) {
-                await notificarAdminsYUnUsuario(asignadoAId, {
+                await notificarUsuario(asignadoAId, {
                     title: 'Nueva Tarea Asignada',
                     body: `Tarea asignada a ${usuario.empleado.nombre} ${usuario.empleado.apellido}: ${titulo}. Por favor, revisa el panel de tareas.`,
                     url: `/superuser`
@@ -92,8 +94,6 @@ export async function POST(request) {
                     url: `/superuser`
                 });
             }
-
-            await transaction.commit();
             return NextResponse.json(nuevaTarea);
         } catch (err) {
             await transaction.rollback();

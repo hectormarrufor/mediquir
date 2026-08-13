@@ -13,12 +13,15 @@ import {
     IconShoppingCart,
     IconAlertTriangle,
     IconSettings, IconCurrencyDollar, IconCheck,
-    IconPackage
+    IconPackage,
+    IconBuildingStore
 } from '@tabler/icons-react';
 import './superuser.css';
 import { useAuth } from '@/hooks/useAuth';
 import DashboardTareas from '../components/DashboardTareas';
 import { notifications } from '@mantine/notifications';
+import dynamic from 'next/dynamic';
+const PosModal = dynamic(() => import('../components/admin/PosModal'), { ssr: false });
 
 // --- CONSTANTES DE DISEÑO ---
 const bgPattern = {
@@ -40,7 +43,7 @@ const menuOptions = [
     { title: 'Clientes', href: '/superuser/clientes', description: 'Gestión de clientes', icon: IconUser, color: 'green' },
     { title: 'Inventario', href: '/superuser/inventario', description: 'Control almacén.', icon: IconArchive, color: 'indigo' },
     { title: 'Personal', href: '/superuser/rrhh', description: 'RRHH y empleados.', icon: IconUser, color: 'cyan' },
-    { title: 'Pedidos', href: '/superuser/pedidos', description: 'Gestión de pedidos.', icon: IconShoppingCart, color: 'grape' },
+    { title: 'Ventas / Pedidos', href: '/superuser/ventas', description: 'Gestión de ventas de diario y pedidos.', icon: IconShoppingCart, color: 'grape' },
     { title: 'Finanzas', href: '/superuser/finanzas', description: 'Gestión de finanzas.', icon: IconCurrencyDollar, color: 'grape' },
 ];
 
@@ -96,6 +99,8 @@ export default function SuperUserHome() {
     const [modalRechazo, setModalRechazo] = useState(false);
     const [selectedItemFirma, setSelectedItemFirma] = useState(null);
     const [motivoRechazo, setMotivoRechazo] = useState('');
+
+    const [modalPosAbierto, setModalPosAbierto] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -306,6 +311,14 @@ export default function SuperUserHome() {
                     </Button>
                 </Modal>
 
+                {modalPosAbierto && (
+                    <PosModal
+                        opened={modalPosAbierto}
+                        onClose={() => setModalPosAbierto(false)}
+                        tasaBcv={precioBCV}
+                    />
+                )}
+
                 {/* --- CABECERA COMPACTA --- */}
                 <FadeInSection>
                     <Group justify="space-between" align="center" mb="md">
@@ -324,40 +337,16 @@ export default function SuperUserHome() {
                                 </ActionIcon>
                             )}
                         </Group>
+                        <Button
+                            size="lg"
+                            color="blue.9"
+                            leftSection={<IconBuildingStore size={22} />}
+                            onClick={() => setModalPosAbierto(true)}
+                        >
+                            Registrar Venta Rápida (POS)
+                        </Button>
                     </Group>
                 </FadeInSection>
-
-                {/* 🔥 BLOQUE PRIORITARIO DE FIRMA DE MATERIALES 🔥 */}
-                {pendientesFirma.length > 0 && (
-                    <FadeInSection>
-                        <Alert color="orange" variant="filled" title="¡Acción Requerida! Confirmación de Materiales" icon={<IconAlertTriangle size={24} />} mb="lg" radius="md">
-                            <Text size="sm" mb="md" fw={600} c="white">
-                                El almacén ha despachado equipos o materiales a tu nombre. Revisa físicamente tu entrega y confirma la recepción aquí mismo para liberar la cadena de custodia.
-                            </Text>
-                            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
-                                {pendientesFirma.map(item => (
-                                    <Card key={item.id} shadow="sm" radius="md" p="sm" bg="white" style={{ border: '2px solid rgba(255,255,255,0.2)' }}>
-                                        <Group justify="space-between" align="flex-start" mb="xs">
-                                            <Box style={{ flex: 1 }}>
-                                                <Text fw={900} size="md" c="dark.9" lh={1.2}>{item.consumible?.nombre}</Text>
-                                                <Text size="xs" c="dimmed">Cant: {parseFloat(item.cantidad)} {item.consumible?.unidadMedida}</Text>
-                                            </Box>
-                                            <IconPackage size={20} color="#e8590c" />
-                                        </Group>
-                                        <Group grow mt="sm">
-                                            <Button variant="subtle" color="red" size="xs" onClick={() => { setSelectedItemFirma(item); setModalRechazo(true); }}>
-                                                Rechazar
-                                            </Button>
-                                            <Button color="orange.7" size="xs" leftSection={<IconCheck size={14} />} onClick={() => handleFirmar(item.id, 'Aceptar')} loading={procesandoFirma}>
-                                                Firmar Recibido
-                                            </Button>
-                                        </Group>
-                                    </Card>
-                                ))}
-                            </SimpleGrid>
-                        </Alert>
-                    </FadeInSection>
-                )}
 
                 {/* --- CUERPO PRINCIPAL --- */}
                 <Grid gutter="md" align="flex-start">

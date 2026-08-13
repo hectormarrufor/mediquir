@@ -42,7 +42,7 @@ MovimientoFinanciero.associate = (models) => {
     
     // Enlaces opcionales (Permiten saber de dónde vino el dinero exactamente)
     // Un ingreso puede venir de un pedido específico o de un abono específico
-    MovimientoFinanciero.belongsTo(models.Pedido, { foreignKey: 'pedidoId', as: 'pedido', allowNull: true });
+    MovimientoFinanciero.belongsTo(models.Venta, { foreignKey: 'ventaId', as: 'venta', allowNull: true });
     MovimientoFinanciero.belongsTo(models.Abono, { foreignKey: 'abonoId', as: 'abono', allowNull: true });
 };
 

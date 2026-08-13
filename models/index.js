@@ -2,13 +2,14 @@
 const sequelize = require('../sequelize');
 
 const db = {
+    Venta: require('./Venta'),
+    Correlativo: require('./Correlativo'),
+    VentaDetalle: require('./VentaDetalle'),
     Marca: require('./inventario/Marca'),
     GrupoEquivalencia: require('./inventario/GrupoEquivalencia'),
     CategoriaFinanciera: require('./finanzas/CategoriaFinanciera'),
     MovimientoFinanciero: require('./finanzas/MovimientoFinanciero'),
     Abono: require('./facturacion/Abono'),
-    Pedido: require('./facturacion/Pedido'),
-    PedidoRenglon: require('./facturacion/PedidoRenglon'),
     Cliente: require('./Cliente'),
     Tag: require('./inventario/Tag'),
     Categoria: require('./inventario/Categoria'),
