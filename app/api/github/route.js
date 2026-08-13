@@ -40,6 +40,10 @@ export async function POST(req) {
                     targetUrl = extractedUrl;
                 }
                 
+                if (targetUrl === '/superuser') {
+                    targetUrl = '/superuser/notificaciones';
+                }
+                
                 // Limpiamos la etiqueta del mensaje final
                 commitMessage = commitMessage.replace(urlMatch[0], '').trim();
             }
