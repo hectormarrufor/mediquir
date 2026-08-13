@@ -7,13 +7,18 @@ import { IconShoppingCartPlus, IconChevronLeft, IconChevronRight } from '@tabler
 export default function ProductCard({ product }) {
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-    // --- LÓGICA DE FINANZAS Y STOCK ---
+   // --- LÓGICA DE FINANZAS Y STOCK ---
     const isOutOfStock = Number(product.stockAlmacen) <= 0;
-    const precioBase = Number(product.precio6) || Number(product.costoUsd) * 1.5;
-    const precioDescuento = Number(product.precioDescuento);
-    const hasDiscount = precioDescuento > 0;
-    const precioFinal = hasDiscount ? precioDescuento : precioBase;
-    const porcentajeAhorro = hasDiscount ? Math.round(((precioBase - precioDescuento) / precioBase) * 100) : 0;
+    const precioBase = Number(product.precio7) > 0 ? Number(product.precio7) : Number(product.costoUsd) * 1.5;
+    
+    // 🔥 LÓGICA DE DESCUENTO BASADA EN PORCENTAJE 🔥
+    const porcentajeAhorro = Number(product.porcentajeDescuento) || 0;
+    const hasDiscount = porcentajeAhorro > 0;
+    
+    // Calculamos cuánto vale realmente en dinero (Ej: 0.11 - 15% = 0.0935)
+    const precioFinal = hasDiscount 
+        ? precioBase - (precioBase * (porcentajeAhorro / 100)) 
+        : precioBase;
 
     // --- LÓGICA DE PRIORIDAD DE IMÁGENES ---
     const carouselImages = [];

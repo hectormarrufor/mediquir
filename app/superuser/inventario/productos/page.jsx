@@ -133,9 +133,9 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
         return (
             <Stack gap="xs">
                 {items.map((prod) => (
-                    <ProductoCardMovil 
-                        key={prod.id} prod={prod} stockPorGrupos={stockPorGrupos} 
-                        onEdit={() => onEdit(prod.id)} onDelete={() => onDelete(prod.id, prod.nombre)} 
+                    <ProductoCardMovil
+                        key={prod.id} prod={prod} stockPorGrupos={stockPorGrupos}
+                        onEdit={() => onEdit(prod.id)} onDelete={() => onDelete(prod.id, prod.nombre)}
                         onImageClick={onImageClick} esGrupo={esGrupo}
                         // 🔥 INYECTAMOS LAS FUNCIONES AQUÍ TAMBIÉN 🔥
                         onEditFinanzas={onEditFinanzas}
@@ -205,7 +205,11 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                                             <Text fw={700} c="green.8" title="Costo Base">C: ${Number(prod.costoUsd).toFixed(2)}</Text>
                                             {Number(prod.precio6) > 0 && <Text size="xs" fw={600} c="blue.7">P6: ${Number(prod.precio6).toFixed(3)}</Text>}
                                             {Number(prod.precio7) > 0 && <Text size="xs" fw={600} c="grape.7">P7: ${Number(prod.precio7).toFixed(3)}</Text>}
-                                            {Number(prod.precioDescuento) > 0 && <Badge color="red" size="xs" mt={4} variant="filled">OFERTA: ${Number(prod.precioDescuento).toFixed(2)}</Badge>}
+                                            {Number(prod.porcentajeDescuento) > 0 && (
+                                                <Badge color="red" size="xs" mt={4} variant="filled">
+                                                    OFERTA: ${(Number(prod.precio7) - (Number(prod.precio7) * (Number(prod.porcentajeDescuento) / 100))).toFixed(3)}
+                                                </Badge>
+                                            )}
                                         </Box>
                                         {isAdmin && (
                                             /* 🔥 AQUÍ USAMOS LA PROP QUE LLEGA DESDE EL PADRE */
@@ -359,10 +363,10 @@ export default function ListaProductos() {
         };
     }, [productos]);
 
-   const productosFiltrados = useMemo(() => {
+    const productosFiltrados = useMemo(() => {
         if (!productos) return [];
         let filtrados = productos;
-        
+
         if (search) {
             const lowerSearch = search.toLowerCase();
             filtrados = filtrados.filter(p => (p.nombre?.toLowerCase().includes(lowerSearch) || p.codigo?.toLowerCase().includes(lowerSearch)));
@@ -480,17 +484,11 @@ export default function ListaProductos() {
 
     const abrirModalFinanzas = (prod) => {
         setProdEditando(prod);
-        // Calculamos a la inversa el % de descuento si ya tenía un precioDescuento
-        let porcentajeActual = 0;
-        if (prod.precioDescuento > 0 && prod.precio7 > 0) {
-            porcentajeActual = Math.round(((prod.precio7 - prod.precioDescuento) / prod.precio7) * 100);
-        }
-
         formFinanzas.setValues({
             costoUsd: Number(prod.costoUsd),
             precio6: Number(prod.precio6),
             precio7: Number(prod.precio7),
-            porcentajeDescuento: porcentajeActual
+            porcentajeDescuento: Number(prod.porcentajeDescuento) || 0 // Directo de la BD
         });
         setModalFinanzas(true);
     };
@@ -510,16 +508,9 @@ export default function ListaProductos() {
                 payload = {
                     costoUsd: Number(values.costoUsd),
                     precio6: Number(values.precio6),
-                    precio7: Number(values.precio7)
+                    precio7: Number(values.precio7),
+                    porcentajeDescuento: Number(values.porcentajeDescuento) || 0 // Directo a la BD
                 };
-
-                // Si le puso un % de descuento, calculamos el precio final restándole ese % al precio 7
-                if (Number(values.porcentajeDescuento) > 0 && Number(values.precio7) > 0) {
-                    const descuento = Number(values.precio7) * (Number(values.porcentajeDescuento) / 100);
-                    payload.precioDescuento = Number(values.precio7) - descuento;
-                } else {
-                    payload.precioDescuento = null; // Quitamos el descuento si le pone 0%
-                }
             } else if (tipo === 'stock') {
                 payload = { stockAlmacen: Number(values.stockAlmacen) };
             }
@@ -664,20 +655,20 @@ export default function ListaProductos() {
                     <Grid.Col span={{ base: 6, md: 2 }}>
                         <Select label="Etiqueta" placeholder="Todas" data={filterOptions.tags} value={filterTag} onChange={setFilterTag} clearable searchable leftSection={<IconTags size={16} />} />
                     </Grid.Col>
-                    
+
                     {/* 🔥 NUEVO SELECT DE FILTRO DE DESCUENTO 🔥 */}
                     <Grid.Col span={{ base: 6, md: 1.5 }}>
-                        <Select 
-                            label="Ofertas" 
-                            placeholder="Todos" 
+                        <Select
+                            label="Ofertas"
+                            placeholder="Todos"
                             data={[
                                 { value: 'con_descuento', label: 'Con Descuento' },
                                 { value: 'sin_descuento', label: 'Sin Descuento' }
-                            ]} 
-                            value={filterDescuento} 
-                            onChange={setFilterDescuento} 
-                            clearable 
-                            allowDeselect 
+                            ]}
+                            value={filterDescuento}
+                            onChange={setFilterDescuento}
+                            clearable
+                            allowDeselect
                         />
                     </Grid.Col>
 

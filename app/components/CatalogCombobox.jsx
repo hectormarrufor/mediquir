@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Combobox, TextInput, useCombobox, Loader } from "@mantine/core";
 import { useCatalogOptions } from "@/hooks/useCatalogOptions";
 import axios from "axios";
-import { capitalizeUnlessUppercase } from "../handlers/capitalizeUnlessUppercase";
+import { capitalizeUnlessUppercase } from "../handlers/formatters";
 import { CatalogCreatorModal } from "./CatalogCreatorModal";
 
 export function AsyncCatalogComboBox({

@@ -1,14 +1,14 @@
 import React from 'react';
 import { ThemeIcon, Text } from '@mantine/core';
 import { 
-    IconBone, 
     IconVaccine, 
-    IconFirstAidKit 
+    IconFirstAidKit, 
+    IconWheelchair
 } from '@tabler/icons-react';
 
 // 1. Nuestro diccionario de iconos exactos
 const iconMap = {
-    'ortopedia': IconBone,
+    'ortopedia': IconWheelchair,
     'descartables': IconVaccine,
     'insumos medicos': IconFirstAidKit,
 };

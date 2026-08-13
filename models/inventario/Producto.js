@@ -49,10 +49,10 @@ const Producto = sequelize.define('Producto', {
         allowNull: true, 
         defaultValue: 0.00 // Precio manual en USD
     },
-    precioDescuento: { 
-        type: DataTypes.DECIMAL(10, 2), 
-        allowNull: true, // Si es null, no tiene descuento
-        defaultValue: null
+    porcentajeDescuento: {
+        type: DataTypes.INTEGER, // Guardaremos números enteros como 15, 20, 50
+        allowNull: true,
+        defaultValue: 0
     },
     nroVentas: { 
         type: DataTypes.INTEGER, 

@@ -1,3 +1,5 @@
+// utils/formatters.js
+
 /**
  * Capitaliza la primera letra de una cadena, a menos que toda la cadena esté en mayúsculas.
  * @param {string} str - La cadena de texto a capitalizar.
@@ -23,4 +25,19 @@ export const capitalizeUnlessUppercase = (str) => {
 
     // Unimos las palabras de nuevo en una sola cadena
     return capitalizedWords.join(' ');
-}
+};
+/**
+ * Convierte un texto a Title Case (Capitaliza la primera letra de cada palabra).
+ * Ej: "inyectadora de plastico" -> "Inyectadora De Plastico"
+ */
+export const capitalizarPalabras = (texto) => {
+    if (!texto) return '';
+    return texto
+        .toLowerCase()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+};
+
+// Aquí puedes ir agregando a futuro más funciones globales, como:
+// export const formatearMoneda = (numero) => { ... }

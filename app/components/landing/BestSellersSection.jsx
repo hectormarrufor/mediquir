@@ -1,67 +1,91 @@
 'use client';
 
-import React from 'react';
-import { Container, Title, Box, Tabs, SimpleGrid, Center, Loader, Text } from '@mantine/core';
-import { IconFlame, IconDiscount2 } from '@tabler/icons-react';
+import React, { useState } from 'react';
+import { Container, Title, Text, Group, Box, Center, Loader, SimpleGrid, Tabs, Paper, Stack } from '@mantine/core';
+import { IconFlame, IconTag } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-import ProductCard from './ProductCard';
+import ProductCard from './ProductCard'; // Asegúrate de que la ruta sea correcta
 
 export default function BestSellersSection() {
-    const { data, isLoading, isError } = useQuery({
+    // 🔥 ESTADO DE LOS TABS: Alternar entre más vendidos y descuentos 🔥
+    const [activeTab, setActiveTab] = useState('mas_vendidos');
+
+    const { data: productos, isLoading } = useQuery({
         queryKey: ['productos-landing'],
         queryFn: async () => {
-            const res = await fetch('/api/tienda/destacados');
-            if (!res.ok) throw new Error('Error de red');
+            const res = await fetch('/api/productos');
+            if (!res.ok) throw new Error('Error al cargar productos');
             return res.json();
         }
     });
 
-    if (isLoading) return <Center py={100}><Loader color="blue" /></Center>;
-    if (isError) return null;
+    if (isLoading) return <Center py={100}><Loader size="xl" color="blue" /></Center>;
+    if (!productos || productos.length === 0) return null;
 
-    // 🔥 DEFENSA 1: Si no hay data, no renderizamos nada (o evitamos el crash)
-    if (!data) return null; 
+    // --- 🔥 NUEVA LÓGICA DE FILTRADO CON porcentajeDescuento 🔥 ---
+    const masVendidos = productos.slice(0, 10);
+    const ofertas = productos.filter(p => Number(p.porcentajeDescuento) > 0).slice(0, 10);
 
-    // 🔥 DEFENSA 2: Extraemos con valores por defecto por si el backend falla
-    const { masVendidos = [], ofertas = [] } = data;
+    const productosMostrados = activeTab === 'mas_vendidos' ? masVendidos : ofertas;
 
     return (
-        <Box py={60} bg="#F8F9FA">
+        <Box py={{ base: 40, md: 80 }} bg="gray.0">
             <Container size="xl">
-                <Tabs defaultValue="mas-vendidos" color="blue" radius="md">
-                    <Tabs.List justify="center" mb="xl">
-                        <Tabs.Tab value="mas-vendidos" leftSection={<IconFlame size={18} color="orange" />} fz="md" fw={600}>
-                            Más Vendidos
-                        </Tabs.Tab>
-                        <Tabs.Tab value="ofertas" leftSection={<IconDiscount2 size={18} color="red" />} fz="md" fw={600}>
-                            Ofertas Imperdibles
-                        </Tabs.Tab>
-                    </Tabs.List>
+                
+                {/* 🔥 CABECERA DINÁMICA CENTRADA 🔥 */}
+                <Stack align="center" ta="center" mb="xl">
+                    <Group gap="xs" justify="center">
+                        {activeTab === 'mas_vendidos' ? <IconFlame color="#FF6B6B" size={32} /> : <IconTag color="#FF922B" size={32} />}
+                        <Title order={2} c={activeTab === 'mas_vendidos' ? "blue.9" : "orange.9"} size="h2" fw={900}>
+                            {activeTab === 'mas_vendidos' ? 'Productos Más Vendidos' : 'Ofertas Imperdibles'}
+                        </Title>
+                    </Group>
+                    <Text c="dimmed" size="md" maw={500}>
+                        {activeTab === 'mas_vendidos' 
+                            ? 'Los insumos preferidos por nuestros clientes con la mejor calidad del mercado.' 
+                            : 'Aprovecha estos descuentos por tiempo limitado antes de que se agoten.'}
+                    </Text>
+                </Stack>
 
-                    <Tabs.Panel value="mas-vendidos">
-                        {masVendidos?.length > 0 ? (
-                            <SimpleGrid cols={{ base: 1, sm: 2, md: 4, lg: 5 }} spacing="lg">
-                                {masVendidos.map((prod) => (
-                                    <ProductCard key={prod.id} product={prod} />
-                                ))}
-                            </SimpleGrid>
-                        ) : (
-                            <Center py={50}><Text c="dimmed">Aún no hay productos registrados.</Text></Center>
-                        )}
-                    </Tabs.Panel>
+                {/* 🔥 TABS ESTILO TOGGLE PREMIUM (Centro y expandidos) 🔥 */}
+                <Box maw={{ base: '100%', sm: 600 }} mx="auto" mb={40}>
+                    <Tabs value={activeTab} onChange={setActiveTab} variant="pills" radius="xl" color={activeTab === 'mas_vendidos' ? "blue" : "orange"}>
+                        <Tabs.List 
+                            grow // 🔥 Obliga a los tabs a ocupar todo el ancho disponible
+                            bg="white" 
+                            p={6} 
+                            style={{ 
+                                borderRadius: '50px', 
+                                border: '1px solid #E9ECEF', 
+                                boxShadow: '0 4px 20px rgba(0,0,0,0.05)' 
+                            }}
+                        >
+                            <Tabs.Tab value="mas_vendidos" leftSection={<IconFlame size={18} />} fw={700} size="md" h={45}>
+                                Más Vendidos
+                            </Tabs.Tab>
+                            {/* Solo mostramos el Tab de ofertas si realmente hay productos con descuento */}
+                            {ofertas.length > 0 && (
+                                <Tabs.Tab value="ofertas" leftSection={<IconTag size={18} />} fw={700} size="md" h={45}>
+                                    Ofertas Especiales
+                                </Tabs.Tab>
+                            )}
+                        </Tabs.List>
+                    </Tabs>
+                </Box>
 
-                    <Tabs.Panel value="ofertas">
-                        {ofertas?.length > 0 ? (
-                            <SimpleGrid cols={{ base: 1, sm: 2, md: 4, lg: 5 }} spacing="lg">
-                                {ofertas.map((prod) => (
-                                    <ProductCard key={prod.id} product={prod} />
-                                ))}
-                            </SimpleGrid>
-                        ) : (
-                            <Center py={50}><Text c="dimmed">No hay ofertas activas en este momento.</Text></Center>
-                        )}
-                    </Tabs.Panel>
-                </Tabs>
+                {/* 🔥 GRID RESPONSIVO: base 2 = 2 columnas en celulares 🔥 */}
+                {productosMostrados.length > 0 ? (
+                    <SimpleGrid cols={{ base: 2, xs: 2, sm: 3, md: 4, lg: 5 }} spacing={{ base: 8, sm: 'md', md: 'lg' }}>
+                        {productosMostrados.map(prod => (
+                            <ProductCard key={`prod-${prod.id}`} product={prod} />
+                        ))}
+                    </SimpleGrid>
+                ) : (
+                    <Paper p="xl" ta="center" radius="md" bg="white" withBorder>
+                        <Text c="dimmed">No hay productos disponibles en esta sección por el momento.</Text>
+                    </Paper>
+                )}
+                
             </Container>
         </Box>
     );
