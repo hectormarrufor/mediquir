@@ -240,6 +240,7 @@ export default function VentasDashboard() {
                                     <Table.Tr>
                                         <Table.Th>Fecha y Hora</Table.Th>
                                         <Table.Th>Documento</Table.Th>
+                                        <Table.Th>Vendedor</Table.Th>
                                         <Table.Th>Artículos</Table.Th>
                                         <Table.Th>Moneda</Table.Th>
                                         <Table.Th>Total</Table.Th>
@@ -257,6 +258,14 @@ export default function VentasDashboard() {
                                             <Table.Tr key={venta.id}>
                                                 <Table.Td>{formatearFechaHora(venta.createdAt)}</Table.Td>
                                                 <Table.Td fw={600}>{venta.numeroDocumento}</Table.Td>
+
+                                                {/* 🔥 AQUÍ MOSTRAMOS EL VENDEDOR */}
+                                                <Table.Td>
+                                                    {console.log('venta:', venta)}
+                                                    {venta.vendedor?.empleado
+                                                        ? `${venta.vendedor.empleado.nombre} ${venta.vendedor.empleado.apellido}`
+                                                        : venta.vendedor?.user || 'Sistema'}
+                                                </Table.Td>
                                                 <Table.Td>{venta.detalles?.reduce((acc, d) => acc + d.cantidad, 0)} items</Table.Td>
                                                 <Table.Td><Badge variant="light" color={venta.moneda === 'BS' ? 'teal' : 'gray'}>{venta.moneda}</Badge></Table.Td>
                                                 <Table.Td>
@@ -304,6 +313,7 @@ export default function VentasDashboard() {
                                     <Table.Tr>
                                         <Table.Th>Fecha y Hora</Table.Th>
                                         <Table.Th>Documento</Table.Th>
+                                        <Table.Th>Vendedor</Table.Th>
                                         <Table.Th>Cliente</Table.Th>
                                         <Table.Th>Pago</Table.Th>
                                         <Table.Th>Total</Table.Th>
@@ -321,6 +331,13 @@ export default function VentasDashboard() {
                                             <Table.Tr key={pedido.id}>
                                                 <Table.Td>{formatearFechaHora(pedido.createdAt)}</Table.Td>
                                                 <Table.Td fw={600}>{pedido.numeroDocumento}</Table.Td>
+
+                                                {/* 🔥 AQUÍ MOSTRAMOS EL VENDEDOR */}
+                                                <Table.Td>
+                                                    {pedido.vendedor?.empleado
+                                                        ? `${pedido.vendedor.empleado.nombre} ${pedido.vendedor.empleado.apellido}`
+                                                        : pedido.vendedor?.user || 'Sistema'}
+                                                </Table.Td>
                                                 <Table.Td>{pedido.cliente?.nombre || 'Desconocido'}</Table.Td>
                                                 <Table.Td>
                                                     <Badge variant="dot" color={pedido.condicionPago === 'Contado' ? 'green' : 'orange'}>

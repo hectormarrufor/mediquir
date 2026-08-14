@@ -82,6 +82,7 @@ const Venta = sequelize.define('Venta', {
 
 Venta.associate = (models) => {
     Venta.belongsTo(models.Cliente, { foreignKey: 'clienteId', as: 'cliente' });
+    Venta.belongsTo(models.User, { foreignKey: 'vendedorId', as: 'vendedor' }); // 🔥 ESTA ES LA MAGIA
     Venta.hasMany(models.VentaDetalle, { foreignKey: 'ventaId', as: 'detalles', onDelete: 'CASCADE' });
     Venta.hasMany(models.Abono, { foreignKey: 'ventaId', as: 'abonos', onDelete: 'CASCADE' });
     Venta.hasMany(models.MovimientoFinanciero, { foreignKey: 'ventaId', as: 'movimientos' });

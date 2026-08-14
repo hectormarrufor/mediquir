@@ -1,17 +1,8 @@
 import { NextResponse } from 'next/server';
-import { sequelize } from '@/models';
 import { Op } from 'sequelize';
-import Venta from '@/models/Venta';
-import VentaDetalle from '@/models/VentaDetalle';
-import Producto from '@/models/inventario/Producto';
-import Marca from '@/models/inventario/Marca'; // 🔥 Importar para la marca del producto
-import Correlativo from '@/models/Correlativo';
-import CategoriaFinanciera from '@/models/finanzas/CategoriaFinanciera';
-import MovimientoFinanciero from '@/models/finanzas/MovimientoFinanciero';
-import Cliente from '@/models/Cliente'; // 🔥 Importar para el nombre en la notificación
-import User from '@/models/user';       // 🔥 Importar para el nombre del vendedor
-import Empleado from '@/models/recursosHumanos/Empleado'; // 🔥 Importar para el nombre del vendedor
+import db from '@/models';
 import { notificarTodos } from '@/app/handlers/notificar';
+const { Venta, VentaDetalle, Producto, Marca, Correlativo, CategoriaFinanciera, MovimientoFinanciero, Cliente, User, Empleado, sequelize } = db;
 
 export async function GET(request) {
     try {
@@ -36,24 +27,34 @@ export async function GET(request) {
         const ventas = await Venta.findAll({
             where: whereClause,
             include: [
-                { 
-                    model: VentaDetalle, 
+                {
+                    model: VentaDetalle,
                     as: 'detalles',
-                    include: [{ 
-                        model: Producto, 
-                        as: 'producto', 
+                    include: [{
+                        model: Producto,
+                        as: 'producto',
                         attributes: ['nombre', 'codigo', 'imagen'],
-                        include: [{ model: Marca, as: 'marca', attributes: ['nombre', 'imagen'] }] 
+                        include: [{ model: Marca, as: 'marca', attributes: ['nombre', 'imagen'] }]
                     }]
                 },
-                { 
-                    model: Cliente, 
+                {
+                    model: Cliente,
                     as: 'cliente',
                     attributes: ['nombre', 'identificacion']
                 },
-                { 
-                    model: MovimientoFinanciero, 
-                    as: 'movimientos' 
+                {
+                    model: User, // O el modelo que uses para los usuarios
+                    as: 'vendedor', // El alias que le hayas puesto en models/index.js
+                    attributes: ['id', 'user'],
+                    include: [{
+                        model: Empleado,
+                        as: 'empleado',
+                        attributes: ['nombre', 'apellido'] // Para traernos el nombre real
+                    }]
+                },
+                {
+                    model: MovimientoFinanciero,
+                    as: 'movimientos'
                 }
             ],
             order: [['createdAt', 'DESC']]
@@ -72,8 +73,8 @@ export async function POST(request) {
     try {
         const body = await request.json();
         const {
-            tipoVenta, tipoDocumento, clienteId, moneda, tasaCambio, 
-            condicionPago, quienRetira, costoFlete, subtotal, montoIva, 
+            tipoVenta, tipoDocumento, clienteId, moneda, tasaCambio,
+            condicionPago, quienRetira, costoFlete, subtotal, montoIva,
             totalFinal, detalles, metodoPago, referencia,
             numeroDocumentoManual,
             vendedorId // 🔥 RECIBIMOS EL ID DEL USUARIO QUE ESTÁ HACIENDO LA VENTA
@@ -87,7 +88,7 @@ export async function POST(request) {
         // --- 1. GESTIÓN INTELIGENTE DEL CORRELATIVO ---
         let prefijo = tipoDocumento === 'FACTURA' ? 'F' : (tipoDocumento === 'NOTA_ENTREGA' ? 'NE' : 'V');
         let corr = await Correlativo.findOne({ where: { prefijo }, transaction: t });
-        
+
         if (!corr) {
             corr = await Correlativo.create({ prefijo, siguienteNumero: 1, cerosRelleno: 5 }, { transaction: t });
         }
@@ -109,8 +110,9 @@ export async function POST(request) {
         // --- 3. CREAR LA VENTA ---
         const nuevaVenta = await Venta.create({
             clienteId: clienteId || null,
+            vendedorId: vendedorId || null, // 🔥 Guardamos el ID del usuario que hace la venta
             tipoVenta, tipoDocumento, numeroDocumento,
-            estado: tipoVenta === 'DETAL' ? 'CONFIRMADO' : 'PENDIENTE',
+            statusDespacho: tipoVenta === 'DETAL' ? 'Completado' : 'Pendiente',
             moneda, tasaCambio: Number(tasaCambio) || 1.00,
             condicionPago, statusPago: condicionPago === 'Contado' ? 'Pagado' : 'Pendiente',
             fechaVencimiento, quienRetira: quienRetira || null,
@@ -164,6 +166,8 @@ export async function POST(request) {
                 }, { transaction: t });
             }
         }
+       
+
 
         // COMITEAMOS LA TRANSACCIÓN ANTES DE NOTIFICAR (Para asegurar que la venta exista)
         await t.commit();
@@ -174,7 +178,7 @@ export async function POST(request) {
                 // Buscamos el nombre del cliente
                 const clienteDB = await Cliente.findByPk(clienteId);
                 const nombreCliente = clienteDB ? (clienteDB.nombre || clienteDB.identificacion) : 'Cliente Desconocido';
-                
+
                 // Buscamos el nombre del empleado que está haciendo la venta
                 let nombreVendedor = 'Administración';
                 if (vendedorId) {
@@ -196,6 +200,7 @@ export async function POST(request) {
                     tipo: 'Info'
                 });
             } catch (notifError) {
+                await t.rollback(); // 🔥 ROLLBACK SI FALLA LA NOTIFICACIÓN
                 console.error('La venta se procesó pero falló la notificación Push:', notifError);
             }
         }

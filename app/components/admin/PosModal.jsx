@@ -243,6 +243,8 @@ export default function PosModal({ opened, onClose, tasaBcv }) {
                 }))
             };
 
+
+
             const res = await fetch('/api/ventas', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
