@@ -71,6 +71,18 @@ const Venta = sequelize.define('Venta', {
         allowNull: false,
         defaultValue: 1.00 // 1 para USD, tasa BCV para BS
     },
+    vendedorId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    empacadorId: { // 🔥 AGREGADO
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    etiquetadorId: { // 🔥 AGREGADO
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
     subtotal: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0.00 },
     montoIva: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0.00 },
     totalDescuento: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0.00 },
@@ -83,9 +95,12 @@ const Venta = sequelize.define('Venta', {
 Venta.associate = (models) => {
     Venta.belongsTo(models.Cliente, { foreignKey: 'clienteId', as: 'cliente' });
     Venta.belongsTo(models.User, { foreignKey: 'vendedorId', as: 'vendedor' }); // 🔥 ESTA ES LA MAGIA
+    Venta.belongsTo(models.User, { foreignKey: 'empacadorId', as: 'empacador' });
+    Venta.belongsTo(models.User, { foreignKey: 'etiquetadorId', as: 'etiquetador' });
     Venta.hasMany(models.VentaDetalle, { foreignKey: 'ventaId', as: 'detalles', onDelete: 'CASCADE' });
     Venta.hasMany(models.Abono, { foreignKey: 'ventaId', as: 'abonos', onDelete: 'CASCADE' });
     Venta.hasMany(models.MovimientoFinanciero, { foreignKey: 'ventaId', as: 'movimientos' });
+    Venta.hasMany(models.SalidaInventario, { foreignKey: 'ventaId', as: 'salidasInventario' });
 };
 
 module.exports = Venta;

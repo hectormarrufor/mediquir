@@ -2,6 +2,10 @@
 const sequelize = require('../sequelize');
 
 const db = {
+    CuentaPorPagar: require('./CuentaPorPagar'),
+    CuentaPorCobrar: require('./CuentaPorCobrar'),
+    FacturaCompra: require('./FacturaCompra'),
+    Proveedor: require('./Proveedor'),
     Venta: require('./Venta'),
     Correlativo: require('./Correlativo'),
     VentaDetalle: require('./VentaDetalle'),

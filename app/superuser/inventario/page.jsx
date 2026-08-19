@@ -35,10 +35,10 @@ export default function InventarioDashboardPage() {
                     <Button fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/productos')}>
                         Lista y creación de Productos 📦
                     </Button>
-                    <Button disabled fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/entradas')}>
+                    <Button fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/entradas')}>
                         Entradas de Inventario 📥
                     </Button>
-                    <Button disabled fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/salidas')}>
+                    <Button fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/salidas')}>
                         Salidas de Inventario 📤
                     </Button>
                  

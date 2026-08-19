@@ -7,7 +7,7 @@ import sequelize from '@/sequelize';
 import db, {
     Empleado, DocumentoEmpleado, ConsumibleSerializado,
     Activo, DocumentoActivo, BcvPrecioHistorico, Flete, Vehiculo, Remolque,
-    Requisicion,
+    Requisicion, CuentaPorPagar, CuentaPorCobrar, Proveedor, Cliente, Venta, FacturaCompra
 } from '@/models'; // Ajusta tus imports
 import { getCaracasDate, addDays, isSameMonthDay, getYearsDiff } from "../../../helpers/dateUtils"; // El archivo del paso 1
 
@@ -310,6 +310,84 @@ export async function checkAssetDocs() {
             estadoTiempo: estadoTiempo,
             msg: `• ${doc.tipo} de ${nombreActivo}: ${estadoTiempo}`, // Mantenido por si lo usas en logs
             id: doc.activoId
+        };
+    });
+}
+
+// ==========================================
+// 5. CUENTAS POR PAGAR (Alertas de vencimiento)
+// ==========================================
+export async function checkCxP() {
+    const today = getCaracasDate();
+    const limitDate = addDays(today, 3); // Avisar con 3 días de anticipación
+
+    const cuentas = await CuentaPorPagar.findAll({
+        where: {
+            estado: 'Pendiente',
+            fechaVencimiento: { [Op.lte]: limitDate }
+        },
+        include: [
+            { model: Proveedor, as: 'proveedor', attributes: ['nombre'] },
+            { model: FacturaCompra, as: 'facturaCompra', attributes: ['numeroDocumento'] }
+        ]
+    });
+
+    return cuentas.map(c => {
+        const fVenc = new Date(c.fechaVencimiento);
+        const diffTime = fVenc.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        let estadoTiempo = "";
+        if (diffDays < 0) estadoTiempo = `❌ VENCIDA hace ${Math.abs(diffDays)} días`;
+        else if (diffDays === 0) estadoTiempo = `🚨 VENCE HOY`;
+        else estadoTiempo = `⏳ Vence en ${diffDays} días`;
+
+        return {
+            id: c.id,
+            proveedor: c.proveedor?.nombre || 'Desconocido',
+            documento: c.facturaCompra?.numeroDocumento || 'S/N',
+            monto: c.saldoPendiente,
+            moneda: c.moneda,
+            estadoTiempo
+        };
+    });
+}
+
+// ==========================================
+// 6. CUENTAS POR COBRAR (Alertas de vencimiento)
+// ==========================================
+export async function checkCxC() {
+    const today = getCaracasDate();
+    const limitDate = addDays(today, 3); // Avisar con 3 días de anticipación
+
+    const cuentas = await CuentaPorCobrar.findAll({
+        where: {
+            estado: 'Pendiente',
+            fechaVencimiento: { [Op.lte]: limitDate }
+        },
+        include: [
+            { model: Cliente, as: 'cliente', attributes: ['nombre'] },
+            { model: Venta, as: 'venta', attributes: ['numeroDocumento'] }
+        ]
+    });
+
+    return cuentas.map(c => {
+        const fVenc = new Date(c.fechaVencimiento);
+        const diffTime = fVenc.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        let estadoTiempo = "";
+        if (diffDays < 0) estadoTiempo = `❌ VENCIDA hace ${Math.abs(diffDays)} días`;
+        else if (diffDays === 0) estadoTiempo = `🚨 VENCE HOY`;
+        else estadoTiempo = `⏳ Vence en ${diffDays} días`;
+
+        return {
+            id: c.id,
+            cliente: c.cliente?.nombre || 'Desconocido',
+            documento: c.venta?.numeroDocumento || 'S/N',
+            monto: c.saldoPendiente,
+            moneda: c.moneda,
+            estadoTiempo
         };
     });
 }

@@ -137,6 +137,7 @@ export default function ImprimirRecibo() {
                     </tbody>
                 </table>
 
+                {/* 🔥 FOOTER CON PUSH AUTOMÁTICO HACIA ABAJO (FLEXBOX) 🔥 */}
                 <footer className="footer-section">
                     <table className="totals-table">
                         <tbody>
@@ -214,32 +215,51 @@ export default function ImprimirRecibo() {
                 </footer>
             </div>
 
-            {/* 🔥 CSS CON ALTURA DINÁMICA INYECTADA Y ESTILOS AJUSTADOS 🔥 */}
+            {/* 🔥 CSS 100% BLINDADO Y A PRUEBA DE SOLAPAMIENTOS 🔥 */}
             <style dangerouslySetInnerHTML={{ __html: `
                 * { box-sizing: border-box; }
 
+                /* CONTENEDOR EN PANTALLA MÓVIL/DESKTOP */
                 .print-wrapper {
                     display: flex;
                     justify-content: center;
                     padding: 20px;
                     background: #525659;
                     min-height: 100vh;
+                    overflow: auto; /* Permite deslizar si no cabe en el celular */
                 }
 
+                /* LA HOJA FÍSICA Y VISUAL */
                 .print-container {
                     background: white;
                     color: black;
                     width: 8.5in;
-                    height: ${altoPapel}; /* 🔥 AQUÍ APLICA LA MAGIA DINÁMICA 🔥 */
-                    padding: 0.3in 0.4in;
+                    min-height: ${altoPapel}; /* Tamaño estricto si hay pocos renglones */
+                    height: max-content; /* Crecerá naturalmente si metes 15 renglones */
+                    padding: 0.2in 0.3in;
                     position: relative;
                     font-family: Arial, Helvetica, sans-serif;
                     font-size: 11px;
                     box-shadow: 0 0 10px rgba(0,0,0,0.5);
-                    overflow: hidden;
-                    transition: height 0.3s ease;
+                    display: flex;
+                    flex-direction: column; /* Activa el empuje del footer */
+                    transform-origin: top center;
                 }
 
+                /* MAGIA PARA MÓVILES ANTES DE IMPRIMIR */
+                @media (max-width: 850px) {
+                    .print-wrapper {
+                        justify-content: flex-start;
+                        padding: 10px;
+                    }
+                    .print-container {
+                        transform: scale(0.9); /* Se achica lo mínimo para no perder legibilidad */
+                        transform-origin: top left;
+                        margin-bottom: 0;
+                    }
+                }
+
+                /* REGLAS ESTRICTAS QUE EL NAVEGADOR DEBE OBEDECER AL IMPRIMIR */
                 @media print {
                     @page {
                         size: letter portrait;
@@ -254,15 +274,16 @@ export default function ImprimirRecibo() {
                         left: 0 !important;
                         top: 0 !important;
                         width: 8.5in !important;
-                        height: ${altoPapel} !important; /* 🔥 SE RESPETA EN LA IMPRESORA 🔥 */
+                        min-height: ${altoPapel} !important;
+                        height: max-content !important;
                         margin: 0 !important;
-                        padding: 0.3in 0.4in !important;
+                        padding: 0.2in 0.3in !important;
                         box-shadow: none !important;
                         border: none !important;
                     }
                     
                     html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
-                    .print-wrapper { padding: 0 !important; background: transparent !important; }
+                    .print-wrapper { padding: 0 !important; background: transparent !important; display: block; }
                     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                 }
 
@@ -295,56 +316,56 @@ export default function ImprimirRecibo() {
                     grid-template-columns: 25% 75%;
                     align-items: center;
                     border-bottom: 2px solid #ccc;
-                    padding-bottom: 5px;
-                    margin-bottom: 5px;
+                    padding-bottom: 2px;
+                    margin-bottom: 2px;
                 }
 
-                /* 🔥 TUS CORRECCIONES DE LOGO Y MEMBRETE 🔥 */
+                /* 🔥 TUS CORRECCIONES EXACTAS 🔥 */
                 .logo { padding: 0; margin-left: 15px; max-width: 100%; max-height: 100px; object-fit: contain; }
                 .membrete-section { text-align: left; padding-left: 0px; margin-left: 0px; }
                 
-                .membrete-section h3 { color: #1976d2 !important; margin: 0 0 2px 0; font-size: 14px; }
-                .membrete-section p { margin: 0; font-size: 9px; font-weight: bold; }
+                .membrete-section h3 { color: #1976d2 !important; margin: 0 0 2px 0; font-size: 13px; }
+                .membrete-section p { margin: 0; font-size: 8.5px; font-weight: bold; }
                 .membrete-section .rif { font-size: 11px; }
                 
                 .info-grid {
                     display: grid;
                     grid-template-columns: 60% 40%;
-                    margin-bottom: 10px;
+                    margin-bottom: 5px;
                 }
                 .cliente-box { padding-right: 15px; }
-                .line-item { margin-bottom: 4px; display: flex; align-items: flex-end; border-bottom: 1px solid #000; padding-bottom: 2px; }
+                .line-item { margin-bottom: 2px; display: flex; align-items: flex-end; border-bottom: 1px solid #000; padding-bottom: 2px; }
                 .line-item .label-red { width: 120px; flex-shrink: 0; }
-                .value-line { flex-grow: 1; font-weight: bold; font-size: 12px; }
+                .value-line { flex-grow: 1; font-weight: bold; font-size: 11px; }
 
                 .doc-box { text-align: right; }
-                .doc-title { font-size: 20px; margin: 0; font-weight: 900; color: #222; text-transform: uppercase; }
-                .doc-number { color: #d32f2f !important; font-size: 16px; margin: 0 0 5px 0; letter-spacing: 1px; }
-                .doc-meta { width: 100%; font-size: 10px; }
+                .doc-title { font-size: 16px; margin: 0; font-weight: 900; color: #222; text-transform: uppercase; }
+                .doc-number { color: #d32f2f !important; font-size: 14px; margin: 0 0 2px 0; letter-spacing: 1px; }
+                .doc-meta { width: 100%; font-size: 9.5px; }
                 .doc-meta td { padding: 1px 4px; }
 
                 .items-table {
                     width: 100%;
                     border-collapse: collapse;
-                    margin-bottom: 15px;
+                    margin-bottom: 5px;
                 }
                 .items-table th {
                     border-top: 2px solid #000;
                     border-bottom: 2px solid #000;
-                    padding: 4px 2px;
-                    font-size: 10px;
+                    padding: 3px 2px;
+                    font-size: 9.5px;
                 }
                 .items-table td {
-                    padding: 4px 2px;
-                    font-size: 10px;
+                    padding: 3px 2px;
+                    font-size: 9.5px;
                     vertical-align: top;
+                    border-bottom: 1px dashed #eee;
                 }
 
+                /* 🔥 FOOTER CON PUSH AUTOMÁTICO (FLEXBOX) 🔥 */
                 .footer-section {
-                    position: absolute;
-                    bottom: 0.3in;
-                    left: 0.4in;
-                    right: 0.4in;
+                    margin-top: auto; 
+                    position: relative;
                 }
 
                 .totals-table {
@@ -354,18 +375,19 @@ export default function ImprimirRecibo() {
                     margin-bottom: 5px;
                 }
                 .totals-table td {
-                    padding: 4px;
+                    padding: 2px;
                     border-bottom: 1px solid #000;
+                    font-size: 9.5px;
                 }
                 .border-right { border-right: 1px solid #000; }
-                .monto-split { display: flex; justify-content: space-around; margin-top: 2px; font-size: 11px; }
+                .monto-split { display: flex; justify-content: space-around; margin-top: 2px; font-size: 10px; }
 
                 .monto-letras {
-                    font-size: 10px;
-                    margin-bottom: 8px;
+                    font-size: 9px;
+                    margin-bottom: 4px;
                     padding-left: 5px;
                 }
-                .original-label { font-size: 10px; margin-bottom: 2px; }
+                .original-label { font-size: 10px; margin-bottom: 2px; font-weight: bold; }
 
                 .legal-box {
                     display: flex;

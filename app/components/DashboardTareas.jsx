@@ -8,7 +8,7 @@ import {
     Table
 } from '@mantine/core';
 import { DateInput } from '@mantine/dates';
-import { 
+import {
     IconPlus, IconCheck, IconClock, IconUser, IconDotsVertical, IconListCheck, IconUsers, IconHandStop,
     IconRefresh, IconSettings
 } from '@tabler/icons-react';
@@ -18,7 +18,7 @@ import { formatDateLong, formatDateShort } from '../helpers/dateUtils';
 
 export default function DashboardTareas({ glassStyle }) {
     const { user, nombre, rol, departamentos, userId, isAdmin } = useAuth();
-    
+
     const containerStyle = glassStyle || {
         backgroundColor: 'rgba(255, 255, 255, 0.7)',
         backdropFilter: 'blur(10px)',
@@ -30,28 +30,28 @@ export default function DashboardTareas({ glassStyle }) {
     const [loading, setLoading] = useState(true);
     const [modalOpen, setModalOpen] = useState(false);
     const [empleados, setEmpleados] = useState([]);
-    
+
     // Estados para la configuración de permisos (Engranaje)
     const [configModalOpen, setConfigModalOpen] = useState(false);
     const [permisosDinamicos, setPermisosDinamicos] = useState({ departamentos: [], puestos: [] });
     const [departamentosList, setDepartamentosList] = useState([]);
     const [puestosList, setPuestosList] = useState([]);
     const [isSavingConfig, setIsSavingConfig] = useState(false);
-    
+
     const [form, setForm] = useState({
         titulo: '',
         descripcion: '',
         prioridad: 'Media',
-        asignadoAId: '', 
+        asignadoAId: '',
         fechaVencimiento: new Date()
     });
 
-    const esPresidencia = 
-        userId === 1 || 
-        rol?.toLowerCase().includes('presidente') || 
-        rol?.toLowerCase().includes('admin') || 
+    const esPresidencia =
+        userId === 1 ||
+        rol?.toLowerCase().includes('presidente') ||
+        rol?.toLowerCase().includes('admin') ||
         isAdmin ||
-        departamentos?.some(dep => dep.toLowerCase().includes('presidencia')); 
+        departamentos?.some(dep => dep.toLowerCase().includes('presidencia'));
 
     const tienePermisoAsignar = () => {
         const depsPermitidos = permisosDinamicos.departamentos || [];
@@ -73,13 +73,13 @@ export default function DashboardTareas({ glassStyle }) {
                 userId: user.id,
                 esPresidencia: esPresidencia
             });
-            
+
             const res = await fetch(`/api/tareas?${queryParams.toString()}`);
             const data = await res.json();
             if (Array.isArray(data)) setTareas(data);
-        } catch (error) { 
-            console.error('Error fetching tareas:', error); 
-        } 
+        } catch (error) {
+            console.error('Error fetching tareas:', error);
+        }
         finally { setLoading(false); }
     };
 
@@ -121,15 +121,15 @@ export default function DashboardTareas({ glassStyle }) {
                     lista = lista.filter(e => e.departamentoId === user.departamentoId);
                 }
 
-                const listaConUsuario = lista.filter(e => e.usuario); 
-                
+                const listaConUsuario = lista.filter(e => e.usuario);
+
                 const opciones = listaConUsuario.map(e => ({
                     value: String(e.usuario?.id),
                     label: `${e.nombre} ${e.apellido} - ${e.puestos.map(p => p.nombre).join(', ') || 'General'}`
                 }));
-                
+
                 opciones.unshift({ value: 'general', label: '📢 GENERAL (Visible para el equipo)' });
-                
+
                 setEmpleados(opciones);
             } catch (err) { console.error(err); }
         }
@@ -215,7 +215,7 @@ export default function DashboardTareas({ glassStyle }) {
             const res = await fetch(`/api/tareas/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ asignadoAId: user.id, estado: 'En Progreso' }) 
+                body: JSON.stringify({ asignadoAId: user.id, estado: 'En Progreso' })
             });
             if (res.ok) {
                 notifications.show({ message: 'Tarea asignada a ti', color: 'blue' });
@@ -225,7 +225,7 @@ export default function DashboardTareas({ glassStyle }) {
     };
 
     const getPriorityColor = (p) => {
-        switch(p) { case 'Urgente': return 'red'; case 'Alta': return 'orange'; case 'Media': return 'blue'; default: return 'gray'; }
+        switch (p) { case 'Urgente': return 'red'; case 'Alta': return 'orange'; case 'Media': return 'blue'; default: return 'gray'; }
     };
 
     const tareasOrdenadas = [...tareas].sort((a, b) => {
@@ -239,7 +239,7 @@ export default function DashboardTareas({ glassStyle }) {
 
     return (
         <Paper p="lg" radius="lg" style={{ ...containerStyle, transition: 'all 0.3s ease' }}>
-            
+
             <Modal opened={configModalOpen} onClose={() => setConfigModalOpen(false)} title={<Text fw={700}>Configurar Asignación de Tareas</Text>} centered>
                 <Stack>
                     <Text size="sm" c="dimmed">
@@ -270,7 +270,7 @@ export default function DashboardTareas({ glassStyle }) {
             <Group justify="space-between" mb="md">
                 <Group gap="sm">
                     <ThemeIcon variant="gradient" gradient={{ from: 'blue', to: 'cyan' }} size="lg" radius="md">
-                        <IconListCheck size={20}/>
+                        <IconListCheck size={20} />
                     </ThemeIcon>
                     <Group gap="xs" align="center">
                         <div>
@@ -289,22 +289,22 @@ export default function DashboardTareas({ glassStyle }) {
                         </Badge>
                     )}
                 </Group>
-                
-                <Button 
-                    leftSection={<IconPlus size={16}/>} 
-                    size="xs" 
-                    radius="xl" 
-                    variant="filled" 
-                    color="blue" 
-                    onClick={() => { 
-                        setModalOpen(true); 
+
+                <Button
+                    leftSection={<IconPlus size={16} />}
+                    size="xs"
+                    radius="xl"
+                    variant="filled"
+                    color="blue"
+                    onClick={() => {
+                        setModalOpen(true);
                         if (puedeAsignar) {
-                            fetchEmpleados(); 
-                            setForm({ ...form, asignadoAId: '' }); 
+                            fetchEmpleados();
+                            setForm({ ...form, asignadoAId: '' });
                         } else {
-                            setForm({ ...form, asignadoAId: String(user.id) }); 
+                            setForm({ ...form, asignadoAId: String(user.id) });
                         }
-                    }} 
+                    }}
                     style={{ boxShadow: '0 4px 10px rgba(34, 139, 230, 0.3)' }}
                 >
                     {puedeAsignar ? 'Asignar Tarea' : 'Nueva Tarea'}
@@ -336,17 +336,17 @@ export default function DashboardTareas({ glassStyle }) {
                             <Table.Tbody>
                                 {tareasOrdenadas.map(tarea => {
                                     const esGeneral = !tarea.asignadoAId;
-                                    const esCancelada = tarea.estado === 'Cancelada'; 
+                                    const esCancelada = tarea.estado === 'Cancelada';
                                     const esCompletada = tarea.estado === 'Completada';
-                                    
+
                                     // Validamos si el usuario actual fue el que creó esta tarea en específico
                                     const esCreador = tarea.creadoPorId === user?.id;
                                     const puedeAdministrarTarea = esPresidencia || esCreador;
 
                                     return (
-                                        <Table.Tr 
+                                        <Table.Tr
                                             key={tarea.id}
-                                            style={{ 
+                                            style={{
                                                 opacity: (esCancelada || esCompletada) ? 0.6 : 1,
                                                 backgroundColor: esCancelada ? 'rgba(255, 200, 200, 0.1)' : 'inherit'
                                             }}
@@ -359,9 +359,9 @@ export default function DashboardTareas({ glassStyle }) {
                                                         </ActionIcon>
                                                     </Tooltip>
                                                 ) : (
-                                                    <Checkbox 
+                                                    <Checkbox
                                                         checked={esCompletada}
-                                                        disabled={esCancelada} 
+                                                        disabled={esCancelada}
                                                         onChange={() => cambiarEstado(tarea.id, esCompletada ? 'Pendiente' : 'Completada')}
                                                         color="green"
                                                         radius="xl"
@@ -374,17 +374,28 @@ export default function DashboardTareas({ glassStyle }) {
                                                 <Group gap="xs" mb={4}>
                                                     {esGeneral && <Badge size="xs" variant="gradient" gradient={{ from: 'indigo', to: 'cyan' }}>GENERAL</Badge>}
                                                     {esCancelada && <Badge size="xs" color="red" variant="filled">CANCELADA</Badge>}
-                                                    <Text 
-                                                        fw={600} 
-                                                        size="sm" 
-                                                        td={(esCompletada || esCancelada) ? 'line-through' : 'none'} 
+                                                    <Text
+                                                        fw={600}
+                                                        size="sm"
+                                                        td={(esCompletada || esCancelada) ? 'line-through' : 'none'}
                                                         c={esCancelada ? 'red.8' : 'dark.8'}
                                                     >
                                                         {tarea.titulo}
                                                     </Text>
                                                 </Group>
+
+                                                {/* 🔥 Renderizado directo y completo de la descripción 🔥 */}
                                                 {tarea.descripcion && (
-                                                    <Text size="xs" c="dimmed" lineClamp={1}>{tarea.descripcion}</Text>
+                                                    <Text
+                                                        size="xs"
+                                                        c="dimmed"
+                                                        style={{
+                                                            whiteSpace: 'pre-wrap', // Respeta los "Enter" (saltos de línea) del usuario
+                                                            wordBreak: 'break-word' // Evita que una palabra superlarga rompa la tabla
+                                                        }}
+                                                    >
+                                                        {tarea.descripcion}
+                                                    </Text>
                                                 )}
                                             </Table.Td>
 
@@ -422,19 +433,19 @@ export default function DashboardTareas({ glassStyle }) {
                                                 <Menu shadow="md" width={150} position="bottom-end">
                                                     <Menu.Target>
                                                         <ActionIcon variant="subtle" color="gray" size="sm">
-                                                            <IconDotsVertical size={16}/>
+                                                            <IconDotsVertical size={16} />
                                                         </ActionIcon>
                                                     </Menu.Target>
                                                     <Menu.Dropdown>
                                                         <Menu.Label>Acciones</Menu.Label>
-                                                        
-                                                        {esGeneral && <Menu.Item leftSection={<IconUser size={14}/>} onClick={() => asumirTarea(tarea.id)}>Asumir Tarea</Menu.Item>}
-                                                        
+
+                                                        {esGeneral && <Menu.Item leftSection={<IconUser size={14} />} onClick={() => asumirTarea(tarea.id)}>Asumir Tarea</Menu.Item>}
+
                                                         {!esCancelada && (
                                                             <>
-                                                                <Menu.Item leftSection={<IconClock size={14}/>} onClick={() => cambiarEstado(tarea.id, 'Pendiente')}>Pendiente</Menu.Item>
-                                                                <Menu.Item leftSection={<IconListCheck size={14}/>} onClick={() => cambiarEstado(tarea.id, 'En Progreso')}>En Progreso</Menu.Item>
-                                                                <Menu.Item leftSection={<IconCheck size={14}/>} onClick={() => cambiarEstado(tarea.id, 'Completada')}>Completada</Menu.Item>
+                                                                <Menu.Item leftSection={<IconClock size={14} />} onClick={() => cambiarEstado(tarea.id, 'Pendiente')}>Pendiente</Menu.Item>
+                                                                <Menu.Item leftSection={<IconListCheck size={14} />} onClick={() => cambiarEstado(tarea.id, 'En Progreso')}>En Progreso</Menu.Item>
+                                                                <Menu.Item leftSection={<IconCheck size={14} />} onClick={() => cambiarEstado(tarea.id, 'Completada')}>Completada</Menu.Item>
                                                             </>
                                                         )}
 
@@ -444,10 +455,10 @@ export default function DashboardTareas({ glassStyle }) {
                                                                 <Menu.Divider />
                                                                 {esCancelada ? (
                                                                     <>
-                                                                        <Menu.Item color="blue" leftSection={<IconRefresh size={14}/>} onClick={() => cambiarEstado(tarea.id, 'Pendiente')}>
+                                                                        <Menu.Item color="blue" leftSection={<IconRefresh size={14} />} onClick={() => cambiarEstado(tarea.id, 'Pendiente')}>
                                                                             Revivir Tarea
                                                                         </Menu.Item>
-                                                                        <Menu.Item color="red" leftSection={<IconHandStop size={14}/>} onClick={() => eliminarTarea(tarea.id)}>
+                                                                        <Menu.Item color="red" leftSection={<IconHandStop size={14} />} onClick={() => eliminarTarea(tarea.id)}>
                                                                             Eliminar Definitivamente
                                                                         </Menu.Item>
                                                                     </>
@@ -472,30 +483,30 @@ export default function DashboardTareas({ glassStyle }) {
 
             <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={puedeAsignar ? "Asignar Nueva Tarea" : "Crear Nueva Tarea"} centered radius="lg">
                 <Stack>
-                    <TextInput 
-                        label="Título" 
-                        placeholder="Ej. Limpieza de patio" 
-                        required 
+                    <TextInput
+                        label="Título"
+                        placeholder="Ej. Limpieza de patio"
+                        required
                         value={form.titulo}
-                        onChange={(e) => setForm({...form, titulo: e.target.value})}
+                        onChange={(e) => setForm({ ...form, titulo: e.target.value })}
                     />
-                    <Textarea 
-                        label="Descripción" 
+                    <Textarea
+                        label="Descripción"
                         value={form.descripcion}
-                        onChange={(e) => setForm({...form, descripcion: e.target.value})}
+                        onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
                     />
                     <Group grow>
                         <Select
                             label="Prioridad"
                             data={['Baja', 'Media', 'Alta', 'Urgente']}
                             value={form.prioridad}
-                            onChange={(val) => setForm({...form, prioridad: val})}
+                            onChange={(val) => setForm({ ...form, prioridad: val })}
                             allowDeselect={false}
                         />
-                         <DateInput
+                        <DateInput
                             label="Vencimiento"
                             value={form.fechaVencimiento}
-                            onChange={(val) => setForm({...form, fechaVencimiento: val})}
+                            onChange={(val) => setForm({ ...form, fechaVencimiento: val })}
                         />
                     </Group>
 
@@ -506,7 +517,7 @@ export default function DashboardTareas({ glassStyle }) {
                             searchable
                             data={empleados}
                             value={form.asignadoAId}
-                            onChange={(val) => setForm({...form, asignadoAId: val})}
+                            onChange={(val) => setForm({ ...form, asignadoAId: val })}
                             required
                             description="Selecciona 'GENERAL' para que todos en tu departamento puedan verla."
                         />

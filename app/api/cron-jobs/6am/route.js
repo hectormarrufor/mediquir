@@ -3,6 +3,7 @@ import {
     syncExchangeRates,
     checkHREvents,
     checkAssetDocs,
+    checkCxP, checkCxC
 } from './services'; 
 import { notificarCabezas } from '@/app/handlers/notificar'; 
 // Nota: Si no tienes configurado notificarUsuarioEspecifico en tu handler, puedes usar notificarCabezas para el aviso.
@@ -22,11 +23,14 @@ export async function GET(request) {
         // Ejecutar los 7 servicios en paralelo de forma segura
         const [
             finanzas, consumibles, rrhh, activos, 
-            nominasAutomaticas, requisiciones, custodiasPendientes
+            nominasAutomaticas, requisiciones, custodiasPendientes,
+            cxp, cxc
         ] = await Promise.allSettled([
             syncExchangeRates(),
             checkHREvents(),
             checkAssetDocs(),
+            checkCxP(),
+            checkCxC(),
         ]);
 
         const report = [];
@@ -70,9 +74,33 @@ export async function GET(request) {
         }
 
 
- 
+        // 🔥 NOTIFICACIONES CUENTAS POR PAGAR (CxP)
+        if (cxp.status === 'fulfilled' && cxp.value.length > 0) {
+            const docs = cxp.value;
+            for (const doc of docs) {
+                await notificarCabezas({
+                    title: `🔴 CxP: ${doc.estadoTiempo}`,
+                    body: `Debemos a ${doc.proveedor} (Fact: ${doc.documento})\nSaldo: ${doc.monto} ${doc.moneda}`,
+                    url: `/superuser/finanzas/cxp`,
+                    tag: `cxp-${doc.id}-${Date.now()}`
+                });
+            }
+            report.push(`✅ ${docs.length} alertas de CxP enviadas.`);
+        }
 
-      
+        // 🔥 NOTIFICACIONES CUENTAS POR COBRAR (CxC)
+        if (cxc.status === 'fulfilled' && cxc.value.length > 0) {
+            const docs = cxc.value;
+            for (const doc of docs) {
+                await notificarCabezas({
+                    title: `🟢 CxC: ${doc.estadoTiempo}`,
+                    body: `Cobrar a ${doc.cliente} (Doc: ${doc.documento})\nSaldo: ${doc.monto} ${doc.moneda}`,
+                    url: `/superuser/finanzas/cxc`,
+                    tag: `cxc-${doc.id}-${Date.now()}`
+                });
+            }
+            report.push(`✅ ${docs.length} alertas de CxC enviadas.`);
+        }
 
         return NextResponse.json({ success: true, report });
 
@@ -81,3 +109,5 @@ export async function GET(request) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
+
+      

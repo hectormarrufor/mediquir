@@ -14,14 +14,18 @@ import {
     IconAlertTriangle,
     IconSettings, IconCurrencyDollar, IconCheck,
     IconPackage,
-    IconBuildingStore
+    IconBuildingStore,
+    IconReceipt,
+    IconShieldCheck
 } from '@tabler/icons-react';
 import './superuser.css';
 import { useAuth } from '@/hooks/useAuth';
 import DashboardTareas from '../components/DashboardTareas';
 import { notifications } from '@mantine/notifications';
 import dynamic from 'next/dynamic';
+
 const PosModal = dynamic(() => import('../components/admin/PosModal'), { ssr: false });
+const CompraModal = dynamic(() => import('../components/admin/CompraModal'), { ssr: false }); // 🔥 IMPORTAMOS EL MODAL DE COMPRAS 🔥
 
 // --- CONSTANTES DE DISEÑO ---
 const bgPattern = {
@@ -44,7 +48,10 @@ const menuOptions = [
     { title: 'Inventario', href: '/superuser/inventario', description: 'Control almacén.', icon: IconArchive, color: 'indigo' },
     { title: 'Personal', href: '/superuser/rrhh', description: 'RRHH y empleados.', icon: IconUser, color: 'cyan' },
     { title: 'Ventas / Pedidos', href: '/superuser/ventas', description: 'Gestión de ventas de diario y pedidos.', icon: IconShoppingCart, color: 'grape' },
-    { title: 'Finanzas', href: '/superuser/finanzas', description: 'Gestión de finanzas.', icon: IconCurrencyDollar, color: 'grape' },
+    { title: 'Compras', href: '/superuser/compras', description: 'Gestión de compras y proveedores.', icon: IconPackage, color: 'orange' },
+    { title: 'Balance General', href: '/superuser/finanzas', description: 'Dashboard de ingresos y egresos.', icon: IconCurrencyDollar, color: 'grape' },
+    { title: 'Cuentas por Cobrar (CxC)', href: '/superuser/cxc', description: 'Gestión de cuentas por cobrar.', icon: IconShieldCheck, color: 'green' },
+    { title: 'Cuentas por Pagar (CxP)', href: '/superuser/cxp', description: 'Gestión de cuentas por pagar.', icon: IconAlertTriangle, color: 'red' },
 ];
 
 const FadeInSection = ({ children, delay = 0 }) => {
@@ -93,7 +100,6 @@ export default function SuperUserHome() {
     const [puestosList, setPuestosList] = useState([]);
     const [usuariosList, setUsuariosList] = useState([]);
 
-    // 🔥 NUEVOS ESTADOS PARA FIRMA DE CUSTODIA 🔥
     const [pendientesFirma, setPendientesFirma] = useState([]);
     const [procesandoFirma, setProcesandoFirma] = useState(false);
     const [modalRechazo, setModalRechazo] = useState(false);
@@ -101,6 +107,7 @@ export default function SuperUserHome() {
     const [motivoRechazo, setMotivoRechazo] = useState('');
 
     const [modalPosAbierto, setModalPosAbierto] = useState(false);
+    const [modalCompraAbierto, setModalCompraAbierto] = useState(false); // 🔥 ESTADO PARA EL MODAL DE COMPRAS 🔥
 
     useEffect(() => {
         const fetchData = async () => {
@@ -125,19 +132,16 @@ export default function SuperUserHome() {
 
                 if (resDepartamentos.ok) {
                     const dataDepartamentos = await resDepartamentos.json();
-                    // Filtramos para asegurar que no entren nulos
                     setDepartamentosList(dataDepartamentos.filter(d => d && d.nombre).map(d => String(d.nombre)));
                 }
 
                 if (resPuestos.ok) {
                     const dataPuestos = await resPuestos.json();
-                    // Filtramos para asegurar que no entren nulos
                     setPuestosList(dataPuestos.filter(p => p && p.nombre).map(p => String(p.nombre)));
                 }
 
                 if (resUsuarios.ok) {
                     const dataUsuarios = await resUsuarios.json();
-                    // Almacenamos el ID como string y el nombre como etiqueta legible
                     setUsuariosList(dataUsuarios.filter(u => u && u.id && u.empleado).map(u => ({ value: String(u.id), label: `${u.empleado.nombre} ${u.empleado.apellido}` })));
                 }
 
@@ -151,7 +155,6 @@ export default function SuperUserHome() {
         fetchData();
     }, []);
 
-    // 🔥 EFECTO PARA BUSCAR MATERIALES PENDIENTES DEL USUARIO LOGUEADO 🔥
     useEffect(() => {
         const fetchPendientes = async () => {
             if (!userId) return;
@@ -159,7 +162,6 @@ export default function SuperUserHome() {
                 const res = await fetch(`/api/inventario/salidas`);
                 if (res.ok) {
                     const data = await res.json();
-                    // Filtramos las salidas que están esperando firma Y que le pertenecen a este usuario
                     const misPendientes = data.filter(s => s.estado === 'Esperando Firma' && s.solicitadoPorId === userId);
                     setPendientesFirma(misPendientes);
                 }
@@ -216,52 +218,20 @@ export default function SuperUserHome() {
             ? rol
             : (typeof rol === 'string' ? [rol] : []);
 
-        // Añadida validación de tipo para evitar errores de undefined en toLowerCase
         const tieneDepartamento = depsPermitidos.some(dep =>
             dep && typeof dep === 'string' && userDepsArray.some(d => d && typeof d === 'string' && d.toLowerCase().includes(dep.toLowerCase()))
         );
 
-        // Añadida validación de tipo para evitar errores de undefined en toLowerCase
         const tienePuesto = puestosPermitidos.some(puesto =>
             puesto && typeof puesto === 'string' && userRolArray.some(r => r && typeof r === 'string' && r.toLowerCase().includes(puesto.toLowerCase()))
         );
 
-        // Validación por ID específico de usuario
         const tieneUsuario = usuariosPermitidos.includes(String(userId));
 
         return tieneDepartamento || tienePuesto || tieneUsuario;
     };
 
     const opcionesVisibles = menuOptions.filter(option => puedeVerModulo(option.href));
-
-    // 🔥 FUNCIÓN PARA CONFIRMAR O RECHAZAR EL MATERIAL DESDE EL DASHBOARD 🔥
-    const handleFirmar = async (id, accion) => {
-        if (accion === 'Rechazar' && !motivoRechazo) return notifications.show({ message: 'Escribe un motivo de rechazo', color: 'orange' });
-
-        setProcesandoFirma(true);
-        try {
-            const res = await fetch(`/api/inventario/salidas/${id}/firmar`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ accion, motivoRechazo })
-            });
-
-            if (res.ok) {
-                notifications.show({ title: 'Acta Digital Cerrada', message: `Material ${accion.toLowerCase()}o correctamente.`, color: 'teal' });
-                setModalRechazo(false);
-                setMotivoRechazo('');
-                // Quitamos el item de la vista localmente para que desaparezca al instante
-                setPendientesFirma(prev => prev.filter(item => item.id !== id));
-            } else {
-                const err = await res.json();
-                throw new Error(err.error);
-            }
-        } catch (error) {
-            notifications.show({ title: 'Error', message: error.message, color: 'red' });
-        } finally {
-            setProcesandoFirma(false);
-        }
-    };
 
     if (isLoading) {
         return (
@@ -296,25 +266,19 @@ export default function SuperUserHome() {
                     </Stack>
                 </Modal>
 
-                {/* MODAL DE RECHAZO DE FIRMA */}
-                <Modal opened={modalRechazo} onClose={() => setModalRechazo(false)} title="Rechazar Recepción de Material" centered>
-                    <Textarea
-                        label="¿Por qué no aceptas este material?"
-                        description="Este mensaje será enviado a gerencia y almacén de forma inmediata."
-                        placeholder="Ej: La pieza está rota, me entregaron el repuesto equivocado..."
-                        value={motivoRechazo}
-                        onChange={(e) => setMotivoRechazo(e.currentTarget.value)}
-                        required
-                    />
-                    <Button fullWidth color="red" mt="md" onClick={() => handleFirmar(selectedItemFirma?.id, 'Rechazar')} loading={procesandoFirma}>
-                        Confirmar Rechazo
-                    </Button>
-                </Modal>
-
                 {modalPosAbierto && (
                     <PosModal
                         opened={modalPosAbierto}
                         onClose={() => setModalPosAbierto(false)}
+                        tasaBcv={precioBCV}
+                    />
+                )}
+
+                {/* 🔥 MODAL DE REGISTRO DE FACTURA DE COMPRA 🔥 */}
+                {modalCompraAbierto && (
+                    <CompraModal
+                        opened={modalCompraAbierto}
+                        onClose={() => setModalCompraAbierto(false)}
                         tasaBcv={precioBCV}
                     />
                 )}
@@ -337,14 +301,27 @@ export default function SuperUserHome() {
                                 </ActionIcon>
                             )}
                         </Group>
-                        <Button
-                            size="lg"
-                            color="blue.9"
-                            leftSection={<IconBuildingStore size={22} />}
-                            onClick={() => setModalPosAbierto(true)}
-                        >
-                            Registrar Venta Rápida (POS)
-                        </Button>
+
+                        {/* 🔥 BOTONES DE ACCIÓN RÁPIDA: POS Y REGISTRAR COMPRA 🔥 */}
+                        <Group gap="sm">
+                            <Button
+                                size="md"
+                                color="grape.8"
+                                leftSection={<IconReceipt size={20} />}
+                                onClick={() => setModalCompraAbierto(true)}
+                            >
+                                Registrar Factura Compra
+                            </Button>
+
+                            <Button
+                                size="md"
+                                color="blue.9"
+                                leftSection={<IconBuildingStore size={22} />}
+                                onClick={() => setModalPosAbierto(true)}
+                            >
+                                Registrar Venta Rápida (POS)
+                            </Button>
+                        </Group>
                     </Group>
                 </FadeInSection>
 

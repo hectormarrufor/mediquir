@@ -1,3 +1,4 @@
+// models/inventario/SalidaInventario.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../../sequelize');
 
@@ -6,6 +7,12 @@ const SalidaInventario = sequelize.define('SalidaInventario', {
         type: DataTypes.INTEGER,
         primaryKey: true,
         autoIncrement: true,
+    },
+    // 🔥 NUEVO CAMPO: Para trazar exactamente a qué factura pertenece esta salida
+    ventaId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: { model: 'Ventas', key: 'id' }
     },
     cantidad: {
         type: DataTypes.DECIMAL(10, 2),
@@ -20,14 +27,13 @@ const SalidaInventario = sequelize.define('SalidaInventario', {
         allowNull: true,
     },
     estado: {
-        type: DataTypes.ENUM('Pendiente', 'Entregada', 'Cancelada', 'Rechazada', 'Esperando Firma', 'Esperando Devolucion', 'Devuelta'),
+        type: DataTypes.ENUM('Pendiente','Empacada', 'Entregada', 'Cancelada', 'Rechazada', 'Esperando Firma', 'Esperando Devolucion', 'Devuelta'),
         defaultValue: 'Pendiente',
     },
     costoAlMomento: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: false,
     },
-    // 🔥 NUEVOS CAMPOS DE TRAZABILIDAD Y CUSTODIA 🔥
     solicitadoPorId: {
         type: DataTypes.INTEGER,
         allowNull: true,
@@ -57,6 +63,11 @@ SalidaInventario.associate = (models) => {
     SalidaInventario.belongsTo(models.User, {
         foreignKey: 'despachadoPorId',
         as: 'despachador'
+    });
+    // 🔥 ASOCIACIÓN CON LA VENTA 🔥
+    SalidaInventario.belongsTo(models.Venta, {
+        foreignKey: 'ventaId',
+        as: 'venta'
     });
 };
 
