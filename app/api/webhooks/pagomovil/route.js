@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/models/index'; // Asegúrate de la ruta correcta a tus modelos
-import { notificarCabezas } from '@/app/handlers/notificar';
+import { notificarCabezas, notificarTodos } from '@/app/handlers/notificar';
 
 export async function POST(request) {
     try {
@@ -55,7 +55,7 @@ export async function POST(request) {
             });
             
             console.log(`Pago registrado con éxito: ${emisor} | Ref: ${referencia4Digitos} | Monto: ${montoLimpio}`);
-            notificarCabezas({
+            await notificarTodos({
                 title: `Pago movil recibido`,
                 body: `Pago registrado con éxito: ${emisor} | Ref: ${referencia4Digitos} | Monto: ${montoLimpio}`,
                 url: "/superuser/pagos-recibidos",
