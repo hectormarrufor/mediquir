@@ -24,7 +24,7 @@ import { useAuth } from '../../../../hooks/useAuth';
 // =======================================================================
 // 1. TARJETA MÓVIL INDIVIDUAL
 // =======================================================================
-const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClick, esGrupo, onEditFinanzas, onEditStock }) => {
+const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClick, esGrupo, onEditFinanzas, onEditStock, onEditPresentacion }) => {
     const { isAdmin } = useAuth(); // 🔥 Extraemos el rol también en móvil
     const isCriticoIndividual = Number(prod.stockAlmacen) <= Number(prod.stockMinimo);
     const imgSrc = prod.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}` : (prod.marca?.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.marca.imagen}` : null);
@@ -60,16 +60,22 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
 
             <Grid gutter="xs" mb="sm">
                 <Grid.Col span={6}>
-                    <Text size="xs" c="dimmed">Presentación</Text>
-                    <Text size="sm" tt="capitalize" fw={500} lh={1.1}>
-                        {prod.presentacion}
-                        {prod.presentacion === 'caja' && prod.unidadesPorCaja && <Text span size="xs" c="dimmed"> ({prod.unidadesPorCaja}u)</Text>}
-                    </Text>
+                    <Group justify="space-between" align="center">
+                        <Box>
+                            <Text size="xs" c="dimmed">Presentación</Text>
+                            <Text size="sm" tt="capitalize" fw={500} lh={1.1}>
+                                {prod.presentacion}
+                                {prod.presentacion === 'caja' && prod.unidadesPorCaja && <Text span size="xs" c="dimmed"> ({prod.unidadesPorCaja}u)</Text>}
+                            </Text>
+                        </Box>
+                        {isAdmin && (
+                            <ActionIcon variant="light" color="orange" size="xs" onClick={() => onEditPresentacion(prod)}>
+                                <IconEdit size={12} />
+                            </ActionIcon>
+                        )}
+                    </Group>
                 </Grid.Col>
-                <Grid.Col span={6}>
-                    <Text size="xs" c="dimmed">Unds x Bulto</Text>
-                    <Text size="sm" fw={500} lh={1.1}>{prod.unidadesPorBulto}</Text>
-                </Grid.Col>
+
 
                 {/* 🔥 FINANZAS CON EDICIÓN RÁPIDA MÓVIL 🔥 */}
                 <Grid.Col span={8}>
@@ -127,7 +133,7 @@ const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClic
 // =======================================================================
 // 2. COMPONENTE RENDERIZADOR DE LISTA
 // =======================================================================
-const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onImageClick, esGrupo, onEditFinanzas, onEditStock }) => {
+const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onImageClick, esGrupo, onEditFinanzas, onEditStock, onEditPresentacion }) => {
     const { isAdmin } = useAuth();
     if (isMobile) {
         return (
@@ -137,9 +143,9 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                         key={prod.id} prod={prod} stockPorGrupos={stockPorGrupos}
                         onEdit={() => onEdit(prod.id)} onDelete={() => onDelete(prod.id, prod.nombre)}
                         onImageClick={onImageClick} esGrupo={esGrupo}
-                        // 🔥 INYECTAMOS LAS FUNCIONES AQUÍ TAMBIÉN 🔥
                         onEditFinanzas={onEditFinanzas}
                         onEditStock={onEditStock}
+                        onEditPresentacion={onEditPresentacion}
                     />
                 ))}
             </Stack>
@@ -189,9 +195,18 @@ const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onI
                                     </Stack>
                                 </Table.Td>
                                 <Table.Td>
-                                    <Text size="sm" tt="capitalize" fw={500}>{prod.presentacion}</Text>
-                                    {prod.presentacion === 'caja' && prod.unidadesPorCaja && <Text size="xs" c="dimmed">({prod.unidadesPorCaja} unds/caja)</Text>}
-                                    <Text size="xs" c="gray.6">Bulto: {prod.unidadesPorBulto}</Text>
+                                    <Group gap="xs" wrap="nowrap">
+                                        <Box>
+                                            <Text size="sm" tt="capitalize" fw={500}>{prod.presentacion}</Text>
+                                            {prod.presentacion === 'caja' && prod.unidadesPorCaja && <Text size="xs" c="dimmed">({prod.unidadesPorCaja} unds/caja)</Text>}
+                                            <Text size="xs" c="gray.6">Bulto: {prod.unidadesPorBulto}</Text>
+                                        </Box>
+                                        {isAdmin && (
+                                            <ActionIcon variant="light" color="orange" size="sm" onClick={() => onEditPresentacion(prod)}>
+                                                <IconEdit size={14} />
+                                            </ActionIcon>
+                                        )}
+                                    </Group>
                                 </Table.Td>
                                 <Table.Td>
                                     <Group gap={4} maw={200}>
@@ -286,6 +301,7 @@ export default function ListaProductos() {
     // --- NUEVOS ESTADOS PARA EDICIÓN RÁPIDA ---
     const [modalFinanzas, setModalFinanzas] = useState(false);
     const [modalStock, setModalStock] = useState(false);
+    const [modalPresentacion, setModalPresentacion] = useState(false);
     const [prodEditando, setProdEditando] = useState(null);
     const [isUpdatingRapido, setIsUpdatingRapido] = useState(false);
 
@@ -299,6 +315,13 @@ export default function ListaProductos() {
     const formStock = useForm({
         initialValues: { stockAlmacen: 0 },
         validate: { stockAlmacen: (value) => (Number(value) < 0 ? 'No puede ser negativo' : null) }
+    });
+    const formPresentacion = useForm({
+        initialValues: { presentacion: '', unidadesPorCaja: '', unidadesPorBulto: 1 },
+        validate: {
+            presentacion: (value) => (!value ? 'Requerido' : null),
+            unidadesPorBulto: (value) => (Number(value) < 1 ? 'Mínimo 1' : null)
+        }
     });
 
     const sortOptions = [
@@ -499,6 +522,16 @@ export default function ListaProductos() {
         setModalStock(true);
     };
 
+    const abrirModalPresentacion = (prod) => {
+        setProdEditando(prod);
+        formPresentacion.setValues({
+            presentacion: prod.presentacion || '',
+            unidadesPorCaja: prod.unidadesPorCaja || '',
+            unidadesPorBulto: prod.unidadesPorBulto || 1
+        });
+        setModalPresentacion(true);
+    };
+
     const handleActualizarRapido = async (tipo, values) => {
         setIsUpdatingRapido(true);
         try {
@@ -513,6 +546,12 @@ export default function ListaProductos() {
                 };
             } else if (tipo === 'stock') {
                 payload = { stockAlmacen: Number(values.stockAlmacen) };
+            } else if (tipo === 'presentacion') {
+                payload = {
+                    presentacion: values.presentacion,
+                    unidadesPorCaja: values.presentacion === 'caja' ? Number(values.unidadesPorCaja) : null,
+                    unidadesPorBulto: Number(values.unidadesPorBulto)
+                };
             }
 
             const res = await fetch(`/api/productos/${prodEditando.id}`, {
@@ -527,6 +566,7 @@ export default function ListaProductos() {
             queryClient.invalidateQueries({ queryKey: ['productos'] });
             setModalFinanzas(false);
             setModalStock(false);
+            setModalPresentacion(false);
         } catch (error) {
             notifications.show({ title: 'Error', message: error.message, color: 'red' });
         } finally {
@@ -737,6 +777,7 @@ export default function ListaProductos() {
                                         // 🔥 INYECTAMOS LAS FUNCIONES AQUÍ 🔥
                                         onEditFinanzas={abrirModalFinanzas}
                                         onEditStock={abrirModalStock}
+                                        onEditPresentacion={abrirModalPresentacion}
                                     />
                                 </Paper>
                             );
@@ -757,6 +798,7 @@ export default function ListaProductos() {
                                     // 🔥 Y LAS INYECTAMOS AQUÍ TAMBIÉN 🔥
                                     onEditFinanzas={abrirModalFinanzas}
                                     onEditStock={abrirModalStock}
+                                    onEditPresentacion={abrirModalPresentacion}
                                 />
                             </Box>
                         )}
@@ -847,6 +889,28 @@ export default function ListaProductos() {
                             />
                             <Button type="submit" loading={isUpdatingRapido} color="teal" fullWidth mt="sm" size="md">
                                 Confirmar Inventario
+                            </Button>
+                        </Stack>
+                    </form>
+                )}
+            </Modal>
+            <Modal opened={modalPresentacion} onClose={() => setModalPresentacion(false)} title={<Title order={4}>Logística y Presentación</Title>} centered>
+                {prodEditando && (
+                    <form onSubmit={formPresentacion.onSubmit((v) => handleActualizarRapido('presentacion', v))}>
+                        <Stack gap="md">
+                            <Text fw={600} c="orange.9">{prodEditando.nombre}</Text>
+                            <Select
+                                label="Presentación Venta"
+                                data={[{ value: 'unidad', label: 'Unidad' }, { value: 'par', label: 'Par' }, { value: 'paqx2', label: 'Paquete x2' }, { value: 'paqx4', label: 'Paquete x4' }, { value: 'caja', label: 'Caja' }]}
+                                withAsterisk
+                                {...formPresentacion.getInputProps('presentacion')}
+                            />
+                            {formPresentacion.values.presentacion === 'caja' && (
+                                <NumberInput label="Unidades por Caja" min={1} {...formPresentacion.getInputProps('unidadesPorCaja')} />
+                            )}
+                            <NumberInput label="Unidades por Bulto" min={1} {...formPresentacion.getInputProps('unidadesPorBulto')} />
+                            <Button type="submit" loading={isUpdatingRapido} color="orange" fullWidth mt="sm">
+                                Guardar Logística
                             </Button>
                         </Stack>
                     </form>
