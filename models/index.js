@@ -2,6 +2,7 @@
 const sequelize = require('../sequelize');
 
 const db = {
+    PagoSms: require('./PagoSms'),
     CuentaPorPagar: require('./CuentaPorPagar'),
     CuentaPorCobrar: require('./CuentaPorCobrar'),
     FacturaCompra: require('./FacturaCompra'),
