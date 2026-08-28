@@ -68,7 +68,7 @@ export default function ClientLayout({ children }) {
                 <Notifications />
                 <AuthProvider>
                   <AppShell
-                    header={{ height: 60, collapsed: !pinned }}
+                    header={{ height: 70, collapsed: !pinned }}
                     navbar={{
                       width: 300,
                       breakpoint: 'sm',
@@ -78,7 +78,7 @@ export default function ClientLayout({ children }) {
                   >
                     <AppShell.Header
                       style={{
-                        background: 'linear-gradient(135deg, rgba(178, 220, 255, 0.92) 0%, rgba(92, 155, 192, 0.82) 40%, rgba(9, 45, 92, 0.92) 100%)',
+                        background: 'linear-gradient(135deg, rgba(7, 27, 44, 0.92) 0%, rgba(43, 115, 163, 0.67) 100%)',
                         backdropFilter: 'blur(16px)',
                         WebkitBackdropFilter: 'blur(16px)',
                         borderBottom: '1px solid rgba(249, 50, 0, 0.08)', // Sutil toque del color corporativo en el borde
@@ -88,15 +88,15 @@ export default function ClientLayout({ children }) {
                       <Group h="100%" px="xl" justify="space-between" wrap="nowrap">
                         {/* SECCIÓN LOGO */}
                         <UnstyledButton onClick={() => router.push('/')}>
-                          <Box w={140} h={60} style={{ display: 'flex', alignItems: 'center' }}>
+                          <Box w={200} h={70} style={{ display: 'flex', alignItems: 'center' }}>
                             <img
                               src={tenant.assets.logo}
                               alt={`Logo ${tenant.name}`}
                               fetchPriority="high"
                               style={{
-                                maxHeight: '60px',
-                                width: 'auto',
-                                objectFit: 'cover'
+                                maxHeight: '70px',
+                                width: '140px',
+                                objectFit: 'fill'
                               }}
                             />
                           </Box>
@@ -122,7 +122,7 @@ export default function ClientLayout({ children }) {
                     </AppShell.Header>
 
                     <AppShell.Navbar p="md"  style={{
-                        background: 'linear-gradient(135deg, rgba(243, 248, 255, 0.92) 0%, rgba(92, 155, 192, 0.82) 40%, rgba(9, 45, 92, 0.92) 100%)',
+                        background: 'linear-gradient(135deg, rgba(243, 248, 255, 0.92) 0%, rgba(92, 155, 192, 0.82) 40%, rgba(7, 30, 61, 0.92) 100%)',
                         backdropFilter: 'blur(16px)',
                         WebkitBackdropFilter: 'blur(16px)',
                         borderBottom: '1px solid rgba(249, 50, 0, 0.08)', // Sutil toque del color corporativo en el borde
@@ -131,7 +131,7 @@ export default function ClientLayout({ children }) {
                       <NavBar router={router} close={toggle} />
                     </AppShell.Navbar>
 
-                    <AppShell.Main p={0}>
+                    <AppShell.Main p={0} pt={70}>
                       <Box
                         style={{
                           position: 'fixed',
@@ -140,7 +140,7 @@ export default function ClientLayout({ children }) {
                           backgroundImage: `url(${tenant.assets.fondoGlobal})`,
                           backgroundSize: 'cover',
                           backgroundPosition: 'center',
-                          opacity: 0.3
+                          opacity: 0.85
                         }}
                       />
                       {children}

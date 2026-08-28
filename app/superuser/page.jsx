@@ -27,14 +27,6 @@ import dynamic from 'next/dynamic';
 const PosModal = dynamic(() => import('../components/admin/PosModal'), { ssr: false });
 const CompraModal = dynamic(() => import('../components/admin/CompraModal'), { ssr: false }); // 🔥 IMPORTAMOS EL MODAL DE COMPRAS 🔥
 
-// --- CONSTANTES DE DISEÑO ---
-const bgPattern = {
-    backgroundColor: '#7f9bb854',
-    backgroundImage: 'radial-gradient(#E5E7EB 1.5px, transparent 1.5px)',
-    backgroundSize: '24px 24px',
-    minHeight: '100vh',
-    paddingBottom: '20px'
-};
 
 const glassCardStyle = {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
@@ -235,14 +227,14 @@ export default function SuperUserHome() {
 
     if (isLoading) {
         return (
-            <Box style={{ ...bgPattern, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+            <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
                 <Loader size="sm" type="dots" color="blue" />
             </Box>
         );
     }
 
     return (
-        <Box style={bgPattern}>
+        <Box>
             <Box maw={1600} mx="auto" px="md" pt="sm">
 
                 <Modal opened={modalAbierto} onClose={() => setModalAbierto(false)} title={<Text fw={700} size="md">Control de Accesos</Text>} size="xl">
