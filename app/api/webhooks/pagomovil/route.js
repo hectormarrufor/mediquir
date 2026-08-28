@@ -1,6 +1,7 @@
+// Webhook para recibir notificaciones de Pago Móvil y registrar los pagos en la base de datos.
 import { NextResponse } from 'next/server';
 import db from '@/models/index'; // Asegúrate de la ruta correcta a tus modelos
-import { notificarCabezas, notificarTodos } from '@/app/handlers/notificar';
+import { notificarTodos } from '@/app/handlers/notificar';
 
 export async function POST(request) {
     try {
@@ -19,18 +20,18 @@ export async function POST(request) {
 
         switch (banco) {
             case 'MERCANTIL_APP':
-                // Mensaje Mercantil: "Mercantil Banco: Has recibido un Tpago de [Nombre] por Bs. [Monto] el [Fecha]. Ref: [Numero]"
+                // NUEVO Mensaje Mercantil: "¡Has recibido un Tpago! - Tpago recibido Bs. 20000,00 del 04243031459 Ref 000058584568..."
                 
-                // 1. Extraer la Referencia (Busca "Ref: " seguido de dígitos)
-                const refMercantil = mensaje.match(/Ref:\s*(\d+)/i);
+                // 1. Extraer la Referencia (Busca "Ref " o "Ref: " seguido de números)
+                const refMercantil = mensaje.match(/Ref\s*:?\s*(\d+)/i);
                 referenciaLarga = refMercantil ? refMercantil[1] : null;
 
-                // 2. Extraer el Monto (Busca "Bs. " seguido de números, puntos y comas)
+                // 2. Extraer el Monto (Busca "Bs. " seguido de números con comas/puntos)
                 const montoMercantil = mensaje.match(/Bs\.\s*([\d.,]+)/i);
                 montoLimpio = montoMercantil ? montoMercantil[1].replace(/\./g, '').replace(',', '.') : null;
                 
-                // 3. Extraer el Nombre del Emisor (Opcional, pero genial ya que Mercantil lo da)
-                const emisorMercantil = mensaje.match(/Tpago de\s+(.*?)\s+por/i);
+                // 3. Extraer el Emisor (Busca "del " seguido del número de teléfono)
+                const emisorMercantil = mensaje.match(/del\s+(\d+)/i);
                 emisor = emisorMercantil ? emisorMercantil[1] : 'Desconocido';
                 
                 break;
@@ -48,19 +49,22 @@ export async function POST(request) {
             await db.PagoSms.create({
                 referencia: referencia4Digitos,
                 monto: Number(montoLimpio),
-                banco: `${banco} (${telefono_origen}) - ${emisor}`,
-                textoOriginal: mensaje,
+                banco,
+                telefonoEmisor: emisor,
                 fechaHora: new Date(),
                 procesado: false
             });
             
             console.log(`Pago registrado con éxito: ${emisor} | Ref: ${referencia4Digitos} | Monto: ${montoLimpio}`);
+            
+            // 🔥 Disparamos la notificación push a los administradores/vendedores 🔥
             await notificarTodos({
-                title: `Pago movil recibido`,
-                body: `Pago registrado con éxito: ${emisor} | Ref: ${referencia4Digitos} | Monto: ${montoLimpio}`,
+                title: `Pago Móvil Recibido 💸`,
+                body: `${montoLimpio}Bs del ${emisor} (Ref: ${referencia4Digitos})`,
                 url: "/superuser/pagos-recibidos",
                 tag: `pago-movil-${referencia4Digitos}`
-            })
+            });
+
             return NextResponse.json({ success: true, message: 'Pago registrado y listo para emparejar' });
         } else {
             console.error('No se pudo extraer la data de la notificación:', mensaje);
