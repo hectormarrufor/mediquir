@@ -7,14 +7,11 @@ import {
 } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useMediaQuery } from '@mantine/hooks';
-import { useRouter } from 'next/navigation';
-import CategoryIcon from '../CategoryIcon'; // Asegúrate de que la ruta sea correcta
+import CategoryIcon from '../CategoryIcon';
 
 export default function CategorySection() {
-    const router = useRouter();
     const isMobile = useMediaQuery('(max-width: 768px)');
 
-    // Hacemos un fetch real a tu base de datos para traer las categorías que has creado
     const { data: categorias, isLoading } = useQuery({
         queryKey: ['categorias-landing'],
         queryFn: async () => {
@@ -24,67 +21,58 @@ export default function CategorySection() {
         }
     });
 
-    // Función para ir a la tienda filtrando por la categoría seleccionada
     const handleCategoryClick = (categoriaId) => {
-        router.push(`/tienda?categoria=${categoriaId}`);
+        // En lugar de redirigir, hacemos un scroll suave a la sección de productos
+        const section = document.getElementById('productos-section');
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth' });
+        }
     };
 
     return (
-        <Box py={50} bg="white">
+        <Box py={80} bg="white">
             <Container size="xl">
-                <Title order={3} mb="xl" c="gray.8" ta={isMobile ? "center" : "left"}>
-                    Comprar por Categorías
+                <Title order={2} mb={50} c="#0B1B3D" ta="center" fw={900} size="h1">
+                    Nuestras Especialidades
                 </Title>
 
                 {isLoading ? (
-                    // Skeletons de carga elegantes mientras responde la API
-                    <Group justify={isMobile ? "center" : "space-between"} gap="xl">
+                    <Group justify="center" gap="xl">
                         {[1, 2, 3, 4, 5].map((i) => (
                             <Stack key={i} align="center" gap="xs">
-                                <Skeleton height={isMobile ? 60 : 80} circle />
+                                <Skeleton height={isMobile ? 80 : 100} circle />
                                 <Skeleton height={12} width={70} radius="xl" />
                             </Stack>
                         ))}
                     </Group>
                 ) : (
-                    // Renderizado de las categorías reales
-                    <Group justify={isMobile ? "center" : "flex-start"} gap="xl">
+                    <Group justify="center" gap={{ base: 'xl', md: 50 }}>
                         {categorias?.map((cat) => (
                             <UnstyledButton 
                                 key={cat.id} 
                                 onClick={() => handleCategoryClick(cat.id)}
-                                style={{
-                                    transition: 'transform 0.2s ease',
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                style={{ transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)' }}
+                                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-10px)'}
+                                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                             >
-                                <Stack align="center" gap="xs">
+                                <Stack align="center" gap="md">
                                     <Box 
                                         style={{ 
                                             borderRadius: '50%', 
-                                            border: '2px solid #E3F2FD', 
-                                            padding: '4px',
-                                            boxShadow: '0 4px 10px rgba(0,0,0,0.05)',
-                                            backgroundColor: 'white'
+                                            border: '1px solid #E9ECEF', 
+                                            padding: isMobile ? '15px' : '20px',
+                                            boxShadow: '0 10px 30px rgba(0,0,0,0.05)',
+                                            backgroundColor: '#F8F9FA'
                                         }}
                                     >
-                                        <CategoryIcon 
+                                        <CategoryIcon
                                             categoryName={cat.nombre} 
-                                            size={isMobile ? 60 : 80} 
-                                            color="blue.9" 
-                                            variant="light"
-                                            radius="50%" // Lo forzamos a ser circular
+                                            size={isMobile ? 50 : 60} 
+                                            color="#005AAA" 
+                                            variant="transparent"
                                         />
                                     </Box>
-                                    <Text 
-                                        size="sm" 
-                                        fw={600} 
-                                        c="gray.8" 
-                                        ta="center" 
-                                        maw={90} 
-                                        lh={1.2}
-                                    >
+                                    <Text size="sm" fw={700} c="#0B1B3D" ta="center" maw={120} lh={1.2}>
                                         {cat.nombre}
                                     </Text>
                                 </Stack>

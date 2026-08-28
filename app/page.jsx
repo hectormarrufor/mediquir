@@ -1,13 +1,16 @@
+'use client';
+
 import React from 'react';
-// Asegúrate de que las rutas coincidan con la ubicación de tus componentes
 import LandingMediquir from './LandingMediquir'; 
+import { CartProvider } from './components/landing/CartContext';
 
 export default function HomePage() {
-  // Leemos la variable de entorno de Vercel. 
-  const clientId = process.env.NEXT_PUBLIC_CLIENT_ID || 'mediquir';
+    // Leemos la variable de entorno de Vercel. 
+    const clientId = process.env.NEXT_PUBLIC_CLIENT_ID || 'mediquir';
 
-
-
-  // Renderizado por defecto
-  return <LandingMediquir />;
+    return (
+        <CartProvider>
+            <LandingMediquir />
+        </CartProvider>
+    );
 }

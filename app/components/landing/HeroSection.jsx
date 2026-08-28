@@ -9,10 +9,9 @@ import {
 import { useMediaQuery } from '@mantine/hooks';
 import { 
     IconSearch, IconTruckDelivery, IconShieldCheck, 
-    IconHeadset, IconStethoscope, IconChevronLeft, IconChevronRight,
+    IconStethoscope, IconChevronLeft, IconChevronRight,
     IconHeartHandshake
 } from '@tabler/icons-react';
-import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 
 const HERO_IMAGES = [
@@ -24,12 +23,26 @@ const HERO_IMAGES = [
 ];
 
 export default function HeroSection() {
-    const router = useRouter();
-    // 🔥 RESTAURADO: El hook más útil para layouts dinámicos
     const isMobile = useMediaQuery('(max-width: 768px)');
     
     const [searchQuery, setSearchQuery] = useState('');
     const [currentSlide, setCurrentSlide] = useState(0);
+    const [videoError, setVideoError] = useState(false);
+
+    // Verificación previa del video
+    useEffect(() => {
+        const videoPath = '/tenants/mediquir/hero-video.mp4';
+        
+        fetch(videoPath, { method: 'HEAD' })
+            .then((res) => {
+                if (!res.ok) {
+                    setVideoError(true);
+                }
+            })
+            .catch(() => {
+                setVideoError(true);
+            });
+    }, []);
 
     const { data: productos } = useQuery({
         queryKey: ['productos-count'],
@@ -45,53 +58,58 @@ export default function HeroSection() {
 
     const handleSearch = (e) => {
         e.preventDefault();
-        if (searchQuery.trim().length > 0) {
-            router.push(`/tienda?q=${encodeURIComponent(searchQuery)}`);
+        const section = document.getElementById('productos-section');
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth' });
         }
     };
 
+    // Autoplay de 7s para acompañar la transición fade de 4s
     useEffect(() => {
-        const timer = setInterval(() => {
-            setCurrentSlide((prev) => (prev + 1) % HERO_IMAGES.length);
-        }, 6000);
-        return () => clearInterval(timer);
-    }, []);
+        if (videoError) {
+            const timer = setInterval(() => {
+                setCurrentSlide((prev) => (prev + 1) % HERO_IMAGES.length);
+            }, 7000);
+            return () => clearInterval(timer);
+        }
+    }, [videoError]);
 
     const nextSlide = () => setCurrentSlide((prev) => (prev + 1) % HERO_IMAGES.length);
     const prevSlide = () => setCurrentSlide((prev) => (prev - 1 + HERO_IMAGES.length) % HERO_IMAGES.length);
 
-    // Módulo de estadísticas encapsulado para insertarlo donde queramos
     const ControlesYEstadisticas = (
         <>
-            <Group gap="sm">
-                <ActionIcon 
-                    variant="white" radius="xl" size="lg" 
-                    style={{ backgroundColor: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(8px)', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}
-                    onClick={prevSlide}
-                >
-                    <IconChevronLeft size={20} />
-                </ActionIcon>
-                <ActionIcon 
-                    variant="white" radius="xl" size="lg" 
-                    style={{ backgroundColor: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(8px)', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}
-                    onClick={nextSlide}
-                >
-                    <IconChevronRight size={20} />
-                </ActionIcon>
-            </Group>
-
-            <Paper p="md" radius="md" shadow="2xl" style={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.5)' }}>
+            {videoError && HERO_IMAGES.length > 1 && (
                 <Group gap="sm">
-                    <ThemeIcon color="blue.9" variant="filled" size="xl" radius="md">
-                        <IconStethoscope size={24} />
+                    <ActionIcon 
+                        variant="white" radius="xl" size="lg" 
+                        style={{ backgroundColor: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(8px)', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}
+                        onClick={prevSlide}
+                    >
+                        <IconChevronLeft size={20} />
+                    </ActionIcon>
+                    <ActionIcon 
+                        variant="white" radius="xl" size="lg" 
+                        style={{ backgroundColor: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(8px)', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}
+                        onClick={nextSlide}
+                    >
+                        <IconChevronRight size={20} />
+                    </ActionIcon>
+                </Group>
+            )}
+
+            <Paper p="md" radius="md" shadow="xl" style={{ backgroundColor: 'rgba(255, 255, 255, 0.15)', backdropFilter: 'blur(15px)', border: '1px solid rgba(255,255,255,0.25)' }}>
+                <Group gap="sm">
+                    <ThemeIcon color="white" variant="light" size="xl" radius="md">
+                        <IconStethoscope size={24} color="#005AAA" />
                     </ThemeIcon>
                     <Stack gap={0}>
                         <Group gap={4} align="flex-end">
-                            <Text fw={900} size="xl" c="blue.9" lh={1}>
-                                {totalProductos === 0 ? <Loader size="xs" color="blue" /> : `${prefijoConteo}${totalProductos}`}
+                            <Text fw={900} size="xl" c="white" lh={1}>
+                                {totalProductos === 0 ? <Loader size="xs" color="white" /> : `${prefijoConteo}${totalProductos}`}
                             </Text>
                         </Group>
-                        <Text size="xs" c="dimmed" fw={700} tt="uppercase">Insumos Disponibles</Text>
+                        <Text size="xs" c="gray.3" fw={700} tt="uppercase">Insumos Disponibles</Text>
                     </Stack>
                 </Group>
             </Paper>
@@ -101,114 +119,115 @@ export default function HeroSection() {
     return (
         <Box 
             pos="relative" 
-            mih={{ base: '100svh', md: 700 }} 
+            mih={{ base: '85vh', md: 720 }} 
             style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
         >
-            
-            {/* CARRUSEL DE FONDO */}
-            <Box pos="absolute" inset={0} style={{ zIndex: 0 }}>
-                <Box 
-                    style={{
-                        display: 'flex',
-                        width: '100%',
-                        height: '100%',
-                        transform: `translateX(-${currentSlide * 100}%)`,
-                        transition: 'transform 0.8s cubic-bezier(0.25, 1, 0.5, 1)'
-                    }}
-                >
-                    {HERO_IMAGES.map((src, idx) => (
-                        <Box key={idx} style={{ flexShrink: 0, width: '100%', height: '100%' }}>
-                            <img 
-                                src={src} 
-                                alt={`Banner Mediquir ${idx + 1}`} 
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement.style.backgroundColor = '#002244'; }}
-                            />
-                        </Box>
-                    ))}
-                </Box>
+            {/* FONDO MULTIMEDIA: VIDEO CON FALLBACK A FOTOS EN TRANSICIÓN FADE (4s) */}
+            <Box pos="absolute" inset={0} style={{ zIndex: 0, backgroundColor: '#0B1B3D' }}>
+                {!videoError ? (
+                    <video 
+                        src="/tenants/mediquir/hero-video.mp4"
+                        autoPlay loop muted playsInline 
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={() => setVideoError(true)}
+                    />
+                ) : (
+                    <Box pos="relative" w="100%" h="100%">
+                        {HERO_IMAGES.map((src, idx) => (
+                            <Box 
+                                key={idx} 
+                                pos="absolute" 
+                                inset={0} 
+                                style={{ 
+                                    opacity: idx === currentSlide ? 1 : 0,
+                                    transition: 'opacity 4s ease-in-out',
+                                    zIndex: idx === currentSlide ? 1 : 0
+                                }}
+                            >
+                                <img 
+                                    src={src} 
+                                    alt={`Banner ${idx + 1}`} 
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                        if (e.currentTarget.parentElement) {
+                                            e.currentTarget.parentElement.style.backgroundColor = '#0B1B3D';
+                                        }
+                                    }}
+                                />
+                            </Box>
+                        ))}
+                    </Box>
+                )}
             </Box>
 
-            {/* 🔥 GRADIENTE INTELIGENTE CON isMobile 🔥 */}
+            {/* OVERLAY DE GRADIENTE */}
             <Box 
-                pos="absolute" 
-                inset={0} 
+                pos="absolute" inset={0} 
                 bg={isMobile 
-                    ? "linear-gradient(180deg, rgba(0, 15, 36, 0.9) 0%, rgba(0, 26, 60, 0.85) 60%, rgba(0, 0, 0, 0.4) 100%)"
-                    : "linear-gradient(90deg, rgba(0, 15, 36, 0.95) 0%, rgba(0, 26, 60, 0.7) 40%, rgba(0, 0, 0, 0.1) 100%)"
+                    ? "linear-gradient(180deg, rgba(11, 27, 61, 0.92) 0%, rgba(11, 27, 61, 0.75) 60%, rgba(0, 0, 0, 0.5) 100%)"
+                    : "linear-gradient(90deg, rgba(11, 27, 61, 0.95) 0%, rgba(11, 27, 61, 0.65) 50%, rgba(0, 0, 0, 0.2) 100%)"
                 } 
-                style={{ zIndex: 1 }} 
+                style={{ zIndex: 2 }} 
             />
 
-            <Container size="xl" w="100%" pos="relative" style={{ zIndex: 2, flex: 1, display: 'flex', flexDirection: 'column' }}>
-                
-                <Grid style={{ flex: 1, margin: 0 }} align="center">
-                    <Grid.Col span={{ base: 12, md: 7 }} py={{ base: 60, md: 0 }}>
+            <Container size="xl" w="100%" h="100%" pos="relative" py={{ base: 50, md: 80 }} style={{ zIndex: 3, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <Grid style={{ margin: 0 }} align="center">
+                    <Grid.Col span={{ base: 12, md: 8, lg: 7 }}>
                         <Box pr={{ base: 0, md: 'xl' }}>
                             <Badge 
-                                variant="filled" color="teal.6" size={isMobile ? "md" : "lg"} radius="xl" 
-                                leftSection={<IconHeartHandshake size={14} />} mb="lg"
-                                style={{ boxShadow: '0 4px 15px rgba(0,0,0,0.3)' }}
-                                mt={isMobile ? 0 : 40}
+                                variant="outline" color="white" size={isMobile ? "md" : "lg"} radius="xl" 
+                                leftSection={<IconHeartHandshake size={14} />} mb="md"
+                                style={{ backdropFilter: 'blur(5px)', borderWidth: 1.5 }}
                             >
                                 Para clínicas, consultorios y tu hogar
                             </Badge>
                             
                             <Title 
-                                order={1} c="white" fz={{ base: 32, sm: 36, md: 54 }} fw={900} lh={1.1} mb="md"
-                                style={{ textShadow: '2px 4px 12px rgba(0,0,0,0.6)' }}
+                                order={1} c="white" fz={{ base: 34, sm: 46, md: 58 }} fw={900} lh={1.15} mb="md"
+                                style={{ letterSpacing: '-0.5px' }}
                             >
-                                Salud y bienestar a tu alcance, de forma <Text component="span" c="teal.4" inherit>rápida y segura.</Text>
+                                Salud integral a tu alcance, de forma <Text component="span" c="#005AAA" inherit>inteligente.</Text>
                             </Title>
                             
-                            <Text 
-                                c="gray.3" fz={{ base: 'sm', sm: 'md', md: 'xl' }} mb="xl" maw={550} fw={500}
-                                style={{ textShadow: '1px 2px 6px rgba(0,0,0,0.8)' }}
-                            >
-                                Ya sea que busques abastecer tu inventario médico al mayor o necesites insumos al detal, aquí encuentras calidad y los mejores precios.
+                            <Text c="gray.3" fz={{ base: 'sm', md: 'lg' }} mb={35} maw={550} fw={400}>
+                                Ya sea que busques abastecer tu inventario médico al mayor o necesites insumos al detal, garantizamos calidad, rapidez y los mejores precios.
                             </Text>
 
-                            <Paper withBorder={false} p="xs" radius="md" shadow="xl" mb="xl" maw={500} bg="rgba(255, 255, 255, 0.95)">
+                            <Paper withBorder={false} p="xs" radius="xl" shadow="xl" mb="lg" maw={500} bg="rgba(255, 255, 255, 1)">
                                 <form onSubmit={handleSearch}>
-                                    <Flex direction={{ base: 'column', sm: 'row' }} gap="xs">
+                                    <Flex direction="row" gap="xs" align="center" pl="md">
                                         <TextInput 
-                                            placeholder="Ej: Inyectadoras, Tensiómetro..." 
-                                            size="md" radius="md" variant="unstyled"
-                                            style={{ flex: 1, paddingLeft: 8 }}
+                                            placeholder="Buscar productos..." 
+                                            size="md" radius="xl" variant="unstyled"
+                                            style={{ flex: 1 }}
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.currentTarget.value)}
                                         />
                                         <Button 
-                                            type="submit" color="blue.9" size="md" radius="md" 
-                                            leftSection={<IconSearch size={16} />}
-                                            fullWidth={isMobile}
+                                            type="submit" color="#0B1B3D" size="md" radius="xl" 
                                         >
-                                            Buscar
+                                            <IconSearch size={20} />
                                         </Button>
                                     </Flex>
                                 </form>
                             </Paper>
 
-                            <Group gap={{ base: 'sm', md: 'lg' }}>
+                            <Group gap={{ base: 'md', md: 'xl' }}>
                                 <Group gap="xs">
-                                    <ThemeIcon color="teal.5" variant="filled" size="sm" radius="xl"><IconTruckDelivery size={14} /></ThemeIcon>
-                                    <Text size="xs" fw={600} c="white">Envíos a todo el país</Text>
+                                    <ThemeIcon color="rgba(255,255,255,0.1)" c="white" size="md" radius="xl"><IconTruckDelivery size={16} /></ThemeIcon>
+                                    <Text size="xs" fw={500} c="white">Envíos Nacionales</Text>
                                 </Group>
                                 <Group gap="xs">
-                                    <ThemeIcon color="teal.5" variant="filled" size="sm" radius="xl"><IconShieldCheck size={14} /></ThemeIcon>
-                                    <Text size="xs" fw={600} c="white">Compras Seguras</Text>
-                                </Group>
-                                <Group gap="xs">
-                                    <ThemeIcon color="teal.5" variant="filled" size="sm" radius="xl"><IconHeadset size={14} /></ThemeIcon>
-                                    <Text size="xs" fw={600} c="white">Ventas Mayor y Detal</Text>
+                                    <ThemeIcon color="rgba(255,255,255,0.1)" c="white" size="md" radius="xl"><IconShieldCheck size={16} /></ThemeIcon>
+                                    <Text size="xs" fw={500} c="white">Calidad Certificada</Text>
                                 </Group>
                             </Group>
                         </Box>
 
-                        {/* 🔥 RENDERIZADO CONDICIONAL EN MÓVIL 🔥 */}
                         {isMobile && (
-                            <Box mt={60} w="100%">
-                                <Stack align="center" gap="xl">
+                            <Box mt={40} w="100%">
+                                <Stack align="center" gap="md">
                                     {ControlesYEstadisticas}
                                 </Stack>
                             </Box>
@@ -216,15 +235,13 @@ export default function HeroSection() {
                     </Grid.Col>
                 </Grid>
 
-                {/* 🔥 RENDERIZADO CONDICIONAL EN DESKTOP 🔥 */}
                 {!isMobile && (
-                    <Box pos="absolute" bottom={40} right={20} style={{ zIndex: 3 }}>
-                        <Stack align="flex-end" gap="xl">
+                    <Box pos="absolute" bottom={40} right={20} style={{ zIndex: 4 }}>
+                        <Stack align="flex-end" gap="md">
                             {ControlesYEstadisticas}
                         </Stack>
                     </Box>
                 )}
-                
             </Container>
         </Box>
     );

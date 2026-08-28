@@ -1,188 +1,239 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, Text, Badge, Button, Group, Stack, Box, Indicator, ActionIcon } from '@mantine/core';
-import { IconShoppingCartPlus, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
-
+import { Card, Text, Badge, Button, Group, Stack, Box, Indicator, ActionIcon, Modal, Image, Grid, TextInput } from '@mantine/core';
+import { IconShoppingCartPlus, IconChevronLeft, IconChevronRight, IconMaximize, IconMinus, IconPlus } from '@tabler/icons-react';
+import { useCart } from './CartContext';
 export default function ProductCard({ product }) {
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    
+    // Estados para Modales
+    const [imageModalOpened, setImageModalOpened] = useState(false);
+    const [detailModalOpened, setDetailModalOpened] = useState(false);
+    const [quantity, setQuantity] = useState(1);
 
-   // --- LÓGICA DE FINANZAS Y STOCK ---
+    const { addToCart } = useCart();
+
+    // --- LÓGICA DE FINANZAS Y STOCK ---
     const isOutOfStock = Number(product.stockAlmacen) <= 0;
     const precioBase = Number(product.precio7) > 0 ? Number(product.precio7) : Number(product.costoUsd) * 1.5;
     
-    // 🔥 LÓGICA DE DESCUENTO BASADA EN PORCENTAJE 🔥
     const porcentajeAhorro = Number(product.porcentajeDescuento) || 0;
     const hasDiscount = porcentajeAhorro > 0;
     
-    // Calculamos cuánto vale realmente en dinero (Ej: 0.11 - 15% = 0.0935)
     const precioFinal = hasDiscount 
         ? precioBase - (precioBase * (porcentajeAhorro / 100)) 
         : precioBase;
 
-    // --- LÓGICA DE PRIORIDAD DE IMÁGENES ---
+    // --- LÓGICA DE IMÁGENES ---
     const carouselImages = [];
     const baseUrl = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
 
-    if (product.imagen) {
-        carouselImages.push(`${baseUrl}/${product.imagen}`);
-    } else if (product.grupoEquivalencia?.imagen) {
-        carouselImages.push(`${baseUrl}/${product.grupoEquivalencia.imagen}`);
-    }
+    if (product.imagen) carouselImages.push(`${baseUrl}/${product.imagen}`);
+    else if (product.grupoEquivalencia?.imagen) carouselImages.push(`${baseUrl}/${product.grupoEquivalencia.imagen}`);
+    
+    if (product.marca?.imagen) carouselImages.push(`${baseUrl}/${product.marca.imagen}`);
+    if (carouselImages.length === 0) carouselImages.push('/placeholder-med.png'); 
 
-    if (product.marca?.imagen) {
-        carouselImages.push(`${baseUrl}/${product.marca.imagen}`);
-    }
-
-    if (carouselImages.length === 0) {
-        carouselImages.push('/placeholder-med.png'); 
-    }
-
-    // --- MAGIA DE AUTOPLAY ASÍNCRONO ---
+    // Auto-play
     useEffect(() => {
-        if (carouselImages.length <= 1) return;
-
-        const tiempoBase = 3000;
-        const tiempoDesfase = (product.id % 5) * 500; 
-        const intervaloUnico = tiempoBase + tiempoDesfase;
-
+        if (carouselImages.length <= 1 || imageModalOpened) return; // Pausar si el modal está abierto
         const timer = setInterval(() => {
             setCurrentImageIndex((prev) => (prev + 1) % carouselImages.length);
-        }, intervaloUnico);
-
+        }, 3000 + ((product.id % 5) * 500));
         return () => clearInterval(timer);
-    }, [carouselImages.length, product.id]);
+    }, [carouselImages.length, product.id, imageModalOpened]);
 
-
-    // --- FUNCIONES MANUALES DEL CARRUSEL ---
     const nextImage = (e) => {
-        e.stopPropagation();
+        if(e) e.stopPropagation();
         setCurrentImageIndex((prev) => (prev + 1) % carouselImages.length);
     };
 
     const prevImage = (e) => {
-        e.stopPropagation();
+        if(e) e.stopPropagation();
         setCurrentImageIndex((prev) => (prev - 1 + carouselImages.length) % carouselImages.length);
     };
 
-    return (
-        <Card shadow="sm" padding="lg" radius="md" withBorder style={{ height: '100%', display: 'flex', flexDirection: 'column', transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-5px)', boxShadow: '0 10px 20px rgba(0,0,0,0.1)' } }}>
-            <Card.Section pos="relative" p="md" bg="white">
-                {/* Badges de Oferta */}
-                {hasDiscount && (
-                    <Badge color="red" variant="filled" pos="absolute" top={10} left={10} style={{ zIndex: 2 }}>
-                        -{porcentajeAhorro}% OFF
-                    </Badge>
-                )}
-                
-                {/* Indicador de Stock */}
-                <Box pos="absolute" top={10} right={10} style={{ zIndex: 2 }}>
-                    <Indicator inline size={12} offset={4} position="middle-center" color={isOutOfStock ? 'red' : 'green'} withBorder />
-                </Box>
+    const handleAddToCart = () => {
+        addToCart(product, quantity, precioFinal);
+        setDetailModalOpened(false);
+        setQuantity(1); // Reset
+    };
 
-                {/* 🔥 NUEVO VISOR DEL CARRUSEL (Efecto Slide) 🔥 */}
-                <Box h={180} pos="relative" style={{ opacity: isOutOfStock ? 0.5 : 1, overflow: 'hidden' }}>
+    return (
+        <>
+            {/* --- TARJETA PRINCIPAL --- */}
+            <Card 
+                shadow="sm" padding="lg" radius="md" bg="white"
+                onClick={() => setDetailModalOpened(true)} // Click general abre el modal de producto
+                style={{ 
+                    height: '100%', display: 'flex', flexDirection: 'column', 
+                    cursor: 'pointer', border: '1px solid #E9ECEF',
+                    transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.3s', 
+                    '&:hover': { transform: 'translateY(-10px)', boxShadow: '0 20px 40px rgba(0,0,0,0.08)' } 
+                }}
+            >
+                <Card.Section pos="relative" p="md">
+                    {hasDiscount && (
+                        <Badge color="red.7" variant="filled" pos="absolute" top={15} left={15} style={{ zIndex: 2 }}>
+                            -{porcentajeAhorro}%
+                        </Badge>
+                    )}
                     
-                    {/* Contenedor Flex que se desliza horizontalmente */}
-                    <Box 
-                        style={{
-                            display: 'flex',
-                            width: '100%',
-                            height: '100%',
-                            transform: `translateX(-${currentImageIndex * 100}%)`,
-                            transition: 'transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)' // Transición más suave y natural
-                        }}
-                    >
-                        {carouselImages.map((src, index) => (
-                            <Box key={index} style={{ flexShrink: 0, width: '100%', height: '100%' }}>
-                                <img 
-                                    src={src} 
-                                    alt={`${product.nombre} - Vista ${index + 1}`} 
-                                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                                />
-                            </Box>
-                        ))}
+                    <Box pos="absolute" top={15} right={15} style={{ zIndex: 2 }}>
+                        <Indicator inline size={12} offset={4} position="middle-center" color={isOutOfStock ? 'red' : 'teal'} withBorder />
                     </Box>
 
-                    {/* Controles del Carrusel (Flechas y Puntos) */}
-                    {carouselImages.length > 1 && (
-                        <>
-                            <ActionIcon 
-                                variant="default" radius="xl" size="sm" 
-                                pos="absolute" left={0} top="50%" style={{ transform: 'translateY(-50%)', zIndex: 2, opacity: 0.8 }}
-                                onClick={prevImage}
-                            >
-                                <IconChevronLeft size={16} />
-                            </ActionIcon>
-                            <ActionIcon 
-                                variant="default" radius="xl" size="sm" 
-                                pos="absolute" right={0} top="50%" style={{ transform: 'translateY(-50%)', zIndex: 2, opacity: 0.8 }}
-                                onClick={nextImage}
-                            >
-                                <IconChevronRight size={16} />
-                            </ActionIcon>
+                    {/* Contenedor de Imagen */}
+                    <Box 
+                        h={200} pos="relative" 
+                        style={{ opacity: isOutOfStock ? 0.5 : 1, overflow: 'hidden', borderRadius: '8px', backgroundColor: '#F8F9FA' }}
+                    >
+                        {/* Botón para expandir imagen sin abrir detalles */}
+                        <ActionIcon 
+                            pos="absolute" bottom={10} right={10} size="md" radius="xl" variant="white" color="gray"
+                            style={{ zIndex: 3, boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}
+                            onClick={(e) => { e.stopPropagation(); setImageModalOpened(true); }}
+                        >
+                            <IconMaximize size={16} />
+                        </ActionIcon>
 
-                            <Group gap={4} justify="center" pos="absolute" bottom={-10} left={0} right={0}>
-                                {carouselImages.map((_, idx) => (
-                                    <Box 
-                                        key={idx} 
-                                        w={idx === currentImageIndex ? 12 : 6} 
-                                        h={6} 
-                                        bg={idx === currentImageIndex ? 'blue.6' : 'gray.3'} 
-                                        style={{ borderRadius: 10, transition: 'width 0.3s ease, background-color 0.3s ease' }} 
-                                    />
-                                ))}
-                            </Group>
-                        </>
-                    )}
-                </Box>
-            </Card.Section>
+                        <Box style={{ display: 'flex', width: '100%', height: '100%', transform: `translateX(-${currentImageIndex * 100}%)`, transition: 'transform 0.5s ease-in-out' }}>
+                            {carouselImages.map((src, index) => (
+                                <Box key={index} style={{ flexShrink: 0, width: '100%', height: '100%', padding: '10px' }}>
+                                    <Image src={src} alt={product.nombre} fit="contain" h="100%" />
+                                </Box>
+                            ))}
+                        </Box>
+                    </Box>
+                </Card.Section>
 
-            <Stack justify="space-between" mt="md" flex={1} gap="xs">
-                <Box>
-                    <Group justify="space-between" align="flex-start" wrap="nowrap" mb={4}>
-                        <Text size="xs" c="dimmed" tt="uppercase" fw={700} lineClamp={1}>
-                            {product.marca?.nombre || 'Genérico'}
+                <Stack justify="space-between" mt="md" flex={1} gap="xs">
+                    <Box>
+                        <Group justify="space-between" align="flex-start" wrap="nowrap" mb={8}>
+                            <Text size="xs" c="blue.9" tt="uppercase" fw={800} lineClamp={1} lts={1}>
+                                {product.marca?.nombre || 'GENÉRICO'}
+                            </Text>
+                            <Text size="xs" c="gray.5" fw={600}>{product.presentacion}</Text>
+                        </Group>
+                        <Text fw={700} size="md" lineClamp={2} c="#0B1B3D" style={{ minHeight: '44px', lineHeight: 1.3 }}>
+                            {product.nombre}
                         </Text>
-                        <Text size="xs" c="gray.5">{product.presentacion}</Text>
-                    </Group>
-                    
-                    <Text fw={700} size="sm" lineClamp={2} style={{ minHeight: '40px', lineHeight: 1.2 }}>
-                        {product.nombre}
-                    </Text>
-                </Box>
+                    </Box>
 
-                <Box mt="sm">
-                    <Group justify="space-between" align="flex-end">
-                        <Box>
-                            {hasDiscount && (
-                                <Text td="line-through" size="xs" c="dimmed">
-                                    Ref ${precioBase.toFixed(2)}
-                                </Text>
-                            )}
-                            <Text fw={900} size="xl" c={hasDiscount ? "red.7" : "blue.9"}>
+                    <Box mt="auto">
+                        {hasDiscount && (
+                            <Text td="line-through" size="sm" c="dimmed" lh={1}>
+                                Ref ${precioBase.toFixed(2)}
+                            </Text>
+                        )}
+                        <Group justify="space-between" align="flex-end">
+                            <Text fw={900} size="xl" c={hasDiscount ? "red.7" : "#005AAA"}>
                                 Ref ${precioFinal.toFixed(2)}
                             </Text>
-                        </Box>
-                        
-                        <Text size="xs" c={isOutOfStock ? "red.7" : "green.7"} fw={600}>
-                            {isOutOfStock ? 'Agotado' : 'Disponible'}
-                        </Text>
-                    </Group>
-                </Box>
+                            <Text size="xs" c={isOutOfStock ? "red.7" : "teal.7"} fw={700} tt="uppercase">
+                                {isOutOfStock ? 'Agotado' : 'Disponible'}
+                            </Text>
+                        </Group>
+                    </Box>
 
-                <Button 
-                    variant={isOutOfStock ? "subtle" : "light"} 
-                    color={isOutOfStock ? "gray" : "blue.9"} 
-                    fullWidth 
-                    mt="md" 
-                    radius="md"
-                    disabled={isOutOfStock}
-                    leftSection={!isOutOfStock && <IconShoppingCartPlus size={18} />}
-                >
-                    {isOutOfStock ? 'Sin Stock' : 'Agregar'}
-                </Button>
-            </Stack>
-        </Card>
+                    <Button 
+                        variant={isOutOfStock ? "light" : "filled"} 
+                        color={isOutOfStock ? "gray" : "#0B1B3D"} 
+                        fullWidth mt="sm" radius="md" size="md"
+                        disabled={isOutOfStock}
+                        onClick={(e) => { e.stopPropagation(); setDetailModalOpened(true); }} // También abre el modal
+                        leftSection={!isOutOfStock && <IconShoppingCartPlus size={18} />}
+                    >
+                        {isOutOfStock ? 'Agotado' : 'Añadir'}
+                    </Button>
+                </Stack>
+            </Card>
+
+            {/* --- MODAL 1: VISOR DE IMÁGENES TIPO LIGHTBOX --- */}
+            <Modal 
+                opened={imageModalOpened} 
+                onClose={() => setImageModalOpened(false)} 
+                fullScreen 
+                transitionProps={{ transition: 'fade', duration: 200 }}
+                styles={{ content: { backgroundColor: 'rgba(0,0,0,0.95)' }, header: { backgroundColor: 'transparent' }, close: { color: 'white' } }}
+            >
+                <Box h="85vh" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                    {carouselImages.length > 1 && (
+                        <ActionIcon pos="absolute" left={20} size={50} radius="xl" variant="light" color="gray" onClick={prevImage} style={{ zIndex: 10 }}>
+                            <IconChevronLeft size={30} />
+                        </ActionIcon>
+                    )}
+                    
+                    <Image src={carouselImages[currentImageIndex]} alt={product.nombre} fit="contain" h="100%" maw="90vw" />
+                    
+                    {carouselImages.length > 1 && (
+                        <ActionIcon pos="absolute" right={20} size={50} radius="xl" variant="light" color="gray" onClick={nextImage} style={{ zIndex: 10 }}>
+                            <IconChevronRight size={30} />
+                        </ActionIcon>
+                    )}
+                </Box>
+            </Modal>
+
+            {/* --- MODAL 2: DETALLES DEL PRODUCTO Y AÑADIR AL CARRITO --- */}
+            <Modal 
+                opened={detailModalOpened} 
+                onClose={() => setDetailModalOpened(false)}
+                size="lg"
+                centered
+                radius="md"
+                padding="xl"
+            >
+                <Grid gutter="xl">
+                    <Grid.Col span={{ base: 12, md: 6 }}>
+                        <Box bg="gray.1" style={{ borderRadius: '8px', padding: '20px' }}>
+                            <Image src={carouselImages[0]} alt={product.nombre} fit="contain" h={300} />
+                        </Box>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 6 }}>
+                        <Stack justify="center" h="100%">
+                            <Box>
+                                <Badge color="blue.9" mb="sm">{product.marca?.nombre || 'Genérico'}</Badge>
+                                <Text fw={900} size="xl" lh={1.2} mb="xs" c="#0B1B3D">{product.nombre}</Text>
+                                <Text c="dimmed" size="sm">{product.presentacion}</Text>
+                            </Box>
+
+                            <Group align="flex-end" gap="xs">
+                                <Text fw={900} size="32px" c={hasDiscount ? "red.7" : "#005AAA"}>
+                                    ${precioFinal.toFixed(2)}
+                                </Text>
+                                {hasDiscount && <Text td="line-through" c="dimmed" size="lg" mb={4}>${precioBase.toFixed(2)}</Text>}
+                            </Group>
+
+                            {!isOutOfStock ? (
+                                <Box mt="md">
+                                    <Text size="sm" fw={600} mb="xs">Cantidad:</Text>
+                                    <Group wrap="nowrap" mb="xl">
+                                        <Group gap={0} style={{ border: '1px solid #E9ECEF', borderRadius: '8px', overflow: 'hidden' }}>
+                                            <ActionIcon size={42} variant="transparent" c="black" onClick={() => setQuantity(q => Math.max(1, q - 1))}>
+                                                <IconMinus size={16} />
+                                            </ActionIcon>
+                                            <TextInput 
+                                                variant="unstyled" value={quantity} readOnly
+                                                styles={{ input: { width: 50, textAlign: 'center', fontWeight: 'bold' } }}
+                                            />
+                                            <ActionIcon size={42} variant="transparent" c="black" onClick={() => setQuantity(q => q + 1)}>
+                                                <IconPlus size={16} />
+                                            </ActionIcon>
+                                        </Group>
+                                    </Group>
+
+                                    <Button fullWidth size="lg" radius="md" color="#0B1B3D" onClick={handleAddToCart}>
+                                        Agregar al Carrito • ${(precioFinal * quantity).toFixed(2)}
+                                    </Button>
+                                </Box>
+                            ) : (
+                                <Text c="red.7" fw={700} size="lg" mt="xl">Producto temporalmente agotado.</Text>
+                            )}
+                        </Stack>
+                    </Grid.Col>
+                </Grid>
+            </Modal>
+        </>
     );
 }

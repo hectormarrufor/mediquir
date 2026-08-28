@@ -68,7 +68,7 @@ export default function ClientLayout({ children }) {
                 <Notifications />
                 <AuthProvider>
                   <AppShell
-                    header={{ height: 60, collapsed: !pinned }}
+                    header={{ height: 70, collapsed: !pinned }}
                     navbar={{
                       width: 300,
                       breakpoint: 'sm',
@@ -77,53 +77,61 @@ export default function ClientLayout({ children }) {
                     padding="md"
                   >
                     <AppShell.Header
-  style={{
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    backdropFilter: 'blur(12px)',
-    borderBottom: '1px solid rgba(0,0,0,0.1)'
-  }}
->
-  <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-    {/* 1. SECCIÓN LOGO */}
-    <UnstyledButton onClick={() => router.push('/')}>
-      <Box w={140} h={60} style={{ display: 'flex', alignItems: 'center'}}>
-        <img
-          src={tenant.assets.logo}
-          alt={`Logo ${tenant.name}`}
-          fetchPriority="high"
-          style={{
-            maxHeight: '55px',
-            width: '100px',
-          }}
-        />
-      </Box>
-    </UnstyledButton>
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(243, 248, 255, 0.92) 0%, rgba(92, 155, 192, 0.82) 40%, rgba(9, 45, 92, 0.92) 100%)',
+                        backdropFilter: 'blur(16px)',
+                        WebkitBackdropFilter: 'blur(16px)',
+                        borderBottom: '1px solid rgba(249, 50, 0, 0.08)', // Sutil toque del color corporativo en el borde
+                        boxShadow: '0 4px 30px rgba(0, 0, 0, 0.26)'
+                      }}
+                    >
+                      <Group h="100%" px="xl" justify="space-between" wrap="nowrap">
+                        {/* SECCIÓN LOGO */}
+                        <UnstyledButton onClick={() => router.push('/')}>
+                          <Box w={140} h={70} style={{ display: 'flex', alignItems: 'center' }}>
+                            <img
+                              src={tenant.assets.logo}
+                              alt={`Logo ${tenant.name}`}
+                              fetchPriority="high"
+                              style={{
+                                maxHeight: '80px',
+                                width: 'auto',
+                                objectFit: 'cover'
+                              }}
+                            />
+                          </Box>
+                        </UnstyledButton>
 
-    {/* 2. SECCIÓN DERECHA (Carrito + Notificaciones + Menú) */}
-    <Group wrap="nowrap" gap="sm">
-     
+                        {/* SECCIÓN DERECHA */}
+                        <Group wrap="nowrap" gap="md">
+                          <NotificationBell />
 
-      <NotificationBell />
-      
-      <Burger
-        opened={opened}
-        onClick={toggle}
-        hiddenFrom="sm"
-        size="sm"
-      />
-      
-      <Box visibleFrom="sm">
-        <LayoutMenu router={router} />
-      </Box>
-    </Group>
-  </Group>
-</AppShell.Header>
+                          <Box visibleFrom="sm">
+                            <LayoutMenu router={router} />
+                          </Box>
 
-                    <AppShell.Navbar p="md" style={{ backgroundColor: 'rgba(255, 255, 255, 0.95)' }}>
+                          <Burger
+                            opened={opened}
+                            onClick={toggle}
+                            hiddenFrom="sm"
+                            size="sm"
+                            color="#0B1B3D"
+                          />
+                        </Group>
+                      </Group>
+                    </AppShell.Header>
+
+                    <AppShell.Navbar p="md"  style={{
+                        background: 'linear-gradient(135deg, rgba(243, 248, 255, 0.92) 0%, rgba(92, 155, 192, 0.82) 40%, rgba(9, 45, 92, 0.92) 100%)',
+                        backdropFilter: 'blur(16px)',
+                        WebkitBackdropFilter: 'blur(16px)',
+                        borderBottom: '1px solid rgba(249, 50, 0, 0.08)', // Sutil toque del color corporativo en el borde
+                        boxShadow: '0 4px 30px rgba(0, 0, 0, 0.03)'
+                      }}>
                       <NavBar router={router} close={toggle} />
                     </AppShell.Navbar>
 
-                    <AppShell.Main p={0} pt={60}>
+                    <AppShell.Main p={0}>
                       <Box
                         style={{
                           position: 'fixed',
