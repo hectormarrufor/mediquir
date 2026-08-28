@@ -9,21 +9,47 @@ export const useCart = () => useContext(CartContext);
 export function CartProvider({ children }) {
     const [cart, setCart] = useState([]);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [isVerifying, setIsVerifying] = useState(false);
 
-    // Cargar del localStorage al iniciar
+    // 1. HIDRATACIÓN + SINCRONIZACIÓN DE STOCK REAL AL INICIAR
     useEffect(() => {
-        const storedCart = localStorage.getItem('mediquir-cart');
-        if (storedCart) {
-            try {
-                setCart(JSON.parse(storedCart));
-            } catch (e) {
-                console.error("Error parsing cart", e);
+        const initCart = async () => {
+            const storedCart = localStorage.getItem('mediquir-cart');
+            if (storedCart) {
+                try {
+                    const parsedCart = JSON.parse(storedCart);
+
+                    // Consultamos el stock fresco al servidor
+                    const res = await fetch('/api/productos');
+                    if (res.ok) {
+                        const productosBD = await res.json();
+                        
+                        // Fusionamos el carrito guardado con la data actualizada de la BD
+                        const cartActualizado = parsedCart.map(item => {
+                            const prodFresco = productosBD.find(p => p.id === item.product.id);
+                            if (prodFresco) {
+                                return {
+                                    ...item,
+                                    product: prodFresco // Se actualiza stockAlmacen real
+                                };
+                            }
+                            return item;
+                        });
+                        setCart(cartActualizado);
+                    } else {
+                        setCart(parsedCart);
+                    }
+                } catch (e) {
+                    console.error("Error revalidando inventario del carrito:", e);
+                }
             }
-        }
-        setIsLoaded(true);
+            setIsLoaded(true);
+        };
+
+        initCart();
     }, []);
 
-    // Guardar en localStorage cada vez que el carrito cambie
+    // 2. Persistencia en localStorage
     useEffect(() => {
         if (isLoaded) {
             localStorage.setItem('mediquir-cart', JSON.stringify(cart));
@@ -57,11 +83,66 @@ export function CartProvider({ children }) {
         );
     };
 
-    const subtotal = cart.reduce((acc, item) => acc + (item.precioFinal * item.quantity), 0);
+    // 3. RE-VERIFICACIÓN ATÓMICA PRE-CHECKOUT
+    const verifyStockBeforeCheckout = async () => {
+        setIsVerifying(true);
+        try {
+            const res = await fetch('/api/productos');
+            if (!res.ok) throw new Error("Error consultando inventario");
+            
+            const productosBD = await res.json();
+            let hayInconsistencias = false;
+
+            const cartValidado = cart.map(item => {
+                const prodBD = productosBD.find(p => p.id === item.product.id);
+                const stockDisponible = Number(prodBD?.stockAlmacen || 0);
+
+                // Si el producto no existe, se agotó o la cantidad supera el stock actual
+                if (!prodBD || stockDisponible <= 0 || item.quantity > stockDisponible) {
+                    hayInconsistencias = true;
+                }
+
+                return {
+                    ...item,
+                    product: prodBD || item.product
+                };
+            });
+
+            setCart(cartValidado);
+            setIsVerifying(false);
+
+            if (hayInconsistencias) {
+                return { success: false, reason: 'STOCK_CHANGED' };
+            }
+
+            return { success: true };
+        } catch (error) {
+            setIsVerifying(false);
+            return { success: false, reason: 'FETCH_ERROR' };
+        }
+    };
+
+    // Subtotal calculado ignorando productos que se hayan quedado sin stock
+    const subtotal = cart.reduce((acc, item) => {
+        const stockDispo = Number(item.product.stockAlmacen || 0);
+        if (stockDispo <= 0) return acc;
+        return acc + (item.precioFinal * item.quantity);
+    }, 0);
+
     const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
 
     return (
-        <CartContext.Provider value={{ cart, addToCart, removeFromCart, updateQuantity, subtotal, totalItems, isLoaded }}>
+        <CartContext.Provider value={{ 
+            cart, 
+            addToCart, 
+            removeFromCart, 
+            updateQuantity, 
+            subtotal, 
+            totalItems, 
+            isLoaded,
+            isVerifying,
+            verifyStockBeforeCheckout 
+        }}>
             {children}
         </CartContext.Provider>
     );

@@ -27,8 +27,8 @@ export default function BestSellersSection({ searchQuery, selectedCategory, onCl
     let productosFiltrados = productos;
 
     if (selectedCategory) {
-        productosFiltrados = productosFiltrados.filter(p => 
-            p.categoriaId === selectedCategory.id || 
+        productosFiltrados = productosFiltrados.filter(p =>
+            p.categoriaId === selectedCategory.id ||
             p.categoria?.id === selectedCategory.id ||
             p.categoria?.nombre?.toLowerCase() === selectedCategory.nombre?.toLowerCase()
         );
@@ -36,7 +36,7 @@ export default function BestSellersSection({ searchQuery, selectedCategory, onCl
 
     if (searchQuery) {
         const query = searchQuery.toLowerCase();
-        productosFiltrados = productosFiltrados.filter(p => 
+        productosFiltrados = productosFiltrados.filter(p =>
             p.nombre?.toLowerCase().includes(query) ||
             p.marca?.nombre?.toLowerCase().includes(query) ||
             p.presentacion?.toLowerCase().includes(query)
@@ -46,25 +46,27 @@ export default function BestSellersSection({ searchQuery, selectedCategory, onCl
     // Si NO hay filtro activo, aplica la división normal de Tabs
     const masVendidos = productosFiltrados.slice(0, 10);
     const ofertas = productosFiltrados.filter(p => Number(p.porcentajeDescuento) > 0).slice(0, 10);
-    const productosMostrados = hasActiveFilter 
-        ? productosFiltrados 
+    const productosMostrados = hasActiveFilter
+        ? productosFiltrados
         : (activeTab === 'mas_vendidos' ? masVendidos : ofertas);
 
     return (
-        <Box py={{ base: 60, md: 100 }} bg="#F8F9FA">
+        <Box py={{ base: 60, md: 100 }} style={{
+            background: 'linear-gradient(135deg, rgba(7, 27, 44, 0.92) 0%, rgba(43, 115, 163, 0.67) 100%)',
+        }}>
             <Container size="xl">
-                
+
                 <Stack align="center" ta="center" mb={40}>
                     <Title order={2} c="#0B1B3D" size="h1" fw={900}>
-                        {hasActiveFilter 
-                            ? 'Resultados Encontrados' 
+                        {hasActiveFilter
+                            ? 'Resultados Encontrados'
                             : (activeTab === 'mas_vendidos' ? 'Selección Destacada' : 'Ofertas Exclusivas')}
                     </Title>
-                    
+
                     {!hasActiveFilter ? (
                         <Text c="dimmed" size="lg" maw={600}>
-                            {activeTab === 'mas_vendidos' 
-                                ? 'Los insumos preferidos por nuestros clientes con la mejor calidad del mercado.' 
+                            {activeTab === 'mas_vendidos'
+                                ? 'Los insumos preferidos por nuestros clientes con la mejor calidad del mercado.'
                                 : 'Aprovecha estos descuentos por tiempo limitado antes de que se agoten.'}
                         </Text>
                     ) : (
@@ -80,11 +82,11 @@ export default function BestSellersSection({ searchQuery, selectedCategory, onCl
                                     Búsqueda: "{searchQuery}"
                                 </Badge>
                             )}
-                            <Button 
-                                variant="subtle" 
-                                color="red" 
-                                size="xs" 
-                                radius="xl" 
+                            <Button
+                                variant="subtle"
+                                color="red"
+                                size="xs"
+                                radius="xl"
                                 leftSection={<IconX size={14} />}
                                 onClick={onClearFilters}
                             >
@@ -130,7 +132,7 @@ export default function BestSellersSection({ searchQuery, selectedCategory, onCl
                         </Button>
                     </Paper>
                 )}
-                
+
             </Container>
         </Box>
     );

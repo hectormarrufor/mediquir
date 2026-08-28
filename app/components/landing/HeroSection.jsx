@@ -17,7 +17,6 @@ import { useQuery } from '@tanstack/react-query';
 const HERO_IMAGES = [
     '/tenants/mediquir/hero-1.jpg',
     '/tenants/mediquir/hero-2.jpg',
-    '/tenants/mediquir/hero-3.jpg',
     '/tenants/mediquir/hero-4.jpg',
     '/tenants/mediquir/hero-5.jpg'
 ];
