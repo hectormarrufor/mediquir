@@ -68,7 +68,7 @@ export default function ClientLayout({ children }) {
                 <Notifications />
                 <AuthProvider>
                   <AppShell
-                    header={{ height: 70, collapsed: !pinned }}
+                    header={{ height: 60, collapsed: !pinned }}
                     navbar={{
                       width: 300,
                       breakpoint: 'sm',
@@ -78,7 +78,7 @@ export default function ClientLayout({ children }) {
                   >
                     <AppShell.Header
                       style={{
-                        background: 'linear-gradient(135deg, rgba(243, 248, 255, 0.92) 0%, rgba(92, 155, 192, 0.82) 40%, rgba(9, 45, 92, 0.92) 100%)',
+                        background: 'linear-gradient(135deg, rgba(178, 220, 255, 0.92) 0%, rgba(92, 155, 192, 0.82) 40%, rgba(9, 45, 92, 0.92) 100%)',
                         backdropFilter: 'blur(16px)',
                         WebkitBackdropFilter: 'blur(16px)',
                         borderBottom: '1px solid rgba(249, 50, 0, 0.08)', // Sutil toque del color corporativo en el borde
@@ -88,13 +88,13 @@ export default function ClientLayout({ children }) {
                       <Group h="100%" px="xl" justify="space-between" wrap="nowrap">
                         {/* SECCIÓN LOGO */}
                         <UnstyledButton onClick={() => router.push('/')}>
-                          <Box w={140} h={70} style={{ display: 'flex', alignItems: 'center' }}>
+                          <Box w={140} h={60} style={{ display: 'flex', alignItems: 'center' }}>
                             <img
                               src={tenant.assets.logo}
                               alt={`Logo ${tenant.name}`}
                               fetchPriority="high"
                               style={{
-                                maxHeight: '80px',
+                                maxHeight: '60px',
                                 width: 'auto',
                                 objectFit: 'cover'
                               }}
