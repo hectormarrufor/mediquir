@@ -1,95 +1,172 @@
-// Webhook para recibir notificaciones de Pago Móvil y registrar los pagos en la base de datos.
+// Webhook seguro multiteléfono para registrar pagos en Mediquir.
 import { NextResponse } from 'next/server';
 import db from '@/models/index'; 
 import { notificarTodos } from '@/app/handlers/notificar';
+import { Op } from 'sequelize';
+
+// Helpers de conversión de fecha bancaria (Permanecen idénticos)
+function parsearFechaMercantil(fechaStr, horaStr) {
+    const [dia, mes, ano] = fechaStr.split('/').map(Number);
+    let [horaMin, periodo] = horaStr.split(' ');
+    let [hora, min] = horaMin.split(':').map(Number);
+    if (periodo?.toUpperCase() === 'PM' && hora < 12) hora += 12;
+    if (periodo?.toUpperCase() === 'AM' && hora === 12) hora = 0;
+    return new Date(ano, mes - 1, dia, hora, min, 0);
+}
+
+function parsearFechaBDV(fechaStr, horaStr) {
+    const [dia, mes, anoCorto] = fechaStr.split('-').map(Number);
+    const [hora, min] = horaStr.split(':').map(Number);
+    const anoCompleto = 2000 + anoCorto;
+    return new Date(anoCompleto, mes - 1, dia, hora, min, 0);
+}
 
 export async function POST(request) {
     try {
         const body = await request.json();
-        const { packageName, title, text, time } = body;
+        const { packageName, title, text } = body;
 
-        // 1. 🔒 VALIDACIÓN DE SEGURIDAD (Bearer Token)
+        // 1. 🔒 CAPTURA Y VALIDACIÓN DINÁMICA DEL BEARER TOKEN (Cero Hardcoding)
         const authHeader = request.headers.get('authorization'); 
-        
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return NextResponse.json({ error: 'No autorizado - Falta encabezado' }, { status: 401 });
         }
 
-        const tokenRecibido = authHeader.slice(7);
+        const tokenRecibido = authHeader.slice(7); // El token que envió el teléfono
+        let dispositivoOrigen = null;
 
-        if (tokenRecibido !== process.env.SMS_WEBHOOK_SECRET) {
+        try {
+            // Leemos el JSON único desde la variable del .env
+            const tokensAutorizados = JSON.parse(process.env.SMS_WEBHOOK_TOKENS || '{}');
+            
+            // Si el token recibido existe en el objeto del .env, extraemos el nombre directamente
+            if (tokensAutorizados[tokenRecibido]) {
+                dispositivoOrigen = tokensAutorizados[tokenRecibido]; // Guardará 'Héctor - S26 Ultra', 'Jolexi', etc.
+            }
+        } catch (jsonError) {
+            console.error('[Seguridad] Error crítico al parsear SMS_WEBHOOK_TOKENS desde el .env');
+        }
+
+        // Si el token no existe en el .env, la API frena y rechaza inmediatamente
+        if (!dispositivoOrigen) {
+            console.warn(`[Seguridad] Intento de acceso rechazado para el token: "${tokenRecibido}"`);
             return NextResponse.json({ error: 'No autorizado - Token inválido' }, { status: 401 });
         }
 
-        // Unificamos el título y el texto para buscar en todo el contenido de la notificación
         const mensajeCompleto = `${title} - ${text}`;
-
-        // ====================================================================
-        // 🎯 FILTRO ULTRA ESTRICTO: Buscar "Tpago recibido" en lugar de solo "tpago"
-        // ====================================================================
-        const contieneTpagoRecibido = mensajeCompleto.toLowerCase().includes('tpago recibido');
-
-        if (!contieneTpagoRecibido) {
-            // Si la notificación no dice "Tpago recibido", la ignoramos silenciosamente con un 200 OK
-            return NextResponse.json({ success: true, message: 'Notificación ignorada (No contiene "Tpago recibido")' });
-        }
-        // ====================================================================
-
+        
+        let bancoIdentificado = null;
         let referenciaLarga = null;
         let montoLimpio = null;
         let emisor = 'Desconocido';
-        let fechaHoraNotificacion = time ? new Date(time) : new Date();
+        let fechaHoraFinal = null;
 
-        // 2. PARSEO DE DATOS CON REGEX MEJORADOS
-        // Formato real: "¡Has recibido un Tpago! - Tpago recibido Bs. 20000,00 del 04243031459 Ref 000058584568..."
-        
-        // Extraer la Referencia: busca "Ref" seguido de espacios y captura todos los dígitos numéricos posteriores
-        const refMercantil = mensajeCompleto.match(/Ref\s+(\d+)/i);
-        referenciaLarga = refMercantil ? refMercantil[1] : null;
+        // 2. 🎯 SWITCH PARA DETERMINAR EL BANCO Y EXTRAER VARIABLES
+        switch (true) {
+            
+            // --- CASO 1: MERCANTIL ---
+            case mensajeCompleto.toLowerCase().includes('tpago recibido'):
+                bancoIdentificado = 'MERCANTIL';
 
-        // Extraer el Monto: busca "Bs." seguido de un espacio y captura los números, puntos y comas
-        const montoMercantil = mensajeCompleto.match(/Bs\.\s*([\d.,]+)/i);
-        if (montoMercantil) {
-            // Transforma "20.000,00" o "20000,00" en "20000.00" ideal para el tipo DECIMAL de Sequelize
-            montoLimpio = montoMercantil[1].replace(/\./g, '').replace(',', '.');
+                const refMercantil = mensajeCompleto.match(/Ref\s+(\d+)/i);
+                referenciaLarga = refMercantil ? refMercantil[1] : null;
+
+                const montoMercantil = mensajeCompleto.match(/Bs\.\s*([\d.,]+)/i);
+                if (montoMercantil) {
+                    montoLimpio = montoMercantil[1].replace(/\./g, '').replace(',', '.');
+                }
+                
+                const emisorMercantil = mensajeCompleto.match(/del\s+(\d+)/i);
+                emisor = emisorMercantil ? emisorMercantil[1] : 'Desconocido';
+
+                const fechaHoraMatch = mensajeCompleto.match(/(\d{2}\/\d{2}\/\d{4}),\s*(\d{2}:\d{2}\s*[APM]{2})/i);
+                if (fechaHoraMatch) {
+                    fechaHoraFinal = parsearFechaMercantil(fechaHoraMatch[1], fechaHoraMatch[2]);
+                }
+                break;
+
+            // --- CASO 2: BANCO DE VENEZUELA (BDV) ---
+            case mensajeCompleto.toLowerCase().includes('pagomovilbdv'):
+                bancoIdentificado = 'VENEZUELA';
+
+                const refBDV = mensajeCompleto.match(/Ref\s*:\s*(\d+)/i);
+                referenciaLarga = refBDV ? refBDV[1] : null;
+
+                const montoBDV = mensajeCompleto.match(/Bs\.\s*([\d.,]+)/i);
+                if (montoBDV) {
+                    montoLimpio = montoBDV[1].replace(/\./g, '').replace(',', '.');
+                }
+
+                const emisorBDV = mensajeCompleto.match(/del\s+([\d-]+)/i);
+                emisor = emisorBDV ? emisorBDV[1].replace(/-/g, '') : 'Desconocido';
+
+                const fechaBDV = mensajeCompleto.match(/fecha\s*:\s*([\d-]+)/i);
+                const horaBDV = mensajeCompleto.match(/hora\s*:\s*([\d:]+)/i);
+                if (fechaBDV && horaBDV) {
+                    fechaHoraFinal = parsearFechaBDV(fechaBDV[1], horaBDV[1]);
+                }
+                break;
+
+            default:
+                return NextResponse.json({ success: true, message: 'Notificación ignorada de forma segura' });
         }
-        
-        // Extraer el Teléfono Emisor: busca la palabra "del" seguida de espacios y captura el número de teléfono
-        const emisorMercantil = mensajeCompleto.match(/del\s+(\d+)/i);
-        emisor = emisorMercantil ? emisorMercantil[1] : 'Desconocido';
 
-        // 3. GUARDADO EN LA BASE DE DATOS (MERCANTIL)
-        if (referenciaLarga && montoLimpio) {
-            // Extraemos solo los últimos 4 dígitos porque el frontend usa maxLength={4}
+        // 3. 🛡️ CONTROL DE DUPLICADOS E INSERCIÓN en la Base de Datos
+        if (referenciaLarga && montoLimpio && fechaHoraFinal) {
             const referencia4Digitos = referenciaLarga.slice(-4);
+            
+            // Formateamos el string del banco inyectando dinámicamente el nombre extraído del .env
+            const bancoConDispositivo = `${bancoIdentificado} (${dispositivoOrigen})`;
 
+            // Ventana de 24 horas para evitar ráfagas o duplicados entre teléfonos
+            const unDiaAtras = new Date(fechaHoraFinal.getTime() - 24 * 60 * 60 * 1000);
+            
+            const pagoExistente = await db.PagoSms.findOne({
+                where: {
+                    referencia: referencia4Digitos,
+                    monto: Number(montoLimpio),
+                    banco: {
+                        [Op.like]: `${bancoIdentificado}%`
+                    },
+                    fechaHora: {
+                        [Op.gte]: unDiaAtras
+                    }
+                }
+            });
+
+            if (pagoExistente) {
+                console.log(`[Mediquir - Duplicado] Bloqueado. Banco: ${bancoConDispositivo} | Ref: ${referencia4Digitos}`);
+                return NextResponse.json({ success: true, message: 'Pago ya registrado previamente' });
+            }
+
+            // 4. GUARDADO FINAL EN SEQUELIZE
             await db.PagoSms.create({
-                banco: 'MERCANTIL',
+                banco: bancoConDispositivo, // Guardará exactamente: "MERCANTIL (Héctor - S26 Ultra)"
                 referencia: referencia4Digitos,
                 monto: Number(montoLimpio),
                 telefonoEmisor: emisor,
-                fechaHora: fechaHoraNotificacion,
+                fechaHora: fechaHoraFinal, 
                 procesado: false
             });
             
-            console.log(`[Mediquir] Pago registrado con éxito: ${emisor} | Ref: ${referencia4Digitos} | Monto: ${montoLimpio} Bs.`);
+            console.log(`[Mediquir] ¡PAGO REGISTRADO! ${bancoConDispositivo} | Ref: ${referencia4Digitos} | Monto: ${montoLimpio} Bs.`);
             
-            // 4. DISPARAR NOTIFICACIÓN PUSH A LOS ADMINISTRADORES
+            // 5. NOTIFICACIÓN PUSH
             await notificarTodos({
-                title: `Pago Móvil Recibido 💸`,
-                body: `${montoLimpio} Bs. del ${emisor} (Ref: ${referencia4Digitos})`,
+                title: `Pago Móvil Recibido (${bancoIdentificado}) 💸`,
+                body: `${montoLimpio} Bs. en teléfono de ${dispositivoOrigen} (Ref: ${referencia4Digitos})`,
                 url: "/superuser/pagos-recibidos",
-                tag: `pago-mobil-${referencia4Digitos}`
+                tag: `pago-${bancoIdentificado.toLowerCase()}-${referencia4Digitos}`
             });
 
-            return NextResponse.json({ success: true, message: 'Pago verificado, registrado y listo para emparejar' });
+            return NextResponse.json({ success: true, message: `Pago registrado con éxito por ${dispositivoOrigen}` });
         } else {
-            console.error('Error al extraer variables. Mensaje original:', mensajeCompleto);
-            return NextResponse.json({ error: 'Estructura de Tpago no pudo ser procesada' }, { status: 400 });
+            console.error(`[Mediquir] Error al extraer data en ${bancoIdentificado || 'Desconocido'}. Mensaje:`, mensajeCompleto);
+            return NextResponse.json({ error: 'Estructura de variables ilegible' }, { status: 400 });
         }
 
     } catch (error) {
-        console.error('Error crítico en el webhook de Pago Móvil:', error);
+        console.error('Error crítico en el webhook dinámico:', error);
         return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
     }
 }
