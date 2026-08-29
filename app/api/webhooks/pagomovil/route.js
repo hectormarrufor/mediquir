@@ -1,6 +1,6 @@
 // Webhook seguro multiteléfono para registrar pagos en Mediquir.
 import { NextResponse } from 'next/server';
-import db from '@/models/index'; 
+import db from '@/models/index';
 import { notificarTodos } from '@/app/handlers/notificar';
 import { Op } from 'sequelize';
 
@@ -26,10 +26,10 @@ export async function POST(request) {
         const body = await request.json();
         const { packageName, title, text } = body;
 
-       // ====================================================================
+        // ====================================================================
         // 1. 🔒 CAPTURA Y VALIDACIÓN DINÁMICA DEL BEARER TOKEN (Blindado contra fallos de .env)
         // ====================================================================
-        const authHeader = request.headers.get('authorization'); 
+        const authHeader = request.headers.get('authorization');
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return NextResponse.json({ error: 'No autorizado - Falta encabezado' }, { status: 401 });
         }
@@ -39,18 +39,18 @@ export async function POST(request) {
 
         try {
             let rawEnvString = process.env.SMS_WEBHOOK_TOKENS || '{}';
-            
+
             // 🔥 LIMPIEZA EXTREMA: Removemos comillas simples estorbosas, saltos de línea o espacios que Vercel inyecte
             rawEnvString = rawEnvString.trim().replace(/^'|'$/g, '');
-            
+
             const tokensAutorizados = JSON.parse(rawEnvString);
-            
+
             if (tokensAutorizados[tokenRecibido]) {
                 dispositivoOrigen = tokensAutorizados[tokenRecibido];
             }
         } catch (jsonError) {
             console.error('[Seguridad] Falló el JSON.parse del .env, aplicando contingencia de respaldo...');
-            
+
             // 🚨 CONTINGENCIA DE RESPALDO (Hardcoding Cero en Git: Evaluamos dinámicamente)
             // Si el JSON de Vercel vino corrupto, validamos por strings planos para salvar la operación
             const rawEnv = process.env.SMS_WEBHOOK_TOKENS || '';
@@ -66,7 +66,7 @@ export async function POST(request) {
         }
 
         const mensajeCompleto = `${title} - ${text}`;
-        
+
         let bancoIdentificado = null;
         let referenciaLarga = null;
         let montoLimpio = null;
@@ -75,7 +75,7 @@ export async function POST(request) {
 
         // 2. 🎯 SWITCH PARA DETERMINAR EL BANCO Y EXTRAER VARIABLES
         switch (true) {
-            
+
             // --- CASO 1: MERCANTIL ---
             case mensajeCompleto.toLowerCase().includes('tpago recibido'):
                 bancoIdentificado = 'MERCANTIL';
@@ -87,7 +87,7 @@ export async function POST(request) {
                 if (montoMercantil) {
                     montoLimpio = montoMercantil[1].replace(/\./g, '').replace(',', '.');
                 }
-                
+
                 const emisorMercantil = mensajeCompleto.match(/del\s+(\d+)/i);
                 emisor = emisorMercantil ? emisorMercantil[1] : 'Desconocido';
 
@@ -104,17 +104,19 @@ export async function POST(request) {
                 const refBDV = mensajeCompleto.match(/Ref\s*:\s*(\d+)/i);
                 referenciaLarga = refBDV ? refBDV[1] : null;
 
-                const montoBDV = mensajeCompleto.match(/Bs\.\s*([\d.,]+)/i);
-                if (montoBDV) {
+                const montoBDV = mensajeCompleto.match(/Bs\.?\s*([\d.,]+)/i);
+                if (montoBDV && montoBDV[1]) {
                     montoLimpio = montoBDV[1].replace(/\./g, '').replace(',', '.');
                 }
 
                 const emisorBDV = mensajeCompleto.match(/del\s+([\d-]+)/i);
-                emisor = emisorBDV ? emisorBDV[1].replace(/-/g, '') : 'Desconocido';
+                emisor = (emisorBDV && emisorBDV[1]) ? emisorBDV[1].replace(/-/g, '') : 'Desconocido';
 
-                const fechaBDV = mensajeCompleto.match(/fecha\s*:\s*([\d-]+)/i);
+                // 🔥 CORRECCIÓN CRÍTICA: El signo ? hace que los dos puntos (:) sean opcionales, atrapando "fecha 29-08-26" o "fecha: 29-08-26"
+                const fechaBDV = mensajeCompleto.match(/fecha\s*:?\s*([\d-]+)/i);
                 const horaBDV = mensajeCompleto.match(/hora\s*:\s*([\d:]+)/i);
-                if (fechaBDV && horaBDV) {
+
+                if (fechaBDV && fechaBDV[1] && horaBDV && horaBDV[1]) {
                     fechaHoraFinal = parsearFechaBDV(fechaBDV[1], horaBDV[1]);
                 }
                 break;
@@ -126,13 +128,13 @@ export async function POST(request) {
         // 3. 🛡️ CONTROL DE DUPLICADOS E INSERCIÓN en la Base de Datos
         if (referenciaLarga && montoLimpio && fechaHoraFinal) {
             const referencia4Digitos = referenciaLarga.slice(-4);
-            
+
             // Formateamos el string del banco inyectando dinámicamente el nombre extraído del .env
             const bancoConDispositivo = `${bancoIdentificado} (${dispositivoOrigen})`;
 
             // Ventana de 24 horas para evitar ráfagas o duplicados entre teléfonos
             const unDiaAtras = new Date(fechaHoraFinal.getTime() - 24 * 60 * 60 * 1000);
-            
+
             const pagoExistente = await db.PagoSms.findOne({
                 where: {
                     referencia: referencia4Digitos,
@@ -157,12 +159,12 @@ export async function POST(request) {
                 referencia: referencia4Digitos,
                 monto: Number(montoLimpio),
                 telefonoEmisor: emisor,
-                fechaHora: fechaHoraFinal, 
+                fechaHora: fechaHoraFinal,
                 procesado: false
             });
-            
+
             console.log(`[Mediquir] ¡PAGO REGISTRADO! ${bancoConDispositivo} | Ref: ${referencia4Digitos} | Monto: ${montoLimpio} Bs.`);
-            
+
             // 5. NOTIFICACIÓN PUSH
             await notificarTodos({
                 title: `Pago Móvil Recibido (${bancoIdentificado}) 💸`,
