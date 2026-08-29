@@ -1,78 +1,95 @@
 // Webhook para recibir notificaciones de Pago Móvil y registrar los pagos en la base de datos.
 import { NextResponse } from 'next/server';
-import db from '@/models/index'; // Asegúrate de la ruta correcta a tus modelos
+import db from '@/models/index'; 
 import { notificarTodos } from '@/app/handlers/notificar';
 
 export async function POST(request) {
     try {
         const body = await request.json();
-        const { banco, mensaje, telefono_origen } = body;
+        const { packageName, title, text, time } = body;
+
+        // 1. 🔒 VALIDACIÓN DE SEGURIDAD (Bearer Token)
+        const authHeader = request.headers.get('authorization'); 
         
-        // Validación de seguridad (El candado de tu API)
-        const secret = request.headers.get('x-webhook-secret');
-        if (secret !== process.env.SMS_WEBHOOK_SECRET) {
-            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return NextResponse.json({ error: 'No autorizado - Falta encabezado' }, { status: 401 });
         }
+
+        const tokenRecibido = authHeader.slice(7);
+
+        if (tokenRecibido !== process.env.SMS_WEBHOOK_SECRET) {
+            return NextResponse.json({ error: 'No autorizado - Token inválido' }, { status: 401 });
+        }
+
+        // Unificamos el título y el texto para buscar en todo el contenido de la notificación
+        const mensajeCompleto = `${title} - ${text}`;
+
+        // ====================================================================
+        // 🎯 FILTRO ULTRA ESTRICTO: Buscar "Tpago recibido" en lugar de solo "tpago"
+        // ====================================================================
+        const contieneTpagoRecibido = mensajeCompleto.toLowerCase().includes('tpago recibido');
+
+        if (!contieneTpagoRecibido) {
+            // Si la notificación no dice "Tpago recibido", la ignoramos silenciosamente con un 200 OK
+            return NextResponse.json({ success: true, message: 'Notificación ignorada (No contiene "Tpago recibido")' });
+        }
+        // ====================================================================
 
         let referenciaLarga = null;
         let montoLimpio = null;
         let emisor = 'Desconocido';
+        let fechaHoraNotificacion = time ? new Date(time) : new Date();
 
-        switch (banco) {
-            case 'MERCANTIL_APP':
-                // NUEVO Mensaje Mercantil: "¡Has recibido un Tpago! - Tpago recibido Bs. 20000,00 del 04243031459 Ref 000058584568..."
-                
-                // 1. Extraer la Referencia (Busca "Ref " o "Ref: " seguido de números)
-                const refMercantil = mensaje.match(/Ref\s*:?\s*(\d+)/i);
-                referenciaLarga = refMercantil ? refMercantil[1] : null;
+        // 2. PARSEO DE DATOS CON REGEX MEJORADOS
+        // Formato real: "¡Has recibido un Tpago! - Tpago recibido Bs. 20000,00 del 04243031459 Ref 000058584568..."
+        
+        // Extraer la Referencia: busca "Ref" seguido de espacios y captura todos los dígitos numéricos posteriores
+        const refMercantil = mensajeCompleto.match(/Ref\s+(\d+)/i);
+        referenciaLarga = refMercantil ? refMercantil[1] : null;
 
-                // 2. Extraer el Monto (Busca "Bs. " seguido de números con comas/puntos)
-                const montoMercantil = mensaje.match(/Bs\.\s*([\d.,]+)/i);
-                montoLimpio = montoMercantil ? montoMercantil[1].replace(/\./g, '').replace(',', '.') : null;
-                
-                // 3. Extraer el Emisor (Busca "del " seguido del número de teléfono)
-                const emisorMercantil = mensaje.match(/del\s+(\d+)/i);
-                emisor = emisorMercantil ? emisorMercantil[1] : 'Desconocido';
-                
-                break;
-
-            // Aquí puedes agregar luego los `case` para BDV_APP o EXTERIOR_EMAIL
-            default:
-                console.log('Banco no reconocido en el webhook:', banco);
+        // Extraer el Monto: busca "Bs." seguido de un espacio y captura los números, puntos y comas
+        const montoMercantil = mensajeCompleto.match(/Bs\.\s*([\d.,]+)/i);
+        if (montoMercantil) {
+            // Transforma "20.000,00" o "20000,00" en "20000.00" ideal para el tipo DECIMAL de Sequelize
+            montoLimpio = montoMercantil[1].replace(/\./g, '').replace(',', '.');
         }
+        
+        // Extraer el Teléfono Emisor: busca la palabra "del" seguida de espacios y captura el número de teléfono
+        const emisorMercantil = mensajeCompleto.match(/del\s+(\d+)/i);
+        emisor = emisorMercantil ? emisorMercantil[1] : 'Desconocido';
 
+        // 3. GUARDADO EN LA BASE DE DATOS (MERCANTIL)
         if (referenciaLarga && montoLimpio) {
-            // Extraemos solo los últimos 4 dígitos porque el frontend de Mediquir usa maxLength={4}
+            // Extraemos solo los últimos 4 dígitos porque el frontend usa maxLength={4}
             const referencia4Digitos = referenciaLarga.slice(-4);
 
-            // Guardamos en la BD el pago para que el checkout haga match
             await db.PagoSms.create({
+                banco: 'MERCANTIL',
                 referencia: referencia4Digitos,
                 monto: Number(montoLimpio),
-                banco,
                 telefonoEmisor: emisor,
-                fechaHora: new Date(),
+                fechaHora: fechaHoraNotificacion,
                 procesado: false
             });
             
-            console.log(`Pago registrado con éxito: ${emisor} | Ref: ${referencia4Digitos} | Monto: ${montoLimpio}`);
+            console.log(`[Mediquir] Pago registrado con éxito: ${emisor} | Ref: ${referencia4Digitos} | Monto: ${montoLimpio} Bs.`);
             
-            // 🔥 Disparamos la notificación push a los administradores/vendedores 🔥
+            // 4. DISPARAR NOTIFICACIÓN PUSH A LOS ADMINISTRADORES
             await notificarTodos({
                 title: `Pago Móvil Recibido 💸`,
-                body: `${montoLimpio}Bs del ${emisor} (Ref: ${referencia4Digitos})`,
+                body: `${montoLimpio} Bs. del ${emisor} (Ref: ${referencia4Digitos})`,
                 url: "/superuser/pagos-recibidos",
-                tag: `pago-movil-${referencia4Digitos}`
+                tag: `pago-mobil-${referencia4Digitos}`
             });
 
-            return NextResponse.json({ success: true, message: 'Pago registrado y listo para emparejar' });
+            return NextResponse.json({ success: true, message: 'Pago verificado, registrado y listo para emparejar' });
         } else {
-            console.error('No se pudo extraer la data de la notificación:', mensaje);
-            return NextResponse.json({ error: 'Formato de notificación no reconocido' }, { status: 400 });
+            console.error('Error al extraer variables. Mensaje original:', mensajeCompleto);
+            return NextResponse.json({ error: 'Estructura de Tpago no pudo ser procesada' }, { status: 400 });
         }
 
     } catch (error) {
-        console.error('Error en webhook de Pago Móvil:', error);
+        console.error('Error crítico en el webhook de Pago Móvil:', error);
         return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
     }
 }

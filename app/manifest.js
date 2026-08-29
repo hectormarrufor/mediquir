@@ -8,8 +8,8 @@ export default function manifest() {
     description: isMediquir ? 'App para venta de insumos medicos Mediquir' : 'App para gestión logística Genérica',
     start_url: '/',
     display: 'standalone',
-    "theme_color": "#1e4152",
-  "background_color": "#22303a",
+    theme_color: "#1e4152",
+    background_color: "#22303a",
     orientation: 'portrait',
     scope: '/',
     lang: 'es-VE',
@@ -33,7 +33,7 @@ export default function manifest() {
         type: 'image/png',
         purpose: 'monochrome'
       }
-  
+
     ]
   };
 }
