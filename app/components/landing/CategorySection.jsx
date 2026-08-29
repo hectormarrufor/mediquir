@@ -9,7 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMediaQuery } from '@mantine/hooks';
 import CategoryIcon from '../CategoryIcon';
 
-export default function CategorySection() {
+export default function CategorySection({ selectedCategory, onSelectCategory }) {
     const isMobile = useMediaQuery('(max-width: 768px)');
 
     const { data: categorias, isLoading } = useQuery({
@@ -20,14 +20,6 @@ export default function CategorySection() {
             return res.json();
         }
     });
-
-    const handleCategoryClick = (categoriaId) => {
-        // En lugar de redirigir, hacemos un scroll suave a la sección de productos
-        const section = document.getElementById('productos-section');
-        if (section) {
-            section.scrollIntoView({ behavior: 'smooth' });
-        }
-    };
 
     return (
         <Box py={80} bg="white">
@@ -47,41 +39,49 @@ export default function CategorySection() {
                     </Group>
                 ) : (
                     <Group justify="center" gap={{ base: 'xl', md: 50 }}>
-                        {categorias?.map((cat) => (
-                            <UnstyledButton 
-                                key={cat.id} 
-                                onClick={() => handleCategoryClick(cat.id)}
-                                style={{ transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)' }}
-                                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-10px)'}
-                                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-                            >
-                                <Stack align="center" gap="md">
-                                    <Box 
-                                        style={{ 
-                                            borderRadius: '50%', 
-                                            border: '1px solid #E9ECEF', 
-                                            padding: isMobile ? '15px' : '20px',
-                                            boxShadow: '0 10px 30px rgba(0,0,0,0.05)',
-                                            backgroundColor: '#F8F9FA'
-                                        }}
-                                    >
-                                        <CategoryIcon
-                                            categoryName={cat.nombre} 
-                                            size={isMobile ? 50 : 60} 
-                                            color="#005AAA" 
-                                            variant="transparent"
-                                        />
-                                    </Box>
-                                    <Text size="sm" fw={700} c="#0B1B3D" ta="center" maw={120} lh={1.2}>
-                                        {cat.nombre}
-                                    </Text>
-                                </Stack>
-                            </UnstyledButton>
-                        ))}
-                        
-                        {categorias?.length === 0 && (
-                            <Text c="dimmed">No hay categorías registradas todavía.</Text>
-                        )}
+                        {categorias?.map((cat) => {
+                            const isSelected = selectedCategory?.id === cat.id;
+                            
+                            return (
+                                <UnstyledButton 
+                                    key={cat.id} 
+                                    onClick={() => onSelectCategory(cat)}
+                                    style={{ transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)' }}
+                                    onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-8px)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                                >
+                                    <Stack align="center" gap="md">
+                                        <Box 
+                                            style={{ 
+                                                borderRadius: '50%', 
+                                                border: isSelected ? '2px solid #F93200' : '1px solid #E9ECEF', 
+                                                padding: isMobile ? '15px' : '20px',
+                                                boxShadow: isSelected ? '0 10px 25px rgba(249, 50, 0, 0.2)' : '0 10px 30px rgba(0,0,0,0.05)',
+                                                backgroundColor: isSelected ? '#FFF5F5' : '#F8F9FA',
+                                                transition: 'all 0.3s ease'
+                                            }}
+                                        >
+                                            <CategoryIcon 
+                                                categoryName={cat.nombre} 
+                                                size={isMobile ? 50 : 60} 
+                                                color={isSelected ? "#F93200" : "#005AAA"} 
+                                                variant="transparent"
+                                            />
+                                        </Box>
+                                        <Text 
+                                            size="sm" 
+                                            fw={isSelected ? 800 : 700} 
+                                            c={isSelected ? "#F93200" : "#0B1B3D"} 
+                                            ta="center" 
+                                            maw={120} 
+                                            lh={1.2}
+                                        >
+                                            {cat.nombre}
+                                        </Text>
+                                    </Stack>
+                                </UnstyledButton>
+                            );
+                        })}
                     </Group>
                 )}
             </Container>

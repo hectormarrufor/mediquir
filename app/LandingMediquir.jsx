@@ -14,34 +14,61 @@ export default function LandingMediquir() {
     const [cartOpened, setCartOpened] = useState(false);
     const { cart, removeFromCart, updateQuantity, subtotal, totalItems, isLoaded } = useCart();
     
-    // 🔥 LÓGICA DE NIVELES PARA OBTENER LA IMAGEN PRINCIPAL
+    // --- ESTADOS DE FILTRADO GLOBAL DE LA LANDING ---
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState(null);
+
+    const scrollToProducts = () => {
+        const section = document.getElementById('productos-section');
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth' });
+        }
+    };
+
+    const handleSearch = (query) => {
+        setSearchQuery(query);
+        setSelectedCategory(null); // Resetea categoría si se hace una búsqueda global
+        scrollToProducts();
+    };
+
+    const handleSelectCategory = (category) => {
+        setSelectedCategory(category);
+        setSearchQuery(''); // Resetea la búsqueda textual si se elige una categoría
+        scrollToProducts();
+    };
+
+    const handleClearFilters = () => {
+        setSearchQuery('');
+        setSelectedCategory(null);
+    };
+
     const getProductImage = (product) => {
         const baseUrl = process.env.NEXT_PUBLIC_BLOB_BASE_URL || '';
-        
-        // 1. Imagen directa del producto
-        if (product?.imagen) {
-            return `${baseUrl}/${product.imagen}`;
-        }
-        // 2. Imagen del grupo de equivalencia
-        if (product?.grupoEquivalencia?.imagen) {
-            return `${baseUrl}/${product.grupoEquivalencia.imagen}`;
-        }
-        // 3. Imagen de la marca
-        if (product?.marca?.imagen) {
-            return `${baseUrl}/${product.marca.imagen}`;
-        }
-        // 4. Placeholder por defecto
+        if (product?.imagen) return `${baseUrl}/${product.imagen}`;
+        if (product?.grupoEquivalencia?.imagen) return `${baseUrl}/${product.grupoEquivalencia.imagen}`;
+        if (product?.marca?.imagen) return `${baseUrl}/${product.marca.imagen}`;
         return '/placeholder-med.png';
     };
 
     return (
         <Box bg="#F8F9FA" style={{ minHeight: '100vh', overflow: 'hidden', position: 'relative' }}>
             
-            <HeroSection />
-            <CategorySection />
+            <HeroSection 
+                searchQuery={searchQuery}
+                onSearch={handleSearch}
+            />
+
+            <CategorySection 
+                selectedCategory={selectedCategory}
+                onSelectCategory={handleSelectCategory}
+            />
             
             <Box id="productos-section">
-                <BestSellersSection />
+                <BestSellersSection 
+                    searchQuery={searchQuery}
+                    selectedCategory={selectedCategory}
+                    onClearFilters={handleClearFilters}
+                />
             </Box>
             
             <FooterSection />
