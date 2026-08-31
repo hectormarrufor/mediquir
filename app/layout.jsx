@@ -1,5 +1,6 @@
 import { tenant } from '@/config/tenant';
 import ClientLayout from './ClientLayout';
+import Script from 'next/script';
 
 // 1. Exportamos el viewport correctamente para Next.js 15
 export const viewport = {
@@ -26,6 +27,10 @@ export default function RootLayout({ children }) {
         <ClientLayout>
           {children}
         </ClientLayout>
+        <Script
+          src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`}
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );

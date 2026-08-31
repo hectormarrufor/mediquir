@@ -122,26 +122,30 @@ export function CartProvider({ children }) {
         }
     };
 
-    // Subtotal calculado ignorando productos que se hayan quedado sin stock
+   // En CartContext.jsx, actualiza los cálculos finales antes del return:
+
     const subtotal = cart.reduce((acc, item) => {
         const stockDispo = Number(item.product.stockAlmacen || 0);
         if (stockDispo <= 0) return acc;
         return acc + (item.precioFinal * item.quantity);
     }, 0);
 
+    const totalImpuestos = cart.reduce((acc, item) => {
+        const stockDispo = Number(item.product.stockAlmacen || 0);
+        if (stockDispo <= 0) return acc;
+        
+        // Usamos el campo directo de tu BD (0 o 16)
+        const porcentajeIva = Number(item.product.porcentajeIva) || 0; 
+        return acc + (item.precioFinal * item.quantity * (porcentajeIva / 100));
+    }, 0);
+
     const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
 
     return (
         <CartContext.Provider value={{ 
-            cart, 
-            addToCart, 
-            removeFromCart, 
-            updateQuantity, 
-            subtotal, 
-            totalItems, 
-            isLoaded,
-            isVerifying,
-            verifyStockBeforeCheckout 
+            cart, addToCart, removeFromCart, updateQuantity, 
+            subtotal, totalImpuestos, totalItems, // Exportamos totalImpuestos
+            isLoaded, isVerifying, verifyStockBeforeCheckout 
         }}>
             {children}
         </CartContext.Provider>

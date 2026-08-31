@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box, Drawer, Indicator, ActionIcon, Stack, Group, Text, Button, ScrollArea, Image } from '@mantine/core';
 import { IconShoppingCart, IconTrash, IconMinus, IconPlus } from '@tabler/icons-react';
 
@@ -9,9 +9,13 @@ import CategorySection from './components/landing/CategorySection';
 import BestSellersSection from './components/landing/BestSellersSection';
 import FooterSection from './components/landing/FooterSection';
 import { useCart } from './components/landing/CartContext';
+import CheckoutProcess from './CheckoutProcess';
 
 export default function LandingMediquir() {
+    const [bcv, setBcv] = useState(undefined);
     const [cartOpened, setCartOpened] = useState(false);
+    // En LandingMediquir.jsx, añade este estado junto a los demás:
+    const [showCheckout, setShowCheckout] = useState(false);
     const {
         cart,
         removeFromCart,
@@ -51,7 +55,36 @@ export default function LandingMediquir() {
         setSelectedCategory(null);
     };
 
-    // Handler de Checkout con verificación previa
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const [resBCV] = await Promise.all([
+                    fetch('/api/bcv'),
+                   
+                ]);
+
+                if (resBCV.ok) {
+                    const dataBCV = await resBCV.json();
+                    setBcv(dataBCV.precio);
+                }
+
+            
+            } catch (error) {
+                console.error("Error al cargar datos iniciales:", error);
+            } finally {
+                // setIsLoading(false); // No se está usando isLoading en este componente, así que se puede comentar o eliminar.
+            }
+        };
+
+        fetchData();
+    }, []);
+
+    // Verificar si hay algún item sin stock en el carrito para bloquear la orden
+    const hasInvalidItems = cart.some(item => {
+        const stock = Number(item.product.stockAlmacen || 0);
+        return stock <= 0 || item.quantity > stock;
+    });
+
     const handleProceedToCheckout = async () => {
         const verification = await verifyStockBeforeCheckout();
 
@@ -64,15 +97,9 @@ export default function LandingMediquir() {
             return;
         }
 
-        // Si todo está disponible, se procede con la orden
-        alert("Inventario verificado con éxito. Redirigiendo a la pasarela/WhatsApp...");
+        // Si el stock está OK, abrimos la vista de checkout en el Drawer
+        setShowCheckout(true);
     };
-
-    // Verificar si hay algún item sin stock en el carrito para bloquear la orden
-    const hasInvalidItems = cart.some(item => {
-        const stock = Number(item.product.stockAlmacen || 0);
-        return stock <= 0 || item.quantity > stock;
-    });
 
     const getProductImage = (product) => {
         const baseUrl = process.env.NEXT_PUBLIC_BLOB_BASE_URL || '';
@@ -127,93 +154,110 @@ export default function LandingMediquir() {
 
             <Drawer
                 opened={cartOpened}
-                onClose={() => setCartOpened(false)}
+                onClose={() => {
+                    setCartOpened(false);
+                    setShowCheckout(false); // Resetea al cerrar
+                }}
                 position="right"
-                title={<Text fw={900} size="xl" c="#0B1B3D">Tu Carrito</Text>}
+                title={<Text fw={900} size="xl" c="#0B1B3D">{showCheckout ? 'Finalizar Compra' : 'Tu Carrito'}</Text>}
                 padding="md"
                 size="md"
             >
-                <ScrollArea h="calc(100vh - 220px)" type="auto">
-                    {cart.length === 0 ? (
-                        <Stack align="center" mt={50} c="dimmed">
-                            <IconShoppingCart size={50} opacity={0.4} />
-                            <Text fw={500}>Tu carrito está vacío.</Text>
-                        </Stack>
-                    ) : (
-                        <Stack gap="md">
-                            {cart.map((item) => {
-                                const stockDisponible = Number(item.product.stockAlmacen || 0);
-                                const isOut = stockDisponible <= 0;
-                                const exceedsStock = item.quantity > stockDisponible && !isOut;
+                {showCheckout ? (
+                    <CheckoutProcess
+                        tasaBcv={bcv} // Pásale tu tasa BCV real actual o un estado/prop
+                        onCancel={() => setShowCheckout(false)}
+                        onSuccess={(data) => {
+                            console.log("Orden creada:", data);
+                            // Aquí puedes vaciar el carrito local si lo deseas
+                        }}
+                    />
+                ) : (
+                    <>
+                        {/* Aquí va todo tu ScrollArea con los items del carrito que ya tenías */}
+                        <ScrollArea h="calc(100vh - 220px)" type="auto">
+                            {cart.length === 0 ? (
+                                <Stack align="center" mt={50} c="dimmed">
+                                    <IconShoppingCart size={50} opacity={0.4} />
+                                    <Text fw={500}>Tu carrito está vacío.</Text>
+                                </Stack>
+                            ) : (
+                                <Stack gap="md">
+                                    {cart.map((item) => {
+                                        const stockDisponible = Number(item.product.stockAlmacen || 0);
+                                        const isOut = stockDisponible <= 0;
+                                        const exceedsStock = item.quantity > stockDisponible && !isOut;
 
-                                return (
-                                    <Group key={item.product.id} wrap="nowrap" align="flex-start" opacity={isOut ? 0.6 : 1}>
-                                        <Image
-                                            src={getProductImage(item.product)}
-                                            w={65} h={65} radius="md" fit="contain" bg="gray.1" p={4}
-                                            fallbackSrc="/placeholder-med.png"
-                                        />
-                                        <Box flex={1}>
-                                            <Text size="sm" fw={700} lineClamp={2} c="#0B1B3D">{item.product.nombre}</Text>
-                                            <Text size="xs" c="dimmed" fw={600}>Ref ${item.precioFinal.toFixed(2)}</Text>
+                                        return (
+                                            <Group key={item.product.id} wrap="nowrap" align="flex-start" opacity={isOut ? 0.6 : 1}>
+                                                <Image
+                                                    src={getProductImage(item.product)}
+                                                    w={65} h={65} radius="md" fit="contain" bg="gray.1" p={4}
+                                                    fallbackSrc="/placeholder-med.png"
+                                                />
+                                                <Box flex={1}>
+                                                    <Text size="sm" fw={700} lineClamp={2} c="#0B1B3D">{item.product.nombre}</Text>
+                                                    <Text size="xs" c="dimmed" fw={600}>Ref ${item.precioFinal.toFixed(2)}</Text>
 
-                                            {isOut && (
-                                                <Badge color="red" size="xs" variant="filled" mt={4}>
-                                                    Agotado en almacén
-                                                </Badge>
-                                            )}
+                                                    {isOut && (
+                                                        <Badge color="red" size="xs" variant="filled" mt={4}>
+                                                            Agotado en almacén
+                                                        </Badge>
+                                                    )}
 
-                                            {exceedsStock && (
-                                                <Badge color="orange" size="xs" variant="filled" mt={4}>
-                                                    Solo quedan {stockDisponible} disponibles
-                                                </Badge>
-                                            )}
+                                                    {exceedsStock && (
+                                                        <Badge color="orange" size="xs" variant="filled" mt={4}>
+                                                            Solo quedan {stockDisponible} disponibles
+                                                        </Badge>
+                                                    )}
 
-                                            {!isOut && (
-                                                <Group gap="xs" mt="xs">
-                                                    <ActionIcon variant="light" size="sm" color="gray" onClick={() => updateQuantity(item.product.id, item.quantity - 1)}>
-                                                        <IconMinus size={14} />
-                                                    </ActionIcon>
-                                                    <Text size="sm" fw={700}>{item.quantity}</Text>
-                                                    <ActionIcon
-                                                        variant="light"
-                                                        size="sm"
-                                                        color="gray"
-                                                        disabled={item.quantity >= stockDisponible}
-                                                        onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                                                    >
-                                                        <IconPlus size={14} />
-                                                    </ActionIcon>
-                                                </Group>
-                                            )}
-                                        </Box>
-                                        <ActionIcon color="red.7" variant="subtle" onClick={() => removeFromCart(item.product.id)}>
-                                            <IconTrash size={18} />
-                                        </ActionIcon>
-                                    </Group>
-                                );
-                            })}
-                        </Stack>
-                    )}
-                </ScrollArea>
+                                                    {!isOut && (
+                                                        <Group gap="xs" mt="xs">
+                                                            <ActionIcon variant="light" size="sm" color="gray" onClick={() => updateQuantity(item.product.id, item.quantity - 1)}>
+                                                                <IconMinus size={14} />
+                                                            </ActionIcon>
+                                                            <Text size="sm" fw={700}>{item.quantity}</Text>
+                                                            <ActionIcon
+                                                                variant="light"
+                                                                size="sm"
+                                                                color="gray"
+                                                                disabled={item.quantity >= stockDisponible}
+                                                                onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                                                            >
+                                                                <IconPlus size={14} />
+                                                            </ActionIcon>
+                                                        </Group>
+                                                    )}
+                                                </Box>
+                                                <ActionIcon color="red.7" variant="subtle" onClick={() => removeFromCart(item.product.id)}>
+                                                    <IconTrash size={18} />
+                                                </ActionIcon>
+                                            </Group>
+                                        );
+                                    })}
+                                </Stack>
+                            )}
+                        </ScrollArea>
 
-                <Box pos="absolute" bottom={0} left={0} right={0} p="md" bg="white" style={{ borderTop: '1px solid #E9ECEF' }}>
-                    <Group justify="space-between" mb="md">
-                        <Text fw={700} size="md" c="gray.7">Subtotal (sin impuestos):</Text>
-                        <Text fw={900} size="xl" c="#005AAA">Ref ${subtotal.toFixed(2)}</Text>
-                    </Group>
-                    <Button
-                        fullWidth
-                        size="lg"
-                        color="#0B1B3D"
-                        radius="md"
-                        loading={isVerifying}
-                        disabled={cart.length === 0 || hasInvalidItems}
-                        onClick={handleProceedToCheckout}
-                    >
-                        {hasInvalidItems ? 'Ajusta los productos sin stock' : 'Proceder al Pago'}
-                    </Button>
-                </Box>
+                        <Box pos="absolute" bottom={0} left={0} right={0} p="md" bg="white" style={{ borderTop: '1px solid #E9ECEF' }}>
+                            <Group justify="space-between" mb="md">
+                                <Text fw={700} size="md" c="gray.7">Subtotal:</Text>
+                                <Text fw={900} size="xl" c="#005AAA">Ref ${subtotal.toFixed(2)}</Text>
+                            </Group>
+                            <Button
+                                fullWidth
+                                size="lg"
+                                color="#0B1B3D"
+                                radius="md"
+                                loading={isVerifying}
+                                disabled={cart.length === 0 || hasInvalidItems}
+                                onClick={handleProceedToCheckout}
+                            >
+                                {hasInvalidItems ? 'Ajusta los productos sin stock' : 'Proceder al Pago'}
+                            </Button>
+                        </Box>
+                    </>
+                )}
             </Drawer>
         </Box>
     );

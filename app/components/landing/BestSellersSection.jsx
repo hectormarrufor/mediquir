@@ -33,13 +33,14 @@ export default function BestSellersSection({ searchQuery, selectedCategory, onCl
             p.categoria?.nombre?.toLowerCase() === selectedCategory.nombre?.toLowerCase()
         );
     }
-
     if (searchQuery) {
         const query = searchQuery.toLowerCase();
         productosFiltrados = productosFiltrados.filter(p =>
             p.nombre?.toLowerCase().includes(query) ||
             p.marca?.nombre?.toLowerCase().includes(query) ||
-            p.presentacion?.toLowerCase().includes(query)
+            p.presentacion?.toLowerCase().includes(query) ||
+            // Buscamos dentro del array de la asociación 'tags'
+            p.tags?.some(tag => tag.nombre?.toLowerCase().includes(query))
         );
     }
 
