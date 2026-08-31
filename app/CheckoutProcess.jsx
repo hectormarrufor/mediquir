@@ -1,22 +1,23 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Stepper, Button, Group, Radio, Stack, Text, Paper, Loader, Alert, Divider, ThemeIcon, TextInput } from '@mantine/core';
+import { Box, Stepper, Button, Group, Radio, Stack, Text, Paper, Loader, Alert, Divider, ThemeIcon, Checkbox, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconBuildingStore, IconMotorbike, IconCheck, IconAlertCircle, IconUser, IconGps, IconMapPinCheck } from '@tabler/icons-react';
 import { useCart } from './components/landing/CartContext';
 
 // Coordenadas base de Mediquir en Ciudad Ojeda
-const MEDIQUIR_LOCATION = { lat: 10.195100738706866, lng: -71.31187591359996 };
-const TARIFA_BASE_DELIVERY = 1.5; 
-const TARIFA_POR_KM = 0.5; 
+const MEDIQUIR_LOCATION = { lat: 10.195099414915264, lng: -71.31187255102861 };
+const TARIFA_BASE_DELIVERY = 1.5;
+const TARIFA_POR_KM = 0.5;
 
 export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 }) {
     const { cart, subtotal, totalImpuestos } = useCart();
-    
+
     const [activeStep, setActiveStep] = useState(0);
-    const [metodoEntrega, setMetodoEntrega] = useState('pickup'); 
-    
+    const [metodoEntrega, setMetodoEntrega] = useState('pickup'); // 'pickup' | 'delivery'
+    const [pagoOnlinePickup, setPagoOnlinePickup] = useState(false); // Si elige pickup pero quiere pagar online
+
     // Delivery & GPS State
     const [coordenadasGPS, setCoordenadasGPS] = useState(null);
     const [precisionGPS, setPrecisionGPS] = useState(null);
@@ -24,7 +25,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
     const [distanciaKm, setDistanciaKm] = useState(0);
     const [costoDelivery, setCostoDelivery] = useState(0);
     const [calculandoDistancia, setCalculandoDistancia] = useState(false);
-    
+
     // Referencias para Google Maps Interactivo
     const mapContainerRef = useRef(null);
     const mapInstanceRef = useRef(null);
@@ -45,11 +46,10 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
         },
     });
 
-    // --- RENDERIZAR O ACTUALIZAR EL MAPA CUANDO HAY COORDENADAS ---
+    // Renderizar o actualizar el mapa interactivo cuando hay coordenadas GPS
     useEffect(() => {
         if (metodoEntrega === 'delivery' && coordenadasGPS && window.google && mapContainerRef.current) {
             if (!mapInstanceRef.current) {
-                // Crear el mapa por primera vez
                 mapInstanceRef.current = new window.google.maps.Map(mapContainerRef.current, {
                     center: coordenadasGPS,
                     zoom: 17,
@@ -57,30 +57,26 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
                     streetViewControl: false,
                 });
 
-                // Crear el marcador arrastrable (Comprobación humana)
                 markerInstanceRef.current = new window.google.maps.Marker({
                     position: coordenadasGPS,
                     map: mapInstanceRef.current,
-                    draggable: true, // ¡Permite al usuario ajustar el pin si el GPS falló un poco!
+                    draggable: true, // Comprobación humana: permite arrastrar el pin si el GPS falló
                     title: "Arrastra el pin a tu ubicación exacta"
                 });
 
-                // Escuchar cuando el usuario arrastra el marcador manualmente
                 markerInstanceRef.current.addListener('dragend', (event) => {
-                    const nuevaLat = event.latLng.lat();
-                    const nuevaLng = event.latLng.lng();
-                    const nuevasCoords = { lat: nuevaLat, lng: nuevaLng };
+                    const nuevasCoords = { lat: event.latLng.lat(), lng: event.latLng.lng() };
                     setCoordenadasGPS(nuevasCoords);
                     calcularDistanciaConGoogle(nuevasCoords);
                 });
             } else {
-                // Si el mapa ya existía, solo recentramos y movemos el marcador
                 mapInstanceRef.current.setCenter(coordenadasGPS);
                 markerInstanceRef.current.setPosition(coordenadasGPS);
             }
         }
     }, [coordenadasGPS, metodoEntrega]);
 
+    // --- FUNCIÓN DE GEOLOCALIZACIÓN CON FILTRO ESTRICTO DE 22 METROS ---
     const obtenerUbicacionGPS = () => {
         if (!navigator.geolocation) {
             alert("Tu navegador no soporta geolocalización.");
@@ -94,8 +90,10 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
                 setObteniendoGPS(false);
                 setPrecisionGPS(accuracy);
 
-                if (accuracy > 22) { // Subí un poco el umbral a 22m para dar margen al GPS móvil real, pero puedes dejarlo en 8 si prefieres
-                    alert(`La señal GPS tiene una precisión de ${accuracy.toFixed(1)} metros. Te sugerimos revisar el mapa y ajustar el marcador si es necesario.`);
+                // 🔥 REGLA ESTRICTA: Validar que la precisión sea de máximo 22 metros
+                if (accuracy > 22) {
+                    alert(`La señal GPS actual tiene una precisión de ${accuracy.toFixed(1)} metros. Requerimos una precisión de máximo 22 metros para calcular el delivery con exactitud. Por favor, acércate a una ventana o intenta nuevamente.`);
+                    return;
                 }
 
                 const coords = { lat: latitude, lng: longitude };
@@ -104,7 +102,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
             },
             (error) => {
                 setObteniendoGPS(false);
-                alert("No se pudo obtener la ubicación. Asegúrate de otorgar permisos de GPS.");
+                alert("No se pudo obtener la ubicación. Asegúrate de dar permisos de GPS en tu navegador.");
             },
             { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
         );
@@ -113,7 +111,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
     const calcularDistanciaConGoogle = (destinoLatLng) => {
         setCalculandoDistancia(true);
         const service = new window.google.maps.DistanceMatrixService();
-        
+
         service.getDistanceMatrix({
             origins: [MEDIQUIR_LOCATION],
             destinations: [destinoLatLng],
@@ -121,8 +119,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
         }, (response, status) => {
             setCalculandoDistancia(false);
             if (status === 'OK' && response.rows[0].elements[0].status === 'OK') {
-                const distanceValue = response.rows[0].elements[0].distance.value; 
-                const kilometros = distanceValue / 1000;
+                const kilometros = response.rows[0].elements[0].distance.value / 1000;
                 setDistanciaKm(kilometros);
                 setCostoDelivery(Number((TARIFA_BASE_DELIVERY + (kilometros * TARIFA_POR_KM)).toFixed(2)));
             } else {
@@ -131,17 +128,15 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
         });
     };
 
-    const totalPagarUSD = subtotal + totalImpuestos + (metodoEntrega === 'delivery' ? costoDelivery : 0);
+    const costoDeliveryFinal = metodoEntrega === 'delivery' ? costoDelivery : 0;
+    const totalPagarUSD = subtotal + totalImpuestos + costoDeliveryFinal;
     const totalPagarBS = totalPagarUSD * tasaBcv;
+    const requierePagoOnline = metodoEntrega === 'delivery' || Boolean(pagoOnlinePickup);
 
     const handleSiguiente = () => {
-        if (activeStep === 0) {
-            const { hasErrors } = formCliente.validate();
-            if (hasErrors) return;
-        }
+        if (activeStep === 0 && formCliente.validate().hasErrors) return;
         if (activeStep === 1 && metodoEntrega === 'delivery' && !coordenadasGPS) {
-            alert("Debes marcar tu ubicación en el mapa para continuar.");
-            return;
+            return alert("Debes marcar tu ubicación GPS en el mapa para continuar.");
         }
         setActiveStep((current) => current + 1);
     };
@@ -158,12 +153,13 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
                     cart,
                     cliente: formCliente.values,
                     metodoEntrega,
-                    coordenadasGPS, // Guardamos la ubicación exacta ajustada por el humano
-                    costoDelivery,
+                    pagoOnlinePickup,
+                    coordenadasGPS,
+                    costoDelivery: costoDeliveryFinal,
                     totalPagarUSD,
                     totalImpuestos,
                     tasaBcv,
-                    pagoMovil: metodoEntrega === 'delivery' ? { referencia, telefono: telefonoPago } : null
+                    pagoMovil: requierePagoOnline ? { referencia, telefono: telefonoPago } : null
                 })
             });
 
@@ -183,67 +179,64 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
     return (
         <Box py="md">
             <Stepper active={activeStep} onStepClick={setActiveStep} color="#005AAA" size="sm" allowNextStepsSelect={false}>
-                
+
                 <Stepper.Step label="Tus Datos" description="Identificación">
                     <Stack mt="xl">
                         <Text fw={700} c="#0B1B3D" size="lg"><IconUser size={20} style={{ verticalAlign: 'middle', marginRight: 5 }} /> Datos del Comprador</Text>
                         <TextInput label="Cédula / RIF" placeholder="Ej: V-12345678" withAsterisk {...formCliente.getInputProps('identificacion')} />
                         <TextInput label="Nombre Completo / Razón Social" placeholder="Ej: Juan Pérez" withAsterisk {...formCliente.getInputProps('nombre')} />
                         <TextInput label="Teléfono" placeholder="Ej: 04141234567" withAsterisk {...formCliente.getInputProps('telefono')} />
+                        <TextInput label="Correo Electrónico (Opcional)" placeholder="correo@ejemplo.com" {...formCliente.getInputProps('email')} />
                     </Stack>
                 </Stepper.Step>
 
-                <Stepper.Step label="Entrega" description="Ubicación y Mapa">
+                <Stepper.Step label="Entrega" description="Modalidad y Mapa">
                     <Stack mt="xl">
                         <Radio.Group value={metodoEntrega} onChange={setMetodoEntrega} label="Selecciona método de entrega" fw={700}>
                             <Stack mt="xs">
                                 <Paper withBorder p="md" radius="md" bg={metodoEntrega === 'pickup' ? 'blue.0' : 'white'} onClick={() => setMetodoEntrega('pickup')} style={{ cursor: 'pointer' }}>
-                                    <Group><IconBuildingStore size={24} color="#0B1B3D" /><Box><Text fw={700} c="#0B1B3D">Pagar y Retirar en Tienda</Text></Box></Group>
+                                    <Group><IconBuildingStore size={24} color="#0B1B3D" /><Box><Text fw={700} c="#0B1B3D">Retirar en Tienda (Pickup)</Text></Box></Group>
                                 </Paper>
                                 <Paper withBorder p="md" radius="md" bg={metodoEntrega === 'delivery' ? 'blue.0' : 'white'} onClick={() => setMetodoEntrega('delivery')} style={{ cursor: 'pointer' }}>
-                                    <Group><IconMotorbike size={24} color="#0B1B3D" /><Box><Text fw={700} c="#0B1B3D">Delivery con Pago Móvil</Text></Box></Group>
+                                    <Group><IconMotorbike size={24} color="#0B1B3D" /><Box><Text fw={700} c="#0B1B3D">Envío a Domicilio (Delivery)</Text></Box></Group>
                                 </Paper>
                             </Stack>
                         </Radio.Group>
 
+                        {metodoEntrega === 'pickup' && (
+                            <Paper withBorder p="sm" radius="md" mt="sm" bg="gray.0">
+                                <Checkbox
+                                    label={<Text size="sm" fw={600}>¿Deseas pagar online ahora con Pago Móvil para retirar rápido?</Text>}
+                                    checked={pagoOnlinePickup}
+                                    onChange={(e) => setPagoOnlinePickup(e.currentTarget.checked)}
+                                    color="#005AAA"
+                                />
+                            </Paper>
+                        )}
+
                         {metodoEntrega === 'delivery' && (
                             <Paper withBorder p="md" radius="md" mt="md" bg="gray.0">
                                 <Stack align="center" ta="center">
-                                    <ThemeIcon size={40} radius="xl" color="blue" variant="light">
-                                        <IconGps size={22} />
-                                    </ThemeIcon>
+                                    <ThemeIcon size={40} radius="xl" color="blue" variant="light"><IconGps size={22} /></ThemeIcon>
                                     <Box>
-                                        <Text fw={700} size="sm">Confirma tu ubicación en el mapa</Text>
+                                        <Text fw={700} size="sm">Ubicación GPS (Precisión requerida: ≤ 22m)</Text>
                                         <Text size="xs" c="dimmed" maw={320} mt={2}>
-                                            Haz clic para obtener tu GPS y <b>arrastra el marcador rojo</b> si necesitas corregir el punto exacto de entrega.
+                                            Haz clic para obtener tu GPS y <b>arrastra el marcador rojo</b> si necesitas ajustar el punto exacto.
                                         </Text>
                                     </Box>
-
-                                    <Button 
-                                        color="#005AAA" 
-                                        size="xs"
-                                        radius="xl" 
-                                        leftSection={<IconMapPinCheck size={16} />} 
-                                        onClick={obtenerUbicacionGPS}
-                                        loading={obteniendoGPS}
-                                    >
+                                    <Button color="#005AAA" size="xs" radius="xl" leftSection={<IconMapPinCheck size={16} />} onClick={obtenerUbicacionGPS} loading={obteniendoGPS}>
                                         {coordenadasGPS ? 'Reubicar con mi GPS' : 'Detectar mi Ubicación GPS'}
                                     </Button>
 
-                                    {/* CONTENEDOR DEL MAPA INTERACTIVO DE GOOGLE */}
-                                    <Box 
-                                        ref={mapContainerRef} 
-                                        w="100%" 
-                                        h="220px" 
-                                        style={{ borderRadius: '8px', border: '1px solid #ced4da', display: coordenadasGPS ? 'block' : 'none' }} 
-                                    />
+                                    {/* MAPA INTERACTIVO */}
+                                    <Box ref={mapContainerRef} w="100%" h="220px" style={{ borderRadius: '8px', border: '1px solid #ced4da', display: coordenadasGPS ? 'block' : 'none' }} />
 
                                     {calculandoDistancia && <Loader size="xs" mt="sm" />}
 
                                     {coordenadasGPS && !calculandoDistancia && (
                                         <Paper bg="white" p="xs" radius="md" w="100%" withBorder>
                                             <Group justify="space-between">
-                                                <Text size="xs" c="teal" fw={700}>✓ Pin fijado correctamente</Text>
+                                                <Text size="xs" c="teal" fw={700}>✓ Pin fijado (Precisión: {precisionGPS?.toFixed(0)}m)</Text>
                                                 <Text size="xs">Distancia: <b>{distanciaKm.toFixed(1)} km</b></Text>
                                             </Group>
                                             <Divider my={4} />
@@ -259,32 +252,35 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
                     </Stack>
                 </Stepper.Step>
 
-                <Stepper.Step label="Pago" description="Confirma tu orden">
+                <Stepper.Step label="Pago" description="Confirmación">
                     <Stack mt="xl" gap="md">
                         <Paper withBorder p="md" radius="md" bg="gray.0">
                             <Group justify="space-between"><Text size="sm">Subtotal:</Text><Text size="sm">${subtotal.toFixed(2)}</Text></Group>
                             <Group justify="space-between"><Text size="sm">IVA (16%):</Text><Text size="sm">${totalImpuestos.toFixed(2)}</Text></Group>
                             {metodoEntrega === 'delivery' && <Group justify="space-between"><Text size="sm">Delivery:</Text><Text size="sm">${costoDelivery.toFixed(2)}</Text></Group>}
                             <Divider my="sm" />
-                            <Group justify="space-between">
-                                <Text fw={900} size="lg">Total USD:</Text>
-                                <Text fw={900} size="xl" c="#0B1B3D">${totalPagarUSD.toFixed(2)}</Text>
-                            </Group>
-                            <Group justify="space-between" mt={5}>
-                                <Text fw={700} size="sm" c="dimmed">Total BS (Tasa: {tasaBcv}):</Text>
-                                <Text fw={900} size="lg" c="blue.7">Bs {totalPagarBS.toFixed(2)}</Text>
-                            </Group>
+                            <Group justify="space-between"><Text fw={900} size="lg">Total USD:</Text><Text fw={900} size="xl" c="#0B1B3D">${totalPagarUSD.toFixed(2)}</Text></Group>
+                            <Group justify="space-between" mt={5}><Text fw={700} size="sm" c="dimmed">Total BS (Tasa: {tasaBcv}):</Text><Text fw={900} size="lg" c="blue.7">Bs {totalPagarBS.toFixed(2)}</Text></Group>
                         </Paper>
 
-                        {metodoEntrega === 'delivery' ? (
+                        {requierePagoOnline ? (
                             <Paper withBorder p="md" radius="md" style={{ borderColor: '#005AAA' }}>
-                                <Text fw={700} c="#005AAA" mb="xs">Datos para Pago Móvil</Text>
+                                <Text fw={700} c="#005AAA" mb="xs">Datos para Pago Móvil ({metodoEntrega === 'pickup' ? 'Retiro Prepagado' : 'Delivery'})</Text>
                                 <Text size="sm"><b>Banco:</b> Venezuela (0102)</Text>
                                 <Text size="sm"><b>Teléfono:</b> 0414-1680773</Text>
-                                <Text size="sm"><b>Cedula:</b> V-19749601</Text>
+                                <Text size="sm"><b>Cedula:</b> 19749601</Text>
                                 <Divider my="md" />
-                                <TextInput label="Últimos 4 dígitos de la referencia" maxLength={4} value={referencia} onChange={(e) => setReferencia(e.currentTarget.value.replace(/\D/g, ''))} mb="sm" required />
-                                <TextInput label="Teléfono emisor" value={telefonoPago} onChange={(e) => setTelefonoPago(e.currentTarget.value.replace(/\D/g, ''))} required />
+
+                                {/* 🔥 Único campo necesario: Últimos 4 dígitos de la referencia */}
+                                <TextInput
+                                    label="Últimos 4 dígitos de la referencia"
+                                    placeholder="Ej: 4321"
+                                    maxLength={4}
+                                    value={referencia}
+                                    onChange={(e) => setReferencia(e.currentTarget.value.replace(/\D/g, ''))}
+                                    required
+                                />
+
                                 {errorPago && <Alert icon={<IconAlertCircle size={16} />} color="red" mt="md">{errorPago}</Alert>}
                             </Paper>
                         ) : (
@@ -297,7 +293,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
                     <Stack align="center" ta="center" mt={50} mb={30}>
                         <Box bg="teal.1" p={20} style={{ borderRadius: '50%' }}><IconCheck size={50} color="teal" /></Box>
                         <Text fw={900} size="xl" mt="md">¡Orden Confirmada!</Text>
-                        <Text c="dimmed" maw={300}>{metodoEntrega === 'delivery' ? 'Tu pago ha sido validado exitosamente.' : 'Tus insumos están reservados.'}</Text>
+                        <Text c="dimmed" maw={300}>{requierePagoOnline ? 'Pago validado con éxito. Tu pedido está en preparación.' : 'Tus insumos están reservados para pago en tienda.'}</Text>
                     </Stack>
                 </Stepper.Completed>
             </Stepper>
@@ -307,15 +303,18 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
                     <Button variant="default" onClick={activeStep === 0 ? onCancel : () => setActiveStep((c) => c - 1)}>
                         {activeStep === 0 ? 'Volver al Carrito' : 'Atrás'}
                     </Button>
-                    
-                    {activeStep < 2 && (
-                        <Button color="#0B1B3D" onClick={handleSiguiente} disabled={activeStep === 1 && metodoEntrega === 'delivery' && !coordenadasGPS}>
-                            Continuar
+                    {activeStep === 2 && (
+                        <Button
+                            color="green"
+                            onClick={procesarCompra}
+                            loading={procesandoPago}
+                            disabled={requierePagoOnline && referencia.length < 4}
+                        >
+                            Confirmar Orden
                         </Button>
                     )}
-                    
                     {activeStep === 2 && (
-                        <Button color="green" onClick={procesarCompra} loading={procesandoPago} disabled={metodoEntrega === 'delivery' && (referencia.length < 4 || telefonoPago.length < 10)}>
+                        <Button color="green" onClick={procesarCompra} loading={procesandoPago} disabled={requierePagoOnline && (referencia.length < 4 || telefonoPago.length < 10)}>
                             Confirmar Orden
                         </Button>
                     )}

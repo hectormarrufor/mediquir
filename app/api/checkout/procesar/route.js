@@ -14,6 +14,7 @@ export async function POST(req) {
             cart, 
             cliente, 
             metodoEntrega, 
+            pagoOnlinePickup, 
             coordenadasGPS, 
             costoDelivery, 
             totalPagarUSD, 
@@ -23,6 +24,9 @@ export async function POST(req) {
         } = body;
 
         let pagoValidadoId = null;
+
+        // Bandera central: ¿La compra requiere pago online previo?
+        const requierePagoOnline = metodoEntrega === 'delivery' || Boolean(pagoOnlinePickup);
 
         // 1. GESTIÓN DEL CLIENTE (Búsqueda o creación automática)
         const [registroCliente] = await Cliente.findOrCreate({
@@ -38,15 +42,72 @@ export async function POST(req) {
             transaction
         });
 
-        // 2. VALIDACIÓN ATÓMICA DE PAGO MÓVIL (Si es Delivery)
-        if (metodoEntrega === 'delivery') {
-            const { referencia, telefono } = pagoMovil;
+        // 2. PROCESAMIENTO DE ITEMS Y CÁLCULO FINANCIERO PREVIO
+        let subtotalCalculado = 0;
+        const detallesVentaData = [];
+
+        for (const item of cart) {
+            const productoObj = item.product || item;
+            const cantidad = item.quantity || 1;
+            const precioUnitario = Number(item.precioFinal ?? productoObj.precio ?? 0);
+            const itemSubtotal = precioUnitario * cantidad;
             
+            subtotalCalculado += itemSubtotal;
+
+            const isFicticio = Boolean(productoObj.isFicticio);
+            const afectaInventario = isFicticio ? false : (item.afectaInventario ?? true);
+            
+            const porcentajeIva = Number(productoObj.porcentajeIva || productoObj.porcentajeIvaProd || 0);
+            const aplicaIva = isFicticio ? Boolean(productoObj.aplicaIva) : (porcentajeIva > 0);
+
+            if (!isFicticio && productoObj.id && afectaInventario) {
+                const productoBD = await Product.findByPk(productoObj.id, { transaction });
+                
+                if (!productoBD || productoBD.stockAlmacen < cantidad) {
+                    throw new Error(`Inventario insuficiente para el producto: ${productoObj.nombre || 'Desconocido'}`);
+                }
+
+                productoBD.stockAlmacen -= cantidad;
+                await productoBD.save({ transaction });
+            }
+
+            detallesVentaData.push({
+                productoId: isFicticio ? null : (productoObj.id || null),
+                isFicticio: isFicticio,
+                nombreFicticio: isFicticio ? (productoObj.nombre || 'Ítem Genérico') : null,
+                cantidad: cantidad,
+                precioUnitario: precioUnitario,
+                subtotal: itemSubtotal,
+                aplicaIva: aplicaIva,
+                afectaInventario: afectaInventario
+            });
+        }
+
+        const totalFinalCalculado = subtotalCalculado + Number(totalImpuestos) + Number(costoDelivery);
+        const totalPagarBS = Number((totalFinalCalculado * Number(tasaBcv)).toFixed(2));
+
+       // 3. VALIDACIÓN ATÓMICA DE PAGO MÓVIL (Referencia + Monto Exacto + SOLO DE HOY)
+        if (requierePagoOnline) {
+            const { referencia } = pagoMovil || {};
+            
+            if (!referencia || referencia.length < 4) {
+                await transaction.rollback();
+                return NextResponse.json(
+                    { message: 'Debe ingresar los últimos 4 dígitos de la referencia de pago.' }, 
+                    { status: 400 }
+                );
+            }
+            
+            // Definimos el inicio del día de hoy (00:00:00)
+            const inicioHoy = new Date();
+            inicioHoy.setHours(0, 0, 0, 0);
+
+            // Buscamos por referencia, que no esté procesado Y que su fecha sea de hoy
             const pagoEncontrado = await PagoSms.findOne({
                 where: {
                     referencia: { [Op.endsWith]: referencia },
-                    telefono: telefono,
-                    procesado: false 
+                    procesado: false,
+                    createdAt: { [Op.gte]: inicioHoy } // 🔥 Filtro estricto: Solo pagos desde hoy a las 12:00 AM
                 },
                 transaction
             });
@@ -54,17 +115,30 @@ export async function POST(req) {
             if (!pagoEncontrado) {
                 await transaction.rollback();
                 return NextResponse.json(
-                    { message: 'Pago móvil no encontrado o ya fue procesado. Verifica los datos.' }, 
+                    { message: 'No se encontró un pago pendiente de HOY con esa referencia. Verifica los datos.' }, 
                     { status: 400 }
                 );
             }
 
+            // Validación de seguridad: Comprobar el monto (con tolerancia de 1.5 Bs por redondeos)
+            const montoPagoRegistrado = Number(pagoEncontrado.monto || pagoEncontrado.montoBs || 0);
+            const diferenciaMonto = Math.abs(montoPagoRegistrado - totalPagarBS);
+
+            if (diferenciaMonto > 1.5) {
+                await transaction.rollback();
+                return NextResponse.json(
+                    { message: `El monto del pago registrado (Bs ${montoPagoRegistrado}) no coincide con el total de la orden (Bs ${totalPagarBS}).` }, 
+                    { status: 400 }
+                );
+            }
+
+            // Marcamos el pago como procesado para que no pueda ser reutilizado
             pagoEncontrado.procesado = true;
             await pagoEncontrado.save({ transaction });
             pagoValidadoId = pagoEncontrado.id;
         }
 
-        // 3. GENERACIÓN DE CORRELATIVO PARA LA VENTA
+        // 4. GENERACIÓN DE CORRELATIVO PARA LA VENTA
         const tipoDoc = metodoEntrega === 'delivery' ? 'FACTURA' : 'VENTA_RAPIDA';
         const prefijoCorr = tipoDoc === 'FACTURA' ? 'F' : 'V';
         
@@ -83,53 +157,6 @@ export async function POST(req) {
             await correlativoRegistro.save({ transaction });
         }
 
-        // 4. PROCESAMIENTO DE ITEMS Y DETALLES DE LA VENTA
-        let subtotalCalculado = 0;
-        const detallesVentaData = [];
-
-        for (const item of cart) {
-            // Soportamos la estructura que viene del carrito web o posibles ítems adaptados
-            const productoObj = item.product || item;
-            const cantidad = item.quantity || 1;
-            const precioUnitario = Number(item.precioFinal ?? productoObj.precio ?? 0);
-            const itemSubtotal = precioUnitario * cantidad;
-            
-            subtotalCalculado += itemSubtotal;
-
-            const isFicticio = Boolean(productoObj.isFicticio);
-            const afectaInventario = isFicticio ? false : (item.afectaInventario ?? true);
-            
-            // Cálculo de IVA basado en el modelo VentaDetalle
-            const porcentajeIva = Number(productoObj.porcentajeIva || productoObj.porcentajeIvaProd || 0);
-            const aplicaIva = isFicticio ? Boolean(productoObj.aplicaIva) : (porcentajeIva > 0);
-
-            // Si el producto es real y afecta inventario, validamos y descontamos stock en BD
-            if (!isFicticio && productoObj.id && afectaInventario) {
-                const productoBD = await Product.findByPk(productoObj.id, { transaction });
-                
-                if (!productoBD || productoBD.stockAlmacen < cantidad) {
-                    throw new Error(`Inventario insuficiente para el producto: ${productoObj.nombre || 'Desconocido'}`);
-                }
-
-                productoBD.stockAlmacen -= cantidad;
-                await productoBD.save({ transaction });
-            }
-
-            // Construcción del detalle adaptada exactamente a tu modelo VentaDetalle.js
-            detallesVentaData.push({
-                productoId: isFicticio ? null : (productoObj.id || null),
-                isFicticio: isFicticio,
-                nombreFicticio: isFicticio ? (productoObj.nombre || 'Ítem Genérico') : null,
-                cantidad: cantidad,
-                precioUnitario: precioUnitario,
-                subtotal: itemSubtotal,
-                aplicaIva: aplicaIva,
-                afectaInventario: afectaInventario
-            });
-        }
-
-        const totalFinalCalculado = subtotalCalculado + Number(totalImpuestos) + Number(costoDelivery);
-
         // 5. CREACIÓN DE LA VENTA
         const nuevaVenta = await Venta.create({
             clienteId: registroCliente.id,
@@ -139,7 +166,7 @@ export async function POST(req) {
             costoFlete: Number(costoDelivery) || 0.00,
             statusDespacho: 'Pendiente', 
             condicionPago: 'Contado',
-            statusPago: metodoEntrega === 'delivery' ? 'Pagado' : 'Pendiente', 
+            statusPago: requierePagoOnline ? 'Pagado' : 'Pendiente', 
             moneda: 'USD',
             tasaCambio: Number(tasaBcv) || 1.00,
             subtotal: subtotalCalculado,
@@ -158,15 +185,15 @@ export async function POST(req) {
         }
 
         await transaction.commit();
+
         try {
             await notificarTodos({
                 tag: 'NUEVA_VENTA_WEB',
                 title: `🛒 ¡Nueva Venta Online! (${numeroDocGenerado})`,
-                body: `Cliente: ${cliente.nombre} | Total: $${totalFinalCalculado.toFixed(2)} (${metodoEntrega.toUpperCase()})`,
+                body: `Cliente: ${cliente.nombre} | Total: $${totalFinalCalculado.toFixed(2)} (Bs ${totalPagarBS}) [${metodoEntrega.toUpperCase()}${pagoOnlinePickup ? ' - PREPAGADO' : ''}]`,
                 url: `/superuser/ventas/${nuevaVenta.id}`
             });
         } catch (notifError) {
-            // Registramos el error de notificación para depurar, pero no bloqueamos la respuesta exitosa al cliente
             console.error("Advertencia: No se pudo enviar la notificación push, pero la venta se procesó correctamente:", notifError);
         }
 
