@@ -83,6 +83,10 @@ export function CartProvider({ children }) {
         );
     };
 
+    const clearCart = () => {
+        setCart([]);
+    };
+
     // 3. RE-VERIFICACIÓN ATÓMICA PRE-CHECKOUT
     const verifyStockBeforeCheckout = async () => {
         setIsVerifying(true);
@@ -145,7 +149,7 @@ export function CartProvider({ children }) {
         <CartContext.Provider value={{ 
             cart, addToCart, removeFromCart, updateQuantity, 
             subtotal, totalImpuestos, totalItems, // Exportamos totalImpuestos
-            isLoaded, isVerifying, verifyStockBeforeCheckout 
+            isLoaded, isVerifying, verifyStockBeforeCheckout, clearCart,
         }}>
             {children}
         </CartContext.Provider>

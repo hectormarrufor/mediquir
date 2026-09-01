@@ -13,4 +13,9 @@ const PagoSms = sequelize.define('PagoSms', {
   tableName: 'PagoSms'
 });
 
+PagoSms.associate = (models) => {
+    PagoSms.hasMany(models.MovimientoFinanciero, { foreignKey: 'pagoSmsId', as: 'movimiento' });
+    PagoSms.belongsTo(models.Venta, { foreignKey: 'ventaId', as: 'venta', allowNull: true });
+};
+
 module.exports = PagoSms;

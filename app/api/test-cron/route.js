@@ -1,3 +1,5 @@
+// Ruta: app/api/test-cron/route.js
+
 import { NextResponse } from 'next/server';
 import {
     syncExchangeRates,
@@ -5,20 +7,24 @@ import {
     checkCxP, 
     checkCxC,
     liberarOrdenesExpiradas
-} from './services'; 
+} from '../cron-jobs/6am/services'; // Ajusta la ruta si es necesario
 import { notificarCabezas } from '@/app/handlers/notificar'; 
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; 
 
 export async function GET(request) {
-    const authHeader = request.headers.get('authorization');
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // 🔒 Pequeña seguridad: Solo se ejecuta si pasas el query param correcto
+    // Ejemplo de uso: http://localhost:3000/api/test-cron?secret=mediquir
+    const { searchParams } = new URL(request.url);
+    const secret = searchParams.get('secret');
+
+    if (secret !== 'mediquir') {
+        return NextResponse.json({ error: 'No autorizado. Usa ?secret=mediquir en la URL.' }, { status: 401 });
     }
 
     try {
-        console.log('--- CRON 6AM START ---');
+        console.log('--- TEST CRON MANUAL START ---');
 
         // Ejecución en paralelo mapeada exactamente 5 a 5
         const [ finanzas, rrhh, cxp, cxc, limpiezaInventario ] = await Promise.allSettled([
@@ -50,6 +56,8 @@ export async function GET(request) {
                 });
             }
             report.push(`✅ ${events.length} eventos de RRHH reportados.`);
+        } else if (rrhh.status === 'fulfilled') {
+             report.push(`✅ RRHH: Sin eventos pendientes.`);
         }
 
         // 3. Cuentas Por Pagar (CxP)
@@ -64,6 +72,8 @@ export async function GET(request) {
                 });
             }
             report.push(`✅ ${docs.length} alertas de CxP enviadas.`);
+        } else if (cxp.status === 'fulfilled') {
+             report.push(`✅ CxP: Al día.`);
         }
 
         // 4. Cuentas Por Cobrar (CxC)
@@ -78,6 +88,8 @@ export async function GET(request) {
                 });
             }
             report.push(`✅ ${docs.length} alertas de CxC enviadas.`);
+        } else if (cxc.status === 'fulfilled') {
+             report.push(`✅ CxC: Al día.`);
         }
 
         // 5. Limpieza de Inventario (Ventas abandonadas)
@@ -98,11 +110,17 @@ export async function GET(request) {
             report.push(`❌ Error en Limpieza Inventario: ${limpiezaInventario.reason}`);
         }
 
-        console.log('--- CRON 6AM END ---');
-        return NextResponse.json({ success: true, report });
+        console.log('--- TEST CRON MANUAL END ---');
+        
+        // Retornamos el reporte bien formateado para leerlo fácil en el navegador
+        return NextResponse.json({ 
+            success: true, 
+            modo: 'TEST MANUAL EJECUTADO', 
+            report 
+        }, { status: 200 });
 
     } catch (error) {
-        console.error('CRON CRITICAL ERROR:', error);
+        console.error('TEST CRON CRITICAL ERROR:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

@@ -2,28 +2,29 @@
 
 import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
-import { PagoSms, Venta, VentaDetalle, Product, Cliente, Correlativo, sequelize } from '@/lib/sequelize'; 
 import { notificarTodos } from '@/app/handlers/notificar';
+import { Cliente, Producto, PagoSms, Venta, VentaDetalle, Correlativo, MovimientoFinanciero, sequelize } from '@/models';
 
 export async function POST(req) {
     const transaction = await sequelize.transaction();
 
     try {
         const body = await req.json();
-        const { 
-            cart, 
-            cliente, 
-            metodoEntrega, 
-            pagoOnlinePickup, 
-            coordenadasGPS, 
-            costoDelivery, 
-            totalPagarUSD, 
-            totalImpuestos, 
-            tasaBcv, 
-            pagoMovil 
+        const {
+            cart,
+            cliente,
+            metodoEntrega,
+            pagoOnlinePickup,
+            coordenadasGPS,
+            costoDelivery,
+            totalPagarUSD,
+            totalImpuestos,
+            tasaBcv,
+            pagoMovil
         } = body;
 
         let pagoValidadoId = null;
+        let pagoEncontrado = null; // Variable para almacenar el objeto del pago validado
 
         // Bandera central: ¿La compra requiere pago online previo?
         const requierePagoOnline = metodoEntrega === 'delivery' || Boolean(pagoOnlinePickup);
@@ -34,8 +35,8 @@ export async function POST(req) {
             defaults: {
                 nombre: cliente.nombre,
                 telefono: cliente.telefono,
-                direccion: coordenadasGPS 
-                    ? `GPS: ${coordenadasGPS.lat}, ${coordenadasGPS.lng}` 
+                direccion: coordenadasGPS
+                    ? `GPS: ${coordenadasGPS.lat}, ${coordenadasGPS.lng}`
                     : (cliente.direccion || 'Compra Web Online'),
                 email: cliente.email || null,
             },
@@ -51,18 +52,18 @@ export async function POST(req) {
             const cantidad = item.quantity || 1;
             const precioUnitario = Number(item.precioFinal ?? productoObj.precio ?? 0);
             const itemSubtotal = precioUnitario * cantidad;
-            
+
             subtotalCalculado += itemSubtotal;
 
             const isFicticio = Boolean(productoObj.isFicticio);
             const afectaInventario = isFicticio ? false : (item.afectaInventario ?? true);
-            
+
             const porcentajeIva = Number(productoObj.porcentajeIva || productoObj.porcentajeIvaProd || 0);
             const aplicaIva = isFicticio ? Boolean(productoObj.aplicaIva) : (porcentajeIva > 0);
 
             if (!isFicticio && productoObj.id && afectaInventario) {
-                const productoBD = await Product.findByPk(productoObj.id, { transaction });
-                
+                const productoBD = await Producto.findByPk(productoObj.id, { transaction });
+
                 if (!productoBD || productoBD.stockAlmacen < cantidad) {
                     throw new Error(`Inventario insuficiente para el producto: ${productoObj.nombre || 'Desconocido'}`);
                 }
@@ -86,65 +87,13 @@ export async function POST(req) {
         const totalFinalCalculado = subtotalCalculado + Number(totalImpuestos) + Number(costoDelivery);
         const totalPagarBS = Number((totalFinalCalculado * Number(tasaBcv)).toFixed(2));
 
-       // 3. VALIDACIÓN ATÓMICA DE PAGO MÓVIL (Referencia + Monto Exacto + SOLO DE HOY)
-        if (requierePagoOnline) {
-            const { referencia } = pagoMovil || {};
-            
-            if (!referencia || referencia.length < 4) {
-                await transaction.rollback();
-                return NextResponse.json(
-                    { message: 'Debe ingresar los últimos 4 dígitos de la referencia de pago.' }, 
-                    { status: 400 }
-                );
-            }
-            
-            // Definimos el inicio del día de hoy (00:00:00)
-            const inicioHoy = new Date();
-            inicioHoy.setHours(0, 0, 0, 0);
+        // 3. GENERACIÓN DE CORRELATIVO PARA LA VENTA (Necesario antes de crear la venta)
+        const tipoDoc = 'VENTA_RAPIDA';
+        const prefijoCorr = 'V';
 
-            // Buscamos por referencia, que no esté procesado Y que su fecha sea de hoy
-            const pagoEncontrado = await PagoSms.findOne({
-                where: {
-                    referencia: { [Op.endsWith]: referencia },
-                    procesado: false,
-                    createdAt: { [Op.gte]: inicioHoy } // 🔥 Filtro estricto: Solo pagos desde hoy a las 12:00 AM
-                },
-                transaction
-            });
-
-            if (!pagoEncontrado) {
-                await transaction.rollback();
-                return NextResponse.json(
-                    { message: 'No se encontró un pago pendiente de HOY con esa referencia. Verifica los datos.' }, 
-                    { status: 400 }
-                );
-            }
-
-            // Validación de seguridad: Comprobar el monto (con tolerancia de 1.5 Bs por redondeos)
-            const montoPagoRegistrado = Number(pagoEncontrado.monto || pagoEncontrado.montoBs || 0);
-            const diferenciaMonto = Math.abs(montoPagoRegistrado - totalPagarBS);
-
-            if (diferenciaMonto > 1.5) {
-                await transaction.rollback();
-                return NextResponse.json(
-                    { message: `El monto del pago registrado (Bs ${montoPagoRegistrado}) no coincide con el total de la orden (Bs ${totalPagarBS}).` }, 
-                    { status: 400 }
-                );
-            }
-
-            // Marcamos el pago como procesado para que no pueda ser reutilizado
-            pagoEncontrado.procesado = true;
-            await pagoEncontrado.save({ transaction });
-            pagoValidadoId = pagoEncontrado.id;
-        }
-
-        // 4. GENERACIÓN DE CORRELATIVO PARA LA VENTA
-        const tipoDoc = metodoEntrega === 'delivery' ? 'FACTURA' : 'VENTA_RAPIDA';
-        const prefijoCorr = tipoDoc === 'FACTURA' ? 'F' : 'V';
-        
-        let correlativoRegistro = await Correlativo.findOne({ 
-            where: { prefijo: prefijoCorr }, 
-            transaction 
+        let correlativoRegistro = await Correlativo.findOne({
+            where: { prefijo: prefijoCorr },
+            transaction
         });
 
         let numeroDocGenerado = `${prefijoCorr}-00001`;
@@ -152,31 +101,105 @@ export async function POST(req) {
             const num = correlativoRegistro.siguienteNumero;
             const ceros = correlativoRegistro.cerosRelleno || 5;
             numeroDocGenerado = `${prefijoCorr}-${String(num).padStart(ceros, '0')}`;
-            
+
             correlativoRegistro.siguienteNumero += 1;
             await correlativoRegistro.save({ transaction });
         }
 
-        // 5. CREACIÓN DE LA VENTA
+        // 4. CREACIÓN DE LA VENTA (Primero creamos la venta para obtener su ID)
         const nuevaVenta = await Venta.create({
             clienteId: registroCliente.id,
-            tipoVenta: 'DETAL',
+            tipoVenta: 'ONLINE',
             tipoDocumento: tipoDoc,
             numeroDocumento: numeroDocGenerado,
             costoFlete: Number(costoDelivery) || 0.00,
-            statusDespacho: 'Pendiente', 
+            statusDespacho: 'Pendiente',
             condicionPago: 'Contado',
-            statusPago: requierePagoOnline ? 'Pagado' : 'Pendiente', 
+            statusPago: requierePagoOnline ? 'Pagado' : 'Pendiente',
             moneda: 'USD',
             tasaCambio: Number(tasaBcv) || 1.00,
             subtotal: subtotalCalculado,
             montoIva: Number(totalImpuestos),
+            tipoEntrega: metodoEntrega,
             totalDescuento: 0.00,
-            totalFinal: totalFinalCalculado,
-            pagoSmsId: pagoValidadoId 
+            totalFinal: totalFinalCalculado
         }, { transaction });
 
-        // 6. INSERCIÓN DE LOS DETALLES VINCULADOS A LA VENTA
+        // 5. VALIDACIÓN Y ENLACE ATÓMICO DE PAGO MÓVIL
+        if (requierePagoOnline) {
+            const { referencia } = pagoMovil || {};
+
+            if (!referencia || referencia.length < 4) {
+                await transaction.rollback();
+                return NextResponse.json(
+                    { message: 'Debe ingresar los últimos 4 dígitos de la referencia de pago.' },
+                    { status: 400 }
+                );
+            }
+
+            const inicioHoy = new Date();
+            inicioHoy.setHours(0, 0, 0, 0);
+
+            pagoEncontrado = await PagoSms.findOne({
+                where: {
+                    referencia: { [Op.endsWith]: referencia },
+                    procesado: false,
+                    createdAt: { [Op.gte]: inicioHoy }
+                },
+                transaction
+            });
+
+            if (!pagoEncontrado) {
+                await transaction.rollback();
+                return NextResponse.json(
+                    {
+                        errorType: 'PAGO_NO_ENCONTRADO',
+                        message: 'No se encontró un pago pendiente de HOY con esa referencia. Verifica los datos.'
+                    },
+                    { status: 400 }
+                );
+            }
+
+            // 🔥 VALIDACIÓN ESTRICTA DE MONTO EXACTO
+            const montoPagoRegistrado = Number(pagoEncontrado.monto || pagoEncontrado.montoBs || 0);
+            const diferenciaMonto = Math.abs(montoPagoRegistrado - totalPagarBS);
+
+            // Tolerancia técnica de 0.05 solo para evitar errores matemáticos de punto flotante en JS
+            if (diferenciaMonto > 0.05) {
+                await transaction.rollback();
+                return NextResponse.json(
+                    { message: `El monto del pago registrado (Bs ${montoPagoRegistrado.toFixed(2)}) no coincide exactamente con el total de la orden (Bs ${totalPagarBS.toFixed(2)}).` },
+                    { status: 400 }
+                );
+            }
+
+            // Marcamos el pago como procesado y le asociamos la venta recién creada
+            pagoEncontrado.procesado = true;
+            pagoEncontrado.ventaId = nuevaVenta.id;
+            await pagoEncontrado.save({ transaction });
+            pagoValidadoId = pagoEncontrado.id;
+
+            // Actualizamos la venta para asignarle el pagoSmsId
+            nuevaVenta.pagoSmsId = pagoValidadoId;
+            await nuevaVenta.save({ transaction });
+
+            // 6. CREACIÓN DEL MOVIMIENTO FINANCIERO ASOCIADO AL PAGO SMS
+            const tasaAplicada = Number(tasaBcv) || 1.00;
+            await MovimientoFinanciero.create({
+                tipo: 'INGRESO',
+                fecha: new Date().toISOString().split('T')[0],
+                metodoPago: 'Pago Móvil',
+                referencia: pagoEncontrado.referencia,
+                montoUsd: totalFinalCalculado,
+                tasaBcvAplicada: tasaAplicada,
+                montoVes: totalPagarBS,
+                descripcion: `Ingreso por Venta Online #${nuevaVenta.numeroDocumento} - Pago Móvil (Banco: ${pagoEncontrado.banco || 'N/A'}, Ref: ${pagoEncontrado.referencia})`,
+                ventaId: nuevaVenta.id,
+                pagoSmsId: pagoEncontrado.id
+            }, { transaction });
+        }
+
+        // 7. INSERCIÓN DE LOS DETALLES VINCULADOS A LA VENTA
         for (const detalle of detallesVentaData) {
             await VentaDetalle.create({
                 ...detalle,
@@ -197,8 +220,8 @@ export async function POST(req) {
             console.error("Advertencia: No se pudo enviar la notificación push, pero la venta se procesó correctamente:", notifError);
         }
 
-        return NextResponse.json({ 
-            success: true, 
+        return NextResponse.json({
+            success: true,
             message: 'Venta web procesada y registrada exitosamente',
             numeroDocumento: numeroDocGenerado,
             ventaId: nuevaVenta.id
@@ -208,7 +231,7 @@ export async function POST(req) {
         await transaction.rollback();
         console.error("Error crítico procesando Venta Web con VentaDetalle:", error);
         return NextResponse.json(
-            { message: error.message || 'Error interno al registrar la venta.' }, 
+            { message: error.message || 'Error interno al registrar la venta.' },
             { status: 500 }
         );
     }

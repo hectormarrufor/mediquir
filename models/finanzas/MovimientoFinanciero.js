@@ -45,6 +45,7 @@ MovimientoFinanciero.associate = (models) => {
     MovimientoFinanciero.belongsTo(models.Venta, { foreignKey: 'ventaId', as: 'venta', allowNull: true });
     MovimientoFinanciero.belongsTo(models.Abono, { foreignKey: 'abonoId', as: 'abono', allowNull: true });
     MovimientoFinanciero.belongsTo(models.FacturaCompra, { foreignKey: 'facturaCompraId', as: 'facturaCompra', allowNull: true });
+    MovimientoFinanciero.belongsTo(models.PagoSms, { foreignKey: 'pagoSmsId', as: 'pagoSms', allowNull: true });
 };
 
 module.exports = MovimientoFinanciero;

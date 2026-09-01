@@ -9,12 +9,12 @@ import { useQuery } from '@tanstack/react-query';
 import {
     IconShoppingBag, IconBuildingStore, IconEye,
     IconArrowRight, IconReceiptTax, IconCash, IconPackage, IconCalendarEvent, IconCurrencyDollar,
-    IconPrinter, IconTrash // 🔥 1. IMPORTAMOS EL ÍCONO DE LA IMPRESORA
+    IconPrinter, IconTrash, IconWorld // 🔥 1. IMPORTAMOS EL ICONO PARA VENTAS ONLINE
 } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
-import PrecioVisual from '@/app/components/ui/PrecioVisual';
 import { useAuth } from '@/hooks/useAuth';
 import { notifications } from '@mantine/notifications';
+import PrecioVisual from '@/app/components/ui/PrecioVisual';
 
 export default function VentasDashboard() {
     const router = useRouter();
@@ -66,8 +66,20 @@ export default function VentasDashboard() {
 
     const ventasDetal = ventas?.filter(v => v.tipoVenta === 'DETAL') || [];
     const pedidosMayor = ventas?.filter(v => v.tipoVenta === 'MAYOR') || [];
+    // 🔥 2. FILTRO PARA VENTAS ONLINE (Ajusta el campo según tu backend, ej: 'ONLINE' o 'WEB')
+    const ventasOnline = ventas?.filter(v => v.tipoVenta === 'ONLINE' || v.origen === 'ONLINE') || [];
 
-    const listaActual = activeTab === 'detal' ? ventasDetal : pedidosMayor;
+    const listaActual = activeTab === 'detal'
+        ? ventasDetal
+        : activeTab === 'mayor'
+            ? pedidosMayor
+            : ventasOnline;
+
+    const getNombreTabLabel = () => {
+        if (activeTab === 'detal') return 'Ventas Detal';
+        if (activeTab === 'mayor') return 'Pedidos Mayor';
+        return 'Ventas Online';
+    };
 
     const totalesDinamicos = listaActual.reduce((acc, venta) => {
         const total = Number(venta.totalFinal) || 0;
@@ -111,12 +123,27 @@ export default function VentasDashboard() {
         }
     };
 
+    const getStatusPagoColor = (status) => {
+        switch (status) {
+            case 'PAGADO': return 'green';
+            case 'PENDIENTE': return 'yellow';
+            default: return 'gray';
+        }
+    };
+
+    const getStatusDespachoColor = (status) => {
+        switch (status) {
+            case 'COMPLETADO': return 'blue';
+            case 'PENDIENTE': return 'orange';
+            default: return 'gray';
+        }
+    };
+
     const abrirModalDetal = (venta) => {
         setVentaSeleccionada(venta);
         setModalDetalAbierto(true);
     };
 
-    // --- 🔥 FUNCIÓN DE BORRADO ABSOLUTO (SOLO ADMIN) 🔥 ---
     const handleEliminarVenta = async (ventaId) => {
         if (!window.confirm("⚠️ ¿Estás seguro de eliminar esta venta? Se devolverá el stock, se borrarán los ingresos de la caja y se perderá el correlativo. Esta acción no se puede deshacer.")) {
             return;
@@ -137,12 +164,12 @@ export default function VentasDashboard() {
                 icon: <IconTrash size={16} />
             });
 
-            // Recargar la tabla (Forzamos a React Query a buscar los datos nuevos)
             window.location.reload();
         } catch (error) {
             notifications.show({ title: 'Error', message: error.message, color: 'red' });
         }
     };
+
     return (
         <Box p="md">
             <Group justify="space-between" mb="md">
@@ -196,7 +223,7 @@ export default function VentasDashboard() {
                         <Group justify="space-between">
                             <Box>
                                 <Text size="xs" c="dimmed" fw={700} tt="uppercase">
-                                    Total Dinámico ({activeTab === 'detal' ? 'Ventas Detal' : 'Pedidos Mayor'}) - USD
+                                    Total Dinámico ({getNombreTabLabel()}) - USD
                                 </Text>
                                 <Text size="xl" fw={900} c="green.9" mt={4}>
                                     <PrecioVisual valor={totalesDinamicos.usd} simbolo="$" size="xl" fw={900} c="green.9" />
@@ -210,7 +237,7 @@ export default function VentasDashboard() {
                         <Group justify="space-between">
                             <Box>
                                 <Text size="xs" c="dimmed" fw={700} tt="uppercase">
-                                    Total Dinámico ({activeTab === 'detal' ? 'Ventas Detal' : 'Pedidos Mayor'}) - BS
+                                    Total Dinámico ({getNombreTabLabel()}) - BS
                                 </Text>
                                 <Text size="xl" fw={900} c="teal.9" mt={4}>
                                     <PrecioVisual valor={totalesDinamicos.bs} simbolo="Bs" size="xl" fw={900} c="teal.9" />
@@ -231,8 +258,13 @@ export default function VentasDashboard() {
                         <Tabs.Tab value="mayor" leftSection={<IconShoppingBag size={18} />}>
                             Pedidos al Mayor
                         </Tabs.Tab>
+                        {/* 🔥 3. NUEVO TAB DE VENTAS ONLINE */}
+                        <Tabs.Tab value="online" leftSection={<IconWorld size={18} />}>
+                            Ventas Online
+                        </Tabs.Tab>
                     </Tabs.List>
 
+                    {/* Panel Detal */}
                     <Tabs.Panel value="detal" p="md">
                         <ScrollArea>
                             <Table striped highlightOnHover verticalSpacing="sm">
@@ -250,18 +282,15 @@ export default function VentasDashboard() {
                                 </Table.Thead>
                                 <Table.Tbody>
                                     {isLoading ? (
-                                        <Table.Tr><Table.Td colSpan={7} align="center" py="xl">Cargando datos del servidor...</Table.Td></Table.Tr>
+                                        <Table.Tr><Table.Td colSpan={8} align="center" py="xl">Cargando datos del servidor...</Table.Td></Table.Tr>
                                     ) : ventasDetal.length === 0 ? (
-                                        <Table.Tr><Table.Td colSpan={7} align="center" py="xl">No hay ventas registradas en este periodo.</Table.Td></Table.Tr>
+                                        <Table.Tr><Table.Td colSpan={8} align="center" py="xl">No hay ventas al detal registradas en este periodo.</Table.Td></Table.Tr>
                                     ) : (
                                         ventasDetal.map((venta) => (
                                             <Table.Tr key={venta.id}>
                                                 <Table.Td>{formatearFechaHora(venta.createdAt)}</Table.Td>
                                                 <Table.Td fw={600}>{venta.numeroDocumento}</Table.Td>
-
-                                                {/* 🔥 AQUÍ MOSTRAMOS EL VENDEDOR */}
                                                 <Table.Td>
-                                                    {console.log('venta:', venta)}
                                                     {venta.vendedor?.empleado
                                                         ? `${venta.vendedor.empleado.nombre} ${venta.vendedor.empleado.apellido}`
                                                         : venta.vendedor?.user || 'Sistema'}
@@ -275,7 +304,6 @@ export default function VentasDashboard() {
                                                     <Badge color={getStatusColor(venta.estado)}>{venta.estado}</Badge>
                                                 </Table.Td>
                                                 <Table.Td>
-                                                    {/* 🔥 BOTONES DE ACCIÓN 🔥 */}
                                                     <Group gap="xs" wrap="nowrap">
                                                         <Button size="xs" variant="light" rightSection={<IconEye size={14} />} onClick={() => abrirModalDetal(venta)}>
                                                             Ver Detalle
@@ -286,8 +314,6 @@ export default function VentasDashboard() {
                                                         >
                                                             <IconPrinter size={16} />
                                                         </ActionIcon>
-
-                                                        {/* 🔥 EL BOTÓN ROJO DE LA MUERTE (SOLO ADMIN) 🔥 */}
                                                         {isAdmin && (
                                                             <ActionIcon
                                                                 size="md" variant="light" color="red" title="Eliminar Venta Absolutamente"
@@ -306,6 +332,7 @@ export default function VentasDashboard() {
                         </ScrollArea>
                     </Tabs.Panel>
 
+                    {/* Panel Mayor */}
                     <Tabs.Panel value="mayor" p="md">
                         <ScrollArea>
                             <Table striped highlightOnHover verticalSpacing="sm">
@@ -323,16 +350,14 @@ export default function VentasDashboard() {
                                 </Table.Thead>
                                 <Table.Tbody>
                                     {isLoading ? (
-                                        <Table.Tr><Table.Td colSpan={7} align="center" py="xl">Cargando pedidos del servidor...</Table.Td></Table.Tr>
+                                        <Table.Tr><Table.Td colSpan={8} align="center" py="xl">Cargando pedidos del servidor...</Table.Td></Table.Tr>
                                     ) : pedidosMayor.length === 0 ? (
-                                        <Table.Tr><Table.Td colSpan={7} align="center" py="xl">No hay pedidos al mayor en este periodo.</Table.Td></Table.Tr>
+                                        <Table.Tr><Table.Td colSpan={8} align="center" py="xl">No hay pedidos al mayor en este periodo.</Table.Td></Table.Tr>
                                     ) : (
                                         pedidosMayor.map((pedido) => (
                                             <Table.Tr key={pedido.id}>
                                                 <Table.Td>{formatearFechaHora(pedido.createdAt)}</Table.Td>
                                                 <Table.Td fw={600}>{pedido.numeroDocumento}</Table.Td>
-
-                                                {/* 🔥 AQUÍ MOSTRAMOS EL VENDEDOR */}
                                                 <Table.Td>
                                                     {pedido.vendedor?.empleado
                                                         ? `${pedido.vendedor.empleado.nombre} ${pedido.vendedor.empleado.apellido}`
@@ -351,7 +376,6 @@ export default function VentasDashboard() {
                                                     <Badge color={getStatusColor(pedido.estado)}>{pedido.estado}</Badge>
                                                 </Table.Td>
                                                 <Table.Td>
-                                                    {/* 🔥 3. BOTONES DE ACCIÓN PARA PEDIDOS AL MAYOR 🔥 */}
                                                     <Group gap="xs" wrap="nowrap">
                                                         <Button
                                                             size="xs" color="grape"
@@ -361,10 +385,7 @@ export default function VentasDashboard() {
                                                             Gestionar
                                                         </Button>
                                                         <ActionIcon
-                                                            size="md"
-                                                            variant="light"
-                                                            color="gray"
-                                                            title="Imprimir Nota/Factura"
+                                                            size="md" variant="light" color="gray" title="Imprimir Nota/Factura"
                                                             onClick={() => window.open(`/superuser/ventas/imprimir/${pedido.id}`, '_blank')}
                                                         >
                                                             <IconPrinter size={16} />
@@ -373,6 +394,98 @@ export default function VentasDashboard() {
                                                 </Table.Td>
                                             </Table.Tr>
                                         ))
+                                    )}
+                                </Table.Tbody>
+                            </Table>
+                        </ScrollArea>
+                    </Tabs.Panel>
+
+                    {/* 🔥 NUEVO PANEL DE VENTAS ONLINE */}
+                    <Tabs.Panel value="online" p="md">
+                        <ScrollArea>
+                            <Table striped highlightOnHover verticalSpacing="sm">
+                                <Table.Thead>
+                                    <Table.Tr>
+                                        <Table.Th>Fecha y Hora</Table.Th>
+                                        <Table.Th>Documento</Table.Th>
+                                        <Table.Th>Cliente Web</Table.Th>
+                                        <Table.Th>Tipo de Entrega</Table.Th>
+                                        <Table.Th>Pago</Table.Th>
+                                        <Table.Th>Despacho</Table.Th>
+                                        <Table.Th>Total</Table.Th>
+                                        <Table.Th align="center">Acción</Table.Th>
+                                    </Table.Tr>
+                                </Table.Thead>
+                                <Table.Tbody>
+                                    {isLoading ? (
+                                        <Table.Tr><Table.Td colSpan={8} align="center" py="xl">Cargando ventas online...</Table.Td></Table.Tr>
+                                    ) : ventasOnline.length === 0 ? (
+                                        <Table.Tr><Table.Td colSpan={8} align="center" py="xl">No hay ventas online registradas en este periodo.</Table.Td></Table.Tr>
+                                    ) : (
+                                        ventasOnline.map((venta) => {
+                                            // Asumiendo que guardas el tipo como 'pickup' o 'DELIVERY' (o 'envio')
+                                            const esPickup = venta.tipoEntrega === 'pickup' || venta.metodoEnvio === 'pickup';
+
+                                            return (
+                                                <Table.Tr key={venta.id}>
+                                                    <Table.Td>{formatearFechaHora(venta.createdAt)}</Table.Td>
+                                                    <Table.Td fw={600}>{venta.numeroDocumento}</Table.Td>
+                                                    <Table.Td>{venta.cliente?.nombre || venta.clienteNombre || 'Cliente Web'}</Table.Td>
+                                                    <Table.Td>
+                                                        <Stack gap={2}>
+                                                            <Badge variant="outline" color={esPickup ? 'grape' : 'cyan'}>
+                                                                {esPickup ? '🏪 Pickup (Retiro en Tienda)' : '🚚 Delivery'}
+                                                            </Badge>
+                                                            {!esPickup && (
+                                                                <Text size="xs" c="dimmed" fs="italic">
+                                                                    ⚠️ Contactar a agencia de delivery
+                                                                </Text>
+                                                            )}
+                                                        </Stack>
+                                                    </Table.Td>
+                                                    <Table.Td>
+                                                        {/* statusPago: PAGADO o PENDIENTE */}
+                                                        <Badge color={getStatusPagoColor(venta.statusPago)}>
+                                                            {venta.statusPago || 'PENDIENTE'}
+                                                        </Badge>
+                                                    </Table.Td>
+                                                    <Table.Td>
+                                                        {/* statusDespacho: COMPLETADO o PENDIENTE */}
+                                                        <Badge color={getStatusDespachoColor(venta.statusDespacho)}>
+                                                            {venta.statusDespacho || 'PENDIENTE'}
+                                                        </Badge>
+                                                    </Table.Td>
+                                                    <Table.Td>
+                                                        <PrecioVisual valor={venta.totalFinal} simbolo={venta.moneda === 'BS' ? 'Bs' : '$'} size="sm" fw={700} />
+                                                    </Table.Td>
+                                                    <Table.Td>
+                                                        <Group gap="xs" wrap="nowrap">
+                                                            <Button
+                                                                size="xs" color="cyan"
+                                                                rightSection={<IconArrowRight size={14} />}
+                                                                onClick={() => router.push(`/superuser/ventas/${venta.id}`)}
+                                                            >
+                                                                Gestionar
+                                                            </Button>
+                                                            <ActionIcon
+                                                                size="md" variant="light" color="gray" title="Imprimir Comprobante Web"
+                                                                onClick={() => window.open(`/superuser/ventas/imprimir/${venta.numeroDocumento}`, '_blank')}
+                                                            >
+                                                                <IconPrinter size={16} />
+                                                            </ActionIcon>
+                                                            {isAdmin && (
+                                                                <ActionIcon
+                                                                    size="md" variant="light" color="red" title="Eliminar Venta Absolutamente"
+                                                                    onClick={() => handleEliminarVenta(venta.id)}
+                                                                >
+                                                                    <IconTrash size={16} />
+                                                                </ActionIcon>
+                                                            )}
+                                                        </Group>
+                                                    </Table.Td>
+                                                </Table.Tr>
+                                            );
+                                        })
                                     )}
                                 </Table.Tbody>
                             </Table>

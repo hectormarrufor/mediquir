@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import db from '@/models/index';
+import db, { PagoSms } from '@/models/index';
 const { 
     sequelize, Venta, VentaDetalle, Producto, SalidaInventario, 
     MovimientoFinanciero, CategoriaFinanciera, Cliente, Marca, 
-    Correlativo, Abono, CuentaPorCobrar, User, Empleado 
+    Correlativo, Abono, CuentaPorCobrar, User, Empleado, GrupoEquivalencia
 } = db;
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -32,22 +32,24 @@ export async function GET(request, { params }) {
                         model: Producto,
                         as: 'producto',
                         attributes: ['nombre', 'codigo', 'imagen'],
-                        include: [{ model: Marca, as: 'marca', attributes: ['nombre', 'imagen'] }]
+                        include: [{ model: Marca, as: 'marca', attributes: ['nombre', 'imagen'] }, {model: GrupoEquivalencia, as: 'grupoEquivalencia', attributes: ['nombre', 'imagen']}]
                     }]
                 },
                 { model: Cliente, as: 'cliente', attributes: ['nombre', 'identificacion', 'direccion'] },
-                { model: MovimientoFinanciero, as: 'movimientosFinancieros' },
+                { model: MovimientoFinanciero, as: 'movimientos',
+                    include: [{ model: PagoSms, as: 'pagoSms' }]
+                 },
                 { model: SalidaInventario, as: 'salidasInventario' },
                 { model: CuentaPorCobrar, as: 'cuentaPorCobrar' }, // 🔥 INCLUIDO PARA EL DASHBOARD
                 { model: Abono, as: 'abonos' },                   // 🔥 INCLUIDO PARA EL DASHBOARD
                 { 
                     model: User, 
-                    as: 'registrador', 
+                    as: 'vendedor', 
                     attributes: ['id', 'user'],
                     include: [{ model: Empleado, as: 'empleado', attributes: ['nombre', 'apellido'] }] 
                 },
-                { model: Empleado, as: 'empacador', attributes: ['nombre', 'apellido'] },
-                { model: Empleado, as: 'etiquetador', attributes: ['nombre', 'apellido'] }
+                { model: User, as: 'empacador', attributes: ['id', 'user'], include: [{ model: Empleado, as: 'empleado', attributes: ['nombre', 'apellido'] }] },
+                { model: User, as: 'etiquetador', attributes: ['id', 'user'], include: [{ model: Empleado, as: 'empleado', attributes: ['nombre', 'apellido'] }] }
             ]
         });
 
@@ -283,10 +285,15 @@ export async function DELETE(request, { params }) {
             }, { status: 400 });
         }
 
-        // Revertir inventario solo si afectaba almacén y la venta ya había empacado o era detal
+        // Revertir inventario si afectaba almacén y la venta era DETAL, ONLINE o ya estaba empacada/completada
         for (const item of ventaAMatar.detalles) {
             if (!item.isFicticio && item.afectaInventario !== false) {
-                if (ventaAMatar.tipoVenta === 'DETAL' || ventaAMatar.statusDespacho === 'Empacado' || ventaAMatar.statusDespacho === 'Completado') {
+                if (
+                    ventaAMatar.tipoVenta === 'DETAL' || 
+                    ventaAMatar.tipoVenta === 'ONLINE' || // 👈 Añadido para incluir las ventas online
+                    ventaAMatar.statusDespacho === 'Empacado' || 
+                    ventaAMatar.statusDespacho === 'Completado'
+                ) {
                     const producto = await Producto.findByPk(item.productoId, { transaction: t });
                     if (producto) {
                         producto.stockAlmacen = Number(producto.stockAlmacen) + Number(item.cantidad);

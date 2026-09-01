@@ -15,7 +15,7 @@ const Venta = sequelize.define('Venta', {
     
     // --- TIPOLOGÍA Y CORRELATIVOS ---
     tipoVenta: {
-        type: DataTypes.ENUM('MAYOR', 'DETAL'),
+        type: DataTypes.ENUM('MAYOR', 'DETAL', 'ONLINE'),
         allowNull: false
     },
     tipoDocumento: {
@@ -83,6 +83,11 @@ const Venta = sequelize.define('Venta', {
         type: DataTypes.INTEGER,
         allowNull: true
     },
+    tipoEntrega: {
+        type: DataTypes.ENUM('pickup', 'delivery', 'flete'),
+        allowNull: false,
+        defaultValue: 'pickup'
+    },
     subtotal: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0.00 },
     montoIva: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0.00 },
     totalDescuento: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0.00 },
@@ -101,6 +106,8 @@ Venta.associate = (models) => {
     Venta.hasMany(models.Abono, { foreignKey: 'ventaId', as: 'abonos', onDelete: 'CASCADE' });
     Venta.hasMany(models.MovimientoFinanciero, { foreignKey: 'ventaId', as: 'movimientos' });
     Venta.hasMany(models.SalidaInventario, { foreignKey: 'ventaId', as: 'salidasInventario' });
+    Venta.hasMany(models.CuentaPorCobrar, { foreignKey: 'ventaId', as: 'cuentaPorCobrar' });
+    Venta.hasOne(models.PagoSms, { foreignKey: 'ventaId', as: 'pagoSms' })
 };
 
 module.exports = Venta;
