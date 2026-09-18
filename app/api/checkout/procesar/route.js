@@ -228,7 +228,7 @@ export async function POST(req) {
         }, { status: 200 });
 
     } catch (error) {
-        await transaction.rollback();
+        if (!transaction.finished) await transaction.rollback();
         console.error("Error crítico procesando Venta Web con VentaDetalle:", error);
         return NextResponse.json(
             { message: error.message || 'Error interno al registrar la venta.' },

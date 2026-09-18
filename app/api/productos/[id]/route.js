@@ -71,7 +71,7 @@ export async function PUT(req, { params }) {
         return NextResponse.json({ message: 'Producto actualizado exitosamente', producto }, { status: 200 });
 
     } catch (error) {
-        await t.rollback();
+        if (!t.finished) await t.rollback();
         if (error.name === 'SequelizeUniqueConstraintError') {
             return NextResponse.json({ error: 'Ya existe otro producto con ese Nombre o Código' }, { status: 400 });
         }

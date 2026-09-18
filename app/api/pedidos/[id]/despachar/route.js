@@ -89,7 +89,7 @@ export async function POST(req, { params }) {
         return NextResponse.json({ message: 'Despacho procesado exitosamente', status: nuevoStatus }, { status: 200 });
 
     } catch (error) {
-        await t.rollback();
+        if (!t.finished) await t.rollback();
         console.error("Error al procesar despacho:", error);
         return NextResponse.json({ error: error.message || 'Error interno del servidor' }, { status: 500 });
     }

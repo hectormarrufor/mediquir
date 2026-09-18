@@ -265,7 +265,7 @@ export async function liberarOrdenesExpiradas() {
         return { status: 'OK', canceladas };
         
     } catch (error) {
-        await transaction.rollback();
+        if (!transaction.finished) await transaction.rollback();
         throw error;
     }
 }

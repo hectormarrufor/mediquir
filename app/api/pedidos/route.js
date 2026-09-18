@@ -106,7 +106,7 @@ export async function POST(req) {
         return NextResponse.json(nuevoPedido, { status: 201 });
     } catch (error) {
         // Si algo falla, revertimos cualquier cambio hecho durante este proceso
-        await t.rollback();
+        if (!t.finished) await t.rollback();
         console.error("Error al crear el pedido:", error);
         return NextResponse.json({ error: error.message || 'Error interno del servidor' }, { status: 500 });
     }

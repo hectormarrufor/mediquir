@@ -96,7 +96,7 @@ export async function POST(request) {
             }
             return NextResponse.json(nuevaTarea);
         } catch (err) {
-            await transaction.rollback();
+            if (!transaction.finished) await transaction.rollback();
             throw err;
         }
     } catch (error) {

@@ -45,20 +45,18 @@ export async function DELETE(request, { params }) {
         // 1. Eliminamos el registro del activo de la base de datos.
         await activoAEliminar.destroy({ transaction });
 
-        // 2. ✨ LÓGICA DE ELIMINACIÓN DE BLOB ✨
-        // Si el activo tenía una URL de imagen...
-        if (urlImagenAEliminar) {
-            // ...la eliminamos de Vercel Blob.
-            // Esto se hace después de confirmar la transacción de la BD.
-            await del(urlImagenAEliminar);
-        }
-
         await transaction.commit();
+
+        // El Blob se elimina fuera de la transacción para no retener la conexión durante I/O de red.
+        if (urlImagenAEliminar) {
+            try { await del(urlImagenAEliminar); }
+            catch (e) { console.error('Blob huérfano, no se pudo borrar:', urlImagenAEliminar, e.message); }
+        }
         console.log(`\x1b[32m [SUCCESS]: Activo ${id} eliminado correctamente. \x1b[0m`);
         return NextResponse.json({ message: 'Activo eliminado correctamente.' }, { status: 200 });
 
     } catch (error) {
-        await transaction.rollback();
+        if (!transaction.finished) await transaction.rollback();
         console.log(`\x1b[41m [ERROR]: Error al eliminar la imagen: ${error.message} \x1b[0m`);
         
         return NextResponse.json({ message: 'Error al eliminar el activo.', error: error.message }, { status: 500 });

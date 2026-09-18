@@ -138,7 +138,7 @@ export async function POST(request) {
 
   } catch (error) {
     // Si algo falla, revertimos todos los cambios.
-    await transaction.rollback();
+    if (!transaction.finished) await transaction.rollback();
     console.error('Error al crear el empleado:', error);
     return NextResponse.json({
       message: 'Error al crear el empleado',

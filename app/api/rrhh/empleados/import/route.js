@@ -72,7 +72,7 @@ export async function POST(request) {
     await t.commit();
     return NextResponse.json({ message: 'Empleados importados con todas sus relaciones y departamentos' }, { status: 201 });
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) await t.rollback();
     console.error('Error importando empleados:', error);
     return NextResponse.json(
       { message: 'Error al importar empleados', error: error.message },

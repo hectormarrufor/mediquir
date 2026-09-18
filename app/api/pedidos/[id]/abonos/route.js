@@ -100,7 +100,7 @@ export async function POST(req, { params }) {
         }, { status: 201 });
 
     } catch (error) {
-        await t.rollback();
+        if (!t.finished) await t.rollback();
         console.error("Error al registrar abono:", error);
         return NextResponse.json({ error: error.message || 'Error interno del servidor' }, { status: 500 });
     }

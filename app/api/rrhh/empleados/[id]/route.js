@@ -72,7 +72,7 @@ export async function PUT(request, { params }) {
 
     return NextResponse.json({ message: 'Empleado actualizado con puestos' });
   } catch (error) {
-    await t.rollback();
+    if (!t.finished) await t.rollback();
     console.error(error);
     return NextResponse.json(
       { message: 'Error al actualizar empleado', error: error.message },

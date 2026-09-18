@@ -1,6 +1,6 @@
 import webpush from 'web-push';
 import {
-    PushSubscription, Notificacion, User, Empleado, sequelize,
+    PushSubscription, Notificacion, User, Empleado,
     Puesto, Departamento
 } from '@/models';
 import { Op } from 'sequelize';
@@ -21,7 +21,6 @@ if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
 
 // 2. FUNCIÓN MAESTRA
 export async function crearYNotificar(data) {
-    const t = await sequelize.transaction();
     const resultados = { exitosos: 0, fallidos: 0 };
 
     const clientId = process.env.NEXT_PUBLIC_CLIENT_ID || 'mediquir';
@@ -44,12 +43,10 @@ export async function crearYNotificar(data) {
             url: data.url,
             departamentosObjetivo: targetDeptos,
             puestosObjetivo: targetPuestos,
-            usuarioId: data.usuarioId || null, 
+            usuarioId: data.usuarioId || null,
             tipo: data.tipo || 'Info',
             fechaHoraCaracas: fechaCaracas
-        }, { transaction: t });
-
-        await t.commit();
+        });
 
         const usuariosMap = new Map(); 
         const formatearNombre = (u) => u.empleado ? `${u.empleado.nombre} ${u.empleado.apellido}` : `Usuario: ${u.user}`;
@@ -148,14 +145,12 @@ export async function crearYNotificar(data) {
         return nuevaNotificacion;
 
     } catch (error) {
-        if (t && !t.finished) await t.rollback();
         console.error("Error crítico notificando:", error);
         throw error;
     }
 }
 
 export async function crearSinNotificar(data) {
-    const t = await sequelize.transaction();
     try {
         const fechaCaracas = new Date().toLocaleString('es-VE', {
             timeZone: 'America/Caracas',
@@ -171,17 +166,14 @@ export async function crearSinNotificar(data) {
             titulo: data.title,
             mensaje: data.body,
             url: data.url,
-            departamentoObjetivo: targetDeptos,
-            puestoObjetivo: targetPuestos,
-            usuarioId: data.usuarioId || null, 
+            departamentosObjetivo: targetDeptos,
+            puestosObjetivo: targetPuestos,
+            usuarioId: data.usuarioId || null,
             tipo: data.tipo || 'Info',
             fechaHoraCaracas: fechaCaracas
-        }, { transaction: t });
-
-        await t.commit();
-        return nuevaNotificacion; 
+        });
+        return nuevaNotificacion;
     } catch (error) {
-        if (t && !t.finished) await t.rollback();
         console.error("Error creando notificación sin enviar:", error);
         throw error;
     }

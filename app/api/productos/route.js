@@ -82,7 +82,7 @@ export async function POST(req) {
 
     } catch (error) {
         // Si ALGO falla (un dato mal, un tag duplicado, etc.), revertimos todo (Rollback)
-        await t.rollback();
+        if (!t.finished) await t.rollback();
         
         // Manejo de errores específicos de base de datos (Ej: Código duplicado)
         if (error.name === 'SequelizeUniqueConstraintError') {

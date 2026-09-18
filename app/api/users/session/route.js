@@ -30,7 +30,7 @@ export async function GET(request) {
 
     // Si no existe (fue borrado) o está inactivo -> ERROR 401
     else if (decoded.id !== 1) {if (!usuarioDb || usuarioDb.empleado?.estado !== 'Activo') {
-      notificarCabezas({
+      await notificarCabezas({
         title: 'Alerta de Seguridad',
         body: `Usuario ${usuarioDb.empleado?.nombre} ${usuarioDb.empleado?.apellido} intentó acceder pero está BORRADO o INACTIVO.`,
         url: 'superuser/rrhh/empleados/' + usuarioDb.empleado?.id // Link directo a la lista de empleados para revisión rápida
