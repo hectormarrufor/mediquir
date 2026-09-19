@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { Venta } from '@/models';
+import { RetencionIva, Venta } from '@/models';
 import { requerirCliente } from '../../../_lib/acceso';
 import { INCLUDES_COBRO, cuentaDe, INCLUDE_DETALLES, hoyCaracas, lineaDeTiempo, resumenPedido } from '../../_lib';
 
@@ -22,6 +22,7 @@ export async function GET(request, { params }) {
         });
         if (!venta) return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
 
+        const retencion = await RetencionIva.findOne({ where: { ventaId: venta.id, tipo: 'VENTA' } });
         const resumen = resumenPedido(venta, hoyCaracas());
         const cancelable = venta.statusDespacho === 'Pendiente' && !cuentaDe(venta) && (venta.abonos || []).length === 0;
 
@@ -30,6 +31,12 @@ export async function GET(request, { params }) {
             quienRetira: venta.quienRetira,
             fechaRetiro: venta.fechaHoraRetiro,
             cancelable,
+            // Retención de IVA que el cliente (contribuyente especial) le hace a la empresa: montos en Bs (dato fiscal)
+            retencion: retencion ? {
+                estado: retencion.estado, porcentaje: Number(retencion.porcentajeRetencion), ivaBs: Number(retencion.montoIva),
+                retenidoBs: Number(retencion.ivaRetenido), comprobante: retencion.comprobante, fecha: retencion.fecha,
+                montoDeclarado: retencion.montoDeclarado === null ? null : Number(retencion.montoDeclarado), comprobanteUrl: retencion.comprobanteUrl,
+            } : null,
             lineaDeTiempo: lineaDeTiempo(venta),
             detalles: venta.detalles.map((d) => ({
                 id: d.id,

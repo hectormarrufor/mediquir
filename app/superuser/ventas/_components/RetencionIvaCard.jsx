@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Badge, Box, Button, Group, Modal, NumberInput, Paper, Select, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconReceiptTax, IconTrash } from '@tabler/icons-react';
+import { IconPrinter, IconReceiptTax, IconTrash } from '@tabler/icons-react';
 import { aBolivares } from '@/app/constants/facturacion';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -28,19 +28,25 @@ export default function RetencionIvaCard({ pedido, onCambio }) {
     const [fecha, setFecha] = useState(hoy());
     const [porcentaje, setPorcentaje] = useState('75');
     const [monto, setMonto] = useState('');
+    const [montoEditado, setMontoEditado] = useState(false); // si se escribió a mano, deja de recalcularse
 
     const tasa = Number(pedido.tasaCambio) || 1;
     const ivaBs = pedido.moneda === 'BS' ? Number(pedido.montoIva) : aBolivares(Number(pedido.montoIva), tasa);
     const retencion = pedido.retenciones?.[0] || null;
     const especial = Boolean(pedido.cliente?.esContribuyenteEspecial);
+    const porRevisar = retencion?.estado === 'POR_REVISAR'; // el cliente ya subió su comprobante desde el portal
 
     useEffect(() => { setControl(pedido.numeroControl || ''); }, [pedido.numeroControl]);
     useEffect(() => {
         if (!abierto) return;
         const p = (retencion ? Number(retencion.porcentajeRetencion) === 100 : especial && Number(pedido.cliente?.retencionIvaPorDefecto) === 100) ? '100' : '75';
-        setPorcentaje(p); setComprobante(''); setFecha(hoy());
-    }, [abierto, especial, pedido.cliente?.retencionIvaPorDefecto, retencion?.porcentajeRetencion]);
-    useEffect(() => { setMonto(Math.round(ivaBs * Number(porcentaje)) / 100); }, [porcentaje, ivaBs]);
+        setPorcentaje(p);
+        // Si el cliente ya subió su comprobante, se parte de lo que declaró (administración lo confirma o lo corrige)
+        setComprobante(porRevisar ? (retencion.comprobante || '') : '');
+        setFecha(porRevisar && retencion.fecha ? String(retencion.fecha).slice(0, 10) : hoy());
+        if (porRevisar && Number(retencion.montoDeclarado) > 0) { setMontoEditado(true); setMonto(Number(retencion.montoDeclarado)); } else setMontoEditado(false);
+    }, [abierto, especial, pedido.cliente?.retencionIvaPorDefecto, retencion?.porcentajeRetencion, porRevisar]);
+    useEffect(() => { if (!montoEditado) setMonto(Math.round(ivaBs * Number(porcentaje)) / 100); }, [porcentaje, ivaBs, montoEditado]);
 
     if (pedido.tipoDocumento !== 'FACTURA' || !(Number(pedido.montoIva) > 0)) return null;
 
@@ -55,7 +61,7 @@ export default function RetencionIvaCard({ pedido, onCambio }) {
     });
     const registrar = () => llamar(async () => {
         await pedirJson(`/api/ventas/${pedido.id}/retencion`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comprobante, fecha, porcentaje: Number(porcentaje), ivaRetenidoBs: Number(monto) }) });
-        notifications.show({ color: 'teal', title: 'Retención registrada', message: retencion ? 'Comprobante cargado: la retención ya entra al libro de ventas.' : 'Se descontó del saldo por cobrar de la factura.' });
+        notifications.show({ color: 'teal', title: 'Retención registrada', message: retencion ? 'Comprobante confirmado: la retención ya entra al libro de ventas.' : 'Se descontó del saldo por cobrar de la factura.' });
         setAbierto(false);
     });
     const eliminar = () => llamar(async () => {
@@ -73,11 +79,25 @@ export default function RetencionIvaCard({ pedido, onCambio }) {
             </Group>
 
             <Text size="xs" c="dimmed">IVA de la factura: <b>Bs {bs(ivaBs)}</b></Text>
-            {retencion && retencion.estado !== 'PENDIENTE' ? (
+            {retencion && retencion.estado === 'REGISTRADA' ? (
                 <Alert mt="xs" color="teal" variant="light" p="xs" title="Retención de IVA registrada">
                     <Text size="xs">Comprobante <b>{retencion.comprobante}</b> · {fmtFecha(retencion.fecha)}</Text>
                     <Text size="sm" fw={800}>Bs {bs(retencion.ivaRetenido)} <Text span size="xs" fw={500}>({Number(retencion.porcentajeRetencion)} % del IVA)</Text></Text>
-                    {isAdmin && <Button mt={6} size="compact-xs" color="red" variant="subtle" leftSection={<IconTrash size={12} />} onClick={eliminar} loading={guardando}>Eliminar retención</Button>}
+                    <Group gap="xs" mt={6}>
+                        {retencion.comprobanteUrl && <Button component="a" href={retencion.comprobanteUrl} target="_blank" rel="noreferrer" size="compact-xs" variant="light" leftSection={<IconPrinter size={12} />}>Ver / imprimir comprobante</Button>}
+                        {isAdmin && <Button size="compact-xs" color="red" variant="subtle" leftSection={<IconTrash size={12} />} onClick={eliminar} loading={guardando}>Eliminar retención</Button>}
+                    </Group>
+                </Alert>
+            ) : porRevisar ? (
+                <Alert mt="xs" color="blue" variant="light" p="xs" title="El cliente subió su comprobante de retención">
+                    <Text size="xs">Comprobante <b>{retencion.comprobante}</b> · {fmtFecha(retencion.fecha)}</Text>
+                    <Text size="sm" fw={800}>Bs {bs(retencion.montoDeclarado ?? retencion.ivaRetenido)} <Text span size="xs" fw={500}>declarados ({Number(retencion.porcentajeRetencion)} % del IVA)</Text></Text>
+                    <Text size="xs" mb={6}>Revísalo contra el archivo: al confirmarlo entra al libro de ventas.</Text>
+                    <Group gap="xs">
+                        {retencion.comprobanteUrl && <Button component="a" href={retencion.comprobanteUrl} target="_blank" rel="noreferrer" size="compact-xs" variant="light" leftSection={<IconPrinter size={12} />}>Ver / imprimir</Button>}
+                        <Button size="compact-xs" color="grape" onClick={() => setAbierto(true)}>Revisar y confirmar</Button>
+                        {isAdmin && <Button size="compact-xs" color="red" variant="subtle" leftSection={<IconTrash size={12} />} onClick={eliminar} loading={guardando}>Quitar</Button>}
+                    </Group>
                 </Alert>
             ) : retencion ? (
                 <Alert mt="xs" color="orange" variant="light" p="xs" title="Retención de IVA pendiente de comprobante">
@@ -103,7 +123,7 @@ export default function RetencionIvaCard({ pedido, onCambio }) {
                         <TextInput type="date" label="Fecha del comprobante" value={fecha} onChange={(e) => setFecha(e.currentTarget.value)} />
                         <Select label="Porcentaje" data={[{ value: '75', label: '75 %' }, { value: '100', label: '100 %' }]} value={porcentaje} onChange={(v) => setPorcentaje(v || '75')} allowDeselect={false} />
                     </Group>
-                    <NumberInput label="IVA retenido (Bs)" description="Se calcula solo; edítalo si el comprobante trae otro monto" value={monto} onChange={setMonto} decimalScale={2} thousandSeparator="." decimalSeparator="," hideControls />
+                    <NumberInput label="IVA retenido (Bs)" description="Se calcula solo; edítalo si el comprobante trae otro monto" value={monto} onChange={(v) => { setMontoEditado(true); setMonto(v); }} decimalScale={2} thousandSeparator="." decimalSeparator="," hideControls />
                     <Group justify="flex-end" mt="xs">
                         <Button variant="default" onClick={() => setAbierto(false)}>Cancelar</Button>
                         <Button color="grape" onClick={registrar} loading={guardando} disabled={!comprobante.trim() || !(Number(monto) > 0)}>Registrar retención</Button>

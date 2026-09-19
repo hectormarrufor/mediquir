@@ -11,6 +11,7 @@ import { aBolivares } from '@/app/constants/facturacion';
 import { getMainImage, PLACEHOLDER_IMG } from '@/app/components/landing/productUtils';
 import { BadgesPedido } from '../../_components/Estados';
 import PagarConPagoMovil from '../../_components/PagarConPagoMovil';
+import RetencionCliente from '../../_components/RetencionCliente';
 import { fmtBs, fmtFecha, fmtFechaHora, fmtPrecio, fmtUsd, pedirJson } from '../../_lib/formato';
 
 const ICONOS = { recibido: IconClock, empacado: IconPackage, entregado: IconTruckDelivery, cancelado: IconX };
@@ -142,6 +143,8 @@ export default function B2BPedidoDetalle() {
                                     )}
                                 </Stack>
                             </Card>
+
+                            {p.retencion && p.estado !== 'Cancelado' && <RetencionCliente pedido={p} />}
 
                             {p.condicionPago === 'Credito' && p.estado !== 'Cancelado' && p.cobro.saldo > 0 && <PagarConPagoMovil pedido={p} />}
 

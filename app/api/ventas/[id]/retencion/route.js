@@ -22,7 +22,8 @@ export async function GET(request, { params }) {
 }
 
 // Registra el comprobante de retención de IVA que el CLIENTE (contribuyente especial) le hace a la empresa sobre una factura de venta.
-// Si la factura ya tiene la retención calculada al facturarla (PENDIENTE de comprobante), la completa con el número del comprobante.
+// Si la factura ya tiene la retención calculada al facturarla (PENDIENTE de comprobante) o con el comprobante que subió el cliente
+// (POR_REVISAR), la completa / confirma: pasa a REGISTRADA y entra al libro de ventas.
 export async function POST(request, { params }) {
     const acceso = await requerirNoVendedor();
     if (acceso.error) return acceso.error;
@@ -47,7 +48,7 @@ export async function POST(request, { params }) {
         if (!(Number(venta.montoIva) > 0)) throw new ErrorRetencion('Esta factura no tiene IVA que retener');
 
         const existente = await RetencionIva.findOne({ where: { ventaId: venta.id }, transaction: t });
-        if (existente && existente.estado !== 'PENDIENTE') {
+        if (existente && existente.estado === 'REGISTRADA') {
             throw new ErrorRetencion('Esta factura ya tiene una retención registrada; elimínala primero si hay que corregirla', 409);
         }
 

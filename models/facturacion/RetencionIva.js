@@ -10,8 +10,12 @@ const RetencionIva = sequelize.define('RetencionIva', {
     periodo: { type: DataTypes.STRING(7), allowNull: false },
     // Puede faltar mientras el cliente no entregue su comprobante (estado PENDIENTE)
     comprobante: { type: DataTypes.STRING(30), allowNull: true },
-    // PENDIENTE: calculada al facturar, falta el número de comprobante · REGISTRADA: ya tiene comprobante (es la que entra al libro)
+    // PENDIENTE: calculada al facturar, falta el comprobante · POR_REVISAR: el cliente subió su comprobante y administración lo debe confirmar
+    // REGISTRADA: confirmada (es la que entra al libro)
     estado: { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'REGISTRADA' },
+    // Archivo del comprobante (PDF o imagen) subido por el cliente y el IVA retenido que declara (Bs)
+    comprobanteUrl: { type: DataTypes.TEXT, allowNull: true },
+    montoDeclarado: { type: DataTypes.DECIMAL(14, 2), allowNull: true },
     facturaAfectada: { type: DataTypes.STRING(50), allowNull: false },
     numeroControlFactura: { type: DataTypes.STRING(30), allowNull: true },
     contraparteRif: { type: DataTypes.STRING(30), allowNull: true },

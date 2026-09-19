@@ -145,7 +145,7 @@ export default function CierreTab() {
                                 </Group>
                                 {tipo === 'ventas' && data.ventas.retencionesPendientes?.cant > 0 && (
                                     <Alert color="orange" variant="light" mb="xs" p="xs">
-                                        {data.ventas.retencionesPendientes.cant} retención(es) de IVA sin comprobante (Bs {dinero(data.ventas.retencionesPendientes.ivaRetenido)}): {data.ventas.retencionesPendientes.facturas.join(', ')}. No entran al libro hasta cargar el comprobante que emite el cliente, desde el detalle de cada factura.
+                                        {data.ventas.retencionesPendientes.cant} retención(es) de IVA sin confirmar (Bs {dinero(data.ventas.retencionesPendientes.ivaRetenido)}): {data.ventas.retencionesPendientes.facturas.join(', ')}. {data.ventas.retencionesPendientes.porRevisar > 0 ? `${data.ventas.retencionesPendientes.porRevisar} ya tiene(n) el comprobante que subió el cliente y falta que lo confirmes. ` : ''}No entran al libro hasta confirmar el comprobante, desde el detalle de cada factura.
                                     </Alert>
                                 )}
                                 {tipo === 'ventas' && data.ventas.noFiscales?.cant > 0 && (
