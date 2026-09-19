@@ -20,7 +20,7 @@ const totalEnUsd = (v) => (v.moneda === 'BS' ? aDolares(Number(v.totalFinal), Nu
 const INCLUDE_TAREA = [
     { model: Cliente, as: 'cliente', attributes: ['nombre'] },
     {
-        model: VentaDetalle, as: 'detalles', attributes: ['id', 'cantidad', 'isFicticio', 'nombreFicticio'],
+        model: VentaDetalle, as: 'detalles', attributes: ['id', 'cantidad', 'isFicticio', 'nombreFicticio', 'presentacionPedida', 'cantidadPresentacion', 'unidadesPorPresentacion'],
         include: [{ model: Producto, as: 'producto', attributes: ['nombre', 'codigo', 'imagen'], include: [{ model: Marca, as: 'marca', attributes: ['nombre'] }] }],
     },
 ];
@@ -40,6 +40,9 @@ const tarea = (v) => ({
         marca: d.producto?.marca?.nombre || null,
         imagen: d.producto?.imagen || null,
         cantidad: Number(d.cantidad),
+        // Lo que pidió el cliente ("2 × Caja x100"); null si se pidió por unidad o es un pedido sin presentación
+        pedido: d.presentacionPedida && d.presentacionPedida !== 'UNIDAD' && d.cantidadPresentacion
+            ? `${d.cantidadPresentacion} × ${d.presentacionPedida === 'CAJA' ? 'Caja' : 'Bulto'} x${d.unidadesPorPresentacion}` : null,
     })),
 });
 

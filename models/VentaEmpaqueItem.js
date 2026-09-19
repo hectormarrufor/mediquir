@@ -16,6 +16,11 @@ const VentaEmpaqueItem = sequelize.define('VentaEmpaqueItem', {
     // Veces que intentó con un código que no era el del producto (errores que el sistema evitó)
     intentosFallidos: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
     observacion: { type: DataTypes.TEXT, allowNull: true },
+    // Qué empacó exactamente (bultos, cajas cerradas y unidades sueltas) y con el código de qué nivel lo comprobó (BULTO/CAJA/UNIDAD)
+    bultosEmpacados: { type: DataTypes.INTEGER, allowNull: true },
+    cajasEmpacadas: { type: DataTypes.INTEGER, allowNull: true },
+    sueltasEmpacadas: { type: DataTypes.INTEGER, allowNull: true },
+    nivelVerificado: { type: DataTypes.STRING(10), allowNull: true },
     verificadoAt: { type: DataTypes.DATE, allowNull: true },
 }, {
     tableName: 'VentaEmpaqueItems',

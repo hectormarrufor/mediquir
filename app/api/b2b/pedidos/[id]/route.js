@@ -48,6 +48,10 @@ export async function GET(request, { params }) {
                 imagen: d.producto?.imagen || null,
                 marca: d.producto?.marca || null,
                 cantidad: Number(d.cantidad),
+                // Lo que pidió: p. ej. 2 cajas de 100 (cantidad ya viene en unidades). Nulo en pedidos anteriores.
+                presentacion: d.presentacionPedida || null,
+                cantidadPresentacion: d.cantidadPresentacion === null ? null : Number(d.cantidadPresentacion),
+                unidadesPorPresentacion: d.unidadesPorPresentacion === null ? null : Number(d.unidadesPorPresentacion),
                 precioUnitario: Number(d.precioUnitario),
                 subtotal: Number(d.subtotal),
                 aplicaIva: d.aplicaIva,

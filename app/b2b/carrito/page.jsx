@@ -10,12 +10,19 @@ import { IconAlertTriangle, IconBuildingStore, IconCheck, IconTrash } from '@tab
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { aBolivares, montoRenglon } from '@/app/constants/facturacion';
 import { getMainImage, PLACEHOLDER_IMG } from '@/app/components/landing/productUtils';
-import { useB2BCart } from '../_lib/B2BCartContext';
+import { presentacionDe, unidadesDe, useB2BCart } from '../_lib/B2BCartContext';
 import { fmtBs, fmtPrecio, fmtUsd, pedirJson } from '../_lib/formato';
 
 function Fila({ item, tasa }) {
-    const { fijarCantidad, quitar } = useB2BCart();
-    const { producto, cantidad } = item;
+    const { fijarCantidad, quitar, cantidadDe } = useB2BCart();
+    const { producto, presentacion, cantidad } = item;
+    const pres = presentacionDe(producto, presentacion);
+    const unidades = unidadesDe(item);
+    const montoPresentacion = pres.unidades > 1 ? montoRenglon(producto.precio, pres.unidades) : null; // lo que cuesta UNA caja / bulto
+    const monto = montoRenglon(producto.precio, unidades);
+    // Cuántas de esta presentación caben todavía (la existencia está en unidades y se comparte con los demás renglones del mismo producto)
+    const enOtros = cantidadDe(producto.id) - unidades;
+    const maximo = producto.disponible > 0 ? Math.max(1, Math.floor((producto.disponible - enOtros) / pres.unidades)) : undefined;
     return (
         <Table.Tr>
             <Table.Td>
@@ -23,19 +30,24 @@ function Fila({ item, tasa }) {
                     <Image src={getMainImage(producto)} w={48} h={48} fit="contain" radius="sm" bg="gray.0" fallbackSrc={PLACEHOLDER_IMG} alt="" />
                     <Box style={{ minWidth: 0 }}>
                         <Text size="sm" fw={600} lineClamp={2}>{producto.nombre}</Text>
+                        <Text size="xs" fw={700} c="navy.9">{pres.etiqueta}{pres.unidades > 1 ? ` · ${unidades} unidades en total` : ''}</Text>
                         <Text size="xs" c="dimmed">{producto.porcentajeIva > 0 ? `IVA ${producto.porcentajeIva}%` : 'Exento'}</Text>
                     </Box>
                 </Group>
             </Table.Td>
-            <Table.Td ta="right"><Text size="sm">{fmtPrecio(producto.precio)}</Text></Table.Td>
+            <Table.Td ta="right">
+                <Text size="sm">{montoPresentacion !== null ? fmtUsd(montoPresentacion) : fmtPrecio(producto.precio)}</Text>
+                <Text size="xs" c="dimmed">{montoPresentacion !== null ? `por ${pres.singular} (${fmtPrecio(producto.precio)} c/u)` : `por ${pres.singular}`}</Text>
+            </Table.Td>
             <Table.Td>
-                <NumberInput value={cantidad} onChange={(v) => fijarCantidad(producto, v)} min={1} max={producto.disponible || undefined} allowDecimal={false} allowNegative={false} clampBehavior="strict" w={90} size="xs" ml="auto" aria-label="Cantidad" />
+                <NumberInput value={cantidad} onChange={(v) => fijarCantidad(producto, v, presentacion)} min={1} max={maximo} allowDecimal={false} allowNegative={false} clampBehavior="strict" w={90} size="xs" ml="auto" aria-label={`Cantidad de ${pres.plural}`} />
+                <Text size="xs" c="dimmed" ta="right" mt={2}>{cantidad === 1 ? pres.singular : pres.plural}</Text>
             </Table.Td>
             <Table.Td ta="right">
-                <Text size="sm" fw={700}>{fmtUsd(montoRenglon(producto.precio, cantidad))}</Text>
-                {tasa && <Text size="xs" c="dimmed">{fmtBs(aBolivares(montoRenglon(producto.precio, cantidad), tasa))}</Text>}
+                <Text size="sm" fw={700}>{fmtUsd(monto)}</Text>
+                {tasa && <Text size="xs" c="dimmed">{fmtBs(aBolivares(monto, tasa))}</Text>}
             </Table.Td>
-            <Table.Td w={40}><ActionIcon variant="subtle" color="red" onClick={() => quitar(producto.id)} aria-label="Quitar"><IconTrash size={16} /></ActionIcon></Table.Td>
+            <Table.Td w={40}><ActionIcon variant="subtle" color="red" onClick={() => quitar(producto.id, presentacion)} aria-label="Quitar"><IconTrash size={16} /></ActionIcon></Table.Td>
         </Table.Tr>
     );
 }
@@ -67,7 +79,7 @@ export default function B2BCarrito() {
             const r = await pedirJson('/api/b2b/pedidos', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tipoEntrega, transporte: tipoEntrega === 'flete' ? transporte : '', condicionPago: pago, tipoDocumento: documento, items: items.map((i) => ({ productoId: i.producto.id, cantidad: i.cantidad })) }),
+                body: JSON.stringify({ tipoEntrega, transporte: tipoEntrega === 'flete' ? transporte : '', condicionPago: pago, tipoDocumento: documento, items: items.map((i) => ({ productoId: i.producto.id, presentacion: i.presentacion, cantidad: i.cantidad })) }),
             });
             vaciar();
             queryClient.invalidateQueries({ queryKey: ['b2b'] });
@@ -101,7 +113,7 @@ export default function B2BCarrito() {
                     <Table.ScrollContainer minWidth={520}>
                         <Table verticalSpacing="xs">
                             <Table.Thead><Table.Tr><Table.Th>Producto</Table.Th><Table.Th ta="right">Precio</Table.Th><Table.Th ta="right">Cantidad</Table.Th><Table.Th ta="right">Monto</Table.Th><Table.Th /></Table.Tr></Table.Thead>
-                            <Table.Tbody>{items.map((i) => <Fila key={i.producto.id} item={i} tasa={tasa} />)}</Table.Tbody>
+                            <Table.Tbody>{items.map((i) => <Fila key={`${i.producto.id}:${i.presentacion}`} item={i} tasa={tasa} />)}</Table.Tbody>
                         </Table>
                     </Table.ScrollContainer>
                     <Button variant="subtle" color="red" size="xs" mt="sm" onClick={vaciar}>Vaciar pedido</Button>

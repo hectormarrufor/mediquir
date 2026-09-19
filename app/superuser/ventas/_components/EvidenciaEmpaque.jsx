@@ -7,6 +7,16 @@ import { notifications } from '@mantine/notifications';
 import { IconShieldCheck, IconAlertTriangle } from '@tabler/icons-react';
 
 const METODOS = { escaneo: 'Escaneo', codigo: 'Código', marca: 'Marca', manual: 'Manual' };
+const NIVELES_TXT = { UNIDAD: 'unidad', CAJA: 'caja', BULTO: 'bulto' };
+// "2 cajas + 50 sueltas" a partir de lo que contó el empacador
+const empacoTexto = (i) => {
+    const partes = [
+        i.bultosEmpacados > 0 && `${i.bultosEmpacados} bulto${i.bultosEmpacados === 1 ? '' : 's'}`,
+        i.cajasEmpacadas > 0 && `${i.cajasEmpacadas} caja${i.cajasEmpacadas === 1 ? '' : 's'}`,
+        i.sueltasEmpacadas > 0 && `${i.sueltasEmpacadas} ${i.bultosEmpacados > 0 || i.cajasEmpacadas > 0 ? 'sueltas' : 'unidades'}`,
+    ].filter(Boolean);
+    return partes.length ? partes.join(' + ') : null;
+};
 const hora = (d) => (d ? new Date(d).toLocaleString('es-VE') : '—');
 
 function duracion(desde, hasta) {
@@ -63,7 +73,7 @@ export default function EvidenciaEmpaque({ ventaId, puedeLiberar }) {
                     <Alert color="orange" icon={<IconAlertTriangle size={18} />} title="Novedades por resolver">
                         {conNovedad.map((i) => (
                             <Group key={i.detalleId} justify="space-between" mt={4}>
-                                <Text size="sm">{i.nombre}: pedido {i.cantidadPedida}, reportó {i.cantidadEmpacada}. “{i.observacion}”</Text>
+                                <Text size="sm">{i.nombre}: pedido {i.entregaTexto || `${i.cantidadPedida} und`}, reportó {empacoTexto(i) || `${i.cantidadEmpacada} und`}. “{i.observacion}”</Text>
                                 {puedeLiberar && <Button size="compact-xs" variant="light" onClick={() => liberar(i.detalleId)}>Liberar para reintentar</Button>}
                             </Group>
                         ))}
@@ -75,9 +85,9 @@ export default function EvidenciaEmpaque({ ventaId, puedeLiberar }) {
                         {items.map((i) => (
                             <Table.Tr key={i.detalleId}>
                                 <Table.Td>{i.nombre}</Table.Td>
-                                <Table.Td ta="right">{i.cantidadPedida}</Table.Td>
-                                <Table.Td ta="right">{i.cantidadEmpacada ?? '—'}</Table.Td>
-                                <Table.Td>{i.estado === 'NOVEDAD' ? <Badge color="orange" size="sm">Novedad</Badge> : (METODOS[i.metodo] || '—')}{i.intentosFallidos > 0 && ` · ${i.intentosFallidos} error(es)`}</Table.Td>
+                                <Table.Td ta="right">{i.entregaTexto || i.cantidadPedida}{i.entrega?.some((e) => e.nivel !== 'UNIDAD') && <Text size="xs" c="dimmed">{i.cantidadPedida} und</Text>}</Table.Td>
+                                <Table.Td ta="right">{empacoTexto(i) || (i.cantidadEmpacada ?? '—')}{i.cantidadEmpacada != null && empacoTexto(i) && <Text size="xs" c="dimmed">{i.cantidadEmpacada} und</Text>}</Table.Td>
+                                <Table.Td>{i.estado === 'NOVEDAD' ? <Badge color="orange" size="sm">Novedad</Badge> : (METODOS[i.metodo] || '—')}{i.nivelVerificado && i.metodo !== 'marca' && ` (${NIVELES_TXT[i.nivelVerificado] || i.nivelVerificado})`}{i.intentosFallidos > 0 && ` · ${i.intentosFallidos} error(es)`}</Table.Td>
                                 <Table.Td>{i.verificadoAt ? new Date(i.verificadoAt).toLocaleTimeString('es-VE') : '—'}</Table.Td>
                             </Table.Tr>
                         ))}

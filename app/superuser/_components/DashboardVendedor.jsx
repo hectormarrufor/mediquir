@@ -94,7 +94,7 @@ function TarjetaTarea({ tarea, tipo, onFirmar }) {
                                 <Text size="sm" fw={600} lineClamp={2}>{d.nombre}</Text>
                                 <Text size="xs" c="dimmed">{[d.codigo, d.marca].filter(Boolean).join(' · ')}</Text>
                             </Box>
-                            <Badge size="lg" variant="outline" color="navy.9" style={{ flexShrink: 0 }}>× {d.cantidad}</Badge>
+                            <Badge size="lg" variant="outline" color="navy.9" style={{ flexShrink: 0 }} tt="none">{d.pedido ? `${d.pedido} (${d.cantidad} und)` : `× ${d.cantidad}`}</Badge>
                         </Group>
                     ))}
                 </Stack>

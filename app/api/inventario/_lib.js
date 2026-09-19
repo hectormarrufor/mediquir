@@ -52,6 +52,8 @@ export function filaProducto(p, tags = []) {
         id: j.id,
         codigo: j.codigo,
         codigoBarras: j.codigoBarras ?? null,
+        codigoBarrasCaja: j.codigoBarrasCaja ?? null,
+        codigoBarrasBulto: j.codigoBarrasBulto ?? null,
         nombre: j.nombre,
         imagen: j.imagen,
         stockAlmacen: num(j.stockAlmacen),

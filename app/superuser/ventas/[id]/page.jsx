@@ -282,7 +282,7 @@ export default function DetallePedidoMayorPage() {
                                                             </Badge>
                                                         </Stack>
                                                     </Table.Td>
-                                                    <Table.Td ta="center"><Text fw={900}>{d.cantidad}</Text></Table.Td>
+                                                    <Table.Td ta="center"><Text fw={900}>{d.cantidad}</Text>{d.presentacionPedida && d.presentacionPedida !== 'UNIDAD' && d.cantidadPresentacion && <Text size="xs" c="dimmed">{d.cantidadPresentacion} × {d.presentacionPedida === 'CAJA' ? 'Caja' : 'Bulto'} x{d.unidadesPorPresentacion}</Text>}</Table.Td>
                                                     <Table.Td ta="right"><PrecioVisual valor={d.precioUnitario} simbolo={pedido.moneda} size="sm" /></Table.Td>
                                                     <Table.Td ta="right"><PrecioVisual valor={d.precioUnitario * d.cantidad} simbolo={pedido.moneda} size="sm" fw={700} /></Table.Td>
                                                 </Table.Tr>

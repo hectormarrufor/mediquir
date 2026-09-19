@@ -83,7 +83,11 @@ export default function B2BPedidoDetalle() {
                                                         </Group>
                                                     </Table.Td>
                                                     <Table.Td ta="right"><Text size="sm">{fmtPrecio(d.precioUnitario)}</Text></Table.Td>
-                                                    <Table.Td ta="right"><Text size="sm">{d.cantidad}</Text></Table.Td>
+                                                    <Table.Td ta="right">
+                                                        {d.presentacion && d.presentacion !== 'UNIDAD' && d.cantidadPresentacion
+                                                            ? <><Text size="sm">{d.cantidadPresentacion} × {d.presentacion === 'CAJA' ? 'Caja' : 'Bulto'} x{d.unidadesPorPresentacion}</Text><Text size="xs" c="dimmed">{d.cantidad} unidades</Text></>
+                                                            : <Text size="sm">{d.cantidad}</Text>}
+                                                    </Table.Td>
                                                     <Table.Td ta="right"><Text size="sm" fw={700}>{fmtUsd(d.subtotal)}</Text></Table.Td>
                                                 </Table.Tr>
                                             ))}

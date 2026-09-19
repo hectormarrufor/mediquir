@@ -38,9 +38,9 @@ export default function CodigosDeBarrasPage() {
     const [q] = useDebouncedValue(busqueda.trim(), 300);
     const [limite, setLimite] = useState(POR_PAGINA);
 
-    const [camaraPara, setCamaraPara] = useState(null);     // producto al que se le va a escanear el código
+    const [camaraPara, setCamaraPara] = useState(null);     // { producto, nivel }: a qué presentación se le va a escanear el código
     const [camaraBusqueda, setCamaraBusqueda] = useState(false); // escanear para BUSCAR a qué producto pertenece un código
-    const [confirmar, setConfirmar] = useState(null);       // { producto, codigo }
+    const [confirmar, setConfirmar] = useState(null);       // { producto, nivel, codigo }
     const [guardando, setGuardando] = useState(false);
     const [error, setError] = useState(null);
 
@@ -54,7 +54,7 @@ export default function CodigosDeBarrasPage() {
     const puedeEditar = data?.puedeEditar !== false;
     const avance = data?.total ? Math.round((data.conCodigo / data.total) * 100) : 0;
 
-    const abrirConfirmacion = (producto, codigo = '') => { setError(null); setConfirmar({ producto, codigo }); };
+    const abrirConfirmacion = (producto, nivel, codigo = '') => { setError(null); setConfirmar({ producto, nivel, codigo }); };
 
     const guardar = async () => {
         if (!confirmar) return;
@@ -63,9 +63,9 @@ export default function CodigosDeBarrasPage() {
         try {
             await pedirJson(`/api/inventario/productos/${confirmar.producto.id}`, {
                 method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cambios: { codigoBarras: confirmar.codigo.trim() || null } }),
+                body: JSON.stringify({ cambios: { [confirmar.nivel.campo]: confirmar.codigo.trim() || null } }),
             });
-            notifications.show({ color: 'teal', icon: <IconCheck size={16} />, message: `Código guardado: ${confirmar.producto.nombre}` });
+            notifications.show({ color: 'teal', icon: <IconCheck size={16} />, message: `Código de ${confirmar.nivel.etiqueta.toLowerCase()} guardado: ${confirmar.producto.nombre}` });
             setConfirmar(null);
             queryClient.invalidateQueries({ queryKey: ['codigos-barras'] });
             queryClient.invalidateQueries({ queryKey: ['productos'] });
@@ -84,7 +84,7 @@ export default function CodigosDeBarrasPage() {
                 </Group>
                 <Box>
                     <Title order={2} c="white" fz={24}><IconBarcode size={26} style={{ verticalAlign: 'middle' }} /> Códigos de barras</Title>
-                    <Text size="sm" c="gray.4">Elige un producto, escanea el código de su empaque y guárdalo. Luego el empaque de pedidos lo usa para confirmar que se tomó el producto correcto.</Text>
+                    <Text size="sm" c="gray.4">Elige un producto y escanea el código de cada presentación: el de la unidad, el de la caja y el del bulto (solo los que traiga). Luego el empaque de pedidos los usa para confirmar que se tomó el producto y la presentación correctos.</Text>
                 </Box>
 
                 <Paper withBorder radius="md" p="sm">
@@ -93,7 +93,7 @@ export default function CodigosDeBarrasPage() {
                         <Badge variant="light" color={avance === 100 ? 'teal' : 'blue'}>{avance}%</Badge>
                     </Group>
                     <Progress value={avance} size="lg" radius="xl" color={avance === 100 ? 'teal' : 'blue'} />
-                    <Text size="xs" c="dimmed" mt={6}>Los productos que no traen código de barras se verifican eligiendo su marca: déjalos sin código.</Text>
+                    <Text size="xs" c="dimmed" mt={6}>Lo que no trae código de barras se verifica eligiendo la marca: déjalo sin código.</Text>
                 </Paper>
 
                 {!puedeEditar && <Alert color="orange" icon={<IconAlertTriangle size={18} />}>No tienes permiso para editar el inventario: puedes ver los códigos pero no guardarlos.</Alert>}
@@ -115,22 +115,31 @@ export default function CodigosDeBarrasPage() {
                     <Stack gap="xs">
                         {productos.map((p) => (
                             <Paper key={p.id} withBorder radius="md" p="sm">
-                                <Group wrap="nowrap" align="center" gap="sm">
+                                <Group wrap="nowrap" align="center" gap="sm" mb="xs">
                                     <Foto src={p.imagen} />
                                     <Box style={{ minWidth: 0, flex: 1 }}>
                                         <Text fw={700} size="sm" lineClamp={2}>{p.nombre}</Text>
                                         <Text size="xs" c="dimmed" truncate>Cód. {p.codigo}{p.marca ? ` · ${p.marca}` : ''}</Text>
-                                        {p.codigoBarras && <Badge mt={4} size="sm" color="teal" variant="light" tt="none" leftSection={<IconBarcode size={12} />}>{p.codigoBarras}</Badge>}
                                     </Box>
-                                    <Stack gap={4} align="flex-end" style={{ flexShrink: 0 }}>
-                                        {escanerDisponible() && (
-                                            <Button size="sm" color={p.codigoBarras ? 'gray' : 'blue'} variant={p.codigoBarras ? 'light' : 'filled'} leftSection={<IconScan size={16} />} disabled={!puedeEditar} onClick={() => setCamaraPara(p)}>
-                                                {p.codigoBarras ? 'Cambiar' : 'Escanear'}
-                                            </Button>
-                                        )}
-                                        <Button size="compact-xs" variant="subtle" color="gray" leftSection={<IconPencil size={12} />} disabled={!puedeEditar} onClick={() => abrirConfirmacion(p, p.codigoBarras || '')}>Escribir</Button>
-                                    </Stack>
                                 </Group>
+                                <Stack gap={6}>
+                                    {p.niveles.map((n) => (
+                                        <Group key={n.clave} wrap="nowrap" justify="space-between" gap="xs">
+                                            <Box style={{ minWidth: 0, flex: 1 }}>
+                                                <Text size="xs" fw={700}>{n.etiqueta}</Text>
+                                                {n.codigo
+                                                    ? <Badge size="sm" color="teal" variant="light" tt="none" leftSection={<IconBarcode size={12} />}>{n.codigo}</Badge>
+                                                    : <Text size="xs" c="dimmed">Sin código</Text>}
+                                            </Box>
+                                            {escanerDisponible() && (
+                                                <Button size="xs" color={n.codigo ? 'gray' : 'blue'} variant={n.codigo ? 'light' : 'filled'} leftSection={<IconScan size={14} />} disabled={!puedeEditar} onClick={() => setCamaraPara({ producto: p, nivel: n })}>
+                                                    {n.codigo ? 'Cambiar' : 'Escanear'}
+                                                </Button>
+                                            )}
+                                            <Button size="compact-xs" variant="subtle" color="gray" leftSection={<IconPencil size={12} />} disabled={!puedeEditar} onClick={() => abrirConfirmacion(p, n, n.codigo || '')}>Escribir</Button>
+                                        </Group>
+                                    ))}
+                                </Stack>
                             </Paper>
                         ))}
                         {data?.hayMas && <Button variant="light" color="gray.3" onClick={() => setLimite((l) => l + POR_PAGINA)}>Ver más productos</Button>}
@@ -138,10 +147,10 @@ export default function CodigosDeBarrasPage() {
                 )}
             </Stack>
 
-            {/* Cámara para un producto: al leer el código se pide confirmarlo antes de guardar */}
+            {/* Cámara para una presentación: al leer el código se pide confirmarlo antes de guardar */}
             <EscanerCodigo
-                opened={Boolean(camaraPara)} titulo={camaraPara ? `Escanea: ${camaraPara.nombre}` : ''} onClose={() => setCamaraPara(null)}
-                onDetectar={(valor) => { const producto = camaraPara; setCamaraPara(null); if (producto) abrirConfirmacion(producto, valor); }}
+                opened={Boolean(camaraPara)} titulo={camaraPara ? `Escanea ${camaraPara.nivel.etiqueta.toLowerCase()}: ${camaraPara.producto.nombre}` : ''} onClose={() => setCamaraPara(null)}
+                onDetectar={(valor) => { const objetivo = camaraPara; setCamaraPara(null); if (objetivo) abrirConfirmacion(objetivo.producto, objetivo.nivel, valor); }}
             />
             {/* Cámara para BUSCAR: el código leído llena el buscador */}
             <EscanerCodigo
@@ -149,7 +158,7 @@ export default function CodigosDeBarrasPage() {
                 onDetectar={(valor) => { setCamaraBusqueda(false); setFiltro('todos'); setBusqueda(valor); setLimite(POR_PAGINA); }}
             />
 
-            <Modal opened={Boolean(confirmar)} onClose={() => setConfirmar(null)} centered title={<Text fw={800}>Código de barras</Text>}>
+            <Modal opened={Boolean(confirmar)} onClose={() => setConfirmar(null)} centered title={<Text fw={800}>{confirmar ? `Código de barras · ${confirmar.nivel.etiqueta}` : ''}</Text>}>
                 {confirmar && (
                     <Stack>
                         <Group wrap="nowrap" gap="sm">
@@ -160,19 +169,21 @@ export default function CodigosDeBarrasPage() {
                             </Box>
                         </Group>
                         <TextInput
-                            label="Código de barras" description="Revisa que sea el del empaque de ESTE producto" size="md" inputMode="numeric" data-autofocus
+                            label={`Código de barras de la ${confirmar.nivel.clave === 'UNIDAD' ? 'unidad' : confirmar.nivel.clave === 'CAJA' ? 'caja' : 'bulto'}`}
+                            description={confirmar.nivel.clave === 'UNIDAD' ? 'Revisa que sea el de UNA unidad suelta de ESTE producto' : `Revisa que sea el impreso en la ${confirmar.nivel.clave === 'CAJA' ? 'caja' : 'bulto'} de ESTE producto, no el de la unidad`}
+                            size="md" inputMode="numeric" data-autofocus
                             value={confirmar.codigo} onChange={(e) => setConfirmar({ ...confirmar, codigo: e.currentTarget.value.replace(/\s/g, '') })}
                         />
                         {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error}</Alert>}
-                        <Button size="md" color={confirmar.codigo.trim() ? 'teal' : 'red'} loading={guardando} disabled={!confirmar.codigo.trim() && !confirmar.producto.codigoBarras} onClick={guardar} leftSection={<IconCheck size={18} />}>
+                        <Button size="md" color={confirmar.codigo.trim() ? 'teal' : 'red'} loading={guardando} disabled={!confirmar.codigo.trim() && !confirmar.nivel.codigo} onClick={guardar} leftSection={<IconCheck size={18} />}>
                             {confirmar.codigo.trim() ? 'Guardar código' : 'Quitar el código'}
                         </Button>
                         <Group grow>
-                            {escanerDisponible() && <Button variant="default" leftSection={<IconScan size={16} />} onClick={() => { const p = confirmar.producto; setConfirmar(null); setCamaraPara(p); }}>Escanear otra vez</Button>}
+                            {escanerDisponible() && <Button variant="default" leftSection={<IconScan size={16} />} onClick={() => { const objetivo = { producto: confirmar.producto, nivel: confirmar.nivel }; setConfirmar(null); setCamaraPara(objetivo); }}>Escanear otra vez</Button>}
                             <Button variant="default" onClick={() => setConfirmar(null)}>Cancelar</Button>
                         </Group>
-                        {confirmar.producto.codigoBarras && (
-                            <Button variant="subtle" color="red" size="compact-sm" onClick={() => setConfirmar({ ...confirmar, codigo: '' })}>Quitar el código (el producto no trae)</Button>
+                        {confirmar.nivel.codigo && (
+                            <Button variant="subtle" color="red" size="compact-sm" onClick={() => setConfirmar({ ...confirmar, codigo: '' })}>Quitar el código (no trae)</Button>
                         )}
                     </Stack>
                 )}

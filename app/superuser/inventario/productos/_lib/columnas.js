@@ -12,6 +12,8 @@ export const COLUMNAS = [
     { key: 'imagen', label: '', ancho: 56, tipo: 'imagen', fija: true },
     { key: 'codigo', label: 'Código', ancho: 110, tipo: 'texto', campo: 'codigo', orden: 'codigo', sticky: true },
     { key: 'codigoBarras', label: 'Cód. barras', ancho: 150, tipo: 'texto', campo: 'codigoBarras', ayuda: 'Código de barras impreso en el empaque del producto (sirve para verificar el empaque de pedidos). Déjalo vacío si el producto no trae.' },
+    { key: 'codigoBarrasCaja', label: 'Cód. barras caja', ancho: 150, tipo: 'texto', campo: 'codigoBarrasCaja', ayuda: 'Código de barras impreso en la CAJA cerrada. Vacío si la caja no trae.' },
+    { key: 'codigoBarrasBulto', label: 'Cód. barras bulto', ancho: 150, tipo: 'texto', campo: 'codigoBarrasBulto', ayuda: 'Código de barras impreso en el BULTO. Vacío si el bulto no trae.' },
     { key: 'nombre', label: 'Producto', ancho: 300, tipo: 'texto', campo: 'nombre', orden: 'nombre', sticky: true },
     { key: 'categoriaId', label: 'Categoría', ancho: 150, tipo: 'select', campo: 'categoriaId', fuente: 'categorias', orden: 'categoria', ver: (r) => r.categoria?.nombre },
     { key: 'marcaId', label: 'Marca', ancho: 140, tipo: 'select', campo: 'marcaId', fuente: 'marcas', orden: 'marca', ver: (r) => r.marca?.nombre },

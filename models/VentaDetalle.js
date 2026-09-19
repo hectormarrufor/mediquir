@@ -48,7 +48,13 @@ const VentaDetalle = sequelize.define('VentaDetalle', {
     afectaInventario: {
         type: DataTypes.BOOLEAN,
         defaultValue: true
-    }
+    },
+    // Presentación que pidió el cliente en el portal B2B: 'UNIDAD' | 'CAJA' | 'BULTO'. `cantidad` sigue en unidades base (stock y precio
+    // no cambian); estos campos dicen que pidió, p. ej., 2 cajas de 100 (cantidad = 200). NULL = sin presentación (punto de venta,
+    // pedidos anteriores): el empaque arma bultos, cajas cerradas y sueltas con la regla de siempre.
+    presentacionPedida: { type: DataTypes.STRING(10), allowNull: true },
+    cantidadPresentacion: { type: DataTypes.INTEGER, allowNull: true },
+    unidadesPorPresentacion: { type: DataTypes.INTEGER, allowNull: true } // unidades de cada caja/bulto EN ESE MOMENTO
 }, {
     tableName: 'VentaDetalles',
     timestamps: false

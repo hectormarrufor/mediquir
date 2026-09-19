@@ -45,7 +45,7 @@ export default function EmpacarPage() {
     const [codigo, setCodigo] = useState('');
     const [escaneado, setEscaneado] = useState(false);
     const [marca, setMarca] = useState('');
-    const [cantidad, setCantidad] = useState('');
+    const [conteo, setConteo] = useState({ BULTO: '', CAJA: '', UNIDAD: '' }); // lo que el empacador cuenta por nivel
     const [motivo, setMotivo] = useState('');
     const [errorItem, setErrorItem] = useState(null);
     const [enviando, setEnviando] = useState(false);
@@ -75,7 +75,7 @@ export default function EmpacarPage() {
     const actual = items.find((i) => i.estado !== 'OK');
     const empezado = comenzado || hechos > 0 || Boolean(venta.empaqueIniciadoAt);
 
-    const limpiar = () => { setCodigo(''); setEscaneado(false); setMarca(''); setCantidad(''); setMotivo(''); setErrorItem(null); };
+    const limpiar = () => { setCodigo(''); setEscaneado(false); setMarca(''); setConteo({ BULTO: '', CAJA: '', UNIDAD: '' }); setMotivo(''); setErrorItem(null); };
 
     const confirmarItem = async () => {
         setEnviando(true);
@@ -83,7 +83,7 @@ export default function EmpacarPage() {
         try {
             const res = await fetch(`/api/ventas/${id}/empaque`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ accion: 'VERIFICAR_ITEM', detalleId: actual.detalleId, codigo, escaneado, marcaElegida: marca, cantidad, observacion: motivo }),
+                body: JSON.stringify({ accion: 'VERIFICAR_ITEM', detalleId: actual.detalleId, codigo, escaneado, marcaElegida: marca, empacado: { bultos: Number(conteo.BULTO || 0), cajas: Number(conteo.CAJA || 0), sueltas: Number(conteo.UNIDAD || 0) }, observacion: motivo }),
             });
             const r = await res.json();
             if (!res.ok) { setErrorItem(r.error || 'No se pudo verificar'); return; }
@@ -163,9 +163,18 @@ export default function EmpacarPage() {
     // ---------- Un producto por pantalla ----------
     if (actual) {
         const bloqueado = actual.estado === 'NOVEDAD';
-        const diferente = cantidad !== '' && Number(cantidad) !== actual.cantidadPedida;
+        // Lo que hay que entregar por nivel; sin desglose (renglón manual) se cuenta el total en unidades
+        const niveles = actual.entrega?.length ? actual.entrega : [{ nivel: 'UNIDAD', cantidad: actual.cantidadPedida, unidadesCada: 1, nombre: 'unidades' }];
+        const completo = niveles.every((n) => conteo[n.nivel] !== '' && conteo[n.nivel] != null);
+        const diferente = completo && niveles.some((n) => Number(conteo[n.nivel]) !== n.cantidad);
         const identificado = actual.modo === 'codigo' ? codigo.trim().length >= 4 : actual.modo === 'marca' ? Boolean(marca) : true;
-        const listo = identificado && cantidad !== '' && (!diferente || motivo.trim().length >= 5);
+        const listo = identificado && completo && (!diferente || motivo.trim().length >= 5);
+        const de = { BULTO: 'del BULTO', CAJA: 'de la CAJA', UNIDAD: 'de la UNIDAD' };
+        const soloUnidad = actual.nivelRequerido === 'UNIDAD';
+        const dondeCodigo = (actual.nivelesCodigo || []).map((n) => de[n]).join(' o ');
+        const etiquetaCodigo = actual.nivelesCodigo?.length > 1 || (soloUnidad && actual.nivelesCodigo?.[0] !== 'UNIDAD')
+            ? `Código de barras (${dondeCodigo}${soloUnidad ? ', o de donde las sacaste' : ''})`
+            : `Código de barras ${dondeCodigo}`;
 
         return (
             <Container size="xs" py="md">
@@ -178,23 +187,32 @@ export default function EmpacarPage() {
                                 : <Center h={160}><IconPhotoOff size={48} color="gray" /></Center>}
                             <Title order={3}>{actual.nombre}</Title>
                             {actual.marca && <Text c="dimmed" size="sm">Marca: {actual.marca}</Text>}
-                            <Badge size="xl" color="blue" variant="filled" radius="sm">Pedido: {actual.cantidadPedida} unidad(es)</Badge>
+                            {/* Qué hay que meter, por nivel: no es lo mismo una caja de 100 que 100 unidades sueltas */}
+                            <Stack gap={4}>
+                                {niveles.map((n) => (
+                                    <Badge key={n.nivel} size="xl" color={n.nivel === 'UNIDAD' ? 'blue' : 'grape'} variant="filled" radius="sm" tt="none" h="auto" py={6} styles={{ label: { whiteSpace: 'normal' } }}>
+                                        {n.cantidad} {n.nombre}{n.nivel === 'UNIDAD' && niveles.length > 1 ? ' sueltas' : ''}{n.nivel !== 'UNIDAD' ? ` cerrada${n.cantidad === 1 ? '' : 's'} (${n.unidadesCada} und c/u)` : ''}
+                                    </Badge>
+                                ))}
+                                {niveles.length > 0 && actual.entrega?.length > 0 && <Text size="xs" c="dimmed">Total: {actual.cantidadPedida} unidades</Text>}
+                            </Stack>
 
                             {bloqueado ? (
                                 <Alert color="orange" icon={<IconAlertTriangle size={18} />} title="Novedad reportada">
-                                    Dijiste {actual.cantidadEmpacada} de {actual.cantidadPedida}: “{actual.observacion}”. Administración fue avisada; podrás continuar cuando la resuelva.
+                                    Dijiste {[actual.bultosEmpacados > 0 && `${actual.bultosEmpacados} bulto(s)`, actual.cajasEmpacadas > 0 && `${actual.cajasEmpacadas} caja(s)`, actual.sueltasEmpacadas > 0 && `${actual.sueltasEmpacadas} suelta(s)`].filter(Boolean).join(' + ') || `${actual.cantidadEmpacada} unidades`} y se pedía {actual.entregaTexto || `${actual.cantidadPedida} unidades`}: “{actual.observacion}”. Administración fue avisada; podrás continuar cuando la resuelva.
                                     <Button mt="sm" variant="light" onClick={() => refetch()}>Revisar si ya se resolvió</Button>
                                 </Alert>
                             ) : (
                                 <>
                                     {actual.modo === 'codigo' && (
                                         <TextInput
-                                            label="Código de barras del producto" size="md" value={codigo} autoComplete="off" inputMode="numeric"
-                                            description={`Escríbelo (o solo sus últimos 4 dígitos)${escanerDisponible() ? ' o escanéalo con la cámara' : ''}`}
+                                            label={etiquetaCodigo} size="md" value={codigo} autoComplete="off" inputMode="numeric"
+                                            description={`${actual.nivelRequerido && actual.nivelRequerido !== 'UNIDAD' ? 'No sirve el código de una unidad suelta. ' : ''}Escríbelo (o solo sus últimos 4 dígitos)${escanerDisponible() ? ' o escanéalo con la cámara' : ''}`}
                                             onChange={(e) => { setCodigo(e.currentTarget.value); setEscaneado(false); }}
                                             rightSection={escanerDisponible() ? <ActionIcon variant="light" size="lg" onClick={() => setVerEscaner(true)}><IconScan size={20} /></ActionIcon> : null}
                                         />
                                     )}
+                                    {actual.modo === 'marca' && actual.nivelRequerido && actual.nivelRequerido !== 'UNIDAD' && <Alert color="gray" variant="light">Esta presentación no tiene código de barras registrado: se comprueba por la marca del empaque.</Alert>}
                                     {actual.modo === 'marca' && (
                                         <Radio.Group label="¿Qué marca dice el empaque del producto que tomaste?" value={marca} onChange={setMarca}>
                                             <SimpleGrid cols={2} mt="xs">
@@ -204,14 +222,17 @@ export default function EmpacarPage() {
                                     )}
                                     {actual.modo === 'manual' && <Alert color="gray" variant="light">Este producto no tiene código ni marca registrada: compáralo con la foto.</Alert>}
 
-                                    <NumberInput
-                                        label="¿Cuántas unidades metiste en la caja?" size="lg" value={cantidad} onChange={setCantidad}
-                                        min={0} allowDecimal={false} allowNegative={false} hideControls inputMode="numeric" placeholder="Escribe la cantidad"
-                                    />
+                                    {niveles.map((n) => (
+                                        <NumberInput
+                                            key={n.nivel} size="lg" value={conteo[n.nivel]} onChange={(v) => setConteo((c) => ({ ...c, [n.nivel]: v }))}
+                                            label={n.nivel === 'UNIDAD' ? (niveles.length > 1 ? '¿Cuántas unidades sueltas metiste?' : '¿Cuántas unidades metiste en la caja?') : `¿Cuántas ${n.nivel === 'CAJA' ? 'cajas' : 'bultos'} cerrad${n.nivel === 'CAJA' ? 'as' : 'os'} metiste?`}
+                                            min={0} allowDecimal={false} allowNegative={false} hideControls inputMode="numeric" placeholder="Escribe la cantidad"
+                                        />
+                                    ))}
                                     {diferente && (
                                         <>
                                             <Alert color="orange" icon={<IconAlertTriangle size={18} />}>
-                                                No coincide con lo pedido ({actual.cantidadPedida}). Explica el motivo; se avisará a administración y el pedido no avanza hasta que lo resuelvan.
+                                                No coincide con lo pedido ({actual.entregaTexto || `${actual.cantidadPedida} unidades`}). Explica el motivo; se avisará a administración y el pedido no avanza hasta que lo resuelvan.
                                             </Alert>
                                             <Textarea label="Motivo" value={motivo} onChange={(e) => setMotivo(e.currentTarget.value)} minRows={2} autosize />
                                         </>
@@ -255,7 +276,7 @@ export default function EmpacarPage() {
                                     <Image src={venta.fotoCajaSelladaUrl} h={110} fit="cover" radius="sm" alt="Caja sellada" />
                                 </SimpleGrid>
                                 <Stack gap={2}>
-                                    {items.map((i) => <Text key={i.detalleId} size="sm">✓ {i.cantidadEmpacada} × {i.nombre}</Text>)}
+                                    {items.map((i) => <Text key={i.detalleId} size="sm">✓ {i.entregaTexto || `${i.cantidadEmpacada} unidades`} · {i.nombre}</Text>)}
                                 </Stack>
                                 <Alert color="blue" variant="light">
                                     Al confirmar, el pedido queda empacado a nombre de <b>{venta.empacadorNombre}</b>. No se puede modificar.

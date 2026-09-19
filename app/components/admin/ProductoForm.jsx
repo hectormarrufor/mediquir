@@ -56,7 +56,7 @@ export default function ProductoForm({ productId = null }) {
     // --- FORMULARIO PRINCIPAL ---
     const form = useForm({
         initialValues: {
-            nombre: '', codigo: '', codigoBarras: '', categoriaId: '', marcaId: '', grupoEquivalenciaId: '',
+            nombre: '', codigo: '', codigoBarras: '', codigoBarrasCaja: '', codigoBarrasBulto: '', categoriaId: '', marcaId: '', grupoEquivalenciaId: '',
             tags: [], costoUsd: '', precio6: '', precio7: '', porcentajeDescuento: '',
             conIva: true, presentacion: 'unidad', unidadesPorCaja: '', cajasPorBulto: '', unidadesPorBulto: '',
             stockAlmacen: '', stockMinimo: '', imagen: null
@@ -92,6 +92,8 @@ export default function ProductoForm({ productId = null }) {
                 nombre: productoDB.nombre,
                 codigo: productoDB.codigo,
                 codigoBarras: productoDB.codigoBarras || '',
+                codigoBarrasCaja: productoDB.codigoBarrasCaja || '',
+                codigoBarrasBulto: productoDB.codigoBarrasBulto || '',
                 categoriaId: productoDB.categoriaId?.toString() || '',
                 marcaId: productoDB.marcaId?.toString() || '',
                 grupoEquivalenciaId: productoDB.grupoEquivalenciaId?.toString() || '',
@@ -159,6 +161,8 @@ export default function ProductoForm({ productId = null }) {
                 precio7: values.precio7 ? Number(values.precio7) : 0,
                 porcentajeIva: values.conIva ? 16 : 0,
                 codigoBarras: String(values.codigoBarras || '').trim() || null,
+                codigoBarrasCaja: String(values.codigoBarrasCaja || '').trim() || null,
+                codigoBarrasBulto: String(values.codigoBarrasBulto || '').trim() || null,
                 unidadesPorCaja: values.presentacion === 'caja' ? Number(values.unidadesPorCaja) : null,
                 cajasPorBulto: values.presentacion === 'caja' ? (Number(values.cajasPorBulto) || 1) : null,
                 // Con cajas: cajas x unidades por caja. Sin cajas: las unidades que trae el bulto directamente.
@@ -309,10 +313,26 @@ export default function ProductoForm({ productId = null }) {
 
                             <Grid.Col span={{ base: 12, md: 4 }}>
                                 <TextInput
-                                    label="Código de barras" placeholder="Opcional" inputMode="numeric"
-                                    description="El impreso en el empaque; vacío si no trae"
+                                    label="Código de barras (unidad)" placeholder="Opcional" inputMode="numeric"
+                                    description="El de la unidad suelta; vacío si no trae"
                                     value={form.values.codigoBarras}
                                     onChange={(e) => form.setFieldValue('codigoBarras', e.currentTarget.value.replace(/\s/g, ''))}
+                                />
+                            </Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 4 }}>
+                                <TextInput
+                                    label="Código de barras (caja)" placeholder="Opcional" inputMode="numeric"
+                                    description="El de la caja cerrada; vacío si no trae"
+                                    value={form.values.codigoBarrasCaja}
+                                    onChange={(e) => form.setFieldValue('codigoBarrasCaja', e.currentTarget.value.replace(/\s/g, ''))}
+                                />
+                            </Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 4 }}>
+                                <TextInput
+                                    label="Código de barras (bulto)" placeholder="Opcional" inputMode="numeric"
+                                    description="El del bulto; vacío si no trae"
+                                    value={form.values.codigoBarrasBulto}
+                                    onChange={(e) => form.setFieldValue('codigoBarrasBulto', e.currentTarget.value.replace(/\s/g, ''))}
                                 />
                             </Grid.Col>
 

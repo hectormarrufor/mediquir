@@ -110,7 +110,7 @@ export async function ventasDelCliente(clienteId, { where = {}, extraInclude = [
 export const INCLUDE_DETALLES = {
     model: VentaDetalle,
     as: 'detalles',
-    attributes: ['id', 'cantidad', 'precioUnitario', 'subtotal', 'aplicaIva', 'isFicticio', 'nombreFicticio'],
+    attributes: ['id', 'cantidad', 'precioUnitario', 'subtotal', 'aplicaIva', 'isFicticio', 'nombreFicticio', 'presentacionPedida', 'cantidadPresentacion', 'unidadesPorPresentacion'],
     include: [{
         model: Producto, as: 'producto', attributes: ['id', 'nombre', 'codigo', 'imagen', 'presentacion', 'unidadesPorCaja'],
         include: [{ model: Marca, as: 'marca', attributes: ['nombre', 'imagen'] }],

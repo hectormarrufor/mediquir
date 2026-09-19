@@ -3,6 +3,7 @@ import { Op } from 'sequelize';
 import { Categoria, GrupoEquivalencia, Marca, Producto } from '@/models';
 import { requerirCliente } from '../../_lib/acceso';
 import { precioMayor } from '@/app/constants/facturacion';
+import { presentacionesDe } from '@/app/constants/presentaciones';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +32,7 @@ export async function GET(request) {
 
         const { rows, count } = await Producto.findAndCountAll({
             where,
-            attributes: ['id', 'codigo', 'nombre', 'imagen', 'presentacion', 'unidadesPorCaja', 'stockAlmacen', 'porcentajeIva', 'precio6', 'precio7', 'costoUsd'],
+            attributes: ['id', 'codigo', 'nombre', 'imagen', 'presentacion', 'unidadesPorCaja', 'cajasPorBulto', 'unidadesPorBulto', 'stockAlmacen', 'porcentajeIva', 'precio6', 'precio7', 'costoUsd'],
             include: [
                 { model: Categoria, as: 'categoria', attributes: ['id', 'nombre'] },
                 { model: Marca, as: 'marca', attributes: ['id', 'nombre', 'imagen'] },
@@ -55,6 +56,8 @@ export async function GET(request) {
                 grupoEquivalencia: j.grupoEquivalencia,
                 presentacion: j.presentacion,
                 unidadesPorCaja: j.unidadesPorCaja,
+                // Presentaciones que se pueden pedir según lo que tenga llenado la ficha: unidad/par, caja y bulto (con sus unidades)
+                presentaciones: presentacionesDe(j),
                 disponible: Math.max(0, Math.floor(Number(j.stockAlmacen) || 0)),
                 porcentajeIva: Number(j.porcentajeIva) || 0,
                 precio,

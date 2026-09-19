@@ -6,6 +6,7 @@ import { cargarGrupos } from '../_grupos';
 import { construirUpdate } from './_sql';
 
 const MAX_ITEMS = 200;
+const CAMPOS_BARRAS = ['codigoBarras', 'codigoBarrasCaja', 'codigoBarrasBulto'];
 
 // Valida cada cambio y las reglas entre campos (empaque, mínimo de grupo, etiquetas)
 async function validar(items) {
@@ -13,7 +14,7 @@ async function validar(items) {
     const validos = [];
     const ids = [...new Set(items.map((i) => Number(i?.id)).filter(Number.isInteger))];
     const actuales = new Map(
-        (await Producto.findAll({ where: { id: ids }, attributes: ['id', 'presentacion', 'unidadesPorCaja', 'cajasPorBulto', 'unidadesPorBulto', 'grupoEquivalenciaId'] })).map((p) => [p.id, p.toJSON()])
+        (await Producto.findAll({ where: { id: ids }, attributes: ['id', 'presentacion', 'unidadesPorCaja', 'cajasPorBulto', 'unidadesPorBulto', 'grupoEquivalenciaId', 'codigoBarras', 'codigoBarrasCaja', 'codigoBarrasBulto'] })).map((p) => [p.id, p.toJSON()])
     );
 
     const vistosEnLote = new Set(); // códigos de barras ya vistos en este mismo lote (pegado masivo)
@@ -33,15 +34,19 @@ async function validar(items) {
         }
         if (!mensaje && Object.keys(cambios).length === 0 && tags === undefined) mensaje = 'No hay cambios';
 
-        // Código de barras: sin espacios, y no puede ser el de otro producto (el empaque lo usa para reconocer el producto)
-        if (!mensaje && typeof cambios.codigoBarras === 'string') {
-            cambios.codigoBarras = cambios.codigoBarras.replace(/\s+/g, '');
-            if (vistosEnLote.has(cambios.codigoBarras)) mensaje = 'Ese código de barras se repite en los productos que estás editando';
-            else {
-                vistosEnLote.add(cambios.codigoBarras);
-                const otro = await Producto.findOne({ where: { codigoBarras: cambios.codigoBarras, id: { [Op.ne]: id } }, attributes: ['nombre'] });
-                if (otro) mensaje = `Ese código de barras ya está registrado en "${otro.nombre}"`;
-            }
+        // Códigos de barras (unidad, caja, bulto): sin espacios, y no pueden ser los de otro producto ni repetirse entre niveles
+        // (el empaque los usa para reconocer el producto y el nivel)
+        for (const campo of CAMPOS_BARRAS) {
+            if (mensaje || typeof cambios[campo] !== 'string') continue;
+            const valor = cambios[campo].replace(/\s+/g, '');
+            cambios[campo] = valor;
+            if (!valor) continue;
+            const finales = { ...actual, ...cambios };
+            if (CAMPOS_BARRAS.some((otro) => otro !== campo && finales[otro] === valor)) { mensaje = 'El mismo producto no puede usar el mismo código en dos presentaciones'; break; }
+            if (vistosEnLote.has(valor)) { mensaje = 'Ese código de barras se repite en los productos que estás editando'; break; }
+            vistosEnLote.add(valor);
+            const otro = await Producto.findOne({ where: { id: { [Op.ne]: id }, [Op.or]: CAMPOS_BARRAS.map((c) => ({ [c]: valor })) }, attributes: ['nombre'] });
+            if (otro) mensaje = `Ese código de barras ya está registrado en "${otro.nombre}"`;
         }
 
         // Con grupo de equivalencia, el mínimo que vale es el del grupo

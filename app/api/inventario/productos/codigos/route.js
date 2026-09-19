@@ -2,11 +2,16 @@ import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
 import { GrupoEquivalencia, Marca, Producto } from '@/models';
 import { imagenDe } from '@/app/api/ventas/_empaque';
+import { presentacionesDe } from '@/app/constants/presentaciones';
 import { puedeEditarInventario, requerirStaff } from '../../_lib';
 
 export const dynamic = 'force-dynamic';
 
 const POR_PAGINA = 30;
+const COLUMNAS_BARRAS = ['codigoBarras', 'codigoBarrasCaja', 'codigoBarrasBulto'];
+const CAMPO_DE_NIVEL = { UNIDAD: 'codigoBarras', CAJA: 'codigoBarrasCaja', BULTO: 'codigoBarrasBulto' };
+const vacio = (c) => ({ [Op.or]: [{ [c]: null }, { [c]: '' }] });
+const lleno = (c) => ({ [c]: { [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: '' }] } });
 
 // Escapa % _ \ para que la búsqueda trate el texto literalmente
 const like = (texto) => `%${texto.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -25,20 +30,21 @@ export async function GET(request) {
         const limite = Math.min(Math.max(parseInt(p.get('limite'), 10) || POR_PAGINA, 1), 300);
 
         const where = [];
-        if (filtro === 'sin') where.push({ [Op.or]: [{ codigoBarras: null }, { codigoBarras: '' }] });
+        // "Sin código": no tiene ninguno en ninguna presentación
+        if (filtro === 'sin') COLUMNAS_BARRAS.forEach((c) => where.push(vacio(c)));
         q.split(/\s+/).filter(Boolean).forEach((palabra) => {
             const patron = like(palabra);
             where.push({ [Op.or]: [
-                { nombre: { [Op.iLike]: patron } }, { codigo: { [Op.iLike]: patron } }, { codigoBarras: { [Op.iLike]: patron } }, { '$marca.nombre$': { [Op.iLike]: patron } },
+                { nombre: { [Op.iLike]: patron } }, { codigo: { [Op.iLike]: patron } }, ...COLUMNAS_BARRAS.map((c) => ({ [c]: { [Op.iLike]: patron } })), { '$marca.nombre$': { [Op.iLike]: patron } },
             ] });
         });
 
         const [total, conCodigo, filas] = await Promise.all([
             Producto.count(),
-            Producto.count({ where: { codigoBarras: { [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: '' }] } } }),
+            Producto.count({ where: { [Op.or]: COLUMNAS_BARRAS.map(lleno) } }),
             Producto.findAll({
                 where: { [Op.and]: where },
-                attributes: ['id', 'nombre', 'codigo', 'codigoBarras', 'imagen'],
+                attributes: ['id', 'nombre', 'codigo', ...COLUMNAS_BARRAS, 'presentacion', 'unidadesPorCaja', 'cajasPorBulto', 'unidadesPorBulto', 'imagen'],
                 include: [
                     { model: Marca, as: 'marca', attributes: ['nombre', 'imagen'] },
                     { model: GrupoEquivalencia, as: 'grupoEquivalencia', attributes: ['imagen'] },
@@ -53,7 +59,9 @@ export async function GET(request) {
             puedeEditar: await puedeEditarInventario(sesion),
             hayMas: filas.length > limite,
             productos: filas.slice(0, limite).map((f) => ({
-                id: f.id, nombre: f.nombre, codigo: f.codigo, codigoBarras: f.codigoBarras || null,
+                id: f.id, nombre: f.nombre, codigo: f.codigo,
+                // Un renglón por presentación que el producto tiene (unidad siempre; caja y bulto si su ficha los define)
+                niveles: presentacionesDe(f.toJSON()).map((n) => ({ clave: n.clave, etiqueta: n.etiqueta, campo: CAMPO_DE_NIVEL[n.clave], codigo: f[CAMPO_DE_NIVEL[n.clave]] || null })),
                 marca: f.marca?.nombre || null, imagen: imagenDe(f),
             })),
         });

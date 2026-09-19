@@ -1,29 +1,37 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Alert, Badge, Box, Button, Card, Center, Group, Image, NumberInput, Pagination, Select, SimpleGrid, Skeleton, Stack, Switch, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Badge, Box, Button, Card, Center, Group, Image, NumberInput, Pagination, SegmentedControl, Select, SimpleGrid, Skeleton, Stack, Switch, Text, TextInput, Title } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { IconAlertTriangle, IconPackageOff, IconSearch, IconShoppingCartPlus } from '@tabler/icons-react';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
-import { aBolivares } from '@/app/constants/facturacion';
-import { getMainImage, PLACEHOLDER_IMG, getPresentacionLabel } from '@/app/components/landing/productUtils';
-import { useB2BCart } from '../_lib/B2BCartContext';
-import { fmtBs, fmtPrecio, pedirJson } from '../_lib/formato';
+import { aBolivares, montoRenglon } from '@/app/constants/facturacion';
+import { getMainImage, PLACEHOLDER_IMG } from '@/app/components/landing/productUtils';
+import { presentacionesDe, useB2BCart } from '../_lib/B2BCartContext';
+import { fmtBs, fmtPrecio, fmtUsd, pedirJson } from '../_lib/formato';
 
 function TarjetaProducto({ producto, tasa }) {
     const { agregar, cantidadDe } = useB2BCart();
+    const opciones = presentacionesDe(producto);
+    const [clave, setClave] = useState('UNIDAD');
     const [cantidad, setCantidad] = useState(1);
+    const pres = opciones.find((o) => o.clave === clave) || opciones[0];
+
+    // La existencia está en unidades: lo que ya hay en el carrito (en cualquier presentación) se descuenta antes de contar cajas o bultos
     const enPedido = cantidadDe(producto.id);
     const agotado = producto.disponible <= 0;
-    const restante = Math.max(0, producto.disponible - enPedido);
+    const restanteUnidades = Math.max(0, producto.disponible - enPedido);
+    const cabe = Math.floor(restanteUnidades / pres.unidades); // cuántas de esta presentación caben todavía
+    const precioPresentacion = pres.unidades > 1 ? montoRenglon(producto.precio, pres.unidades) : null; // lo que cuesta UNA caja / bulto
 
+    const elegir = (nueva) => { setClave(nueva); setCantidad(1); };
     const anadir = () => {
         const n = Math.floor(Number(cantidad) || 0);
-        if (n < 1) return;
-        agregar(producto, n);
-        notifications.show({ color: 'teal', message: `${n} × ${producto.nombre} añadido a tu pedido`, autoClose: 2500 });
+        if (n < 1 || n > cabe) return;
+        agregar(producto, n, pres.clave);
+        notifications.show({ color: 'teal', message: `${n} × ${pres.etiqueta} de ${producto.nombre} añadido a tu pedido`, autoClose: 2500 });
         setCantidad(1);
     };
 
@@ -39,27 +47,37 @@ function TarjetaProducto({ producto, tasa }) {
                     {producto.codigo && <Text size="xs" c="dimmed" ff="monospace">{producto.codigo}</Text>}
                 </Group>
                 <Text fw={700} size="sm" lh={1.3} lineClamp={2} c="navy.9" mih={38}>{producto.nombre}</Text>
-                <Text size="xs" c="dimmed">{getPresentacionLabel(producto)}</Text>
+
+                {opciones.length > 1
+                    ? <SegmentedControl fullWidth size="xs" color="navy.9" value={pres.clave} onChange={elegir} data={opciones.map((o) => ({ value: o.clave, label: o.etiqueta }))} />
+                    : <Text size="xs" c="dimmed">Se vende por {opciones[0].singular}</Text>}
 
                 <Box mt={4}>
-                    <Text fz={20} fw={800} c="brand.6" lh={1.1}>{fmtPrecio(producto.precio)}</Text>
-                    {tasa && <Text size="xs" c="dimmed" fw={600}>{fmtBs(aBolivares(producto.precio, tasa))}</Text>}
-                    <Text size="xs" c="dimmed">{producto.porcentajeIva > 0 ? `+ IVA ${producto.porcentajeIva}%` : 'Exento de IVA'}</Text>
+                    <Text fz={20} fw={800} c="brand.6" lh={1.1}>{precioPresentacion !== null ? fmtUsd(precioPresentacion) : fmtPrecio(producto.precio)}</Text>
+                    {tasa && <Text size="xs" c="dimmed" fw={600}>{fmtBs(aBolivares(precioPresentacion !== null ? precioPresentacion : producto.precio, tasa))}</Text>}
+                    <Text size="xs" c="dimmed">
+                        {pres.unidades > 1 ? `por ${pres.singular} · ${fmtPrecio(producto.precio)} c/u` : `por ${pres.singular}`} · {producto.porcentajeIva > 0 ? `+ IVA ${producto.porcentajeIva}%` : 'Exento de IVA'}
+                    </Text>
                 </Box>
 
                 {agotado
                     ? <Badge color="red" variant="light" leftSection={<IconPackageOff size={12} />} mt={4}>Agotado</Badge>
-                    : <Text size="xs" c={producto.disponible <= 10 ? 'orange.7' : 'dimmed'} fw={producto.disponible <= 10 ? 700 : 400}>{producto.disponible} disponibles{enPedido > 0 ? ` · ${enPedido} en tu pedido` : ''}</Text>}
+                    : <Text size="xs" c={producto.disponible <= 10 ? 'orange.7' : 'dimmed'} fw={producto.disponible <= 10 ? 700 : 400}>
+                        {producto.disponible} unidades disponibles{pres.unidades > 1 ? ` (${Math.floor(producto.disponible / pres.unidades)} ${Math.floor(producto.disponible / pres.unidades) === 1 ? pres.singular : pres.plural})` : ''}{enPedido > 0 ? ` · ${enPedido} en tu pedido` : ''}
+                    </Text>}
             </Stack>
 
             {!agotado && (
-                <Group gap={6} mt="sm" wrap="nowrap">
-                    <NumberInput value={cantidad} onChange={setCantidad} min={1} max={Math.max(1, restante)} allowDecimal={false} allowNegative={false} clampBehavior="strict"
-                        w={84} size="sm" aria-label="Cantidad" disabled={restante <= 0} />
-                    <Button flex={1} size="sm" color="navy.9" tt="none" leftSection={<IconShoppingCartPlus size={16} />} onClick={anadir} disabled={restante <= 0}>
-                        {restante <= 0 ? 'Todo en tu pedido' : 'Agregar'}
-                    </Button>
-                </Group>
+                <Stack gap={4} mt="sm">
+                    <Group gap={6} wrap="nowrap">
+                        <NumberInput value={cantidad} onChange={setCantidad} min={1} max={Math.max(1, cabe)} allowDecimal={false} allowNegative={false} clampBehavior="strict"
+                            w={84} size="sm" aria-label={`Cantidad de ${pres.plural}`} disabled={cabe < 1} />
+                        <Button flex={1} size="sm" color="navy.9" tt="none" leftSection={<IconShoppingCartPlus size={16} />} onClick={anadir} disabled={cabe < 1}>
+                            {cabe < 1 ? (restanteUnidades > 0 ? `No alcanza para ${pres.unidades > 1 ? 'una ' + pres.singular : 'más'}` : 'Todo en tu pedido') : 'Agregar'}
+                        </Button>
+                    </Group>
+                    {pres.unidades > 1 && cabe >= 1 && <Text size="xs" c="dimmed">{Number(cantidad) || 1} {(Number(cantidad) || 1) === 1 ? pres.singular : pres.plural} = <b>{(Number(cantidad) || 1) * pres.unidades} unidades</b></Text>}
+                </Stack>
             )}
         </Card>
     );

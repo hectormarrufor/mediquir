@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { Cliente, Correlativo, CuentaPorCobrar, Producto, SalidaInventario, Venta, VentaDetalle, sequelize } from '@/models';
 import { notificarTodos } from '@/app/handlers/notificar';
 import { calcularFactura, precioMayor } from '@/app/constants/facturacion';
+import { presentacionDe } from '@/app/constants/presentaciones';
 import { requerirCliente } from '../../_lib/acceso';
 import { crearRetencionPendiente } from '../../_lib/retencionesVenta';
 import { tasaVigente } from '../../_lib/tasaBcv';
@@ -66,15 +67,19 @@ export async function POST(request) {
         if (items.length === 0) throw new ErrorNegocio('Tu pedido está vacío');
         if (items.length > MAX_RENGLONES) throw new ErrorNegocio(`Un pedido admite hasta ${MAX_RENGLONES} productos distintos`);
 
-        // Unifica productos repetidos y valida cantidades enteras (no se vende a granel)
-        const cantidades = new Map();
+        // Unifica renglones repetidos (mismo producto y misma presentación) y valida cantidades enteras (no se vende a granel).
+        // `presentacion`: UNIDAD (o par/paquete, según el producto), CAJA o BULTO; `cantidad`: cuántas de ESA presentación.
+        const solicitudes = new Map();
         for (const item of items) {
             const productoId = Number(item.productoId);
             const cantidad = Number(item.cantidad);
+            const presentacion = ['UNIDAD', 'CAJA', 'BULTO'].includes(item.presentacion) ? item.presentacion : 'UNIDAD';
             if (!Number.isInteger(productoId) || productoId <= 0) throw new ErrorNegocio('Producto inválido en el pedido');
             if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > MAX_CANTIDAD) throw new ErrorNegocio('Las cantidades deben ser números enteros mayores a 0');
-            cantidades.set(productoId, (cantidades.get(productoId) || 0) + cantidad);
+            const clave = `${productoId}:${presentacion}`;
+            solicitudes.set(clave, { productoId, presentacion, cantidad: (solicitudes.get(clave)?.cantidad || 0) + cantidad });
         }
+        const idsProductos = [...new Set([...solicitudes.values()].map((s) => s.productoId))];
 
         // Pedido a crédito: se comprueba el cupo con la fila del cliente bloqueada, para que dos pedidos simultáneos no superen el máximo
         const aCredito = body.condicionPago === 'Credito';
@@ -91,13 +96,27 @@ export async function POST(request) {
         const tipoDocumento = body.tipoDocumento === 'FACTURA' ? 'FACTURA' : 'NOTA_ENTREGA';
         const prefijo = tipoDocumento === 'FACTURA' ? 'F' : 'NE';
 
-        const productos = await Producto.findAll({ where: { id: { [Op.in]: [...cantidades.keys()] } }, transaction: t, lock: t.LOCK.UPDATE });
-        if (productos.length !== cantidades.size) throw new ErrorNegocio('Alguno de los productos ya no está disponible');
+        const productos = await Producto.findAll({ where: { id: { [Op.in]: idsProductos } }, transaction: t, lock: t.LOCK.UPDATE });
+        if (productos.length !== idsProductos.length) throw new ErrorNegocio('Alguno de los productos ya no está disponible');
+        const porId = new Map(productos.map((p) => [p.id, p]));
 
-        const lineas = productos.map((p) => ({ producto: p, cantidad: cantidades.get(p.id) }));
-        const faltantes = lineas.filter(({ producto, cantidad }) => (Number(producto.stockAlmacen) || 0) < cantidad);
+        // Cada renglón: la presentación pedida se traduce a UNIDADES con lo que dice la ficha del producto (el servidor manda, no el navegador).
+        // `cantidad` queda en unidades (stock, precio e inventario no cambian); la presentación pedida se guarda aparte para el empaque.
+        const lineas = [...solicitudes.values()].map((s) => {
+            const producto = porId.get(s.productoId);
+            const presentacion = presentacionDe(producto, s.presentacion);
+            if (!presentacion) throw new ErrorNegocio(`"${producto.nombre}" ya no se ofrece en esa presentación. Actualiza tu carrito.`, 409);
+            const unidades = s.cantidad * presentacion.unidades;
+            if (unidades > MAX_CANTIDAD * 100) throw new ErrorNegocio(`La cantidad de "${producto.nombre}" es demasiado grande`);
+            return { producto, presentacion, cantidadPresentacion: s.cantidad, cantidad: unidades };
+        });
+
+        // La existencia se comprueba por producto, sumando todas sus presentaciones (stock en unidades)
+        const pedidoPorProducto = new Map();
+        lineas.forEach((l) => pedidoPorProducto.set(l.producto.id, (pedidoPorProducto.get(l.producto.id) || 0) + l.cantidad));
+        const faltantes = [...pedidoPorProducto].filter(([id, unidades]) => (Number(porId.get(id).stockAlmacen) || 0) < unidades).map(([id]) => porId.get(id));
         if (faltantes.length) {
-            throw new ErrorNegocio(`Sin existencia suficiente: ${faltantes.map(({ producto }) => `${producto.nombre} (disponible ${Math.max(0, Math.floor(Number(producto.stockAlmacen) || 0))})`).join(', ')}`, 409);
+            throw new ErrorNegocio(`Sin existencia suficiente: ${faltantes.map((p) => `${p.nombre} (disponible ${Math.max(0, Math.floor(Number(p.stockAlmacen) || 0))} unidades)`).join(', ')}`, 409);
         }
 
         const sinPrecio = lineas.filter(({ producto }) => !(precioMayor(producto) > 0));
@@ -155,7 +174,7 @@ export async function POST(request) {
         }
 
         for (let i = 0; i < lineas.length; i++) {
-            const { producto } = lineas[i];
+            const { producto, presentacion, cantidadPresentacion } = lineas[i];
             const renglon = factura.renglones[i];
             await VentaDetalle.create({
                 ventaId: venta.id,
@@ -166,6 +185,10 @@ export async function POST(request) {
                 cantidad: renglon.cantidad,
                 precioUnitario: renglon.precioUnitario,
                 subtotal: renglon.monto,
+                // Lo que pidió el cliente (p. ej. 2 cajas de 100); `cantidad` ya está en unidades
+                presentacionPedida: presentacion.clave,
+                cantidadPresentacion,
+                unidadesPorPresentacion: presentacion.unidades,
             }, { transaction: t });
 
             // El personal empaca desde estas salidas pendientes; el stock se descuenta al empacar (igual que el resto de pedidos al mayor)

@@ -3,8 +3,9 @@ import { requerirStaff } from '@/app/api/inventario/_lib';
 import { rolDe } from '@/app/constants/roles';
 import { notificarCabezas } from '@/app/handlers/notificar';
 import db from '@/models/index';
+import { codigosDe, nivelDelCodigo, nivelMayor, NOMBRE_NIVEL, textoEntrega, unidadesDeEntrega } from '@/app/constants/presentaciones';
 import {
-    buscarVentaParaEmpaque, imagenDe, nombreDe, codigoCoincide, modoVerificacion, opcionesDeMarca,
+    buscarVentaParaEmpaque, codigosDelRenglon, entregaDeDetalle, imagenDe, nombreDe, modoVerificacion, opcionesDeMarca,
 } from '../../_empaque';
 
 const { sequelize, Venta, VentaEmpaqueItem } = db;
@@ -42,17 +43,23 @@ export async function GET(request, { params }) {
         for (const d of venta.detalles) {
             const r = porDetalle.get(d.id);
             const modo = modoVerificacion(d);
+            const entrega = entregaDeDetalle(d);
             items.push({
                 detalleId: d.id,
                 nombre: nombreDe(d),
                 marca: d.producto?.marca?.nombre || null,
                 imagen: imagenDe(d.producto),
                 cantidadPedida: Number(d.cantidad),
+                // Lo que hay que entregar, por nivel: "2 cajas" o "50 unidades sueltas" (con lo que trae cada una)
+                entrega, entregaTexto: textoEntrega(entrega), nivelRequerido: entrega.length ? nivelMayor(entrega) : null,
+                nivelesCodigo: modo === 'codigo' ? codigosDelRenglon(d).map((c) => c.nivel) : [],
                 modo,
                 // No se envía el código esperado: se valida en el servidor
                 opcionesMarca: modo === 'marca' && r?.estado !== 'OK' ? await opcionesDeMarca(d) : null,
                 estado: r?.estado || 'PENDIENTE',
                 cantidadEmpacada: r?.cantidadEmpacada != null ? Number(r.cantidadEmpacada) : null,
+                bultosEmpacados: r?.bultosEmpacados ?? null, cajasEmpacadas: r?.cajasEmpacadas ?? null, sueltasEmpacadas: r?.sueltasEmpacadas ?? null,
+                nivelVerificado: r?.nivelVerificado || null,
                 metodo: r?.metodo || null,
                 intentosFallidos: r?.intentosFallidos || 0,
                 observacion: r?.observacion || null,
@@ -89,7 +96,7 @@ export async function POST(request, { params }) {
     let novedad = null;
     try {
         const { id } = await params;
-        const { accion, detalleId, codigo, escaneado, marcaElegida, cantidad, observacion } = await request.json();
+        const { accion, detalleId, codigo, escaneado, marcaElegida, cantidad, empacado, observacion } = await request.json();
 
         const venta = await buscarVentaParaEmpaque(id, { transaction: t });
         if (!venta) throw new ErrorEmpaque('Documento no encontrado', 404);
@@ -107,6 +114,7 @@ export async function POST(request, { params }) {
             if (!reg || reg.estado !== 'NOVEDAD') throw new ErrorEmpaque('Ese renglón no tiene una novedad pendiente', 409);
             reg.estado = 'PENDIENTE';
             reg.cantidadEmpacada = null;
+            reg.bultosEmpacados = null; reg.cajasEmpacadas = null; reg.sueltasEmpacadas = null; reg.nivelVerificado = null;
             reg.observacion = `Novedad anterior: ${reg.observacion || 's/n'}`;
             await reg.save({ transaction: t });
             await t.commit();
@@ -128,9 +136,23 @@ export async function POST(request, { params }) {
         const modo = modoVerificacion(detalle);
         let metodo = 'manual';
         let coincide = true;
+        let nivelVerificado = null;
+        const entrega = entregaDeDetalle(detalle);
+        let avisoNivel = null;
         if (modo === 'codigo') {
-            coincide = codigoCoincide(detalle.producto.codigoBarras, codigo, Boolean(escaneado));
+            const aceptados = codigosDelRenglon(detalle);
+            nivelVerificado = nivelDelCodigo(aceptados, codigo, Boolean(escaneado));
+            coincide = Boolean(nivelVerificado);
             metodo = escaneado && coincide ? 'escaneo' : 'codigo';
+            if (!coincide) {
+                // ¿Es un código válido del producto pero de OTRA presentación? (p. ej. la unidad cuando se piden cajas)
+                const otros = Object.entries(codigosDe(detalle.producto)).map(([nivel, cod]) => ({ nivel, codigo: cod }));
+                const otro = nivelDelCodigo(otros, codigo, Boolean(escaneado));
+                const exigido = aceptados.map((a) => NOMBRE_NIVEL[a.nivel]).join(' o ');
+                avisoNivel = otro
+                    ? `Ese es el código ${NOMBRE_NIVEL[otro]}, pero este renglón se entrega en ${textoEntrega(entrega)}: escanea el código ${exigido}.`
+                    : null;
+            }
         } else if (modo === 'marca') {
             coincide = String(marcaElegida || '') === detalle.producto.marca.nombre;
             metodo = 'marca';
@@ -140,28 +162,51 @@ export async function POST(request, { params }) {
             reg.intentosFallidos += 1;
             await reg.save({ transaction: t });
             await t.commit();
-            const msg = modo === 'codigo'
+            const msg = avisoNivel || (modo === 'codigo'
                 ? 'Ese código de barras no corresponde al producto pedido. Revisa que estés tomando el producto correcto.'
-                : 'Esa no es la marca del producto pedido. Revisa que estés tomando el producto correcto.';
+                : 'Esa no es la marca del producto pedido. Revisa que estés tomando el producto correcto.');
             return NextResponse.json({ error: msg, intentosFallidos: reg.intentosFallidos }, { status: 422 });
         }
 
-        // 2) ¿La cantidad coincide con lo pedido?
-        const cant = Number(cantidad);
-        if (cantidad === '' || cantidad == null || !Number.isFinite(cant) || cant < 0) throw new ErrorEmpaque('Escribe cuántas unidades metiste');
+        // 2) ¿Lo que se metió coincide con lo pedido? El empacador cuenta por nivel (bultos, cajas, sueltas); sin desglose (clientes viejos) se compara el total
         const pedida = Number(detalle.cantidad);
+        let cant;
+        let coincideCantidad;
+        if (empacado && typeof empacado === 'object') {
+            const conteo = { BULTO: empacado.bultos, CAJA: empacado.cajas, UNIDAD: empacado.sueltas };
+            for (const [nivel, v] of Object.entries(conteo)) {
+                const n = Number(v ?? 0);
+                if (!Number.isInteger(n) || n < 0 || n > 10000000) throw new ErrorEmpaque('Escribe cuántos bultos, cajas y unidades sueltas metiste (números enteros)');
+                conteo[nivel] = n;
+            }
+            const factor = (n) => entrega.find((e) => e.nivel === n)?.unidadesCada || (n === 'UNIDAD' ? 1 : null);
+            // Si se contó un nivel que el pedido no tiene, se convierte con lo que trae la ficha del producto
+            const porNivel = { BULTO: factor('BULTO') || detalle.producto?.unidadesPorBulto || 0, CAJA: factor('CAJA') || detalle.producto?.unidadesPorCaja || 0, UNIDAD: 1 };
+            cant = conteo.BULTO * porNivel.BULTO + conteo.CAJA * porNivel.CAJA + conteo.UNIDAD;
+            const esperado = { BULTO: 0, CAJA: 0, UNIDAD: 0 };
+            entrega.forEach((e) => { esperado[e.nivel] = e.cantidad; });
+            coincideCantidad = ['BULTO', 'CAJA', 'UNIDAD'].every((n) => esperado[n] === conteo[n]);
+            reg.bultosEmpacados = conteo.BULTO;
+            reg.cajasEmpacadas = conteo.CAJA;
+            reg.sueltasEmpacadas = conteo.UNIDAD;
+        } else {
+            cant = Number(cantidad);
+            if (cantidad === '' || cantidad == null || !Number.isFinite(cant) || cant < 0) throw new ErrorEmpaque('Escribe cuántas unidades metiste');
+            coincideCantidad = cant === pedida;
+        }
 
         if (!venta.empaqueIniciadoAt) venta.empaqueIniciadoAt = new Date();
         reg.metodo = metodo;
+        reg.nivelVerificado = nivelVerificado;
         reg.cantidadEmpacada = cant;
         reg.verificadoAt = new Date();
 
-        if (cant !== pedida) {
+        if (!coincideCantidad) {
             const motivo = String(observacion || '').trim();
             if (motivo.length < 5) throw new ErrorEmpaque('La cantidad no coincide con lo pedido: explica el motivo', 400, { requiereMotivo: true });
             reg.estado = 'NOVEDAD';
             reg.observacion = motivo.slice(0, 500);
-            novedad = { numero: venta.numeroDocumento, nombre: nombreDe(detalle), pedida, cant, motivo: reg.observacion, ventaId: venta.id };
+            novedad = { numero: venta.numeroDocumento, nombre: nombreDe(detalle), pedida, cant, entrega: textoEntrega(entrega), motivo: reg.observacion, ventaId: venta.id };
         } else {
             reg.estado = 'OK';
         }
@@ -173,7 +218,7 @@ export async function POST(request, { params }) {
             try {
                 await notificarCabezas({
                     title: 'Novedad en un empaque ⚠️',
-                    body: `Pedido ${novedad.numero}: "${novedad.nombre}" pedido ${novedad.pedida}, el empacador reporta ${novedad.cant}. Motivo: ${novedad.motivo}`,
+                    body: `Pedido ${novedad.numero}: "${novedad.nombre}" pedido ${novedad.entrega || novedad.pedida + ' und'} (${novedad.pedida} unidades), el empacador reporta ${novedad.cant} unidades. Motivo: ${novedad.motivo}`,
                     url: `/superuser/ventas/${novedad.ventaId}`, tipo: 'Alerta',
                 });
             } catch (e) {
