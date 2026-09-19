@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Box, Drawer, Indicator, ActionIcon, Stack, Group, Text, Button, ScrollArea, Image } from '@mantine/core';
+import { Box, Drawer, Indicator, ActionIcon, Stack, Group, Text, Button, ScrollArea, Image, Badge } from '@mantine/core';
 import { IconShoppingCart, IconTrash, IconMinus, IconPlus } from '@tabler/icons-react';
 
 import HeroSection from './components/landing/HeroSection';
@@ -10,6 +10,7 @@ import BestSellersSection from './components/landing/BestSellersSection';
 import FooterSection from './components/landing/FooterSection';
 import { useCart } from './components/landing/CartContext';
 import CheckoutProcess from './CheckoutProcess';
+import { getMainImage, PLACEHOLDER_IMG } from './components/landing/productUtils';
 
 export default function LandingMediquir() {
     const [bcv, setBcv] = useState(undefined);
@@ -101,16 +102,8 @@ export default function LandingMediquir() {
         setShowCheckout(true);
     };
 
-    const getProductImage = (product) => {
-        const baseUrl = process.env.NEXT_PUBLIC_BLOB_BASE_URL || '';
-        if (product?.imagen) return `${baseUrl}/${product.imagen}`;
-        if (product?.grupoEquivalencia?.imagen) return `${baseUrl}/${product.grupoEquivalencia.imagen}`;
-        if (product?.marca?.imagen) return `${baseUrl}/${product.marca.imagen}`;
-        return '/placeholder-med.png';
-    };
-
     return (
-        <Box bg="#F8F9FA" style={{ minHeight: '100vh', overflow: 'hidden', position: 'relative' }}>
+        <Box style={{ minHeight: '100vh', overflowX: 'clip', position: 'relative' }}>
 
             <HeroSection
                 searchQuery={searchQuery}
@@ -134,12 +127,20 @@ export default function LandingMediquir() {
 
             {/* BOTÓN FLOTANTE DEL CARRITO */}
             {isLoaded && (
-                <Box pos="fixed" bottom={30} right={30} style={{ zIndex: 100 }}>
+                <Box
+                    pos="fixed"
+                    style={{
+                        zIndex: 100,
+                        right: 'max(16px, env(safe-area-inset-right))',
+                        bottom: 'max(16px, env(safe-area-inset-bottom))',
+                    }}
+                >
                     <Indicator label={totalItems} size={22} color="red" offset={5} disabled={totalItems === 0}>
                         <ActionIcon
                             radius="xl"
-                            size={60}
-                            color="#0B1B3D"
+                            size={56}
+                            aria-label="Abrir carrito"
+                            color="navy.9"
                             variant="filled"
                             onClick={() => setCartOpened(true)}
                             style={{ boxShadow: '0 8px 25px rgba(0,0,0,0.25)', transition: 'transform 0.2s' }}
@@ -159,7 +160,7 @@ export default function LandingMediquir() {
                     setShowCheckout(false); // Resetea al cerrar
                 }}
                 position="right"
-                title={<Text fw={900} size="xl" c="#0B1B3D">{showCheckout ? 'Finalizar Compra' : 'Tu Carrito'}</Text>}
+                title={<Text fw={900} size="xl" c="navy.9">{showCheckout ? 'Finalizar Compra' : 'Tu Carrito'}</Text>}
                 padding="md"
                 size="md"
             >
@@ -191,12 +192,12 @@ export default function LandingMediquir() {
                                         return (
                                             <Group key={item.product.id} wrap="nowrap" align="flex-start" opacity={isOut ? 0.6 : 1}>
                                                 <Image
-                                                    src={getProductImage(item.product)}
+                                                    src={getMainImage(item.product)}
                                                     w={65} h={65} radius="md" fit="contain" bg="gray.1" p={4}
-                                                    fallbackSrc="/placeholder-med.png"
+                                                    fallbackSrc={PLACEHOLDER_IMG}
                                                 />
                                                 <Box flex={1}>
-                                                    <Text size="sm" fw={700} lineClamp={2} c="#0B1B3D">{item.product.nombre}</Text>
+                                                    <Text size="sm" fw={700} lineClamp={2} c="navy.9">{item.product.nombre}</Text>
                                                     <Text size="xs" c="dimmed" fw={600}>Ref ${item.precioFinal.toFixed(2)}</Text>
 
                                                     {isOut && (
@@ -242,12 +243,12 @@ export default function LandingMediquir() {
                         <Box pos="absolute" bottom={0} left={0} right={0} p="md" bg="white" style={{ borderTop: '1px solid #E9ECEF' }}>
                             <Group justify="space-between" mb="md">
                                 <Text fw={700} size="md" c="gray.7">Subtotal:</Text>
-                                <Text fw={900} size="xl" c="#005AAA">Ref ${subtotal.toFixed(2)}</Text>
+                                <Text fw={900} size="xl" c="brand.6">Ref ${subtotal.toFixed(2)}</Text>
                             </Group>
                             <Button
                                 fullWidth
                                 size="lg"
-                                color="#0B1B3D"
+                                color="navy.9"
                                 radius="md"
                                 loading={isVerifying}
                                 disabled={cart.length === 0 || hasInvalidItems}

@@ -1,218 +1,169 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-    Container, Title, Text, Button, Group, 
-    TextInput, Badge, Box, ThemeIcon, ActionIcon,
-    Paper, Stack, Loader, Flex, Grid
+import {
+    Container, Title, Text, Button, Group, TextInput, Badge, Box,
+    ThemeIcon, Paper, Stack, Loader, Flex
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { 
-    IconSearch, IconTruckDelivery, IconShieldCheck, 
-    IconStethoscope, IconChevronLeft, IconChevronRight,
-    IconHeartHandshake
+import {
+    IconSearch, IconTruckDelivery, IconShieldCheck, IconStethoscope,
+    IconHeartHandshake, IconChevronDown
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
+import classes from './landing.module.css';
 
-const HERO_IMAGES = [
-    '/tenants/mediquir/hero-1.jpg',
-    '/tenants/mediquir/hero-2.jpg',
-    '/tenants/mediquir/hero-4.jpg',
-    '/tenants/mediquir/hero-5.jpg'
-];
+// Versiones optimizadas (~50–200 KB) de las fotos originales de 7–9 MB
+const HERO_IMAGES = [1, 2, 4, 5].map((n) => ({
+    lg: `/tenants/mediquir/hero-${n}-lg.jpg`,
+    sm: `/tenants/mediquir/hero-${n}-sm.jpg`,
+}));
+
 
 export default function HeroSection({ searchQuery, onSearch }) {
-    const isMobile = useMediaQuery('(max-width: 768px)');
+    // Se asume móvil hasta comprobar lo contrario: así el móvil nunca descarga el video
+    const isMobile = useMediaQuery('(max-width: 48em)', true);
     const [localQuery, setLocalQuery] = useState(searchQuery || '');
     const [currentSlide, setCurrentSlide] = useState(0);
     const [videoError, setVideoError] = useState(false);
 
-    useEffect(() => {
-        setLocalQuery(searchQuery);
-    }, [searchQuery]);
+    useEffect(() => { setLocalQuery(searchQuery || ''); }, [searchQuery]);
 
-    useEffect(() => {
-        const videoPath = '/tenants/mediquir/hero-video.mp4';
-        fetch(videoPath, { method: 'HEAD' })
-            .then((res) => { if (!res.ok) setVideoError(true); })
-            .catch(() => setVideoError(true));
-    }, []);
-
+    // Misma queryKey que el catálogo: no genera una petición extra
     const { data: productos } = useQuery({
-        queryKey: ['productos-count'],
+        queryKey: ['productos-landing'],
+        staleTime: 60_000,
         queryFn: async () => {
             const res = await fetch('/api/productos');
-            if (!res.ok) return [];
+            if (!res.ok) throw new Error('Error al cargar productos');
             return res.json();
         }
     });
-    
+
     const totalProductos = productos?.length || 0;
-    const prefijoConteo = totalProductos > 100 ? '+' : '';
+    const usaVideo = !isMobile && !videoError;
+
+    // Sin video (móvil o error): fundido lento entre fotos
+    useEffect(() => {
+        if (usaVideo) return;
+        const timer = setInterval(() => setCurrentSlide((prev) => (prev + 1) % HERO_IMAGES.length), 6000);
+        return () => clearInterval(timer);
+    }, [usaVideo]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (localQuery.trim().length > 0) {
-            onSearch(localQuery.trim());
-        }
+        if (localQuery.trim().length > 0) onSearch(localQuery.trim());
     };
 
-    useEffect(() => {
-        if (videoError) {
-            const timer = setInterval(() => {
-                setCurrentSlide((prev) => (prev + 1) % HERO_IMAGES.length);
-            }, 7000);
-            return () => clearInterval(timer);
-        }
-    }, [videoError]);
-
-    const nextSlide = () => setCurrentSlide((prev) => (prev + 1) % HERO_IMAGES.length);
-    const prevSlide = () => setCurrentSlide((prev) => (prev - 1 + HERO_IMAGES.length) % HERO_IMAGES.length);
-
-    const ControlesYEstadisticas = (
-        <>
-            {videoError && HERO_IMAGES.length > 1 && (
-                <Group gap="sm">
-                    <ActionIcon 
-                        variant="white" radius="xl" size="lg" 
-                        style={{ backgroundColor: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(8px)', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}
-                        onClick={prevSlide}
-                    >
-                        <IconChevronLeft size={20} />
-                    </ActionIcon>
-                    <ActionIcon 
-                        variant="white" radius="xl" size="lg" 
-                        style={{ backgroundColor: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(8px)', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}
-                        onClick={nextSlide}
-                    >
-                        <IconChevronRight size={20} />
-                    </ActionIcon>
-                </Group>
-            )}
-
-            <Paper p="md" radius="md" shadow="xl" style={{ backgroundColor: 'rgba(255, 255, 255, 0.15)', backdropFilter: 'blur(15px)', border: '1px solid rgba(255,255,255,0.25)' }}>
-                <Group gap="sm">
-                    <ThemeIcon color="white" variant="light" size="xl" radius="md">
-                        <IconStethoscope size={24} color="#005AAA" />
-                    </ThemeIcon>
-                    <Stack gap={0}>
-                        <Group gap={4} align="flex-end">
-                            <Text fw={900} size="xl" c="white" lh={1}>
-                                {totalProductos === 0 ? <Loader size="xs" color="white" /> : `${prefijoConteo}${totalProductos}`}
-                            </Text>
-                        </Group>
-                        <Text size="xs" c="gray.3" fw={700} tt="uppercase">Insumos Disponibles</Text>
-                    </Stack>
-                </Group>
-            </Paper>
-        </>
-    );
+    const scrollToCatalog = () => document.getElementById('productos-section')?.scrollIntoView({ behavior: 'smooth' });
 
     return (
-        <Box pos="relative" mih={{ base: '85vh', md: 720 }} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            {/* FONDO MULTIMEDIA: VIDEO CON OPTIMIZACIÓN Y FALLBACK A FOTOS FADE (4s) */}
-            <Box pos="absolute" inset={0} style={{ zIndex: 0, backgroundColor: '#0B1B3D' }}>
-                {!videoError ? (
-                    <video 
+        <Box className={classes.hero} pos="relative" mih={{ base: 440, sm: 560, md: 640 }} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            {/* FONDO */}
+            <Box pos="absolute" inset={0} style={{ zIndex: 0, backgroundColor: 'var(--mantine-color-navy-9)' }}>
+                {usaVideo ? (
+                    <video
                         src="/tenants/mediquir/hero-video.mp4"
-                        poster="/tenants/mediquir/hero-1.jpg"
-                        autoPlay 
-                        loop 
-                        muted 
-                        playsInline 
-                        preload="auto"
+                        poster={HERO_IMAGES[0].lg}
+                        autoPlay loop muted playsInline preload="metadata"
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         onError={() => setVideoError(true)}
                     />
                 ) : (
-                    <Box pos="relative" w="100%" h="100%">
-                        {HERO_IMAGES.map((src, idx) => (
-                            <Box 
-                                key={idx} pos="absolute" inset={0} 
-                                style={{ 
-                                    opacity: idx === currentSlide ? 1 : 0,
-                                    transition: 'opacity 4s ease-in-out',
-                                    zIndex: idx === currentSlide ? 1 : 0
-                                }}
-                            >
-                                <img src={src} alt={`Banner ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            </Box>
-                        ))}
-                    </Box>
+                    HERO_IMAGES.map((img, idx) => (
+                        <Box key={idx} className={classes.heroSlide} data-active={idx === currentSlide || undefined}>
+                            <img
+                                src={isMobile ? img.sm : img.lg}
+                                alt=""
+                                loading={idx === 0 ? 'eager' : 'lazy'}
+                                fetchPriority={idx === 0 ? 'high' : 'auto'}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                        </Box>
+                    ))
                 )}
             </Box>
 
-            <Box 
-                pos="absolute" inset={0} 
-                bg={isMobile 
-                    ? "linear-gradient(180deg, rgba(11, 27, 61, 0.92) 0%, rgba(11, 27, 61, 0.75) 60%, rgba(0, 0, 0, 0.5) 100%)"
-                    : "linear-gradient(90deg, rgba(11, 27, 61, 0.95) 0%, rgba(11, 27, 61, 0.65) 50%, rgba(0, 0, 0, 0.2) 100%)"
-                } 
-                style={{ zIndex: 2 }} 
+            <Box
+                pos="absolute" inset={0} style={{ zIndex: 2 }}
+                bg={isMobile
+                    ? 'linear-gradient(180deg, rgba(11,27,61,0.88) 0%, rgba(11,27,61,0.72) 55%, rgba(11,27,61,0.9) 100%)'
+                    : 'linear-gradient(90deg, rgba(11,27,61,0.95) 0%, rgba(11,27,61,0.65) 50%, rgba(0,0,0,0.2) 100%)'}
             />
 
-            <Container size="xl" w="100%" h="100%" pos="relative" py={{ base: 50, md: 80 }} style={{ zIndex: 3, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <Grid style={{ margin: 0 }} align="center">
-                    <Grid.Col span={{ base: 12, md: 8, lg: 7 }}>
-                        <Box pr={{ base: 0, md: 'xl' }}>
-                            <Badge variant="outline" color="white" size={isMobile ? "md" : "lg"} radius="xl" leftSection={<IconHeartHandshake size={14} />} mb="md" style={{ backdropFilter: 'blur(5px)', borderWidth: 1.5 }}>
-                                Para clínicas, consultorios y tu hogar
-                            </Badge>
-                            
-                            <Title order={1} c="white" fz={{ base: 34, sm: 46, md: 58 }} fw={900} lh={1.15} mb="md" style={{ letterSpacing: '-0.5px' }}>
-                                Salud integral a tu alcance, de forma <Text component="span" c="#005AAA" inherit>inteligente.</Text>
-                            </Title>
-                            
-                            <Text c="gray.3" fz={{ base: 'sm', md: 'lg' }} mb={35} maw={550} fw={400}>
-                                Ya sea que busques abastecer tu inventario médico al mayor o necesites insumos al detal, garantizamos calidad, rapidez y los mejores precios.
+            <Box className={classes.heroGlow} />
+
+            <Container
+                size="xl" w="100%" pos="relative" px={{ base: 'sm', sm: 'md' }} py={{ base: 32, md: 80 }}
+                style={{ zIndex: 3, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}
+            >
+                <Box maw={640}>
+                    <Badge
+                        variant="outline" color="white" size={isMobile ? 'md' : 'lg'} radius="xl" mb="sm"
+                        leftSection={<IconHeartHandshake size={14} />} tt="none"
+                        style={{ backdropFilter: 'blur(5px)', borderWidth: 1.5 }}
+                    >
+                        Clínicas, consultorios y hogar
+                    </Badge>
+
+                    <Title order={1} c="white" fz={{ base: 30, sm: 44, md: 56 }} fw={900} lh={1.1} mb="sm" tt="none" display="block" pb={0} style={{ letterSpacing: '-0.5px' }}>
+                        Salud integral a tu alcance, de forma{' '}
+                        <Text component="span" c="sky.3" inherit>inteligente.</Text>
+                    </Title>
+
+                    <Text c="gray.3" fz={{ base: 'sm', md: 'lg' }} mb={{ base: 'md', md: 30 }} maw={540}>
+                        <Text component="span" visibleFrom="sm" inherit>
+                            Ya sea que busques abastecer tu inventario médico al mayor o necesites insumos al detal, garantizamos calidad, rapidez y los mejores precios.
+                        </Text>
+                        <Text component="span" hiddenFrom="sm" inherit>
+                            Insumos médicos al mayor y al detal. Calidad, rapidez y los mejores precios.
+                        </Text>
+                    </Text>
+
+                    <Paper p={4} radius="xl" shadow="xl" mb="md" maw={520} bg="white" withBorder={false}>
+                        <form onSubmit={handleSubmit}>
+                            <Flex gap="xs" align="center" pl="md">
+                                <TextInput
+                                    placeholder="Busca: tensiómetro, guantes, jeringas…"
+                                    size="md" radius="xl" variant="unstyled" style={{ flex: 1 }}
+                                    value={localQuery}
+                                    onChange={(e) => setLocalQuery(e.currentTarget.value)}
+                                    aria-label="Buscar insumos"
+                                />
+                                <Button type="submit" color="navy.9" size="md" radius="xl" px={18} aria-label="Buscar">
+                                    <IconSearch size={20} />
+                                </Button>
+                            </Flex>
+                        </form>
+                    </Paper>
+
+                    {/* Confianza en una sola fila (con scroll si no cabe) */}
+                    <Group gap={{ base: 'md', md: 'xl' }} wrap="nowrap" style={{ overflowX: 'auto', scrollbarWidth: 'none' }}>
+                        <Group gap={6} wrap="nowrap">
+                            <ThemeIcon color="rgba(255,255,255,0.12)" c="white" size="md" radius="xl"><IconTruckDelivery size={16} /></ThemeIcon>
+                            <Text size="xs" fw={600} c="white" style={{ whiteSpace: 'nowrap' }}>Envíos nacionales</Text>
+                        </Group>
+                        <Group gap={6} wrap="nowrap">
+                            <ThemeIcon color="rgba(255,255,255,0.12)" c="white" size="md" radius="xl"><IconShieldCheck size={16} /></ThemeIcon>
+                            <Text size="xs" fw={600} c="white" style={{ whiteSpace: 'nowrap' }}>Calidad certificada</Text>
+                        </Group>
+                        <Group gap={6} wrap="nowrap">
+                            <ThemeIcon color="rgba(255,255,255,0.12)" c="white" size="md" radius="xl"><IconStethoscope size={16} /></ThemeIcon>
+                            <Text size="xs" fw={600} c="white" style={{ whiteSpace: 'nowrap' }}>
+                                {totalProductos === 0 ? <Loader size={10} color="white" /> : `${totalProductos > 100 ? '+' : ''}${totalProductos} insumos`}
                             </Text>
+                        </Group>
+                    </Group>
+                </Box>
 
-                            <Paper withBorder={false} p="xs" radius="xl" shadow="xl" mb="lg" maw={500} bg="rgba(255, 255, 255, 1)">
-                                <form onSubmit={handleSubmit}>
-                                    <Flex direction="row" gap="xs" align="center" pl="md">
-                                        <TextInput 
-                                            placeholder="Ej: Tensiómetro, Inyectadoras..." 
-                                            size="md" radius="xl" variant="unstyled"
-                                            style={{ flex: 1 }}
-                                            value={localQuery}
-                                            onChange={(e) => setLocalQuery(e.currentTarget.value)}
-                                        />
-                                        <Button type="submit" color="#0B1B3D" size="md" radius="xl">
-                                            <IconSearch size={20} />
-                                        </Button>
-                                    </Flex>
-                                </form>
-                            </Paper>
-
-                            <Group gap={{ base: 'md', md: 'xl' }}>
-                                <Group gap="xs">
-                                    <ThemeIcon color="rgba(255,255,255,0.1)" c="white" size="md" radius="xl"><IconTruckDelivery size={16} /></ThemeIcon>
-                                    <Text size="xs" fw={500} c="white">Envíos Nacionales</Text>
-                                </Group>
-                                <Group gap="xs">
-                                    <ThemeIcon color="rgba(255,255,255,0.1)" c="white" size="md" radius="xl"><IconShieldCheck size={16} /></ThemeIcon>
-                                    <Text size="xs" fw={500} c="white">Calidad Certificada</Text>
-                                </Group>
-                            </Group>
-                        </Box>
-
-                        {isMobile && (
-                            <Box mt={40} w="100%">
-                                <Stack align="center" gap="md">
-                                    {ControlesYEstadisticas}
-                                </Stack>
-                            </Box>
-                        )}
-                    </Grid.Col>
-                </Grid>
-
-                {!isMobile && (
-                    <Box pos="absolute" bottom={40} right={20} style={{ zIndex: 4 }}>
-                        <Stack align="flex-end" gap="md">
-                            {ControlesYEstadisticas}
-                        </Stack>
-                    </Box>
-                )}
+                <Box visibleFrom="md" pos="absolute" bottom={28} left="50%" style={{ transform: 'translateX(-50%)' }}>
+                    <Button
+                        variant="subtle" color="white" radius="xl" onClick={scrollToCatalog} tt="none"
+                        rightSection={<IconChevronDown size={18} />}
+                    >
+                        Ver catálogo
+                    </Button>
+                </Box>
             </Container>
         </Box>
     );

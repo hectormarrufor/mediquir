@@ -1,0 +1,177 @@
+/* Estilos de la landing que Mantine no cubre por props (hover, estados data-*, scroll horizontal). */
+
+.card {
+    background: #fff;
+    border: 1px solid #e6eaf0;
+    border-radius: 16px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+@media (hover: hover) {
+    .card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 16px 34px alpha(var(--mantine-color-navy-9), 0.14), 0 0 0 1px alpha(var(--mantine-color-brand-6), 0.28);
+    }
+}
+
+.card:active {
+    transform: scale(0.985);
+}
+
+.media {
+    position: relative;
+    background: linear-gradient(180deg, #f4f7fb 0%, #eaf0f7 100%);
+}
+
+/* Carrusel de imágenes (Mantine Carousel) */
+.carousel .controls {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.carousel:hover .controls {
+    opacity: 1;
+}
+
+.carousel .indicators {
+    bottom: 6px;
+}
+
+.carousel .indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 6px;
+    background: var(--mantine-color-navy-9);
+    opacity: 0.25;
+    transition: width 0.25s ease, opacity 0.25s ease;
+}
+
+.carousel .indicator[data-active] {
+    width: 16px;
+    opacity: 0.85;
+}
+
+/* Fila de chips con scroll horizontal (categorías en móvil) */
+.scroller {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding: 4px 12px 8px;
+    margin: 0 -12px; /* compensa el px="sm" del Container para que el scroll llegue al borde */
+}
+
+.scroller::-webkit-scrollbar {
+    display: none;
+}
+
+.scroller > * {
+    scroll-snap-align: start;
+    flex: 0 0 auto;
+}
+
+.categoryCard {
+    background: var(--mm-glass-bg);
+    -webkit-backdrop-filter: var(--mm-glass-filter);
+    backdrop-filter: var(--mm-glass-filter);
+    border: 1px solid var(--mm-glass-border);
+    box-shadow: 0 8px 28px alpha(var(--mantine-color-navy-9), 0.07);
+    border-radius: 16px;
+    padding: 18px 22px;
+    cursor: pointer;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+@media (hover: hover) {
+    .categoryCard:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 14px 30px alpha(var(--mantine-color-navy-9), 0.1);
+    }
+}
+
+.categoryCard[data-selected] {
+    border-color: var(--mantine-color-accent-6);
+    box-shadow: 0 10px 25px alpha(var(--mantine-color-accent-6), 0.15);
+}
+
+/* Fundido entre imágenes del hero cuando no hay video */
+.heroSlide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 1.6s ease-in-out;
+}
+
+.heroSlide[data-active] {
+    opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .card,
+    .categoryCard,
+    .heroSlide,
+    .carousel .indicator {
+        transition: none;
+    }
+}
+
+/* Título con degradado de marca */
+.gradientText {
+    background: var(--mm-gradient-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+}
+
+/* Hero: esquinas inferiores redondeadas + resplandores de marca sobre la foto/video */
+.hero {
+    border-radius: 0 0 28px 28px;
+    box-shadow: 0 20px 50px alpha(var(--mantine-color-navy-9), 0.22);
+}
+
+@media (min-width: 48em) {
+    .hero {
+        border-radius: 0 0 44px 44px;
+    }
+}
+
+.heroGlow {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background:
+        radial-gradient(520px 280px at 88% 8%, alpha(var(--mantine-color-sky-3), 0.30), transparent 65%),
+        radial-gradient(460px 260px at 6% 100%, alpha(var(--mantine-color-brand-6), 0.40), transparent 65%),
+        radial-gradient(300px 180px at 60% 100%, alpha(var(--mantine-color-accent-6), 0.14), transparent 70%);
+}
+
+/* Footer con malla de degradados y filo luminoso superior */
+.footer {
+    position: relative;
+    border-radius: 28px 28px 0 0;
+    background:
+        radial-gradient(700px 320px at 8% 0%, alpha(var(--mantine-color-brand-6), 0.5), transparent 62%),
+        radial-gradient(620px 300px at 100% 100%, alpha(var(--mantine-color-sky-3), 0.2), transparent 62%),
+        var(--mantine-color-navy-9);
+}
+
+.footer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 12%;
+    right: 12%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--mantine-color-sky-3), var(--mantine-color-accent-6), transparent);
+    opacity: 0.85;
+}

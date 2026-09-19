@@ -1,38 +1,46 @@
 import React from 'react';
 import { ThemeIcon, Text } from '@mantine/core';
-import { 
-    IconVaccine, 
-    IconFirstAidKit, 
-    IconWheelchair
+import {
+    IconVaccine,
+    IconFirstAidKit,
+    IconWheelchair,
+    IconPill,
+    IconGenderFemale,
+    IconBoxMultiple
 } from '@tabler/icons-react';
 
-// 1. Nuestro diccionario de iconos exactos
+// Diccionario de iconos por categoría. Las claves van en minúsculas y SIN acentos
+// (el nombre de la categoría se normaliza igual, así "Ginecología" y "Ginecologia" coinciden).
 const iconMap = {
     'ortopedia': IconWheelchair,
     'descartables': IconVaccine,
     'insumos medicos': IconFirstAidKit,
+    'productos farmaceuticos': IconPill,
+    'ginecologia': IconGenderFemale,
+    'miscelaneo': IconBoxMultiple,
 };
+
+const normalizar = (nombre) =>
+    nombre.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 export default function CategoryIcon({ categoryName, size = 40, color = 'blue', variant = 'light', ...props }) {
     if (!categoryName) return null;
 
-    // Normalizamos el nombre para evitar problemas con mayúsculas/minúsculas o espacios extra
-    const normalizedName = categoryName.trim().toLowerCase();
-    
-    // Buscamos si existe el componente en el diccionario
+    const normalizedName = normalizar(categoryName);
     const IconComponent = iconMap[normalizedName];
 
+    // Sin fondo (variant="transparent") el icono puede ocupar más espacio dentro del contenedor
+    const ratio = variant === 'transparent' ? 0.85 : 0.6;
+
     if (IconComponent) {
-        // Si existe, renderizamos el icono de Tabler dentro de un ThemeIcon para mantener el fondo y la forma
         return (
             <ThemeIcon size={size} radius="md" color={color} variant={variant} {...props}>
-                <IconComponent size={size * 0.6} stroke={1.5} />
+                <IconComponent size={size * ratio} stroke={1.5} />
             </ThemeIcon>
         );
     }
 
-    // 🔥 FALLBACK INTELIGENTE: Si no existe, calculamos las iniciales 🔥
-    // Ej: "Cuidado Personal" -> "CP", "Sillas" -> "S"
+    // Fallback: iniciales del nombre. Ej: "Cuidado Personal" -> "CP"
     const initials = normalizedName
         .split(' ')
         .map(word => word[0])

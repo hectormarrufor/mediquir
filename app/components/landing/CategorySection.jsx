@@ -1,19 +1,19 @@
 'use client';
 
 import React from 'react';
-import {
-    Container, Title, Group, Stack, Text,
-    Box, Skeleton, UnstyledButton
-} from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
+import { Container, Title, Text, Group, Stack, Box, Skeleton, UnstyledButton, Badge } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
+import { useQuery } from '@tanstack/react-query';
 import CategoryIcon from '../CategoryIcon';
+import classes from './landing.module.css';
+
 
 export default function CategorySection({ selectedCategory, onSelectCategory }) {
-    const isMobile = useMediaQuery('(max-width: 768px)');
+    const isMobile = useMediaQuery('(max-width: 48em)', true);
 
     const { data: categorias, isLoading } = useQuery({
         queryKey: ['categorias-landing'],
+        staleTime: 5 * 60_000,
         queryFn: async () => {
             const res = await fetch('/api/categorias');
             if (!res.ok) throw new Error('Error al cargar categorías');
@@ -21,66 +21,83 @@ export default function CategorySection({ selectedCategory, onSelectCategory }) 
         }
     });
 
+    // Reutiliza la misma petición del catálogo para mostrar cuántos productos tiene cada categoría
+    const { data: productos } = useQuery({
+        queryKey: ['productos-landing'],
+        staleTime: 60_000,
+        queryFn: async () => {
+            const res = await fetch('/api/productos');
+            if (!res.ok) throw new Error('Error al cargar productos');
+            return res.json();
+        }
+    });
+
+    const contar = (cat) => (productos || []).filter((p) => (p.categoriaId ?? p.categoria?.id) === cat.id).length;
+    const toggle = (cat) => onSelectCategory(selectedCategory?.id === cat.id ? null : cat);
+
     return (
-        <Box py={80} style={{
-            background: 'linear-gradient(135deg, rgba(21, 55, 85, 0.92) 0%, rgba(43, 115, 163, 0.67) 100%)',
-        }}>
-            <Container size="xl">
-                <Title order={2} mb={50} c="#0B1B3D" ta="center" fw={900} size="h1">
-                    Nuestras Especialidades
-                </Title>
+        <Box id="especialidades" py={{ base: 24, md: 56 }}>
+            <Container size="xl" px={{ base: 'sm', sm: 'md' }}>
+                <Stack gap={4} mb={{ base: 'sm', md: 'xl' }} align={isMobile ? 'flex-start' : 'center'}>
+                    <Text fz={11} fw={800} c="brand.6" tt="uppercase" lts={1.5}>Especialidades</Text>
+                    <Title order={2} fz={{ base: 22, md: 32 }} fw={900} className={classes.gradientText} tt="none" display="block" pb={0}>
+                        Encuentra lo que necesitas
+                    </Title>
+                </Stack>
 
                 {isLoading ? (
-                    <Group justify="center" gap="xl">
-                        {[1, 2, 3, 4, 5].map((i) => (
-                            <Stack key={i} align="center" gap="xs">
-                                <Skeleton height={isMobile ? 80 : 100} circle />
-                                <Skeleton height={12} width={70} radius="xl" />
-                            </Stack>
-                        ))}
+                    <Group gap="xs" wrap="nowrap">
+                        {[1, 2, 3, 4].map((i) => <Skeleton key={i} h={isMobile ? 38 : 84} w={isMobile ? 110 : 200} radius="xl" />)}
                     </Group>
-                ) : (
-                    <Group justify="center" gap={{ base: 'xl', md: 50 }}>
+                ) : isMobile ? (
+                    // MÓVIL: chips compactos con scroll horizontal
+                    <Box className={classes.scroller}>
+                        <Badge
+                            component="button" size="xl" radius="xl" h={38} px={16}
+                            variant={selectedCategory ? 'default' : 'filled'} color="navy.9"
+                            style={{ cursor: 'pointer', textTransform: 'none' }}
+                            onClick={() => onSelectCategory(null)}
+                        >
+                            Todas
+                        </Badge>
                         {categorias?.map((cat) => {
                             const isSelected = selectedCategory?.id === cat.id;
-
+                            return (
+                                <Badge
+                                    key={cat.id} component="button" size="xl" radius="xl" h={38} px={14}
+                                    variant={isSelected ? 'filled' : 'default'} color="navy.9"
+                                    leftSection={<CategoryIcon categoryName={cat.nombre} size={24} color={isSelected ? 'white' : 'brand.6'} variant="transparent" />}
+                                    style={{ cursor: 'pointer', textTransform: 'none' }}
+                                    onClick={() => toggle(cat)}
+                                >
+                                    {cat.nombre}
+                                </Badge>
+                            );
+                        })}
+                    </Box>
+                ) : (
+                    // ESCRITORIO: tarjetas con icono y conteo
+                    <Group gap="md" justify="center">
+                        {categorias?.map((cat) => {
+                            const isSelected = selectedCategory?.id === cat.id;
+                            const total = contar(cat);
                             return (
                                 <UnstyledButton
                                     key={cat.id}
-                                    onClick={() => onSelectCategory(cat)}
-                                    style={{ transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)' }}
-                                    onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-8px)'}
-                                    onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                                    className={classes.categoryCard}
+                                    data-selected={isSelected || undefined}
+                                    onClick={() => toggle(cat)}
                                 >
-                                    <Stack align="center" gap="md">
-                                        <Box
-                                            style={{
-                                                borderRadius: '50%',
-                                                border: isSelected ? '2px solid #F93200' : '1px solid #E9ECEF',
-                                                padding: isMobile ? '15px' : '20px',
-                                                boxShadow: isSelected ? '0 10px 25px rgba(249, 50, 0, 0.2)' : '0 10px 30px rgba(0,0,0,0.05)',
-                                                backgroundColor: isSelected ? '#FFF5F5' : '#F8F9FA',
-                                                transition: 'all 0.3s ease'
-                                            }}
-                                        >
-                                            <CategoryIcon
-                                                categoryName={cat.nombre}
-                                                size={isMobile ? 50 : 60}
-                                                color={isSelected ? "#F93200" : "#005AAA"}
-                                                variant="transparent"
-                                            />
+                                    <Group gap="md" wrap="nowrap">
+                                        <CategoryIcon
+                                            categoryName={cat.nombre} size={48}
+                                            color={isSelected ? 'accent.6' : 'brand.6'} variant="light"
+                                        />
+                                        <Box>
+                                            <Text fw={800} c={isSelected ? 'accent.6' : 'navy.9'} lh={1.2}>{cat.nombre}</Text>
+                                            {total > 0 && <Text size="xs" c="dimmed">{total} {total === 1 ? 'producto' : 'productos'}</Text>}
                                         </Box>
-                                        <Text
-                                            size="sm"
-                                            fw={isSelected ? 800 : 700}
-                                            c={isSelected ? "#F93200" : "#0B1B3D"}
-                                            ta="center"
-                                            maw={120}
-                                            lh={1.2}
-                                        >
-                                            {cat.nombre}
-                                        </Text>
-                                    </Stack>
+                                    </Group>
                                 </UnstyledButton>
                             );
                         })}

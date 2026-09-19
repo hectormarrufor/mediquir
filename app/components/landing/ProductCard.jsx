@@ -1,239 +1,127 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Card, Text, Badge, Button, Group, Stack, Box, Indicator, ActionIcon, Modal, Image, Grid, TextInput } from '@mantine/core';
-import { IconShoppingCartPlus, IconChevronLeft, IconChevronRight, IconMaximize, IconMinus, IconPlus } from '@tabler/icons-react';
+import React, { useMemo, useState } from 'react';
+import { Badge, Box, Group, Text, ActionIcon } from '@mantine/core';
+import { IconShoppingCartPlus, IconCheck } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
 import { useCart } from './CartContext';
-export default function ProductCard({ product }) {
-    const [currentImageIndex, setCurrentImageIndex] = useState(0);
-    
-    // Estados para Modales
-    const [imageModalOpened, setImageModalOpened] = useState(false);
-    const [detailModalOpened, setDetailModalOpened] = useState(false);
-    const [quantity, setQuantity] = useState(1);
+import ImageCarousel from './ImageCarousel';
+import ProductDetail from './ProductDetail';
+import { getProductImages, getPricing, getPresentacionLabel } from './productUtils';
+import classes from './landing.module.css';
 
-    const { addToCart } = useCart();
+export default function ProductCard({ product, isMobile }) {
+    const [detailOpened, setDetailOpened] = useState(false);
+    const [detailMounted, setDetailMounted] = useState(false); // monta el detalle solo la primera vez que se abre
+    const { addToCart, cart } = useCart();
 
-    // --- LÓGICA DE FINANZAS Y STOCK ---
-    const isOutOfStock = Number(product.stockAlmacen) <= 0;
-    const precioBase = Number(product.precio7) > 0 ? Number(product.precio7) : Number(product.costoUsd) * 1.5;
-    
-    const porcentajeAhorro = Number(product.porcentajeDescuento) || 0;
-    const hasDiscount = porcentajeAhorro > 0;
-    
-    const precioFinal = hasDiscount 
-        ? precioBase - (precioBase * (porcentajeAhorro / 100)) 
-        : precioBase;
+    const images = useMemo(() => getProductImages(product), [product]);
+    const { stock, precioBase, porcentajeAhorro, hasDiscount, precioFinal, isOutOfStock, isLowStock } = getPricing(product);
+    const enCarrito = cart.find((item) => item.product.id === product.id)?.quantity || 0;
+    const puedeAgregar = !isOutOfStock && enCarrito < stock;
 
-    // --- LÓGICA DE IMÁGENES ---
-    const carouselImages = [];
-    const baseUrl = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
-
-    if (product.imagen) carouselImages.push(`${baseUrl}/${product.imagen}`);
-    else if (product.grupoEquivalencia?.imagen) carouselImages.push(`${baseUrl}/${product.grupoEquivalencia.imagen}`);
-    
-    if (product.marca?.imagen) carouselImages.push(`${baseUrl}/${product.marca.imagen}`);
-    if (carouselImages.length === 0) carouselImages.push('/placeholder-med.png'); 
-
-    // Auto-play
-    useEffect(() => {
-        if (carouselImages.length <= 1 || imageModalOpened) return; // Pausar si el modal está abierto
-        const timer = setInterval(() => {
-            setCurrentImageIndex((prev) => (prev + 1) % carouselImages.length);
-        }, 3000 + ((product.id % 5) * 500));
-        return () => clearInterval(timer);
-    }, [carouselImages.length, product.id, imageModalOpened]);
-
-    const nextImage = (e) => {
-        if(e) e.stopPropagation();
-        setCurrentImageIndex((prev) => (prev + 1) % carouselImages.length);
+    const openDetail = () => {
+        setDetailMounted(true);
+        setDetailOpened(true);
     };
 
-    const prevImage = (e) => {
-        if(e) e.stopPropagation();
-        setCurrentImageIndex((prev) => (prev - 1 + carouselImages.length) % carouselImages.length);
+    // Los botones internos (indicadores del carrusel, "+") no deben abrir el detalle
+    const handleCardClick = (e) => {
+        if (e.target.closest('button')) return;
+        openDetail();
     };
 
-    const handleAddToCart = () => {
-        addToCart(product, quantity, precioFinal);
-        setDetailModalOpened(false);
-        setQuantity(1); // Reset
+    const handleQuickAdd = (e) => {
+        e.stopPropagation();
+        addToCart(product, 1, precioFinal);
+        notifications.show({
+            message: `${product.nombre} añadido al carrito`,
+            color: 'teal',
+            icon: <IconCheck size={16} />,
+            autoClose: 2000,
+        });
     };
 
     return (
         <>
-            {/* --- TARJETA PRINCIPAL --- */}
-            <Card 
-                shadow="sm" padding="lg" radius="md" bg="white"
-                onClick={() => setDetailModalOpened(true)} // Click general abre el modal de producto
-                style={{ 
-                    height: '100%', display: 'flex', flexDirection: 'column', 
-                    cursor: 'pointer', border: '1px solid #E9ECEF',
-                    transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.3s', 
-                    '&:hover': { transform: 'translateY(-10px)', boxShadow: '0 20px 40px rgba(0,0,0,0.08)' } 
-                }}
+            <Box
+                className={classes.card}
+                role="button"
+                tabIndex={0}
+                aria-label={`Ver ${product.nombre}`}
+                onClick={handleCardClick}
+                onKeyDown={(e) => { if (e.key === 'Enter') openDetail(); }}
             >
-                <Card.Section pos="relative" p="md">
+                <Box className={classes.media}>
                     {hasDiscount && (
-                        <Badge color="red.7" variant="filled" pos="absolute" top={15} left={15} style={{ zIndex: 2 }}>
+                        <Badge color="red.7" variant="filled" size="sm" pos="absolute" top={8} left={8} style={{ zIndex: 2 }}>
                             -{porcentajeAhorro}%
                         </Badge>
                     )}
-                    
-                    <Box pos="absolute" top={15} right={15} style={{ zIndex: 2 }}>
-                        <Indicator inline size={12} offset={4} position="middle-center" color={isOutOfStock ? 'red' : 'teal'} withBorder />
+                    {isOutOfStock ? (
+                        <Badge color="gray.7" variant="filled" size="sm" pos="absolute" top={8} right={8} style={{ zIndex: 2 }}>
+                            Agotado
+                        </Badge>
+                    ) : isLowStock && (
+                        <Badge color="orange" variant="light" size="sm" pos="absolute" top={8} right={8} style={{ zIndex: 2 }}>
+                            Últimas {stock}
+                        </Badge>
+                    )}
+
+                    <Box style={{ opacity: isOutOfStock ? 0.45 : 1 }}>
+                        <ImageCarousel
+                            images={images}
+                            alt={product.nombre}
+                            height={isMobile ? 150 : 190}
+                            // En móvil se desliza con el dedo; el autoplay solo corre en escritorio
+                            autoplayDelay={isMobile ? 0 : 4000 + (product.id % 5) * 600}
+                            withControls={!isMobile}
+                            padding={isMobile ? 8 : 12}
+                        />
                     </Box>
+                </Box>
 
-                    {/* Contenedor de Imagen */}
-                    <Box 
-                        h={200} pos="relative" 
-                        style={{ opacity: isOutOfStock ? 0.5 : 1, overflow: 'hidden', borderRadius: '8px', backgroundColor: '#F8F9FA' }}
-                    >
-                        {/* Botón para expandir imagen sin abrir detalles */}
-                        <ActionIcon 
-                            pos="absolute" bottom={10} right={10} size="md" radius="xl" variant="white" color="gray"
-                            style={{ zIndex: 3, boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}
-                            onClick={(e) => { e.stopPropagation(); setImageModalOpened(true); }}
-                        >
-                            <IconMaximize size={16} />
-                        </ActionIcon>
-
-                        <Box style={{ display: 'flex', width: '100%', height: '100%', transform: `translateX(-${currentImageIndex * 100}%)`, transition: 'transform 0.5s ease-in-out' }}>
-                            {carouselImages.map((src, index) => (
-                                <Box key={index} style={{ flexShrink: 0, width: '100%', height: '100%', padding: '10px' }}>
-                                    <Image src={src} alt={product.nombre} fit="contain" h="100%" />
-                                </Box>
-                            ))}
-                        </Box>
-                    </Box>
-                </Card.Section>
-
-                <Stack justify="space-between" mt="md" flex={1} gap="xs">
-                    <Box>
-                        <Group justify="space-between" align="flex-start" wrap="nowrap" mb={8}>
-                            <Text size="xs" c="blue.9" tt="uppercase" fw={800} lineClamp={1} lts={1}>
-                                {product.marca?.nombre || 'GENÉRICO'}
-                            </Text>
-                            <Text size="xs" c="gray.5" fw={600}>{product.presentacion}</Text>
-                        </Group>
-                        <Text fw={700} size="md" lineClamp={2} c="#0B1B3D" style={{ minHeight: '44px', lineHeight: 1.3 }}>
-                            {product.nombre}
+                <Box p={isMobile ? 10 : 14} style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 4 }}>
+                    <Group justify="space-between" wrap="nowrap" gap={4}>
+                        <Text fz={10} c="blue.9" tt="uppercase" fw={800} lts={0.8} lineClamp={1}>
+                            {product.marca?.nombre || 'Genérico'}
                         </Text>
-                    </Box>
+                        <Text fz={10} c="dimmed" fw={600} style={{ whiteSpace: 'nowrap' }}>
+                            {getPresentacionLabel(product)}
+                        </Text>
+                    </Group>
 
-                    <Box mt="auto">
-                        {hasDiscount && (
-                            <Text td="line-through" size="sm" c="dimmed" lh={1}>
-                                Ref ${precioBase.toFixed(2)}
-                            </Text>
-                        )}
-                        <Group justify="space-between" align="flex-end">
-                            <Text fw={900} size="xl" c={hasDiscount ? "red.7" : "#005AAA"}>
+                    <Text fw={700} fz={{ base: 13, sm: 15 }} lh={1.3} lineClamp={2} c="navy.9" mih={{ base: 34, sm: 39 }}>
+                        {product.nombre}
+                    </Text>
+
+                    <Group justify="space-between" align="flex-end" wrap="nowrap" mt="auto" pt={6} gap={6}>
+                        <Box>
+                            {hasDiscount && (
+                                <Text td="line-through" fz={11} c="dimmed" lh={1}>${precioBase.toFixed(2)}</Text>
+                            )}
+                            <Text fw={800} fz={{ base: 16, sm: 20 }} lh={1.15} c={hasDiscount ? 'red.7' : 'brand.6'}>
                                 Ref ${precioFinal.toFixed(2)}
                             </Text>
-                            <Text size="xs" c={isOutOfStock ? "red.7" : "teal.7"} fw={700} tt="uppercase">
-                                {isOutOfStock ? 'Agotado' : 'Disponible'}
-                            </Text>
-                        </Group>
-                    </Box>
-
-                    <Button 
-                        variant={isOutOfStock ? "light" : "filled"} 
-                        color={isOutOfStock ? "gray" : "#0B1B3D"} 
-                        fullWidth mt="sm" radius="md" size="md"
-                        disabled={isOutOfStock}
-                        onClick={(e) => { e.stopPropagation(); setDetailModalOpened(true); }} // También abre el modal
-                        leftSection={!isOutOfStock && <IconShoppingCartPlus size={18} />}
-                    >
-                        {isOutOfStock ? 'Agotado' : 'Añadir'}
-                    </Button>
-                </Stack>
-            </Card>
-
-            {/* --- MODAL 1: VISOR DE IMÁGENES TIPO LIGHTBOX --- */}
-            <Modal 
-                opened={imageModalOpened} 
-                onClose={() => setImageModalOpened(false)} 
-                fullScreen 
-                transitionProps={{ transition: 'fade', duration: 200 }}
-                styles={{ content: { backgroundColor: 'rgba(0,0,0,0.95)' }, header: { backgroundColor: 'transparent' }, close: { color: 'white' } }}
-            >
-                <Box h="85vh" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                    {carouselImages.length > 1 && (
-                        <ActionIcon pos="absolute" left={20} size={50} radius="xl" variant="light" color="gray" onClick={prevImage} style={{ zIndex: 10 }}>
-                            <IconChevronLeft size={30} />
-                        </ActionIcon>
-                    )}
-                    
-                    <Image src={carouselImages[currentImageIndex]} alt={product.nombre} fit="contain" h="100%" maw="90vw" />
-                    
-                    {carouselImages.length > 1 && (
-                        <ActionIcon pos="absolute" right={20} size={50} radius="xl" variant="light" color="gray" onClick={nextImage} style={{ zIndex: 10 }}>
-                            <IconChevronRight size={30} />
-                        </ActionIcon>
-                    )}
-                </Box>
-            </Modal>
-
-            {/* --- MODAL 2: DETALLES DEL PRODUCTO Y AÑADIR AL CARRITO --- */}
-            <Modal 
-                opened={detailModalOpened} 
-                onClose={() => setDetailModalOpened(false)}
-                size="lg"
-                centered
-                radius="md"
-                padding="xl"
-            >
-                <Grid gutter="xl">
-                    <Grid.Col span={{ base: 12, md: 6 }}>
-                        <Box bg="gray.1" style={{ borderRadius: '8px', padding: '20px' }}>
-                            <Image src={carouselImages[0]} alt={product.nombre} fit="contain" h={300} />
                         </Box>
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 12, md: 6 }}>
-                        <Stack justify="center" h="100%">
-                            <Box>
-                                <Badge color="blue.9" mb="sm">{product.marca?.nombre || 'Genérico'}</Badge>
-                                <Text fw={900} size="xl" lh={1.2} mb="xs" c="#0B1B3D">{product.nombre}</Text>
-                                <Text c="dimmed" size="sm">{product.presentacion}</Text>
-                            </Box>
+                        <ActionIcon
+                            size={isMobile ? 36 : 40}
+                            radius="xl"
+                            color="navy.9"
+                            variant={puedeAgregar ? 'filled' : 'light'}
+                            disabled={!puedeAgregar}
+                            onClick={handleQuickAdd}
+                            aria-label={`Añadir ${product.nombre} al carrito`}
+                        >
+                            <IconShoppingCartPlus size={isMobile ? 18 : 20} />
+                        </ActionIcon>
+                    </Group>
+                </Box>
+            </Box>
 
-                            <Group align="flex-end" gap="xs">
-                                <Text fw={900} size="32px" c={hasDiscount ? "red.7" : "#005AAA"}>
-                                    ${precioFinal.toFixed(2)}
-                                </Text>
-                                {hasDiscount && <Text td="line-through" c="dimmed" size="lg" mb={4}>${precioBase.toFixed(2)}</Text>}
-                            </Group>
-
-                            {!isOutOfStock ? (
-                                <Box mt="md">
-                                    <Text size="sm" fw={600} mb="xs">Cantidad:</Text>
-                                    <Group wrap="nowrap" mb="xl">
-                                        <Group gap={0} style={{ border: '1px solid #E9ECEF', borderRadius: '8px', overflow: 'hidden' }}>
-                                            <ActionIcon size={42} variant="transparent" c="black" onClick={() => setQuantity(q => Math.max(1, q - 1))}>
-                                                <IconMinus size={16} />
-                                            </ActionIcon>
-                                            <TextInput 
-                                                variant="unstyled" value={quantity} readOnly
-                                                styles={{ input: { width: 50, textAlign: 'center', fontWeight: 'bold' } }}
-                                            />
-                                            <ActionIcon size={42} variant="transparent" c="black" onClick={() => setQuantity(q => q + 1)}>
-                                                <IconPlus size={16} />
-                                            </ActionIcon>
-                                        </Group>
-                                    </Group>
-
-                                    <Button fullWidth size="lg" radius="md" color="#0B1B3D" onClick={handleAddToCart}>
-                                        Agregar al Carrito • ${(precioFinal * quantity).toFixed(2)}
-                                    </Button>
-                                </Box>
-                            ) : (
-                                <Text c="red.7" fw={700} size="lg" mt="xl">Producto temporalmente agotado.</Text>
-                            )}
-                        </Stack>
-                    </Grid.Col>
-                </Grid>
-            </Modal>
+            {detailMounted && (
+                <ProductDetail product={product} opened={detailOpened} onClose={() => setDetailOpened(false)} isMobile={isMobile} />
+            )}
         </>
     );
 }
