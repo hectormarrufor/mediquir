@@ -58,11 +58,16 @@ export function B2BCartProvider({ children }) {
         ? calcularFactura({ renglones: items.map((i) => ({ precioUnitario: i.producto.precio, cantidad: i.cantidad, aplicaIva: i.producto.porcentajeIva > 0, porcentajeIva: i.producto.porcentajeIva })) })
         : null), [items]);
 
+    // Nota de entrega: el mismo pedido sin IVA
+    const facturaSinIva = useMemo(() => (items.length
+        ? calcularFactura({ renglones: items.map((i) => ({ precioUnitario: i.producto.precio, cantidad: i.cantidad, aplicaIva: false, porcentajeIva: i.producto.porcentajeIva })) })
+        : null), [items]);
+
     const valor = useMemo(() => ({
-        items, listo, factura, agregar, fijarCantidad, quitar, vaciar,
+        items, listo, factura, facturaSinIva, agregar, fijarCantidad, quitar, vaciar,
         totalArticulos: items.reduce((acc, i) => acc + i.cantidad, 0),
         cantidadDe: (id) => items.find((i) => i.producto.id === id)?.cantidad || 0,
-    }), [items, listo, factura, agregar, fijarCantidad, quitar, vaciar]);
+    }), [items, listo, factura, facturaSinIva, agregar, fijarCantidad, quitar, vaciar]);
 
     return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;
 }

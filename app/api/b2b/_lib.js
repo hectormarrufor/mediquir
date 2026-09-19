@@ -2,6 +2,17 @@ import { Op } from 'sequelize';
 import { Abono, CuentaPorCobrar, Venta, VentaDetalle, Producto, Marca } from '@/models';
 import { aDolares } from '@/app/constants/facturacion';
 
+// Crédito del cliente: días aprobados, máximo de pedidos a crédito activos y cuántos le quedan.
+// "Activo" = a crédito, no cancelado y todavía con saldo por pagar.
+export async function creditoDeCliente(cliente, { transaction } = {}) {
+    const activos = await Venta.count({
+        where: { clienteId: cliente.id, condicionPago: 'Credito', statusDespacho: { [Op.ne]: 'Cancelado' }, statusPago: { [Op.ne]: 'Pagado' } },
+        transaction,
+    });
+    const maxPedidos = Number(cliente.maxPedidosCredito ?? 5);
+    return { diasCredito: Number(cliente.diasCredito ?? 7), maxPedidos, activos, disponibles: Math.max(0, maxPedidos - activos) };
+}
+
 // Estados de despacho en los que el pedido sigue "en curso"
 export const ESTADOS_ACTIVOS = ['Pendiente', 'Empacado', 'Parcial'];
 

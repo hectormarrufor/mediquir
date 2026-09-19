@@ -59,6 +59,20 @@ const Cliente = sequelize.define('Cliente', {
     type: DataTypes.TEXT,
     allowNull: true,
   },
+  // Crédito aprobado por administración para los pedidos que el cliente hace desde su portal B2B
+  diasCredito: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 7,
+    validate: { min: 0, max: 365 },
+  },
+  // Máximo de pedidos a crédito activos (sin pagar del todo y no cancelados) a la vez; 0 = sin crédito
+  maxPedidosCredito: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 5,
+    validate: { min: 0, max: 100 },
+  },
 }, {
   tableName: 'Clientes',
   timestamps: true,

@@ -3,6 +3,8 @@ import sequelize from '@/sequelize';
 import { Cliente, Venta } from '@/models';
 import { rolDe } from '@/app/constants/roles';
 import { requerirStaff } from '../../inventario/_lib';
+import { creditoDeCliente } from '../../b2b/_lib';
+import { filtrarCambiosCliente } from '@/app/constants/clienteCampos';
 
 const USD = `(CASE WHEN "moneda" = 'BS' THEN "totalFinal" / NULLIF("tasaCambio", 0) ELSE "totalFinal" END)`;
 
@@ -38,7 +40,8 @@ export async function GET(req, { params }) {
             condicionPago: v.condicionPago, fechaVencimiento: v.fechaVencimiento,
             total: v.moneda === 'BS' ? Number(v.totalFinal) / (Number(v.tasaCambio) || 1) : Number(v.totalFinal),
         }));
-        return NextResponse.json({ ...json, pedidos, resumen: totales }, { status: 200 });
+        const credito = await creditoDeCliente(cliente);
+        return NextResponse.json({ ...json, pedidos, resumen: totales, credito }, { status: 200 });
     } catch (error) {
         console.error('Error al obtener cliente:', error.message);
         return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
@@ -47,17 +50,24 @@ export async function GET(req, { params }) {
 
 // PUT: Actualizar un cliente existente
 export async function PUT(req, { params }) {
+    const acceso = await requerirStaff();
+    if (acceso.error) return acceso.error;
+    const rol = rolDe(acceso.sesion);
+    if (rol === 'vendedor') return NextResponse.json({ error: 'Tu rol no permite esta acción' }, { status: 403 });
+
     try {
         const { id } = await params;
-        const body = await req.json();
+        // Solo se guardan los campos permitidos (el crédito, únicamente si quien edita es administrador)
+        const { cambios, error: errorCampo } = filtrarCambiosCliente(await req.json(), { esAdmin: rol === 'admin' });
+        if (errorCampo) return NextResponse.json({ error: errorCampo }, { status: 400 });
 
         const cliente = await Cliente.findByPk(id);
-        
+
         if (!cliente) {
             return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
         }
 
-        await cliente.update(body);
+        await cliente.update(cambios);
 
         return NextResponse.json({ message: 'Cliente actualizado exitosamente', cliente }, { status: 200 });
     } catch (error) {

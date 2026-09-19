@@ -2,23 +2,24 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    ActionIcon, Alert, Avatar, Badge, Box, Button, Card, Center, Group, Menu, Pagination, Paper, SegmentedControl, SimpleGrid, Skeleton, Stack,
-    Table, Text, TextInput, ThemeIcon, Title,
+    Alert, Box, Button, Card, Center, Group, Pagination, Paper, SegmentedControl, SimpleGrid, Skeleton, Stack,
+    Text, TextInput, ThemeIcon, Title,
 } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
-    IconAlertTriangle, IconBrandWhatsapp, IconCash, IconDotsVertical, IconEdit, IconEye, IconKey, IconPlus, IconSearch, IconUserCheck, IconUserOff, IconUsers,
+    IconAlertTriangle, IconCash, IconPlus, IconSearch, IconUserCheck, IconUserOff, IconUsers,
 } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
 import ClienteDrawer from './_components/ClienteDrawer';
-import AccesoModal, { telefonoWhatsapp } from './_components/AccesoModal';
+import AccesoModal from './_components/AccesoModal';
+import ClientesGrid from './_components/ClientesGrid';
+import { COLUMNAS, comparar } from './_components/columnasClientes';
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtUsd = (v) => `$${usd.format(Number(v) || 0)}`;
-const fmtFecha = (v) => (v ? new Date(v).toLocaleDateString('es-VE', { timeZone: 'America/Caracas' }) : '—');
-const TAMANO = 12;
+const TAMANO = 40;
 
 async function pedirJson(url) {
     const res = await fetch(url);
@@ -51,6 +52,7 @@ export default function ClientesDashboard() {
     const [q] = useDebouncedValue(busqueda.trim().toLowerCase(), 250);
     const [filtro, setFiltro] = useState('todos');
     const [pagina, setPagina] = useState(1);
+    const [orden, setOrden] = useState({ sort: '', dir: '' });
     const [drawer, setDrawer] = useState(false);
     const [acceso, setAcceso] = useState(null); // { cliente, credenciales }
 
@@ -76,8 +78,23 @@ export default function ClientesDashboard() {
         return [c.nombre, c.identificacion, c.telefono, c.email, c.usuario].some((x) => String(x || '').toLowerCase().includes(q));
     }), [clientes, q, filtro]);
 
-    const paginas = Math.max(1, Math.ceil(filtrados.length / TAMANO));
-    const visibles = filtrados.slice((pagina - 1) * TAMANO, pagina * TAMANO);
+    // Clic en un encabezado: ascendente -> descendente -> orden por defecto (los más nuevos primero)
+    const onOrden = (clave) => {
+        if (orden.sort !== clave) setOrden({ sort: clave, dir: 'asc' });
+        else if (orden.dir === 'asc') setOrden({ sort: clave, dir: 'desc' });
+        else setOrden({ sort: '', dir: '' });
+    };
+    const ordenados = useMemo(() => {
+        if (!orden.sort) return filtrados;
+        const lista = [...filtrados].sort((a, b) => comparar(a, b, orden.sort));
+        return orden.dir === 'desc' ? lista.reverse() : lista;
+    }, [filtrados, orden]);
+
+    const columnas = useMemo(() => COLUMNAS.filter((c) => !(esVendedor && c.dinero)), [esVendedor]);
+    const permisos = data?.permisos || { editar: false, editarCredito: false };
+
+    const paginas = Math.max(1, Math.ceil(ordenados.length / TAMANO));
+    const visibles = ordenados.slice((pagina - 1) * TAMANO, pagina * TAMANO);
 
     return (
         <Box maw={1500} mx="auto" px="md" py="md">
@@ -107,52 +124,18 @@ export default function ClientesDashboard() {
                         <TextInput flex="1 1 240px" placeholder="Buscar por nombre, RIF, teléfono, correo o usuario…" leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)} />
                     </Group>
 
+                    {permisos.editar && (
+                        <Text size="xs" c="dimmed" mb="xs">
+                            Haz clic en una celda y pulsa Enter (o escribe) para editarla: se guarda al instante. Tab / flechas para moverte, Esc cancela, Ctrl+Z deshace.
+                            {!permisos.editarCredito && ' Los días y el cupo de crédito solo los cambia un administrador.'}
+                        </Text>
+                    )}
                     {isLoading ? <Stack gap="xs">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} h={52} />)}</Stack>
                         : !visibles.length ? <Center py={50}><Text c="dimmed">No hay clientes con esos filtros.</Text></Center> : (
-                            <Table.ScrollContainer minWidth={esVendedor ? 640 : 900}>
-                                <Table verticalSpacing="sm" highlightOnHover>
-                                    <Table.Thead>
-                                        <Table.Tr>
-                                            <Table.Th>Cliente</Table.Th><Table.Th>Contacto</Table.Th>
-                                            {!esVendedor && <><Table.Th ta="right">Compras</Table.Th><Table.Th ta="right">Saldo</Table.Th><Table.Th>Último pedido</Table.Th></>}
-                                            <Table.Th>Portal B2B</Table.Th><Table.Th />
-                                        </Table.Tr>
-                                    </Table.Thead>
-                                    <Table.Tbody>
-                                        {visibles.map((c) => (
-                                            <Table.Tr key={c.id} style={{ cursor: 'pointer' }} onClick={() => router.push(`/superuser/clientes/${c.id}`)}>
-                                                <Table.Td>
-                                                    <Group gap="sm" wrap="nowrap">
-                                                        <Avatar radius="xl" color="brand" variant="light">{(c.nombre || c.identificacion || '?').charAt(0).toUpperCase()}</Avatar>
-                                                        <Box style={{ minWidth: 0 }}>
-                                                            <Text fw={700} size="sm" lineClamp={1} maw={230}>{c.nombre || 'Sin nombre'}</Text>
-                                                            <Group gap={6}><Text size="xs" c="dimmed">{c.identificacion}</Text>{c.esContribuyenteEspecial && <Badge size="xs" variant="light" color="grape">Especial</Badge>}</Group>
-                                                        </Box>
-                                                    </Group>
-                                                </Table.Td>
-                                                <Table.Td><Text size="sm">{c.telefono || '—'}</Text><Text size="xs" c="dimmed" lineClamp={1} maw={190}>{c.email || ''}</Text></Table.Td>
-                                                {!esVendedor && <>
-                                                    <Table.Td ta="right"><Text size="sm" fw={600}>{fmtUsd(c.compras)}</Text><Text size="xs" c="dimmed">{c.pedidos} pedido(s)</Text></Table.Td>
-                                                    <Table.Td ta="right">{c.saldo > 0 ? <Badge color="orange" variant="light" size="lg">{fmtUsd(c.saldo)}</Badge> : <Text size="sm" c="dimmed">—</Text>}</Table.Td>
-                                                    <Table.Td><Text size="sm">{fmtFecha(c.ultimaCompra)}</Text></Table.Td>
-                                                </>}
-                                                <Table.Td>{c.usuario ? <Badge color="teal" variant="light" tt="none">{c.usuario}</Badge> : <Badge color="gray" variant="outline">Sin acceso</Badge>}</Table.Td>
-                                                <Table.Td onClick={(e) => e.stopPropagation()}>
-                                                    <Menu position="bottom-end" withinPortal shadow="md">
-                                                        <Menu.Target><ActionIcon variant="subtle" color="gray"><IconDotsVertical size={18} /></ActionIcon></Menu.Target>
-                                                        <Menu.Dropdown>
-                                                            <Menu.Item leftSection={<IconEye size={16} />} onClick={() => router.push(`/superuser/clientes/${c.id}`)}>Ver ficha</Menu.Item>
-                                                            {!esVendedor && <Menu.Item leftSection={<IconEdit size={16} />} onClick={() => router.push(`/superuser/clientes/${c.id}/editar`)}>Editar</Menu.Item>}
-                                                            {!esVendedor && <Menu.Item leftSection={<IconKey size={16} />} onClick={() => setAcceso({ cliente: c })}>{c.usuario ? 'Restablecer contraseña' : 'Crear acceso B2B'}</Menu.Item>}
-                                                            {telefonoWhatsapp(c.telefono) && <Menu.Item component="a" href={`https://wa.me/${telefonoWhatsapp(c.telefono)}`} target="_blank" leftSection={<IconBrandWhatsapp size={16} />}>WhatsApp</Menu.Item>}
-                                                        </Menu.Dropdown>
-                                                    </Menu>
-                                                </Table.Td>
-                                            </Table.Tr>
-                                        ))}
-                                    </Table.Tbody>
-                                </Table>
-                            </Table.ScrollContainer>
+                            <ClientesGrid
+                                filas={visibles} columnas={columnas} permisos={permisos} orden={orden} onOrden={onOrden}
+                                onFicha={(id) => router.push(`/superuser/clientes/${id}`)} onAcceso={(cliente) => setAcceso({ cliente })}
+                            />
                         )}
 
                     <Group justify="space-between" mt="md" wrap="wrap">

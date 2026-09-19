@@ -117,6 +117,11 @@ export default function ClienteDashboard({ params }) {
                                         <Text size="h1" fw={900} c={deudaPendiente > 0 ? 'red.9' : 'green.9'}>
                                             ${deudaPendiente.toFixed(2)}
                                         </Text>
+                                        {cliente.credito && (
+                                            <Text size="xs" c="dimmed" mt={4}>
+                                                Crédito B2B: {cliente.credito.diasCredito} días · {cliente.credito.activos} de {cliente.credito.maxPedidos} pedidos a crédito activos
+                                            </Text>
+                                        )}
                                     </Card>
                                 </Grid.Col>
                                 <Grid.Col span={12}>

@@ -5,12 +5,13 @@ import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
     Box, Button, Group, Title, TextInput, Textarea, 
-    Switch, Select, Paper, Stack, Grid, Center, Loader, Text 
+    Switch, Select, Paper, Stack, Grid, Center, Loader, Text, NumberInput 
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
 import { IconDeviceFloppy, IconArrowLeft } from '@tabler/icons-react';
 import ImageDropzone from '@/app/components/ImageDropzone';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function EditarCliente({ params }) {
     const router = useRouter();
@@ -19,6 +20,8 @@ export default function EditarCliente({ params }) {
     const { id } = resolvedParams;
 
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const { rolUsuario } = useAuth();
+    const esAdmin = rolUsuario === 'admin'; // solo un administrador cambia el crédito del cliente
 
     // Fetch del cliente a editar
     const { data: cliente, isLoading, isError } = useQuery({
@@ -40,6 +43,8 @@ export default function EditarCliente({ params }) {
             notas: '',
             esContribuyenteEspecial: false,
             retencionIvaPorDefecto: '75',
+            diasCredito: 7,
+            maxPedidosCredito: 5,
             imagen: null
         },
         validate: {
@@ -60,6 +65,8 @@ export default function EditarCliente({ params }) {
                 notas: cliente.notas || '',
                 esContribuyenteEspecial: cliente.esContribuyenteEspecial || false,
                 retencionIvaPorDefecto: String(cliente.retencionIvaPorDefecto || 75),
+                diasCredito: cliente.diasCredito ?? 7,
+                maxPedidosCredito: cliente.maxPedidosCredito ?? 5,
                 imagen: cliente.imagen || null
             });
         }
@@ -156,6 +163,23 @@ export default function EditarCliente({ params }) {
                                 </Grid.Col>
                                 <Grid.Col span={{ base: 12, md: 6 }}>
                                     <Select label="Porcentaje de Retención IVA" data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} disabled={!form.values.esContribuyenteEspecial} {...form.getInputProps('retencionIvaPorDefecto')} />
+                                </Grid.Col>
+                            </Grid>
+                        </Paper>
+
+                        <Paper withBorder p="md" radius="md" bg="gray.0">
+                            <Title order={5} mb={4} c="gray.7">Crédito en el portal B2B</Title>
+                            <Text size="xs" c="dimmed" mb="md">
+                                Lo que el cliente puede pedir a crédito por su cuenta. Con 0 en cualquiera de los dos, no tiene crédito.
+                                {cliente?.credito && <> Hoy usa <b>{cliente.credito.activos}</b> pedido(s) a crédito activo(s).</>}
+                                {!esAdmin && ' Solo un administrador puede cambiarlo.'}
+                            </Text>
+                            <Grid>
+                                <Grid.Col span={{ base: 12, md: 6 }}>
+                                    <NumberInput label="Días de crédito aprobados" min={0} max={365} allowDecimal={false} allowNegative={false} disabled={!esAdmin} {...form.getInputProps('diasCredito')} />
+                                </Grid.Col>
+                                <Grid.Col span={{ base: 12, md: 6 }}>
+                                    <NumberInput label="Máximo de pedidos a crédito activos" min={0} max={100} allowDecimal={false} allowNegative={false} disabled={!esAdmin} {...form.getInputProps('maxPedidosCredito')} />
                                 </Grid.Col>
                             </Grid>
                         </Paper>

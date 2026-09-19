@@ -12,11 +12,15 @@ const USD = `(CASE WHEN v."moneda" = 'BS' THEN v."totalFinal" / NULLIF(v."tasaCa
 export async function GET() {
     const acceso = await requerirStaff();
     if (acceso.error) return acceso.error;
-    const conDinero = rolDe(acceso.sesion) !== 'vendedor';
+    const rol = rolDe(acceso.sesion);
+    const conDinero = rol !== 'vendedor';
+    // Qué puede modificar quien consulta la lista (la hoja se abre en modo lectura si no puede)
+    const permisos = { editar: rol !== 'vendedor', editarCredito: rol === 'admin' };
 
     try {
         const filas = await sequelize.query(
-            `SELECT c."id", c."identificacion", c."nombre", c."telefono", c."email", c."direccion", c."imagen", c."esContribuyenteEspecial", c."createdAt",
+            `SELECT c."id", c."identificacion", c."nombre", c."telefono", c."email", c."direccion", c."imagen", c."esContribuyenteEspecial", c."retencionIvaPorDefecto", c."notas", c."diasCredito", c."maxPedidosCredito", c."createdAt",
+                (SELECT COUNT(*) FROM "Ventas" x WHERE x."clienteId" = c."id" AND x."condicionPago" = 'Credito' AND x."statusDespacho" <> 'Cancelado' AND x."statusPago" <> 'Pagado')::int AS "creditosActivos",
                 (SELECT u."user" FROM "Usuarios" u WHERE u."clienteId" = c."id" LIMIT 1) AS usuario,
                 COALESCE(m."compras", 0)::float AS compras, COALESCE(m."pedidos", 0)::int AS pedidos, m."ultima" AS "ultimaCompra",
                 COALESCE(m."saldo", 0)::float AS saldo
@@ -35,7 +39,7 @@ export async function GET() {
         );
 
         const clientes = filas.map((c) => (conDinero ? c : { ...c, compras: null, saldo: null, pedidos: null }));
-        return NextResponse.json({ clientes });
+        return NextResponse.json({ clientes, permisos });
     } catch (error) {
         console.error('Resumen de clientes:', error);
         return NextResponse.json({ error: 'No se pudo cargar la lista de clientes' }, { status: 500 });

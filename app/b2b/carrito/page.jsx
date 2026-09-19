@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { ActionIcon, Alert, Box, Button, Divider, Grid, Group, Image, Modal, NumberInput, Paper, SegmentedControl, Stack, Table, Text, Title } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { IconAlertTriangle, IconBuildingStore, IconCheck, IconTrash } from '@tabler/icons-react';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
@@ -43,9 +43,17 @@ function Fila({ item, tasa }) {
 export default function B2BCarrito() {
     const router = useRouter();
     const queryClient = useQueryClient();
-    const { items, listo, factura, vaciar } = useB2BCart();
+    const { items, listo, factura: facturaConIva, facturaSinIva, vaciar } = useB2BCart();
     const { tasa } = useTasaBcv();
     const [tipoEntrega, setTipoEntrega] = useState('pickup');
+    const [formaPago, setFormaPago] = useState('Contado');
+    // Factura: con IVA · Nota de entrega: sin IVA. Sirven tanto para pagar de contado como a crédito
+    const [documento, setDocumento] = useState('NOTA_ENTREGA');
+    const factura = documento === 'FACTURA' ? facturaConIva : facturaSinIva;
+    const { data: credito } = useQuery({ queryKey: ['b2b', 'credito'], queryFn: () => pedirJson('/api/b2b/credito'), staleTime: 30000 });
+    const puedeCredito = Boolean(credito?.habilitado && credito.disponibles > 0);
+    // Si el cupo se agota mientras arma el pedido, vuelve a contado
+    const pago = formaPago === 'Credito' && puedeCredito ? 'Credito' : 'Contado';
     const [enviando, setEnviando] = useState(false);
     const [error, setError] = useState('');
     const [confirmando, { open: abrirConfirmacion, close: cerrarConfirmacion }] = useDisclosure(false);
@@ -58,11 +66,11 @@ export default function B2BCarrito() {
             const r = await pedirJson('/api/b2b/pedidos', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tipoEntrega, items: items.map((i) => ({ productoId: i.producto.id, cantidad: i.cantidad })) }),
+                body: JSON.stringify({ tipoEntrega, condicionPago: pago, tipoDocumento: documento, items: items.map((i) => ({ productoId: i.producto.id, cantidad: i.cantidad })) }),
             });
             vaciar();
             queryClient.invalidateQueries({ queryKey: ['b2b'] });
-            notifications.show({ color: 'teal', icon: <IconCheck size={16} />, title: 'Pedido enviado', message: `Recibimos tu pedido ${r.numero}. Te avisaremos cuando esté listo.` });
+            notifications.show({ color: 'teal', icon: <IconCheck size={16} />, title: 'Pedido enviado', message: r.aCredito ? `Recibimos tu pedido ${r.numero} a crédito. Tienes ${credito?.diasCredito} días para pagarlo.` : `Recibimos tu pedido ${r.numero}. Te avisaremos cuando esté listo.` });
             router.push(`/b2b/pedidos/${r.id}`);
         } catch (e) {
             setError(e.message);
@@ -108,6 +116,28 @@ export default function B2BCarrito() {
                             <SegmentedControl fullWidth color="navy.9" value={tipoEntrega} onChange={setTipoEntrega} data={[{ value: 'pickup', label: 'Retiro en tienda' }, { value: 'flete', label: 'Envío (flete)' }]} />
                             {tipoEntrega === 'flete' && <Text size="xs" c="dimmed" mt={4}>El costo del flete lo coordinamos contigo al preparar el pedido.</Text>}
                         </Box>
+                        <Box>
+                            <Text size="sm" fw={600} mb={4}>Documento</Text>
+                            <SegmentedControl
+                                fullWidth color="navy.9" value={documento} onChange={setDocumento}
+                                data={[{ value: 'NOTA_ENTREGA', label: 'Nota de entrega' }, { value: 'FACTURA', label: 'Factura' }]}
+                            />
+                            <Text size="xs" c="dimmed" mt={4}>{documento === 'FACTURA' ? 'La factura incluye el IVA.' : 'La nota de entrega no lleva IVA.'}</Text>
+                        </Box>
+                        <Box>
+                            <Text size="sm" fw={600} mb={4}>Forma de pago</Text>
+                            <SegmentedControl
+                                fullWidth color="navy.9" value={pago} onChange={setFormaPago}
+                                data={[{ value: 'Contado', label: 'De contado' }, { value: 'Credito', label: `A crédito${credito?.habilitado ? ` (${credito.diasCredito} días)` : ''}`, disabled: !puedeCredito }]}
+                            />
+                            {credito?.habilitado ? (
+                                <Text size="xs" c="dimmed" mt={4}>
+                                    {puedeCredito
+                                        ? `Pagas dentro de ${credito.diasCredito} días. Pedidos a crédito activos: ${credito.activos} de ${credito.maxPedidos}.`
+                                        : `Ya usas tus ${credito.maxPedidos} pedidos a crédito permitidos. Paga alguno para pedir otro a crédito.`}
+                                </Text>
+                            ) : credito ? <Text size="xs" c="dimmed" mt={4}>Tu cuenta no tiene crédito habilitado. Consulta con administración.</Text> : null}
+                        </Box>
                         <Divider />
                         <Group justify="space-between"><Text size="sm">Subtotal</Text><Text size="sm">{fmtUsd(factura.subtotal)}</Text></Group>
                         {factura.exento > 0 && <Group justify="space-between"><Text size="xs" c="dimmed">De los cuales exentos</Text><Text size="xs" c="dimmed">{fmtUsd(factura.exento)}</Text></Group>}
@@ -133,6 +163,7 @@ export default function B2BCarrito() {
             <Modal opened={confirmando} onClose={cerrarConfirmacion} title="Confirmar pedido" centered>
                 <Stack gap="md">
                     <Text size="sm">Vas a enviar un pedido por <b>{fmtUsd(factura.totalFinal)}</b>{tasa ? <> ({fmtBs(aBolivares(factura.totalFinal, tasa))})</> : null}. Los precios y existencias se verifican al enviarlo.</Text>
+                    {pago === 'Credito' && <Alert color="blue" variant="light">Es un pedido <b>a crédito</b> ({documento === 'FACTURA' ? 'factura' : 'nota de entrega'}): tienes <b>{credito.diasCredito} días</b> para pagarlo, completo o en abonos por Pago Móvil desde tu portal.</Alert>}
                     <Group justify="flex-end">
                         <Button variant="default" onClick={cerrarConfirmacion}>Revisar</Button>
                         <Button color="navy.9" onClick={confirmar} loading={enviando}>Enviar pedido</Button>

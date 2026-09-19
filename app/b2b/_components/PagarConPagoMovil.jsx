@@ -11,7 +11,7 @@ import { DATOS_PAGO_MOVIL } from '@/app/constants/empresa';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { fmtBs, fmtUsd, pedirJson } from '../_lib/formato';
 
-// El cliente paga (total o parcial) una factura a crédito por Pago Móvil y reporta los últimos 4 dígitos de la referencia
+// El cliente paga (total o parcial) un pedido a crédito (factura o nota de entrega) por Pago Móvil y reporta los últimos 4 dígitos de la referencia
 // y el monto: el sistema busca el pago entre los avisos del banco y crea el abono solo.
 export default function PagarConPagoMovil({ pedido }) {
     const queryClient = useQueryClient();
@@ -35,8 +35,8 @@ export default function PagarConPagoMovil({ pedido }) {
                 body: JSON.stringify({ referencia, monto: Number(monto) }),
             });
             notifications.show({
-                color: 'teal', title: r.liquidada ? '¡Factura pagada!' : 'Abono registrado',
-                message: r.liquidada ? `Recibimos tu pago de ${fmtUsd(r.abonoUsd)}. Tu factura quedó pagada.` : `Recibimos tu pago de ${fmtUsd(r.abonoUsd)}. Te queda un saldo de ${r.monedaCuenta === 'USD' ? fmtUsd(r.saldoRestante) : fmtBs(r.saldoRestante)}.`,
+                color: 'teal', title: r.liquidada ? '¡Pedido pagado!' : 'Abono registrado',
+                message: r.liquidada ? `Recibimos tu pago de ${fmtUsd(r.abonoUsd)}. Tu pedido quedó pagado.` : `Recibimos tu pago de ${fmtUsd(r.abonoUsd)}. Te queda un saldo de ${r.monedaCuenta === 'USD' ? fmtUsd(r.saldoRestante) : fmtBs(r.saldoRestante)}.`,
             });
             setReferencia('');
             setMonto('');

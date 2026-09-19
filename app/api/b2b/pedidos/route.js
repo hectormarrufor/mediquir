@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { Cliente, Correlativo, Producto, SalidaInventario, Venta, VentaDetalle, sequelize } from '@/models';
+import { Cliente, Correlativo, CuentaPorCobrar, Producto, SalidaInventario, Venta, VentaDetalle, sequelize } from '@/models';
 import { notificarTodos } from '@/app/handlers/notificar';
 import { calcularFactura, precioMayor } from '@/app/constants/facturacion';
 import { requerirCliente } from '../../_lib/acceso';
 import { tasaVigente } from '../../_lib/tasaBcv';
-import { ESTADOS_ACTIVOS, Op, hoyCaracas, resumenPedido, ventasDelCliente } from '../_lib';
+import { ESTADOS_ACTIVOS, Op, creditoDeCliente, hoyCaracas, resumenPedido, ventasDelCliente } from '../_lib';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,6 +75,21 @@ export async function POST(request) {
             cantidades.set(productoId, (cantidades.get(productoId) || 0) + cantidad);
         }
 
+        // Pedido a crédito: se comprueba el cupo con la fila del cliente bloqueada, para que dos pedidos simultáneos no superen el máximo
+        const aCredito = body.condicionPago === 'Credito';
+        let credito = null;
+        if (aCredito) {
+            const clienteCredito = await Cliente.findByPk(clienteId, { transaction: t, lock: t.LOCK.UPDATE });
+            credito = await creditoDeCliente(clienteCredito, { transaction: t });
+            if (credito.maxPedidos <= 0 || credito.diasCredito <= 0) throw new ErrorNegocio('Tu cuenta no tiene crédito habilitado. Puedes pagar de contado o hablar con administración.', 403);
+            if (credito.disponibles <= 0) {
+                throw new ErrorNegocio(`Ya tienes ${credito.activos} pedido(s) a crédito activos y el máximo aprobado para ti es ${credito.maxPedidos}. Cuando pagues alguno podrás pedir otro a crédito.`, 409);
+            }
+        }
+        // El cliente elige el documento, sea de contado o a crédito: factura (con IVA) o nota de entrega (sin IVA)
+        const tipoDocumento = body.tipoDocumento === 'FACTURA' ? 'FACTURA' : 'NOTA_ENTREGA';
+        const prefijo = tipoDocumento === 'FACTURA' ? 'F' : 'NE';
+
         const productos = await Producto.findAll({ where: { id: { [Op.in]: [...cantidades.keys()] } }, transaction: t, lock: t.LOCK.UPDATE });
         if (productos.length !== cantidades.size) throw new ErrorNegocio('Alguno de los productos ya no está disponible');
 
@@ -90,33 +105,34 @@ export async function POST(request) {
         const factura = calcularFactura({
             renglones: lineas.map(({ producto, cantidad }) => {
                 const porcentajeIva = Number(producto.porcentajeIva) || 0;
-                return { precioUnitario: precioMayor(producto), cantidad, aplicaIva: porcentajeIva > 0, porcentajeIva };
+                return { precioUnitario: precioMayor(producto), cantidad, aplicaIva: tipoDocumento === 'FACTURA' && porcentajeIva > 0, porcentajeIva };
             }),
         });
         const tasaCambio = await tasaVigente({ transaction: t });
 
-        // Correlativo de nota de entrega
-        let corr = await Correlativo.findOne({ where: { prefijo: 'NE' }, transaction: t, lock: t.LOCK.UPDATE });
-        if (!corr) corr = await Correlativo.create({ prefijo: 'NE', siguienteNumero: 1, cerosRelleno: 5 }, { transaction: t });
+        // Correlativo del documento (F: factura · NE: nota de entrega)
+        let corr = await Correlativo.findOne({ where: { prefijo }, transaction: t, lock: t.LOCK.UPDATE });
+        if (!corr) corr = await Correlativo.create({ prefijo, siguienteNumero: 1, cerosRelleno: 5 }, { transaction: t });
         // Nunca por debajo del mayor número ya emitido (el POS también emite notas de entrega, a veces con número manual)
         const [{ maximo }] = await sequelize.query(
             `SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace("numeroDocumento", '\\D', '', 'g'), '') AS bigint)), 0) AS maximo
-             FROM "Ventas" WHERE "numeroDocumento" LIKE 'NE-%'`,
-            { type: sequelize.QueryTypes.SELECT, transaction: t }
+             FROM "Ventas" WHERE "numeroDocumento" LIKE :patron`,
+            { replacements: { patron: `${prefijo}-%` }, type: sequelize.QueryTypes.SELECT, transaction: t }
         );
         const numeroSiguiente = Math.max(corr.siguienteNumero, Number(maximo) + 1);
-        const numeroDocumento = `NE-${String(numeroSiguiente).padStart(corr.cerosRelleno || 5, '0')}`;
+        const numeroDocumento = `${prefijo}-${String(numeroSiguiente).padStart(corr.cerosRelleno || 5, '0')}`;
         corr.siguienteNumero = numeroSiguiente + 1;
         await corr.save({ transaction: t });
 
         const venta = await Venta.create({
             clienteId,
             tipoVenta: 'MAYOR',
-            tipoDocumento: 'NOTA_ENTREGA',
+            tipoDocumento,
             numeroDocumento,
             tipoEntrega,
             statusDespacho: 'Pendiente',
-            condicionPago: 'Contado',
+            condicionPago: aCredito ? 'Credito' : 'Contado',
+            fechaVencimiento: aCredito ? new Date(Date.now() + credito.diasCredito * 86400000) : null,
             statusPago: 'Pendiente',
             moneda: 'USD',
             tasaCambio,
@@ -126,6 +142,14 @@ export async function POST(request) {
             totalDescuento: 0,
             totalFinal: factura.totalFinal,
         }, { transaction: t });
+
+        // A crédito nace la cuenta por cobrar: cada Pago Móvil del cliente o abono de administración la va bajando
+        if (aCredito) {
+            await CuentaPorCobrar.create({
+                clienteId, ventaId: venta.id, montoTotal: factura.totalFinal, saldoPendiente: factura.totalFinal,
+                moneda: 'USD', tasaCambio, fechaVencimiento: venta.fechaVencimiento, estado: 'Pendiente',
+            }, { transaction: t });
+        }
 
         for (let i = 0; i < lineas.length; i++) {
             const { producto } = lineas[i];
@@ -158,8 +182,10 @@ export async function POST(request) {
         try {
             const cliente = await Cliente.findByPk(clienteId, { attributes: ['nombre'] });
             await notificarTodos({
-                title: 'Nuevo pedido B2B 📦',
-                body: `${cliente?.nombre || 'Un cliente'} hizo el pedido ${numeroDocumento} por $${factura.totalFinal.toFixed(2)}.`,
+                title: aCredito ? 'Nuevo pedido B2B a crédito 📦' : 'Nuevo pedido B2B 📦',
+                body: aCredito
+                    ? `${cliente?.nombre || 'Un cliente'} hizo ${tipoDocumento === 'FACTURA' ? 'la factura' : 'la nota de entrega'} ${numeroDocumento} a crédito por $${factura.totalFinal.toFixed(2)} (${credito.diasCredito} días; crédito activo ${credito.activos + 1} de ${credito.maxPedidos}).${tipoDocumento === 'FACTURA' ? ' Falta su número de control.' : ''}`
+                    : `${cliente?.nombre || 'Un cliente'} hizo ${tipoDocumento === 'FACTURA' ? 'la factura' : 'el pedido'} ${numeroDocumento} por $${factura.totalFinal.toFixed(2)}.${tipoDocumento === 'FACTURA' ? ' Falta su número de control.' : ''}`,
                 url: `/superuser/ventas/${venta.id}`,
                 tipo: 'Info',
             });
@@ -167,7 +193,7 @@ export async function POST(request) {
             console.error('B2B: no se pudo notificar al personal:', e.message);
         }
 
-        return NextResponse.json({ success: true, id: venta.id, numero: numeroDocumento, total: factura.totalFinal }, { status: 201 });
+        return NextResponse.json({ success: true, id: venta.id, numero: numeroDocumento, total: factura.totalFinal, aCredito, vence: aCredito ? venta.fechaVencimiento : null }, { status: 201 });
     } catch (error) {
         if (!t.finished) await t.rollback();
         if (error instanceof ErrorNegocio) return NextResponse.json({ error: error.message }, { status: error.status });
