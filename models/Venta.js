@@ -95,6 +95,8 @@ const Venta = sequelize.define('Venta', {
     fotoCajaSelladaUrl: { type: DataTypes.TEXT, allowNull: true },
     empaqueIniciadoAt: { type: DataTypes.DATE, allowNull: true },
     empaqueVerificado: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    // Cuándo se borraron las fotos definitivas por vencer el plazo de retención (queda la nota en la evidencia)
+    fotosVencidasAt: { type: DataTypes.DATE, allowNull: true },
     tipoEntrega: {
         type: DataTypes.ENUM('pickup', 'delivery', 'flete'),
         allowNull: false,

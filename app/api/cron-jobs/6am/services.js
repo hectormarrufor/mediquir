@@ -10,6 +10,7 @@ import db, {
     Venta, FacturaCompra, Producto, VentaDetalle
 } from '@/models'; 
 import { getCaracasDate, addDays, getYearsDiff } from "../../../helpers/dateUtils"; 
+import { borrarTodasLasFotos, DIAS_RETENCION_FOTOS, DIAS_CANCELADAS, DIAS_SIN_FIRMAR } from '../../ventas/_fotosEmpaque';
 
 const URL_BINANCE = 'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search';
 const BINANCE_HEADERS = {
@@ -268,4 +269,50 @@ export async function liberarOrdenesExpiradas() {
         if (!transaction.finished) await transaction.rollback();
         throw error;
     }
+}
+
+// ==========================================
+// 6. LIMPIEZA DE FOTOS DE EMPAQUE (Vercel Blob)
+// ==========================================
+// · Vencidas: pedidos despachados hace más de DIAS_RETENCION_FOTOS (ventana de reclamos). Queda la nota "fotos vencidas".
+// · Abandonadas: pedidos cancelados (tras DIAS_CANCELADAS) o empaques nunca firmados (tras DIAS_SIN_FIRMAR).
+// Por corrida se procesan pocas ventas para no pasar del tiempo máximo de la función; el resto sigue al día siguiente.
+export async function limpiarFotosEmpaque() {
+    const LOTE = 25;
+    const hace = (dias) => new Date(Date.now() - dias * 24 * 60 * 60 * 1000);
+    const conFotos = { [Op.or]: [{ fotoCajaAbiertaUrl: { [Op.ne]: null } }, { fotoCajaSelladaUrl: { [Op.ne]: null } }] };
+
+    const vencidas = await Venta.findAll({
+        where: { statusDespacho: 'Completado', fotosVencidasAt: null, fechaHoraRetiro: { [Op.lt]: hace(DIAS_RETENCION_FOTOS) }, ...conFotos },
+        limit: LOTE,
+    });
+    const abandonadas = await Venta.findAll({
+        where: {
+            [Op.and]: [conFotos, {
+                [Op.or]: [
+                    { statusDespacho: 'Cancelado', updatedAt: { [Op.lt]: hace(DIAS_CANCELADAS) } },
+                    { statusDespacho: { [Op.notIn]: ['Completado', 'Cancelado'] }, empacadoAt: null, empaqueIniciadoAt: { [Op.lt]: hace(DIAS_SIN_FIRMAR) } },
+                ],
+            }],
+        },
+        limit: LOTE,
+    });
+
+    let borradasVencidas = 0;
+    let borradasAbandonadas = 0;
+    let errores = 0;
+    for (const [lista, esVencida] of [[vencidas, true], [abandonadas, false]]) {
+        for (const venta of lista) {
+            try {
+                const n = await borrarTodasLasFotos(venta);
+                if (esVencida) { venta.fotosVencidasAt = new Date(); borradasVencidas += n; } else { borradasAbandonadas += n; }
+                await venta.save({ fields: ['fotoCajaAbiertaUrl', 'fotoCajaSelladaUrl', 'fotosVencidasAt'] });
+            } catch (e) {
+                // Si el Blob falla no se limpia la URL: queda para reintentar mañana
+                errores++;
+                console.error(`No se pudieron borrar las fotos del pedido ${venta.numeroDocumento}:`, e.message);
+            }
+        }
+    }
+    return { status: 'OK', borradasVencidas, borradasAbandonadas, errores };
 }

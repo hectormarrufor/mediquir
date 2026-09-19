@@ -4,8 +4,9 @@ import {
     checkHREvents,
     checkCxP, 
     checkCxC,
-    liberarOrdenesExpiradas
-} from './services'; 
+    liberarOrdenesExpiradas,
+    limpiarFotosEmpaque
+} from './services';
 import { notificarCabezas } from '@/app/handlers/notificar'; 
 
 export const dynamic = 'force-dynamic';
@@ -20,13 +21,14 @@ export async function GET(request) {
     try {
         console.log('--- CRON 6AM START ---');
 
-        // Ejecución en paralelo mapeada exactamente 5 a 5
-        const [ finanzas, rrhh, cxp, cxc, limpiezaInventario ] = await Promise.allSettled([
+        // Ejecución en paralelo mapeada exactamente 6 a 6
+        const [ finanzas, rrhh, cxp, cxc, limpiezaInventario, limpiezaFotos ] = await Promise.allSettled([
             syncExchangeRates(),
             checkHREvents(),
             checkCxP(),
             checkCxC(),
-            liberarOrdenesExpiradas()
+            liberarOrdenesExpiradas(),
+            limpiarFotosEmpaque()
         ]);
 
         const report = [];
@@ -96,6 +98,14 @@ export async function GET(request) {
             }
         } else {
             report.push(`❌ Error en Limpieza Inventario: ${limpiezaInventario.reason}`);
+        }
+
+        // 6. Limpieza de fotos de empaque (sin notificación push: es mantenimiento)
+        if (limpiezaFotos.status === 'fulfilled') {
+            const { borradasVencidas, borradasAbandonadas, errores } = limpiezaFotos.value;
+            report.push(`✅ Fotos de empaque borradas: ${borradasVencidas} vencidas, ${borradasAbandonadas} de empaques abandonados${errores ? ` (${errores} pedido(s) con error, se reintenta mañana)` : ''}.`);
+        } else {
+            report.push(`❌ Error en limpieza de fotos de empaque: ${limpiezaFotos.reason}`);
         }
 
         console.log('--- CRON 6AM END ---');

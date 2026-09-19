@@ -12,7 +12,8 @@ const { Client } = require('pg');
             ADD COLUMN IF NOT EXISTS "fotoCajaAbiertaUrl" text NULL,
             ADD COLUMN IF NOT EXISTS "fotoCajaSelladaUrl" text NULL,
             ADD COLUMN IF NOT EXISTS "empaqueIniciadoAt" timestamptz NULL,
-            ADD COLUMN IF NOT EXISTS "empaqueVerificado" boolean NOT NULL DEFAULT false`);
+            ADD COLUMN IF NOT EXISTS "empaqueVerificado" boolean NOT NULL DEFAULT false,
+            ADD COLUMN IF NOT EXISTS "fotosVencidasAt" timestamptz NULL`);
         await db.query(`CREATE TABLE IF NOT EXISTS "VentaEmpaqueItems" (
             id serial PRIMARY KEY,
             "ventaId" uuid NOT NULL REFERENCES "Ventas"(id) ON DELETE CASCADE,

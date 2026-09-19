@@ -12,6 +12,7 @@ import { requerirStaff } from '../../inventario/_lib';
 import { crearYNotificar, notificarCabezas } from '@/app/handlers/notificar';
 import { RetencionIva } from '@/models';
 import { faltantesDeEmpaque, reiniciarEmpaque } from '../_empaque';
+import { borrarFotosSobrantes } from '../_fotosEmpaque';
 
 // Error de reglas de logística (permisos, estados) con su código HTTP
 class ErrorLogistica extends Error {
@@ -216,6 +217,13 @@ export async function PUT(request, { params }) {
             venta.empaqueVerificado = true;
             await venta.save({ transaction: t });
             await t.commit();
+
+            // Solo quedan las dos fotos definitivas: las repetidas se borran del Blob (si falla, el cron lo reintenta al vencer el plazo)
+            try {
+                await borrarFotosSobrantes(venta);
+            } catch (e) {
+                console.error('No se pudieron borrar las fotos repetidas:', e.message);
+            }
             return NextResponse.json({ success: true, message: 'Empaque firmado' });
         }
 

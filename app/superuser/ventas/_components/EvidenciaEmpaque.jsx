@@ -83,6 +83,9 @@ export default function EvidenciaEmpaque({ ventaId, puedeLiberar }) {
                         ))}
                     </Table.Tbody>
                 </Table>
+                {venta.fotosVencidasAt && (
+                    <Text size="xs" c="dimmed">Fotos vencidas: se borraron el {hora(venta.fotosVencidasAt)} al cumplirse el plazo de conservación tras el despacho.</Text>
+                )}
                 {(venta.fotoCajaAbiertaUrl || venta.fotoCajaSelladaUrl) && (
                     <SimpleGrid cols={{ base: 1, sm: 2 }}>
                         {[['Caja abierta', venta.fotoCajaAbiertaUrl], ['Caja sellada', venta.fotoCajaSelladaUrl]].map(([titulo, url]) => url && (

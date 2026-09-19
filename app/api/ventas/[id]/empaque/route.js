@@ -64,7 +64,7 @@ export async function GET(request, { params }) {
             venta: {
                 id: venta.id, numeroDocumento: venta.numeroDocumento, statusDespacho: venta.statusDespacho,
                 empacadorId: venta.empacadorId, empacadorNombre: nombreEmpleado(venta.empacador),
-                empaqueIniciadoAt: venta.empaqueIniciadoAt, empacadoAt: venta.empacadoAt, empaqueVerificado: venta.empaqueVerificado,
+                empaqueIniciadoAt: venta.empaqueIniciadoAt, empacadoAt: venta.empacadoAt, empaqueVerificado: venta.empaqueVerificado, fotosVencidasAt: venta.fotosVencidasAt,
                 fotoCajaAbiertaUrl: venta.fotoCajaAbiertaUrl, fotoCajaSelladaUrl: venta.fotoCajaSelladaUrl,
             },
             esEmpacador: Number(venta.empacadorId) === yo,
