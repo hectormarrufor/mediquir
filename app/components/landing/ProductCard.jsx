@@ -74,7 +74,7 @@ export default function ProductCard({ product, isMobile }) {
                             Agotado
                         </Badge>
                     ) : isLowStock && (
-                        <Badge color="orange" variant="light" size="sm" pos="absolute" top={8} right={8} style={{ zIndex: 2 }}>
+                        <Badge color="orange" variant="light" size={isMobile ? 'xs' : 'sm'} pos="absolute" top={isMobile ? 4 : 8} right={isMobile ? 4 : 8} style={{ zIndex: 2 }}>
                             Últimas {stock}
                         </Badge>
                     )}
@@ -83,26 +83,28 @@ export default function ProductCard({ product, isMobile }) {
                         <ImageCarousel
                             images={images}
                             alt={product.nombre}
-                            height={isMobile ? 150 : 190}
+                            height={isMobile ? 105 : 180}
                             // En móvil se desliza con el dedo; el autoplay solo corre en escritorio
                             autoplayDelay={isMobile ? 0 : 4000 + (product.id % 5) * 600}
                             withControls={!isMobile}
-                            padding={isMobile ? 8 : 12}
+                            padding={isMobile ? 4 : 10}
                         />
                     </Box>
                 </Box>
 
-                <Box p={isMobile ? 10 : 14} style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 4 }}>
+                <Box p={isMobile ? 6 : 12} style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: isMobile ? 2 : 4 }}>
                     <Group justify="space-between" wrap="nowrap" gap={4}>
-                        <Text fz={10} c="blue.9" tt="uppercase" fw={800} lts={0.8} lineClamp={1}>
+                        <Text fz={isMobile ? 8 : 10} c="blue.9" tt="uppercase" fw={800} lts={isMobile ? 0.3 : 0.8} lineClamp={1}>
                             {product.marca?.nombre || 'Genérico'}
                         </Text>
-                        <Text fz={10} c="dimmed" fw={600} style={{ whiteSpace: 'nowrap' }}>
-                            {getPresentacionLabel(product)}
-                        </Text>
+                        {!isMobile && (
+                            <Text fz={10} c="dimmed" fw={600} style={{ whiteSpace: 'nowrap' }}>
+                                {getPresentacionLabel(product)}
+                            </Text>
+                        )}
                     </Group>
 
-                    <Text fw={700} fz={{ base: 13, sm: 15 }} lh={1.3} lineClamp={2} c="navy.9" mih={{ base: 34, sm: 39 }}>
+                    <Text fw={700} fz={{ base: 11, sm: 14 }} lh={1.25} lineClamp={2} c="navy.9" mih={{ base: 28, sm: 35 }}>
                         {product.nombre}
                     </Text>
 
@@ -111,13 +113,13 @@ export default function ProductCard({ product, isMobile }) {
                             {hasDiscount && (
                                 <Text td="line-through" fz={11} c="dimmed" lh={1}>${formatearPrecio(precioBase)}</Text>
                             )}
-                            <Text fw={800} fz={{ base: 16, sm: 20 }} lh={1.15} c={hasDiscount ? 'red.7' : 'brand.6'}>
+                            <Text fw={800} fz={{ base: 13, sm: 19 }} lh={1.15} c={hasDiscount ? 'red.7' : 'brand.6'}>
                                 Ref ${formatearPrecio(precioFinal)}
                             </Text>
-                            {tasa && <Text fz={{ base: 11, sm: 12 }} fw={600} c="dimmed" lh={1.2}>Bs {formatearBs(aBolivares(precioFinal, tasa))}</Text>}
+                            {tasa && <Text fz={{ base: 9, sm: 12 }} fw={600} c="dimmed" lh={1.2}>Bs {formatearBs(aBolivares(precioFinal, tasa))}</Text>}
                         </Box>
                         <ActionIcon
-                            size={isMobile ? 36 : 40}
+                            size={isMobile ? 28 : 38}
                             radius="xl"
                             color="navy.9"
                             variant={puedeAgregar ? 'filled' : 'light'}
@@ -125,12 +127,12 @@ export default function ProductCard({ product, isMobile }) {
                             onClick={handleQuickAdd}
                             aria-label={`Añadir ${product.nombre} al carrito`}
                         >
-                            <IconShoppingCartPlus size={isMobile ? 18 : 20} />
+                            <IconShoppingCartPlus size={isMobile ? 15 : 20} />
                         </ActionIcon>
                     </Group>
                     {caja && (
-                        <Button size="compact-xs" variant="light" color="navy.9" fullWidth mt={4} disabled={!puedeCaja} onClick={handleQuickAddCaja}>
-                            + {caja.etiqueta} · ${formatearPrecio(montoRenglon(precioFinal, caja.unidades))}
+                        <Button size="compact-xs" variant="light" color="navy.9" fullWidth mt={4} styles={isMobile ? { root: { height: 22, fontSize: 10, paddingInline: 4 } } : undefined} disabled={!puedeCaja} onClick={handleQuickAddCaja}>
+                            {isMobile ? '+ Caja' : `+ ${caja.etiqueta} · $${formatearPrecio(montoRenglon(precioFinal, caja.unidades))}`}
                         </Button>
                     )}
                 </Box>

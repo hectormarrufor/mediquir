@@ -37,7 +37,7 @@ export default function CategorySection({ selectedCategory, onSelectCategory }) 
 
     return (
         <Box id="especialidades" py={{ base: 24, md: 56 }}>
-            <Container size="xl" px={{ base: 'sm', sm: 'md' }}>
+            <Container fluid px={{ base: 6, sm: 10 }}>
                 <Stack gap={4} mb={{ base: 'sm', md: 'xl' }} align={isMobile ? 'flex-start' : 'center'}>
                     <Text fz={11} fw={800} c="brand.6" tt="uppercase" lts={1.5}>Especialidades</Text>
                     <Title order={2} fz={{ base: 22, md: 32 }} fw={900} className={classes.gradientText} tt="none" display="block" pb={0}>

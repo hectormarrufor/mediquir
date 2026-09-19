@@ -81,8 +81,8 @@ export default function BestSellersSection({ searchQuery, selectedCategory, onCl
     if (isLoading) {
         return (
             <Box py={40}>
-                <Container size="xl" px={{ base: 'sm', sm: 'md' }}>
-                    <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 5 }} spacing={{ base: 'xs', sm: 'md' }}>
+                <Container fluid px={{ base: 6, sm: 10 }}>
+                    <SimpleGrid cols={{ base: 3, xs: 4, md: 5, lg: 6, xl: 7 }} spacing={{ base: 6, sm: 'sm' }}>
                         {Array.from({ length: 6 }).map((_, i) => (
                             <AspectRatio key={i} ratio={3 / 4}><Skeleton radius="lg" /></AspectRatio>
                         ))}
@@ -104,7 +104,7 @@ export default function BestSellersSection({ searchQuery, selectedCategory, onCl
 
     return (
         <Box py={{ base: 28, md: 64 }}>
-            <Container size="xl" px={{ base: 'sm', sm: 'md' }}>
+            <Container fluid px={{ base: 6, sm: 10 }}>
                 <Stack gap={6} mb={{ base: 'md', md: 'xl' }} align={isMobile ? 'flex-start' : 'center'} ta={isMobile ? 'left' : 'center'}>
                     <Text fz={11} fw={800} c="brand.6" tt="uppercase" lts={1.5}>Catálogo</Text>
                     <Title order={2} fz={{ base: 24, md: 34 }} fw={900} className={classes.gradientText} tt="none" display="block" pb={0}>
@@ -159,7 +159,7 @@ export default function BestSellersSection({ searchQuery, selectedCategory, onCl
 
                 {mostrados.length > 0 ? (
                     <>
-                        <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 5 }} spacing={{ base: 'xs', sm: 'md' }} verticalSpacing={{ base: 'xs', sm: 'md' }}>
+                        <SimpleGrid cols={{ base: 3, xs: 4, md: 5, lg: 6, xl: 7 }} spacing={{ base: 6, sm: 'sm' }} verticalSpacing={{ base: 6, sm: 'sm' }}>
                             {mostrados.map((prod) => (
                                 <ProductCard key={`prod-${prod.id}`} product={prod} isMobile={isMobile} />
                             ))}

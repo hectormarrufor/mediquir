@@ -65,8 +65,8 @@
     scroll-snap-type: x proximity;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
-    padding: 4px 12px 8px;
-    margin: 0 -12px; /* compensa el px="sm" del Container para que el scroll llegue al borde */
+    padding: 4px 6px 8px;
+    margin: 0 -6px; /* compensa el px del Container para que el scroll llegue al borde */
 }
 
 .scroller::-webkit-scrollbar {
