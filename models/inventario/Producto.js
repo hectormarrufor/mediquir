@@ -35,7 +35,8 @@ const Producto = sequelize.define('Producto', {
     },
     // --- ESTRUCTURA DE PRECIOS Y COSTOS (En USD) ---
     costoUsd: { 
-        type: DataTypes.DECIMAL(10, 3), 
+        type: DataTypes.DECIMAL(12, 5), // costo de UNA unidad: necesita más decimales (p. ej. 0.00825 por guante)
+        comment: 'Costo por unidad',
         allowNull: false, 
         defaultValue: 0.00 
     },
@@ -69,10 +70,14 @@ const Producto = sequelize.define('Producto', {
         type: DataTypes.INTEGER,
         allowNull: true, // Solo se llena si presentacion es 'caja'
     },
+    cajasPorBulto: {
+        type: DataTypes.INTEGER,
+        allowNull: true, // Solo si presentacion es 'caja': cuántas cajas trae el bulto
+    },
     unidadesPorBulto: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        defaultValue: 1
+        defaultValue: 1 // TOTAL de unidades del bulto (si hay cajas: cajasPorBulto x unidadesPorCaja)
     }
 
 }, { 

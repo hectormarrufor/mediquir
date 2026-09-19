@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { Producto, Categoria, Marca, GrupoEquivalencia, Tag } from '@/models';
 import sequelize from '@/sequelize';
+import { requerirStaff } from '@/app/api/inventario/_lib';
+import { resolverEmpaque } from '@/app/constants/inventarioCampos';
 
 // =======================================================================
 // GET: Obtener un producto específico con todas sus relaciones
@@ -31,6 +33,10 @@ export async function GET(req, { params }) {
 
 
 export async function PUT(req, { params }) {
+    // Antes esta ruta no validaba sesión: cualquiera podía cambiar precios. Va ANTES de abrir la transacción.
+    const { error: sinAcceso } = await requerirStaff();
+    if (sinAcceso) return sinAcceso;
+
     const t = await sequelize.transaction();
     try {
         const { id } = await params;
@@ -43,6 +49,15 @@ export async function PUT(req, { params }) {
         // 🔥 1. ACTUALIZACIÓN DINÁMICA (Tu idea brillante) 🔥
         // Sequelize es inteligente: si productData solo trae { stockAlmacen: 50 }, 
         // solo hará el UPDATE de esa columna y dejará el resto intacto.
+        // Empaque coherente: si cambia la presentación o el bulto, se recalculan los derivados
+        const camposEmpaque = ['presentacion', 'unidadesPorCaja', 'cajasPorBulto', 'unidadesPorBulto'].filter((k) => k in productData);
+        if (camposEmpaque.length) {
+            const entrada = Object.fromEntries(camposEmpaque.map((k) => [k, productData[k] === '' ? null : productData[k]]));
+            const resuelto = resolverEmpaque(producto.toJSON(), entrada);
+            if (resuelto.error) throw new Error(resuelto.error);
+            Object.assign(productData, resuelto.cambios);
+        }
+
         if (Object.keys(productData).length > 0) {
             await producto.update(productData, { transaction: t });
         }
@@ -84,6 +99,9 @@ export async function PUT(req, { params }) {
 // DELETE: Eliminar el producto
 // =======================================================================
 export async function DELETE(req, { params }) {
+    const { error: sinAcceso } = await requerirStaff();
+    if (sinAcceso) return sinAcceso;
+
     try {
         const { id } = await params;
         const producto = await Producto.findByPk(id);

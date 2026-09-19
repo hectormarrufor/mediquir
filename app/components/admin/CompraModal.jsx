@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Modal, Button, Group, Title, TextInput, NumberInput, 
-    Select, Paper, Stack, Grid, Table, ActionIcon, 
-    Text, Divider, Badge, Checkbox, Box, ScrollArea, Alert 
+    Select, Paper, Stack, Grid, Table, ActionIcon,
+    Text, Divider, Badge, Checkbox, Box, ScrollArea, Alert, SegmentedControl
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -84,36 +84,63 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
         }
     }, [formCompra.values.proveedorId, proveedores]);
 
+    // ---- Compra por BULTO, por CAJAS o por UNIDADES ----
+    // El costo del producto es POR UNIDAD y el stock está en unidades. Lo que se recibe (un bulto, N cajas
+    // o N unidades) y su precio (editable, por si el proveedor lo actualizó) se convierten aquí a
+    // `cantidad` (unidades) y `precioCompraUnitario` (por unidad), que es lo que espera el servidor.
+    const factorDe = (item) => (item.unidadCompra === 'bulto' ? item.undPorBulto : item.unidadCompra === 'caja' ? item.undPorCaja : 1) || 1;
+    const recalcular = (item) => {
+        const f = factorDe(item);
+        return { ...item, cantidad: (Number(item.cantidadCompra) || 0) * f, precioCompraUnitario: (Number(item.precioCompra) || 0) / f };
+    };
+
     const agregarAlCarritoCompra = (prod) => {
         const existe = carritoCompra.find(i => i.id === prod.id);
         if (existe) {
-            setCarritoCompra(carritoCompra.map(i => i.id === prod.id ? { ...i, cantidad: i.cantidad + 1 } : i));
+            setCarritoCompra(carritoCompra.map(i => i.id === prod.id ? recalcular({ ...i, cantidadCompra: i.cantidadCompra + 1 }) : i));
         } else {
-            setCarritoCompra([...carritoCompra, {
+            const costoUnidad = Number(prod.costoUsd) || 0;
+            setCarritoCompra([...carritoCompra, recalcular({
                 id: prod.id,
                 codigo: prod.codigo,
                 nombre: prod.nombre,
-                costoAnterior: Number(prod.costoUsd) || 0,
-                precioCompraUnitario: Number(prod.costoUsd) || 0,
-                cantidad: 1,
+                costoAnterior: costoUnidad,
+                undPorCaja: prod.presentacion === 'caja' ? Number(prod.unidadesPorCaja) || 0 : 0,
+                undPorBulto: Number(prod.unidadesPorBulto) || 0,
+                unidadCompra: 'unidad',
+                cantidadCompra: 1,
+                precioCompra: costoUnidad,
                 porcentajeIva: Number(prod.porcentajeIva) || 16,
                 aceptarCambioPrecio: true
-            }]);
+            })]);
         }
     };
 
     const cambiarCantidad = (id, delta) => {
         setCarritoCompra(carritoCompra.map(i => {
             if (i.id === id) {
-                const nuevaCant = i.cantidad + delta;
-                return nuevaCant > 0 ? { ...i, cantidad: nuevaCant } : null;
+                const nuevaCant = (Number(i.cantidadCompra) || 0) + delta;
+                return nuevaCant > 0 ? recalcular({ ...i, cantidadCompra: nuevaCant }) : null;
             }
             return i;
         }).filter(Boolean));
     };
 
+    const actualizarCantidadCompra = (id, valor) => {
+        setCarritoCompra(carritoCompra.map(i => i.id === id ? recalcular({ ...i, cantidadCompra: Number(valor) || 0 }) : i));
+    };
+
+    // Al cambiar de unidad se conserva el costo por unidad y se recalcula el precio del bulto / la caja
+    const cambiarUnidadCompra = (id, unidad) => {
+        setCarritoCompra(carritoCompra.map(i => {
+            if (i.id !== id) return i;
+            const nuevo = { ...i, unidadCompra: unidad, cantidadCompra: 1 };
+            return recalcular({ ...nuevo, precioCompra: i.precioCompraUnitario * factorDe(nuevo) });
+        }));
+    };
+
     const actualizarPrecioCompra = (id, nuevoPrecio) => {
-        setCarritoCompra(carritoCompra.map(i => i.id === id ? { ...i, precioCompraUnitario: Number(nuevoPrecio) || 0 } : i));
+        setCarritoCompra(carritoCompra.map(i => i.id === id ? recalcular({ ...i, precioCompra: Number(nuevoPrecio) || 0 }) : i));
     };
 
     const toggleAceptarCambioItem = (id) => {
@@ -310,9 +337,9 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                         <Table.Thead>
                                             <Table.Tr>
                                                 <Table.Th><Text size="sm">Producto</Text></Table.Th>
-                                                <Table.Th ta="center"><Text size="sm">Cant</Text></Table.Th>
-                                                <Table.Th><Text size="sm">Costo Ant.</Text></Table.Th>
-                                                <Table.Th><Text size="sm">Nuevo Precio Compra</Text></Table.Th>
+                                                <Table.Th ta="center"><Text size="sm">¿Qué recibes?</Text></Table.Th>
+                                                <Table.Th><Text size="sm">Costo ant. / unidad</Text></Table.Th>
+                                                <Table.Th><Text size="sm">Precio de compra</Text></Table.Th>
                                                 <Table.Th></Table.Th>
                                             </Table.Tr>
                                         </Table.Thead>
@@ -328,15 +355,29 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                                             <Text size="xs" c="dimmed">SKU: {item.codigo}</Text>
                                                         </Table.Td>
                                                         <Table.Td ta="center">
-                                                            <Group gap={6} justify="center">
-                                                                <ActionIcon size="sm" onClick={() => cambiarCantidad(item.id, -1)}><IconMinus size={14}/></ActionIcon>
-                                                                <Text fw={700} size="md">{item.cantidad}</Text>
-                                                                <ActionIcon size="sm" onClick={() => cambiarCantidad(item.id, 1)}><IconPlus size={14}/></ActionIcon>
-                                                            </Group>
+                                                            <Stack gap={6} align="center">
+                                                                <SegmentedControl
+                                                                    size="xs" value={item.unidadCompra} onChange={(v) => cambiarUnidadCompra(item.id, v)}
+                                                                    data={[
+                                                                        { value: 'unidad', label: 'Unidades' },
+                                                                        ...(item.undPorCaja > 0 ? [{ value: 'caja', label: `Cajas (${item.undPorCaja} und)` }] : []),
+                                                                        ...(item.undPorBulto > 1 ? [{ value: 'bulto', label: `Bulto (${item.undPorBulto} und)` }] : []),
+                                                                    ]}
+                                                                />
+                                                                <Group gap={6} justify="center" wrap="nowrap">
+                                                                    <ActionIcon size="sm" onClick={() => cambiarCantidad(item.id, -1)}><IconMinus size={14}/></ActionIcon>
+                                                                    <NumberInput value={item.cantidadCompra} onChange={(v) => actualizarCantidadCompra(item.id, v)} min={1} allowDecimal={false} hideControls w={80} size="xs" ta="center" />
+                                                                    <ActionIcon size="sm" onClick={() => cambiarCantidad(item.id, 1)}><IconPlus size={14}/></ActionIcon>
+                                                                </Group>
+                                                                {item.unidadCompra !== 'unidad' && <Text size="xs" c="dimmed">= {item.cantidad.toLocaleString('es-VE')} unidades</Text>}
+                                                            </Stack>
                                                         </Table.Td>
                                                         <Table.Td><PrecioVisual valor={item.costoAnterior} simbolo="$" size="md" c="dimmed" /></Table.Td>
                                                         <Table.Td>
-                                                            <NumberInput value={item.precioCompraUnitario} onChange={(val) => actualizarPrecioCompra(item.id, val)} decimalScale={2} w={120} size="sm" />
+                                                            <NumberInput value={item.precioCompra} onChange={(val) => actualizarPrecioCompra(item.id, val)} decimalScale={4} w={130} size="sm" />
+                                                            <Text size="xs" c="dimmed">
+                                                                por {item.unidadCompra === 'bulto' ? 'bulto' : item.unidadCompra === 'caja' ? 'caja' : 'unidad'}{item.unidadCompra !== 'unidad' ? ` → ${item.precioCompraUnitario.toFixed(4)} c/u` : ''}
+                                                            </Text>
                                                             {diferencia !== 0 && (
                                                                 <Text size="xs" c={diferencia > 0 ? 'red' : 'teal'} fw={700}>
                                                                     {diferencia > 0 ? `▲ +${variacionPorcentual}%` : `▼ ${variacionPorcentual}%`} ponderado

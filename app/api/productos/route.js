@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { Producto, Categoria, Marca, GrupoEquivalencia, Tag } from '@/models';
 import sequelize from '@/sequelize';
+import { requerirStaff } from '@/app/api/inventario/_lib';
+import { resolverEmpaque } from '@/app/constants/inventarioCampos';
 
 // =======================================================================
 // GET: Listar todo el inventario con sus relaciones completas
@@ -28,6 +30,10 @@ export async function GET() {
 // POST: Crear nuevo producto (Operación Transaccional Segura)
 // =======================================================================
 export async function POST(req) {
+    // Antes esta ruta no validaba sesión: cualquiera podía crear productos. La comprobación va ANTES de abrir la transacción.
+    const { error: sinAcceso } = await requerirStaff();
+    if (sinAcceso) return sinAcceso;
+
     const t = await sequelize.transaction();
 
     try {
@@ -41,6 +47,17 @@ export async function POST(req) {
             throw new Error('Faltan datos obligatorios (Nombre, Código, Categoría o Marca)');
         }
 
+        // Empaque: bulto -> (cajas) -> unidades. unidadesPorBulto es SIEMPRE el total de unidades del bulto.
+        const esCaja = productData.presentacion === 'caja';
+        const resuelto = resolverEmpaque({}, {
+            presentacion: productData.presentacion || 'unidad',
+            unidadesPorCaja: esCaja ? parseInt(productData.unidadesPorCaja) || null : null,
+            cajasPorBulto: esCaja ? parseInt(productData.cajasPorBulto) || null : null,
+            unidadesPorBulto: parseInt(productData.unidadesPorBulto) || 1,
+        });
+        if (resuelto.error) throw new Error(resuelto.error);
+        const empaque = { presentacion: resuelto.cambios.presentacion, unidadesPorCaja: resuelto.cambios.unidadesPorCaja ?? null, cajasPorBulto: resuelto.cambios.cajasPorBulto ?? null, unidadesPorBulto: resuelto.cambios.unidadesPorBulto };
+
         // 2. Crear el Producto en la base de datos dentro de la transacción
         const nuevoProducto = await Producto.create({
             ...productData,
@@ -50,8 +67,7 @@ export async function POST(req) {
             precio7: parseFloat(productData.precio7 || 0),
             stockAlmacen: parseFloat(productData.stockAlmacen || 0),
             stockMinimo: parseFloat(productData.stockMinimo || 0),
-            unidadesPorCaja: productData.presentacion === 'caja' ? parseInt(productData.unidadesPorCaja) : null,
-            unidadesPorBulto: parseInt(productData.unidadesPorBulto || 1)
+            ...empaque
         }, { transaction: t });
 
         // 3. Lógica Inteligente de Tags (Etiquetas)

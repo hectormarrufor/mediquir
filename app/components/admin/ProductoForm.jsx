@@ -58,7 +58,7 @@ export default function ProductoForm({ productId = null }) {
         initialValues: {
             nombre: '', codigo: '', categoriaId: '', marcaId: '', grupoEquivalenciaId: '',
             tags: [], costoUsd: '', precio6: '', precio7: '', porcentajeDescuento: '',
-            conIva: true, presentacion: 'unidad', unidadesPorCaja: '', unidadesPorBulto: '',
+            conIva: true, presentacion: 'unidad', unidadesPorCaja: '', cajasPorBulto: '', unidadesPorBulto: '',
             stockAlmacen: '', stockMinimo: '', imagen: null
         },
         validate: {
@@ -75,7 +75,8 @@ export default function ProductoForm({ productId = null }) {
             precio7: (value) => (value !== '' && Number(value) < -1 ? 'No puede ser negativo' : null),
             stockAlmacen: (value) => (value === '' || Number(value) < 0 ? 'No puede ser negativo' : null),
             unidadesPorCaja: (value, values) => (values.presentacion === 'caja' && (!value || Number(value) <= 0) ? 'Debe ser mayor a 0' : null),
-            unidadesPorBulto: (value) => (value !== '' && Number(value) < 1 ? 'Mínimo 1 unidad por bulto' : null),
+            cajasPorBulto: (value, values) => (values.presentacion === 'caja' && value !== '' && Number(value) < 1 ? 'Mínimo 1 caja por bulto' : null),
+            unidadesPorBulto: (value, values) => (values.presentacion !== 'caja' && value !== '' && Number(value) < 1 ? 'Mínimo 1 unidad por bulto' : null),
         }
     });
 
@@ -104,7 +105,8 @@ export default function ProductoForm({ productId = null }) {
                 conIva: Number(productoDB.porcentajeIva) > 0,
                 presentacion: productoDB.presentacion,
                 unidadesPorCaja: productoDB.unidadesPorCaja || '',
-                unidadesPorBulto: productoDB.unidadesPorBulto || '',
+                cajasPorBulto: productoDB.cajasPorBulto || '',
+                unidadesPorBulto: productoDB.presentacion === 'caja' ? '' : (productoDB.unidadesPorBulto || ''),
                 stockAlmacen: Number(productoDB.stockAlmacen),
                 stockMinimo: Number(productoDB.stockMinimo),
                 imagen: productoDB.imagen || null
@@ -156,7 +158,11 @@ export default function ProductoForm({ productId = null }) {
                 precio7: values.precio7 ? Number(values.precio7) : 0,
                 porcentajeIva: values.conIva ? 16 : 0,
                 unidadesPorCaja: values.presentacion === 'caja' ? Number(values.unidadesPorCaja) : null,
-                unidadesPorBulto: values.unidadesPorBulto ? Number(values.unidadesPorBulto) : 1,
+                cajasPorBulto: values.presentacion === 'caja' ? (Number(values.cajasPorBulto) || 1) : null,
+                // Con cajas: cajas x unidades por caja. Sin cajas: las unidades que trae el bulto directamente.
+                unidadesPorBulto: values.presentacion === 'caja'
+                    ? (Number(values.cajasPorBulto) || 1) * Number(values.unidadesPorCaja)
+                    : (Number(values.unidadesPorBulto) || 1),
             };
 
             delete payload.conIva;
@@ -326,7 +332,7 @@ export default function ProductoForm({ productId = null }) {
                         <Group mb="md" gap="xs"><IconCalculator color="#1971c2" /><Title order={4} c="blue.7">2. Estructura de Precios (Ref USD)</Title></Group>
                         <Grid align="flex-end">
                             {/* 🔥 Todos los NumberInput de dinero ajustados a 3 decimales 🔥 */}
-                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput withAsterisk label="Costo (USD)" decimalScale={3} prefix="$ " placeholder="Ej. 10.500" {...form.getInputProps('costoUsd')} /></Grid.Col>
+                            <Grid.Col span={{ base: 12, md: 3 }}><NumberInput withAsterisk label="Costo por unidad (USD)" description="Lo que cuesta UNA unidad (un guante, una jeringa)" decimalScale={5} prefix="$ " placeholder="Ej. 0.045" {...form.getInputProps('costoUsd')} /></Grid.Col>
                             <Grid.Col span={{ base: 12, md: 3 }}><NumberInput label="Precio 6 (Manual USD)" decimalScale={3} prefix="$ " placeholder="Ej. 12.000" {...form.getInputProps('precio6')} /></Grid.Col>
                             <Grid.Col span={{ base: 12, md: 3 }}><NumberInput label="Precio 7 (Manual USD)" decimalScale={3} prefix="$ " placeholder="Ej. 15.000" {...form.getInputProps('precio7')} /></Grid.Col>
 
@@ -377,16 +383,43 @@ export default function ProductoForm({ productId = null }) {
                         <Title order={4} mb="md" c="gray.7">3. Logística e Inventario</Title>
                         <Grid>
                             <Grid.Col span={{ base: 12, md: 4 }}>
-                                <Select label="Presentación Venta" data={[{ value: 'unidad', label: 'Unidad' }, { value: 'par', label: 'Par' }, { value: 'paqx2', label: 'Paquete x2' }, { value: 'paqx4', label: 'Paquete x4' }, { value: 'caja', label: 'Caja' }]} withAsterisk {...form.getInputProps('presentacion')} />
+                                <Select label="Presentación (unidad de stock, costo y precios)" data={[{ value: 'unidad', label: 'Unidad' }, { value: 'par', label: 'Par' }, { value: 'paqx2', label: 'Paquete x2' }, { value: 'paqx4', label: 'Paquete x4' }, { value: 'caja', label: 'Caja' }]} withAsterisk {...form.getInputProps('presentacion')} />
                             </Grid.Col>
-                            {form.values.presentacion === 'caja' && (
+                            {form.values.presentacion === 'caja' ? (
+                                <>
+                                    <Grid.Col span={{ base: 12, md: 4 }}>
+                                        <NumberInput withAsterisk label="Unidades por caja" description="Unidades que trae cada caja" placeholder="Ej. 50" min={1} {...form.getInputProps('unidadesPorCaja')} />
+                                    </Grid.Col>
+                                    <Grid.Col span={{ base: 12, md: 4 }}>
+                                        <NumberInput label="Cajas por bulto" description="Cajas que trae el bulto con el que compras" placeholder="Ej. 10" min={1} {...form.getInputProps('cajasPorBulto')} />
+                                    </Grid.Col>
+                                </>
+                            ) : (
                                 <Grid.Col span={{ base: 12, md: 4 }}>
-                                    <NumberInput withAsterisk label="Unidades por Caja" placeholder="Ej. 50" min={1} {...form.getInputProps('unidadesPorCaja')} />
+                                    <NumberInput label="Unidades por bulto" description="El bulto trae las unidades directamente, sin cajas" placeholder="Ej. 3000" min={1} {...form.getInputProps('unidadesPorBulto')} />
                                 </Grid.Col>
                             )}
-                            <Grid.Col span={{ base: 12, md: 4 }}>
-                                <NumberInput label="Despacho en Bultos (Und/Bulto)" placeholder="Ej. 24" min={1} {...form.getInputProps('unidadesPorBulto')} />
-                            </Grid.Col>
+
+                            {/* Del costo por unidad al costo de la caja y del bulto */}
+                            {(() => {
+                                const v = form.values;
+                                const esCaja = v.presentacion === 'caja';
+                                const undCaja = Number(v.unidadesPorCaja) || 0;
+                                const cajas = Number(v.cajasPorBulto) || 1;
+                                const undBulto = esCaja ? cajas * undCaja : (Number(v.unidadesPorBulto) || 0);
+                                const costo = Number(v.costoUsd) || 0;
+                                if (!undBulto && !(esCaja && undCaja)) return null;
+                                return (
+                                    <Grid.Col span={12}>
+                                        <Group gap="xs">
+                                            {esCaja && undCaja > 0 && <Badge color="blue" variant="light" size="lg">1 bulto = {cajas} caja(s) × {undCaja} und = {undBulto} unidades</Badge>}
+                                            {!esCaja && undBulto > 0 && <Badge color="blue" variant="light" size="lg">1 bulto = {undBulto} unidades</Badge>}
+                                            {costo > 0 && esCaja && undCaja > 0 && <Badge color="teal" variant="light" size="lg">Costo por caja: {'$'}{(costo * undCaja).toFixed(2)}</Badge>}
+                                            {costo > 0 && undBulto > 0 && <Badge color="grape" variant="light" size="lg">Costo por bulto: {'$'}{(costo * undBulto).toFixed(2)}</Badge>}
+                                        </Group>
+                                    </Grid.Col>
+                                );
+                            })()}
 
                             <Grid.Col span={12}><Divider my="sm" /></Grid.Col>
 
