@@ -6,6 +6,7 @@ import { useForm } from '@mantine/form';
 import { IconBuildingStore, IconMotorbike, IconCheck, IconAlertCircle, IconUser, IconGps, IconMapPinCheck } from '@tabler/icons-react';
 import { useCart } from './components/landing/CartContext';
 import { aBolivares } from '@/app/constants/facturacion';
+import { DATOS_PAGO_MOVIL } from '@/app/constants/empresa';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 
 // Coordenadas base de Mediquir en Ciudad Ojeda
@@ -445,9 +446,9 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                         {requierePagoOnline ? (
                             <Paper withBorder p="md" radius="md" style={{ borderColor: '#005AAA' }}>
                                 <Text fw={700} c="#005AAA" mb="xs">Datos para Pago Móvil ({metodoEntrega === 'pickup' ? 'Retiro Prepagado' : 'Delivery'})</Text>
-                                <Text size="sm"><b>Banco:</b> Venezuela (0102)</Text>
-                                <Text size="sm"><b>Teléfono:</b> 0414-1680773</Text>
-                                <Text size="sm"><b>Cédula:</b> 19749601</Text>
+                                <Text size="sm"><b>Banco:</b> {DATOS_PAGO_MOVIL.banco}</Text>
+                                <Text size="sm"><b>Teléfono:</b> {DATOS_PAGO_MOVIL.telefono}</Text>
+                                <Text size="sm"><b>Cédula:</b> {DATOS_PAGO_MOVIL.cedula}</Text>
                                 <Divider my="md" />
 
                                 <TextInput

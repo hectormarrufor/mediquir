@@ -13,6 +13,7 @@ import { crearYNotificar, notificarCabezas } from '@/app/handlers/notificar';
 import { RetencionIva } from '@/models';
 import { faltantesDeEmpaque, reiniciarEmpaque } from '../_empaque';
 import { borrarFotosSobrantes } from '../_fotosEmpaque';
+import { registrarAbono, ErrorAbono } from '../../_lib/abonos';
 
 // Error de reglas de logística (permisos, estados) con su código HTTP
 class ErrorLogistica extends Error {
@@ -329,72 +330,18 @@ export async function PUT(request, { params }) {
         if (accion === 'ABONAR') {
             const { montoAbono, metodoPago, referencia, monedaAbono, tasaCambioAbono } = body;
 
-            // 1. Buscamos la Cuenta por Cobrar vinculada a esta venta
-            const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, transaction: t });
-
-            if (!cxc) {
-                await t.rollback();
-                return NextResponse.json({ error: 'Esta venta no tiene una Cuenta por Cobrar asociada' }, { status: 404 });
+            // Mismo registro que usan el vínculo de pagos móviles y el pago del cliente B2B: baja el saldo y asienta el ingreso
+            // repartido entre "Ingreso por Cobranza" e "IVA Recaudado"
+            try {
+                await registrarAbono({
+                    venta, monto: montoAbono, moneda: monedaAbono,
+                    tasa: Number(tasaCambioAbono) > 0 ? Number(tasaCambioAbono) : Number(venta.tasaCambio),
+                    metodoPago, referencia, transaction: t,
+                });
+            } catch (e) {
+                if (e instanceof ErrorAbono) throw new ErrorLogistica(e.message, e.status);
+                throw e;
             }
-
-            if (cxc.estado === 'Pagado') {
-                await t.rollback();
-                return NextResponse.json({ error: 'Esta cuenta ya está pagada en su totalidad' }, { status: 400 });
-            }
-
-            // 2. Validaciones y conversión EXACTA (dólares <-> bolívares a la tasa del pago)
-            const monto = Number(montoAbono);
-            if (!(monto > 0)) { await t.rollback(); return NextResponse.json({ error: 'El monto del abono debe ser mayor a 0' }, { status: 400 }); }
-            if (!['USD', 'BS'].includes(monedaAbono)) { await t.rollback(); return NextResponse.json({ error: 'Moneda del abono inválida' }, { status: 400 }); }
-            const tasaAbono = Number(tasaCambioAbono) > 0 ? Number(tasaCambioAbono) : Number(venta.tasaCambio);
-            if (!(tasaAbono > 0)) { await t.rollback(); return NextResponse.json({ error: 'Tasa de cambio inválida' }, { status: 400 }); }
-
-            const abonoUsd = monedaAbono === 'USD' ? monto : aDolares(monto, tasaAbono);
-            const abonoBs = monedaAbono === 'BS' ? monto : aBolivares(monto, tasaAbono);
-            // A la moneda de la cuenta (la que se descuenta del saldo)
-            const montoAbonadoHomologado = cxc.moneda === 'USD' ? abonoUsd : abonoBs;
-
-            // 3. Abono histórico (con las columnas reales de la tabla Abonos)
-            const nuevoAbono = await Abono.create({
-                ventaId: venta.id,
-                fechaPago: new Date(),
-                metodoPago: metodoPago || 'No especificado',
-                referencia: referencia || null,
-                montoUsd: abonoUsd,
-                montoVes: abonoBs,
-                montoBs: abonoBs,
-                tasaBcvAplicada: tasaAbono,
-                tasaCambio: tasaAbono,
-            }, { transaction: t });
-
-            // 4. Actualizar saldos (sin decimales flotantes sobrantes)
-            cxc.saldoPendiente = Math.max(0, Number((Number(cxc.saldoPendiente) - montoAbonadoHomologado).toFixed(2)));
-
-            // Si se completó el pago, pasar a histórico
-            if (cxc.saldoPendiente <= 0) {
-                cxc.estado = 'Pagado';
-                venta.statusPago = 'Pagado'; // Mutamos también la cabecera de la venta
-                await venta.save({ transaction: t });
-            }
-            await cxc.save({ transaction: t });
-
-            // 5. Asentar Ingreso Financiero
-            let catAbono = await CategoriaFinanciera.findOne({ where: { nombre: 'Ingreso por Cobranza (CxC)' }, transaction: t });
-            if (!catAbono) catAbono = await CategoriaFinanciera.create({ nombre: 'Ingreso por Cobranza (CxC)', tipo: 'INGRESO' }, { transaction: t });
-
-            await MovimientoFinanciero.create({
-                tipo: 'INGRESO',
-                fecha: new Date(),
-                metodoPago,
-                referencia: referencia || `Abono CxC - Doc: ${venta.numeroDocumento}`,
-                montoUsd: abonoUsd,
-                tasaBcvAplicada: tasaAbono,
-                montoVes: abonoBs,
-                descripcion: `Abono a Cuenta por Cobrar - Venta ${venta.numeroDocumento}`,
-                categoriaId: catAbono.id,
-                ventaId: venta.id,
-                abonoId: nuevoAbono.id
-            }, { transaction: t });
 
             await t.commit();
             return NextResponse.json({ success: true, message: 'Abono registrado y saldo actualizado exitosamente.' });

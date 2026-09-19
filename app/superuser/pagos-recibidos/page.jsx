@@ -75,10 +75,11 @@ function VincularModal({ pago, onClose }) {
                                             <Table.Td>
                                                 <Text size="sm" fw={600}>{v.numeroDocumento}</Text>
                                                 <Text size="xs" c="dimmed">{v.cliente}</Text>
+                                                {v.esCredito && <Badge size="xs" color="grape" variant="light">A crédito: se registra como abono</Badge>}
                                             </Table.Td>
                                             <Table.Td style={{ textAlign: 'right' }}>
                                                 <Text size="sm" fw={700} c={v.coincide ? 'teal.7' : undefined}>{fmt(v.esperadoBs)}</Text>
-                                                {v.coincide && <Badge size="xs" color="teal" variant="light">Mismo monto</Badge>}
+                                                {v.coincide && <Badge size="xs" color="teal" variant="light">{v.esCredito ? 'Liquida el saldo' : 'Mismo monto'}</Badge>}
                                             </Table.Td>
                                             <Table.Td style={{ textAlign: 'right' }}>
                                                 <Button size="xs" variant={v.coincide ? 'filled' : 'light'} loading={enviando === v.id} onClick={() => vincular(v)}>Vincular</Button>

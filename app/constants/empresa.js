@@ -19,3 +19,10 @@ export const CONFIG_FISCAL = {
     maxRenglonesFactura: 13, // renglones que caben en la forma libre preimpresa (media carta)
     estacion: '001',
 };
+
+// Datos para que los clientes paguen por Pago Móvil (checkout de la tienda y pagos de facturas a crédito en el portal B2B)
+export const DATOS_PAGO_MOVIL = {
+    banco: 'Venezuela (0102)',
+    telefono: '0414-1680773',
+    cedula: '19749601',
+};
