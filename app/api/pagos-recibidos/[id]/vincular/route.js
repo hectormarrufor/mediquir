@@ -10,7 +10,10 @@ class ErrorNegocio extends Error {}
 // Diferencia tolerada entre el pago y el total de la venta (Bs) antes de exigir confirmación
 const TOLERANCIA_BS = 0.01;
 
-const totalEnBs = (venta) => aBolivares(Number(venta.totalFinal), Number(venta.tasaCambio));
+// El documento puede estar en USD (se convierte a la tasa BCV congelada) o ya en Bs
+const totalEnBs = (venta) => (venta.moneda === 'BS'
+    ? Math.round(Number(venta.totalFinal) * 100) / 100
+    : aBolivares(Number(venta.totalFinal), Number(venta.tasaCambio)));
 
 // Ventas que siguen esperando su pago, para elegir a cuál pertenece el pago recibido
 export async function GET(request, { params }) {
@@ -22,7 +25,7 @@ export async function GET(request, { params }) {
         if (!pago) return NextResponse.json({ error: 'Pago no encontrado' }, { status: 404 });
 
         const ventas = await Venta.findAll({
-            where: { statusPago: 'Pendiente', moneda: 'USD' },
+            where: { statusPago: 'Pendiente' },
             include: [{ model: Cliente, as: 'cliente', attributes: ['nombre'], required: false }],
             order: [['createdAt', 'DESC']],
             limit: 50,
@@ -64,7 +67,6 @@ export async function POST(request, { params }) {
         if (!venta) throw new ErrorNegocio('Venta no encontrada');
         if (venta.statusPago !== 'Pendiente') throw new ErrorNegocio('Esa venta ya no está pendiente de pago');
         if (venta.statusDespacho === 'Cancelado') throw new ErrorNegocio('Esa venta está cancelada');
-        if (venta.moneda !== 'USD') throw new ErrorNegocio('Solo se pueden vincular ventas en dólares');
 
         const montoPago = Number(pago.monto);
         const esperadoBs = totalEnBs(venta);
