@@ -12,6 +12,9 @@ const withPWA = require('next-pwa')({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Permite levantar un segundo `next dev` (p. ej. para pruebas automáticas) con otra carpeta de build
+  // y así no pisar la de tu servidor: NEXT_DIST_DIR=.next-test npx next dev -p 3010
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   serverExternalPackages: ['sequelize', 'pg', 'pg-hstore', 'pg-connection-string'],
   
   // NUEVO: Configuración de dominios externos permitidos para next/image

@@ -103,7 +103,7 @@ export default function ClientLayout({ children }) {
                       <NavBar router={router} close={toggle} opened={opened} />
                     </AppShell.Navbar>
 
-                    <AppShell.Main p={0} pt={{ base: 60, sm: 70 }}>
+                    <AppShell.Main px={0} pb={0} pt={{ base: 60, sm: 70 }}>
                       <AppBackground />
                       {children}
                     </AppShell.Main>
