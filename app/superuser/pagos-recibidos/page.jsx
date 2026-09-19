@@ -1,14 +1,104 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { 
     Container, Title, Paper, Table, Badge, Group, 
-    Text, ScrollArea, ActionIcon, Tooltip, Loader, Center
+    Text, ScrollArea, ActionIcon, Tooltip, Loader, Center, Button, Modal, Stack, Alert
 } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
-import { IconDeviceMobileMessage, IconCheck, IconClock, IconRefresh } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { IconDeviceMobileMessage, IconCheck, IconClock, IconRefresh, IconLink } from '@tabler/icons-react';
+
+function VincularModal({ pago, onClose }) {
+    const queryClient = useQueryClient();
+    const [enviando, setEnviando] = useState(null);
+    const [aviso, setAviso] = useState(null); // { ventaId, mensaje } cuando el monto no coincide y hay que confirmar
+
+    const { data: ventas, isLoading } = useQuery({
+        queryKey: ['pago-vincular', pago?.id],
+        enabled: Boolean(pago),
+        queryFn: async () => {
+            const res = await fetch(`/api/pagos-recibidos/${pago.id}/vincular`);
+            if (!res.ok) throw new Error('Error al cargar las ventas');
+            return res.json();
+        },
+    });
+
+    const vincular = async (venta, confirmarDiferencia = false) => {
+        setEnviando(venta.id);
+        try {
+            const res = await fetch(`/api/pagos-recibidos/${pago.id}/vincular`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ventaId: venta.id, confirmarDiferencia }),
+            });
+            const data = await res.json();
+            if (res.status === 409 && data.requiereConfirmacion) {
+                setAviso({ venta, mensaje: data.error });
+                return;
+            }
+            if (!res.ok) throw new Error(data.error || 'No se pudo vincular');
+            notifications.show({ title: 'Pago vinculado', message: `Quedó asociado a la venta ${data.numeroDocumento}`, color: 'teal' });
+            queryClient.invalidateQueries({ queryKey: ['pagos-recibidos'] });
+            onClose();
+        } catch (e) {
+            notifications.show({ title: 'Error', message: e.message, color: 'red' });
+        } finally {
+            setEnviando(null);
+        }
+    };
+
+    const fmt = (n) => new Intl.NumberFormat('es-VE', { style: 'currency', currency: 'VES' }).format(n);
+
+    return (
+        <Modal opened={Boolean(pago)} onClose={onClose} title="Vincular pago con una venta" size="lg">
+            {pago && (
+                <Stack gap="sm">
+                    <Text size="sm">
+                        Pago de <b>{pago.telefonoEmisor || 'Desconocido'}</b> por <b>{fmt(pago.monto)}</b> (ref. {pago.referencia}).
+                        Elige la venta pendiente de cobro a la que pertenece.
+                    </Text>
+                    {aviso && (
+                        <Alert color="yellow" title="El monto no coincide">
+                            <Text size="sm" mb="xs">{aviso.mensaje}</Text>
+                            <Group>
+                                <Button size="xs" color="yellow.8" loading={enviando === aviso.venta.id} onClick={() => vincular(aviso.venta, true)}>Vincular de todos modos</Button>
+                                <Button size="xs" variant="default" onClick={() => setAviso(null)}>Cancelar</Button>
+                            </Group>
+                        </Alert>
+                    )}
+                    {isLoading ? <Center h={120}><Loader type="dots" /></Center> : (
+                        <ScrollArea.Autosize mah={360}>
+                            <Table verticalSpacing="xs">
+                                <Table.Tbody>
+                                    {ventas?.length ? ventas.map((v) => (
+                                        <Table.Tr key={v.id}>
+                                            <Table.Td>
+                                                <Text size="sm" fw={600}>{v.numeroDocumento}</Text>
+                                                <Text size="xs" c="dimmed">{v.cliente}</Text>
+                                            </Table.Td>
+                                            <Table.Td style={{ textAlign: 'right' }}>
+                                                <Text size="sm" fw={700} c={v.coincide ? 'teal.7' : undefined}>{fmt(v.esperadoBs)}</Text>
+                                                {v.coincide && <Badge size="xs" color="teal" variant="light">Mismo monto</Badge>}
+                                            </Table.Td>
+                                            <Table.Td style={{ textAlign: 'right' }}>
+                                                <Button size="xs" variant={v.coincide ? 'filled' : 'light'} loading={enviando === v.id} onClick={() => vincular(v)}>Vincular</Button>
+                                            </Table.Td>
+                                        </Table.Tr>
+                                    )) : (
+                                        <Table.Tr><Table.Td><Text c="dimmed" ta="center">No hay ventas pendientes de pago.</Text></Table.Td></Table.Tr>
+                                    )}
+                                </Table.Tbody>
+                            </Table>
+                        </ScrollArea.Autosize>
+                    )}
+                </Stack>
+            )}
+        </Modal>
+    );
+}
 
 export default function PagosRecibidosPage() {
+    const [pagoAVincular, setPagoAVincular] = useState(null);
     // Fetcheamos los pagos desde nuestra nueva API
     const { data: pagos, isLoading, refetch } = useQuery({
         queryKey: ['pagos-recibidos'],
@@ -93,9 +183,16 @@ export default function PagosRecibidosPage() {
                                                     Conciliado
                                                 </Badge>
                                             ) : (
-                                                <Badge color="yellow.8" variant="light" leftSection={<IconClock size={12} />}>
-                                                    Pendiente
-                                                </Badge>
+                                                <Group gap="xs" justify="center" wrap="nowrap">
+                                                    <Badge color="yellow.8" variant="light" leftSection={<IconClock size={12} />}>
+                                                        Pendiente
+                                                    </Badge>
+                                                    <Tooltip label="Vincular a una venta">
+                                                        <ActionIcon variant="light" color="blue" onClick={() => setPagoAVincular(pago)}>
+                                                            <IconLink size={16} />
+                                                        </ActionIcon>
+                                                    </Tooltip>
+                                                </Group>
                                             )}
                                         </Table.Td>
                                     </Table.Tr>
@@ -111,6 +208,7 @@ export default function PagosRecibidosPage() {
                     )}
                 </ScrollArea>
             </Paper>
+            <VincularModal pago={pagoAVincular} onClose={() => setPagoAVincular(null)} />
         </Container>
     );
 }
