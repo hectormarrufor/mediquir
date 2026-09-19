@@ -9,6 +9,7 @@ import { useMediaQuery } from '@mantine/hooks';
 import { IconFlame, IconTag, IconLayoutGrid, IconX, IconFilter, IconChevronDown } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import ProductCard from './ProductCard';
+import { buscarProductos } from '@/app/helpers/busquedaProductos';
 import classes from './landing.module.css';
 
 const PAGE_SIZE = 12;
@@ -42,22 +43,17 @@ export default function BestSellersSection({ searchQuery, selectedCategory, onCl
                 p.categoria?.nombre?.toLowerCase() === selectedCategory.nombre?.toLowerCase()
             );
         }
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            lista = lista.filter((p) =>
-                p.nombre?.toLowerCase().includes(q) ||
-                p.marca?.nombre?.toLowerCase().includes(q) ||
-                p.presentacion?.toLowerCase().includes(q) ||
-                p.tags?.some((tag) => tag.nombre?.toLowerCase().includes(q))
-            );
-        }
+        // Búsqueda por palabras sueltas (nombre, etiquetas, marca...), tolerante a tildes, plurales y errores de tipeo.
+        // Devuelve primero lo que coincide con todo lo escrito y después opciones parciales, con los disponibles primero.
+        if (searchQuery) lista = buscarProductos(lista, searchQuery, { desempate: enStock });
         return lista;
     }, [productos, selectedCategory, searchQuery]);
 
     // Los disponibles primero; el orden estable conserva el criterio del API dentro de cada grupo
+    // Con una búsqueda activa se respeta el orden de relevancia (que ya prefiere los disponibles)
     const disponiblesPrimero = useMemo(
-        () => [...filtrados].sort((a, b) => enStock(b) - enStock(a)),
-        [filtrados]
+        () => (searchQuery ? filtrados : [...filtrados].sort((a, b) => enStock(b) - enStock(a))),
+        [filtrados, searchQuery]
     );
     const masVendidos = useMemo(
         () => [...filtrados]

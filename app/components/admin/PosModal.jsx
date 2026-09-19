@@ -21,6 +21,7 @@ import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 import { numeroALetras } from '@/app/utils/numeroALetras';
 import { calcularFactura, aBolivares, aDolares, precioPorTarifa } from '@/app/constants/facturacion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
+import { buscarProductos } from '@/app/helpers/busquedaProductos';
 
 export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
     const queryClient = useQueryClient(); // 🔥 INSTANCIADO PARA INVALIDAR QUERIES
@@ -317,7 +318,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
         }
     };
 
-    const productosFiltrados = productos?.filter(p => p.nombre?.toLowerCase().includes(busquedaProducto.toLowerCase()) || p.codigo?.toLowerCase().includes(busquedaProducto.toLowerCase())) || [];
+    const productosFiltrados = buscarProductos(productos, busquedaProducto);
 
     const tituloDocumento = tipoDocumentoActual === 'FACTURA' ? 'Factura' : (tipoDocumentoActual === 'NOTA DE ENTREGA' ? 'Nota de Entrega' : 'Recibo de Venta');
     

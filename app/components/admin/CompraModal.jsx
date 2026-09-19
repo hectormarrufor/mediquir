@@ -15,6 +15,7 @@ import { notifications } from '@mantine/notifications';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import PrecioVisual from '../ui/PrecioVisual';
 import { useAuth } from '@/hooks/useAuth';
+import { buscarProductos } from '@/app/helpers/busquedaProductos';
 
 export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
     const { userId } = useAuth();
@@ -258,7 +259,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
         }
     };
 
-    const productosFiltrados = productos?.filter(p => p.nombre?.toLowerCase().includes(busquedaProd.toLowerCase()) || p.codigo?.toLowerCase().includes(busquedaProd.toLowerCase())) || [];
+    const productosFiltrados = buscarProductos(productos, busquedaProd);
 
     return (
         <>
