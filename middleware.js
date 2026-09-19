@@ -24,6 +24,7 @@ const PUBLICAS = [
     ['GET', /^\/api\/auth\/check-status$/],
     ['POST', /^\/api\/suscribir$/],                // suscripción a notificaciones push
     ['POST', /^\/api\/webhooks\/pagomovil$/],      // valida su propio Bearer token
+    ['POST', /^\/api\/github$/],                   // webhook de GitHub (notifica cada push al personal): valida su firma HMAC secreta
     ['GET', /^\/api\/cron-jobs\/[^/]+$/],          // valida CRON_SECRET
 ];
 
