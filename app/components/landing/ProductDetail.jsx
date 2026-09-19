@@ -4,7 +4,9 @@ import React, { useState } from 'react';
 import { Modal, Drawer, Grid, Box, Stack, Group, Text, Badge, Button, ActionIcon, SegmentedControl } from '@mantine/core';
 import { IconMinus, IconPlus, IconShoppingCartPlus, IconCheck } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
+import Link from 'next/link';
 import ImageCarousel from './ImageCarousel';
+import { rutaProducto } from '@/app/lib/seo';
 import { useCart } from './CartContext';
 import { getProductImages, getPricing, getPresentacionLabel, presentacionesTienda, formatearPrecio, formatearBs } from './productUtils';
 import { aBolivares, montoRenglon } from '@/app/constants/facturacion';
@@ -127,6 +129,7 @@ function DetailBody({ product, onClose, isMobile }) {
                             >
                                 Agregar • ${formatearPrecio(montoRenglon(precioFinal, pres.unidades * quantity))}
                             </Button>
+                            <Text ta="center" size="xs"><Link href={rutaProducto(product)} style={{ color: 'inherit' }}>Ver ficha completa del producto</Link></Text>
                         </Stack>
                     )}
                 </Stack>

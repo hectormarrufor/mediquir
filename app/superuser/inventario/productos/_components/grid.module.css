@@ -49,6 +49,27 @@
     cursor: pointer;
 }
 
+/* Asa para cambiar el ancho: borde derecho del título */
+.resize {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 7px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 5;
+}
+
+.resize:hover {
+    background: color-mix(in srgb, var(--mantine-color-brand-6) 35%, transparent);
+}
+
+/* Columna sobre la que se suelta otra al reordenar */
+.thDestino {
+    box-shadow: inset 3px 0 0 var(--mantine-color-brand-6);
+    background: color-mix(in srgb, var(--mantine-color-brand-6) 10%, #fff);
+}
+
 .thOrden:hover {
     background: var(--mantine-color-gray-1);
     color: var(--mantine-color-navy-9);

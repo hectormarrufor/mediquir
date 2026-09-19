@@ -19,7 +19,9 @@ const specsDe = (edit) => (edit.tabla === 'grupo' ? CAMPOS_GRUPO : CAMPOS);
 export default function InventarioGrid({
     items, columnas, opciones, puedeEditar, estados, orden, onOrden,
     onEditar, onPegarBloque, onDeshacer, onFicha, onEliminar, onFoto, onToggleGrupo, cargando,
+    onAncho, onRestablecerAncho, onMoverColumna,
 }) {
+    const [sobre, setSobre] = useState(null); // columna sobre la que se está arrastrando otra
     const navegables = useMemo(() => columnas.filter((c) => !c.fija), [columnas]);
     const [activa, setActiva] = useState(null);       // { r, c } sobre `navegables`
     const [edicion, setEdicion] = useState(null);     // { r, c, texto, seleccionar, error }
@@ -172,6 +174,20 @@ export default function InventarioGrid({
         else if (!mod && !e.altKey && tecla.length === 1) { e.preventDefault(); iniciarEdicion(r, c, tecla); }
     };
 
+    // Cambiar el ancho arrastrando el borde derecho del título (doble clic = ancho original)
+    const iniciarAncho = (e, col) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const x0 = e.clientX;
+        const w0 = col.ancho;
+        const mover = (ev) => onAncho(col.key, limitar(Math.round(w0 + ev.clientX - x0), 50, 900));
+        const soltar = () => { window.removeEventListener('mousemove', mover); window.removeEventListener('mouseup', soltar); document.body.style.cursor = ''; };
+        document.body.style.cursor = 'col-resize';
+        window.addEventListener('mousemove', mover);
+        window.addEventListener('mouseup', soltar);
+    };
+    const movible = (col) => !col.fija && !col.sticky;
+
     const iconoOrden = (col) => (orden.sort !== col.orden ? <IconArrowsSort size={12} opacity={0.4} /> : orden.dir === 'asc' ? <IconArrowUp size={12} /> : <IconArrowDown size={12} />);
     const ctx = { onFoto, onToggleGrupo, onFicha, onEliminar, puedeEditar };
 
@@ -188,12 +204,21 @@ export default function InventarioGrid({
                             <th
                                 key={col.key}
                                 title={col.ayuda}
-                                className={cls(classes.th, col.orden && classes.thOrden, orden.sort === col.orden && classes.thActivo, izquierda[col.key] !== undefined && classes.fija)}
+                                className={cls(classes.th, col.orden && classes.thOrden, orden.sort === col.orden && classes.thActivo, izquierda[col.key] !== undefined && classes.fija, sobre === col.key && classes.thDestino)}
                                 style={{ left: izquierda[col.key], textAlign: col.derecha ? 'right' : 'left' }}
                                 onClick={col.orden ? () => onOrden(col.orden) : undefined}
+                                draggable={movible(col)}
+                                onDragStart={movible(col) ? (e) => { e.dataTransfer.setData('text/plain', col.key); e.dataTransfer.effectAllowed = 'move'; } : undefined}
+                                onDragOver={movible(col) ? (e) => { e.preventDefault(); if (sobre !== col.key) setSobre(col.key); } : undefined}
+                                onDragLeave={() => setSobre((s) => (s === col.key ? null : s))}
+                                onDrop={movible(col) ? (e) => { e.preventDefault(); setSobre(null); onMoverColumna(e.dataTransfer.getData('text/plain'), col.key); } : undefined}
+                                onDragEnd={() => setSobre(null)}
                                 aria-sort={orden.sort === col.orden ? (orden.dir === 'asc' ? 'ascending' : 'descending') : undefined}
                             >
                                 <Group gap={4} wrap="nowrap" justify={col.derecha ? 'flex-end' : 'flex-start'}>{col.label}{col.orden && iconoOrden(col)}</Group>
+                                {col.key !== 'imagen' && (
+                                    <span className={classes.resize} onMouseDown={(e) => iniciarAncho(e, col)} onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => { e.stopPropagation(); onRestablecerAncho(col.key); }} title="Arrastra para cambiar el ancho · doble clic para restablecer" />
+                                )}
                             </th>
                         ))}
                     </tr>

@@ -1,0 +1,183 @@
+/* Páginas públicas pensadas para buscadores (producto, categoría, envíos) */
+.pagina {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 16px 12px 48px;
+}
+
+.panel {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 6px 24px rgba(11, 27, 61, 0.12);
+    color: #16233f;
+}
+
+.migas {
+    font-size: 13px;
+    margin-bottom: 12px;
+    color: #cfd8e6;
+}
+
+.migas a {
+    color: #fff;
+    text-decoration: underline;
+}
+
+.producto {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+}
+
+@media (min-width: 768px) {
+    .producto {
+        grid-template-columns: 380px 1fr;
+    }
+}
+
+.foto {
+    background: #f4f7fb;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    min-height: 260px;
+}
+
+.foto img {
+    max-width: 100%;
+    max-height: 340px;
+    object-fit: contain;
+}
+
+.titulo {
+    font-size: 26px;
+    line-height: 1.2;
+    margin: 0 0 8px;
+    color: #0b1b3d;
+}
+
+.marca {
+    font-size: 13px;
+    font-weight: 700;
+    color: #005aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+
+.precio {
+    font-size: 32px;
+    font-weight: 900;
+    color: #005aaa;
+    margin: 12px 0 2px;
+}
+
+.sub {
+    font-size: 13px;
+    color: #5b6b85;
+}
+
+.boton {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 12px 22px;
+    border-radius: 999px;
+    background: #0b1b3d;
+    color: #fff;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.botonAlt {
+    display: inline-block;
+    margin: 16px 0 0 8px;
+    padding: 12px 22px;
+    border-radius: 999px;
+    background: #25d366;
+    color: #fff;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.chip {
+    background: #eef4fa;
+    color: #16233f;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 12px;
+}
+
+.h2 {
+    font-size: 19px;
+    margin: 22px 0 8px;
+    color: #0b1b3d;
+}
+
+.rejilla {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+@media (min-width: 640px) {
+    .rejilla {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (min-width: 992px) {
+    .rejilla {
+        grid-template-columns: repeat(5, 1fr);
+    }
+}
+
+.tarjeta {
+    display: block;
+    text-decoration: none;
+    color: #16233f;
+    border: 1px solid #e6eaf0;
+    border-radius: 12px;
+    padding: 8px;
+    background: #fff;
+}
+
+.tarjeta img {
+    width: 100%;
+    height: 110px;
+    object-fit: contain;
+    background: #f4f7fb;
+    border-radius: 8px;
+}
+
+.tarjeta span {
+    display: block;
+    font-size: 13px;
+    line-height: 1.25;
+    margin-top: 6px;
+    font-weight: 600;
+}
+
+.tarjeta b {
+    display: block;
+    color: #005aaa;
+    margin-top: 2px;
+}
+
+.texto p {
+    line-height: 1.6;
+    margin: 0 0 10px;
+}
+
+.lista {
+    padding-left: 18px;
+    line-height: 1.7;
+}

@@ -49,6 +49,17 @@ const nextConfig = {
     ],
   },
 
+  // Lo privado (panel del personal, portal de clientes, API, login) no debe aparecer en Google
+  async headers() {
+    const privado = [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }];
+    return [
+      { source: '/superuser/:path*', headers: privado },
+      { source: '/b2b/:path*', headers: privado },
+      { source: '/login', headers: privado },
+      { source: '/api/:path*', headers: privado },
+    ];
+  },
+
   webpack: (config) => {
     // Apaga de raíz las auditorías de Webpack sobre límites de tamaño de archivos
     config.performance = {

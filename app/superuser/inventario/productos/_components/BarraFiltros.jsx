@@ -18,7 +18,7 @@ const aOpciones = (lista) => (lista || []).map((o) => ({ value: String(o.id), la
 
 export default function BarraFiltros({
     params, setParams, hayFiltros, limpiarFiltros, opciones, isMobile,
-    columnasVisibles, setColumnasVisibles, puedeEditar, bloqueado, setBloqueado,
+    columnasVisibles, setColumnasVisibles, onRestablecerColumnas, puedeEditar, bloqueado, setBloqueado,
     onDeshacer, hayHistorial, onNuevo, onListaPrecios, grupos = [], contraidos = new Set(), setContraidos = () => {},
 }) {
     // La búsqueda se envía al servidor 300 ms después de dejar de teclear
@@ -81,6 +81,9 @@ export default function BarraFiltros({
                                 <Checkbox size="xs" readOnly label={c.label} checked={columnasVisibles.includes(c.key)} styles={{ root: { pointerEvents: 'none' } }} />
                             </Menu.Item>
                         ))}
+                        <Menu.Divider />
+                        <Menu.Label>Arrastra el título de una columna para moverla y su borde derecho para cambiar el ancho</Menu.Label>
+                        <Menu.Item closeMenuOnClick onClick={onRestablecerColumnas}>Restablecer orden y anchos</Menu.Item>
                     </Menu.Dropdown>
                 </Menu>
             )}

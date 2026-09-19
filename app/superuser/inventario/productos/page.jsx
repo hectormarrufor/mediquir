@@ -34,6 +34,9 @@ export default function InventarioProductosPage() {
 
     const [visibles, setVisibles] = useLocalStorage({ key: 'inv.columnas.v4', defaultValue: VISIBLES_POR_DEFECTO });
     const [bloqueado, setBloqueado] = useLocalStorage({ key: 'inv.bloqueado', defaultValue: false });
+    // Cada persona ajusta la hoja a su gusto: ancho de cada columna y orden de las columnas (se guardan en su navegador)
+    const [anchos, setAnchos] = useLocalStorage({ key: 'inv.anchos.v1', defaultValue: {} });
+    const [ordenCols, setOrdenCols] = useLocalStorage({ key: 'inv.orden.v1', defaultValue: [] });
     const [contraidos, setContraidos] = useState(() => new Set());
     const [fotoDe, setFotoDe] = useState(null);
     const [listaPrecios, setListaPrecios] = useState(false);
@@ -41,7 +44,25 @@ export default function InventarioProductosPage() {
     const entries = data?.entries ?? [];
     const tienePermiso = Boolean(data?.permisos?.editar);
     const puedeEditar = tienePermiso && !bloqueado;
-    const columnas = useMemo(() => COLUMNAS.filter((c) => c.fija || visibles.includes(c.key)), [visibles]);
+    // Las columnas fijas (foto, código y producto) se quedan a la izquierda; el resto se puede reordenar
+    const esFijaIzq = (c) => Boolean(c.fija || c.sticky);
+    const columnas = useMemo(() => {
+        const base = COLUMNAS.filter((c) => c.fija || visibles.includes(c.key));
+        const posicion = (k) => { const i = ordenCols.indexOf(k); return i === -1 ? 1000 + COLUMNAS.findIndex((c) => c.key === k) : i; };
+        const izq = base.filter(esFijaIzq);
+        const resto = base.filter((c) => !esFijaIzq(c)).sort((a, b) => posicion(a.key) - posicion(b.key));
+        return [...izq, ...resto].map((c) => (anchos[c.key] ? { ...c, ancho: anchos[c.key] } : c));
+    }, [visibles, ordenCols, anchos]);
+    const cambiarAncho = (clave, ancho) => setAnchos((a) => ({ ...a, [clave]: ancho }));
+    const restablecerAncho = (clave) => setAnchos((a) => { const { [clave]: _quitada, ...resto } = a; return resto; });
+    const moverColumna = (desde, hacia) => {
+        const claves = columnas.filter((c) => !esFijaIzq(c)).map((c) => c.key);
+        if (!claves.includes(desde) || !claves.includes(hacia) || desde === hacia) return;
+        const nueva = claves.filter((k) => k !== desde);
+        nueva.splice(nueva.indexOf(hacia) + (claves.indexOf(desde) < claves.indexOf(hacia) ? 1 : 0), 0, desde);
+        setOrdenCols(nueva);
+    };
+    const restablecerColumnas = () => { setAnchos({}); setOrdenCols([]); };
     const items = useMemo(() => aplanarEntradas(entries, contraidos), [entries, contraidos]);
 
     // Si tras filtrar la página actual ya no existe, vuelve a la última que sí
@@ -129,7 +150,7 @@ export default function InventarioProductosPage() {
             <BarraFiltros
                 params={params} setParams={setParams} hayFiltros={hayFiltros} limpiarFiltros={limpiarFiltros}
                 opciones={opciones} isMobile={isMobile}
-                columnasVisibles={visibles} setColumnasVisibles={setVisibles}
+                columnasVisibles={visibles} setColumnasVisibles={setVisibles} onRestablecerColumnas={restablecerColumnas}
                 puedeEditar={tienePermiso} bloqueado={bloqueado} setBloqueado={setBloqueado}
                 onDeshacer={edicion.deshacer} hayHistorial={edicion.hayHistorial}
                 grupos={todosLosGrupos} contraidos={contraidos} setContraidos={setContraidos}
@@ -153,6 +174,7 @@ export default function InventarioProductosPage() {
                             puedeEditar={puedeEditar} estados={edicion.estados}
                             orden={{ sort: params.sort, dir: params.dir }} onOrden={onOrden}
                             onEditar={editar} onPegarBloque={pegarBloque} onDeshacer={edicion.deshacer}
+                            onAncho={cambiarAncho} onRestablecerAncho={restablecerAncho} onMoverColumna={moverColumna}
                             onFicha={irFicha} onEliminar={eliminar} onFoto={setFotoDe} onToggleGrupo={alternarGrupo}
                             cargando={isPlaceholderData || edicion.procesando}
                         />

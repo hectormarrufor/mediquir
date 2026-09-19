@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActionIcon, Avatar, Badge, Group, Menu, Text, UnstyledButton } from '@mantine/core';
+import { ActionIcon, Avatar, Badge, Group, Menu, Text, Tooltip, UnstyledButton } from '@mantine/core';
 import { IconChevronDown, IconChevronRight, IconDotsVertical, IconEdit, IconTrash } from '@tabler/icons-react';
 import dayjs from 'dayjs';
 import { formatearNumero, margen, valorDe, valorInventario } from '../_lib/columnas';
@@ -31,7 +31,12 @@ export function renderCelda(item, col, ctx) {
             return <Foto src={imagenDe(fila)} letra={fila.nombre?.charAt(0)} onClick={() => ctx.onFoto(item)} titulo={propia ? 'Foto del producto' : fila.marca?.imagen ? 'Foto de la marca (el producto no tiene foto propia)' : 'Sin foto'} />;
         }
         case 'nombre':
-            return item.k === 'hijo' ? <span className={classes.hijoNombre}>{fila.nombre}</span> : fila.nombre;
+            // El nombre puede no caber en la columna: al pasar el ratón se ve completo
+            return (
+                <Tooltip label={fila.nombre} multiline w={340} openDelay={250} withArrow position="bottom-start">
+                    {item.k === 'hijo' ? <span className={classes.hijoNombre}>{fila.nombre}</span> : <span>{fila.nombre}</span>}
+                </Tooltip>
+            );
         case 'stockAlmacen': return <span className={classes.stock}>{formatearNumero(fila.stockAlmacen, col)}</span>;
         case 'stockMinimo':
             return item.k === 'hijo'
@@ -86,7 +91,7 @@ function celdaGrupo(item, col, ctx) {
                     <ActionIcon size="sm" variant="subtle" color="gray" onClick={(e) => { e.stopPropagation(); ctx.onToggleGrupo(g.id); }} aria-label={item.cerrado ? 'Expandir grupo' : 'Contraer grupo'}>
                         {item.cerrado ? <IconChevronRight size={16} /> : <IconChevronDown size={16} />}
                     </ActionIcon>
-                    <span className={classes.grupoNombre}>{g.nombre}</span>
+                    <Tooltip label={g.nombre} multiline w={340} openDelay={250} withArrow position="bottom-start"><span className={classes.grupoNombre}>{g.nombre}</span></Tooltip>
                     <Text span size="xs" c="dimmed">{item.nHijos === g.nProductos ? g.nProductos : `${item.nHijos}/${g.nProductos}`}</Text>
                 </Group>
             );

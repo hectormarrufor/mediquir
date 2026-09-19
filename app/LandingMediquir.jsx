@@ -13,7 +13,7 @@ import CheckoutProcess from './CheckoutProcess';
 import { getMainImage, PLACEHOLDER_IMG, formatearPrecio, formatearBs } from './components/landing/productUtils';
 import { aBolivares } from '@/app/constants/facturacion';
 
-export default function LandingMediquir() {
+export default function LandingMediquir({ seo = null }) {
     const [bcv, setBcv] = useState(undefined);
     const [cartOpened, setCartOpened] = useState(false);
     // En LandingMediquir.jsx, añade este estado junto a los demás:
@@ -32,6 +32,12 @@ export default function LandingMediquir() {
 
     // --- ESTADOS DE FILTRADO GLOBAL DE LA LANDING ---
     const [searchQuery, setSearchQuery] = useState('');
+
+    // Enlaces desde Google o desde una ficha de producto: /?buscar=jeringa muestra esa búsqueda en la tienda
+    useEffect(() => {
+        const q = new URLSearchParams(window.location.search).get('buscar');
+        if (q) setSearchQuery(q.slice(0, 100));
+    }, []);
     const [selectedCategory, setSelectedCategory] = useState(null);
 
     const scrollToProducts = () => {
@@ -124,6 +130,8 @@ export default function LandingMediquir() {
                     onClearFilters={handleClearFilters}
                 />
             </Box>
+
+            {seo}
 
             <FooterSection />
 
