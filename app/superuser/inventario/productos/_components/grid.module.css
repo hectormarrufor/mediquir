@@ -25,14 +25,14 @@
     border-collapse: separate;
     border-spacing: 0;
     table-layout: fixed;
-    font-size: 13px;
+    font-size: 12.5px;
 }
 
 .th {
     position: sticky;
     top: 0;
     z-index: 3;
-    padding: 8px 10px;
+    padding: 5px 6px;
     background: var(--mantine-color-gray-0);
     border-bottom: 2px solid var(--mantine-color-gray-3);
     border-right: 1px solid var(--mantine-color-gray-2);
@@ -81,8 +81,8 @@
 
 .td {
     position: relative;
-    height: 40px;
-    padding: 0 10px;
+    height: 34px;
+    padding: 0 6px;
     border-bottom: 1px solid var(--mantine-color-gray-2);
     border-right: 1px solid var(--mantine-color-gray-1);
     overflow: hidden;

@@ -32,7 +32,7 @@ export default function InventarioProductosPage() {
     const { data: opciones } = useOpcionesInventario();
     const edicion = useEdicionInventario(opciones);
 
-    const [visibles, setVisibles] = useLocalStorage({ key: 'inv.columnas.v4', defaultValue: VISIBLES_POR_DEFECTO });
+    const [visibles, setVisibles] = useLocalStorage({ key: 'inv.columnas.v5', defaultValue: VISIBLES_POR_DEFECTO });
     const [bloqueado, setBloqueado] = useLocalStorage({ key: 'inv.bloqueado', defaultValue: false });
     // Cada persona ajusta la hoja a su gusto: ancho de cada columna y orden de las columnas (se guardan en su navegador)
     const [anchos, setAnchos] = useLocalStorage({ key: 'inv.anchos.v1', defaultValue: {} });

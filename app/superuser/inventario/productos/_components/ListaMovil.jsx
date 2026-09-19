@@ -185,6 +185,11 @@ function TarjetaProducto({ f, puedeEditar, onEditar, onCodigos, onFicha, hijo })
                     <Box key={t}><Text fz={10} c="dimmed" tt="uppercase">{t}</Text><Text size="sm" fw={800}>{formatearNumero(v, { decimales: d })}</Text></Box>
                 ))}
             </SimpleGrid>
+            {(f.unidadesPorCaja > 0 || f.unidadesPorBulto > 1) && (
+                <Text fz={11} c="dimmed" mt={4}>
+                    Equivale a{f.unidadesPorCaja > 0 ? ` ${formatearNumero(f.stockAlmacen / f.unidadesPorCaja, { decimales: [0, 2] })} cajas` : ''}{f.unidadesPorBulto > 1 ? `${f.unidadesPorCaja > 0 ? ' ·' : ''} ${formatearNumero(f.stockAlmacen / f.unidadesPorBulto, { decimales: [0, 2] })} bultos` : ''}
+                </Text>
+            )}
             <Group gap="xs" mt="sm" grow>
                 {puedeEditar && <Button size="xs" variant="light" color="brand.6" leftSection={<IconEdit size={14} />} onClick={() => onEditar(f)} tt="none">Editar rápido</Button>}
                 {puedeEditar && <Button size="xs" variant="light" color="blue" leftSection={<IconBarcode size={14} />} onClick={() => onCodigos(f.id)} tt="none">Códigos</Button>}
