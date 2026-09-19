@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { Badge, Box, Button, Container, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon, Title } from '@mantine/core';
 import { IconArrowRight, IconBrandWhatsapp, IconBuildingStore, IconMapPin, IconTruckDelivery } from '@tabler/icons-react';
 import { Categoria, Producto } from '@/models';
-import CategoryIcon from '@/app/components/CategoryIcon';
 import { SITIO, rutaCategoria } from '@/app/lib/seo';
 import classes from './landing.module.css';
 
@@ -50,22 +49,14 @@ export default async function SeccionSeo() {
                 </SimpleGrid>
 
                 {categorias.length > 0 && (
-                    <>
-                        <Title order={3} c="navy.9" fz={{ base: 20, md: 24 }} fw={800} tt="none" display="block" pb={0} mb="sm">Explora por categoría</Title>
-                        <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} spacing={{ base: 'xs', md: 'md' }} mb={{ base: 28, md: 44 }}>
-                            {categorias.map((c) => (
-                                <Link key={c.id} href={rutaCategoria(c)} className={classes.seoTarjeta}>
-                                    <Group gap="sm" wrap="nowrap" align="center">
-                                        <CategoryIcon categoryName={c.nombre} size={42} color="brand" />
-                                        <Box style={{ minWidth: 0 }}>
-                                            <Text fw={800} size="sm" c="navy.9" lh={1.2} lineClamp={2}>{c.nombre}</Text>
-                                            <Text size="xs" c="dimmed">{c.total} productos</Text>
-                                        </Box>
-                                    </Group>
-                                </Link>
-                            ))}
-                        </SimpleGrid>
-                    </>
+                    <Group gap={8} justify="center" mb={{ base: 28, md: 40 }} aria-label="Categorías">
+                        <Text size="sm" c="dimmed" fw={600}>Ver por categoría:</Text>
+                        {categorias.map((c) => (
+                            <Badge key={c.id} component={Link} href={rutaCategoria(c)} variant="light" color="brand" size="lg" radius="xl" tt="none" style={{ cursor: 'pointer' }}>
+                                {c.nombre} · {c.total}
+                            </Badge>
+                        ))}
+                    </Group>
                 )}
 
                 <Paper className={classes.seoBanda} p={{ base: 'lg', md: 'xl' }}>
@@ -75,7 +66,7 @@ export default async function SeccionSeo() {
                             <Text c="gray.3" size="sm" mt={4}>Escríbenos y te respondemos con disponibilidad, precios y tiempos de envío.</Text>
                         </Box>
                         <Group gap="sm">
-                            <Button component="a" href={`https://wa.me/${SITIO.whatsapp}`} target="_blank" rel="noopener noreferrer" color="green" size="md" radius="xl" leftSection={<IconBrandWhatsapp size={18} />} tt="none">
+                            <Button component="a" href={`https://wa.me/${SITIO.whatsapp}`} target="_blank" rel="noopener noreferrer" color="green.8" size="md" radius="xl" leftSection={<IconBrandWhatsapp size={18} />} tt="none">
                                 Escribir por WhatsApp
                             </Button>
                             <Button component={Link} href="/envios-nacionales" variant="white" color="navy.9" size="md" radius="xl" rightSection={<IconArrowRight size={16} />} tt="none">

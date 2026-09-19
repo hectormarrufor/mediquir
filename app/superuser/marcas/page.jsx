@@ -93,7 +93,7 @@ export default function GestionMarcas() {
 
     return (
         <Box p="md" maw={1000} mx="auto">
-            <Title order={2} c="grape.9" mb="xl">Gestión de Marcas</Title>
+            <Title order={2} c="white" mb="xl">Gestión de Marcas</Title>
             
             <Paper withBorder radius="md" p="md" bg="white">
                 <Table striped highlightOnHover verticalSpacing="sm">

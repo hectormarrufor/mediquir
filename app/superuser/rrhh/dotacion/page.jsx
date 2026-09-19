@@ -66,7 +66,7 @@ export default function DotacionReportPage() {
 
     return (
         <Container size="xl" py="xl">
-            <Title order={2} mb="xl">Necesidades de Dotación (Personal Activo)</Title>
+            <Title order={2} mb="xl" c="white">Necesidades de Dotación (Personal Activo)</Title>
 
             <SimpleGrid cols={{ base: 1, md: 3 }} spacing="lg">
                 <TallaCard

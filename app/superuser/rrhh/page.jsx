@@ -105,7 +105,7 @@ export default function RRHHPage() {
             <Group mb="xl" align="center">
                 <ActionIcon 
                     variant="subtle" 
-                    color="gray" 
+                    color="gray.3" 
                     size="xl" 
                     onClick={() => router.back()}
                     radius="xl"
@@ -113,8 +113,8 @@ export default function RRHHPage() {
                     <IconChevronLeft size={28} />
                 </ActionIcon>
                 <div>
-                    <Title order={2}>Recursos Humanos</Title>
-                    <Text c="dimmed">Administración de personal y estructura organizativa</Text>
+                    <Title order={2} c="white">Recursos Humanos</Title>
+                    <Text c="gray.4">Administración de personal y estructura organizativa</Text>
                 </div>
             </Group>
 

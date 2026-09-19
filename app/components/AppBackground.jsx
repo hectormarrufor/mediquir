@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Box } from '@mantine/core';
 import { usePathname } from 'next/navigation';
 import { tenant } from '@/config/tenant';
@@ -12,6 +12,10 @@ const DARK_ROUTES = ['/superuser', '/bcv'];
 export default function AppBackground() {
     const pathname = usePathname() || '/';
     const variant = DARK_ROUTES.some((r) => pathname.startsWith(r)) ? 'dark' : 'light';
+    useEffect(() => {
+        document.documentElement.dataset.appDark = String(variant === 'dark');
+        return () => { delete document.documentElement.dataset.appDark; };
+    }, [variant]);
 
     return (
         <Box className="app-bg" data-variant={variant} aria-hidden="true">

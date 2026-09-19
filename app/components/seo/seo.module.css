@@ -16,11 +16,16 @@
 .migas {
     font-size: 13px;
     margin-bottom: 12px;
-    color: #cfd8e6;
+    color: #4a5a75;
 }
 
 .migas a {
-    color: #fff;
+    color: #005aaa;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.migas a:hover {
     text-decoration: underline;
 }
 
@@ -95,7 +100,7 @@
     margin: 16px 0 0 8px;
     padding: 12px 22px;
     border-radius: 999px;
-    background: #25d366;
+    background: #1a8f4b;
     color: #fff;
     font-weight: 700;
     text-decoration: none;

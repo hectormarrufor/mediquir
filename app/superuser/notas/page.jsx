@@ -52,7 +52,7 @@ export default function NotasPage() {
                 </Group>
 
                 {pendientes.length > 0 && (
-                    <Alert color="orange" icon={<IconAlertTriangle size={18} />} title="Falta configurar la numeración">
+                    <Alert color="orange" variant="white" icon={<IconAlertTriangle size={18} />} title="Falta configurar la numeración">
                         Indica con qué número empieza: {pendientes.map((s) => s.etiqueta.toLowerCase()).join(', ')}. <Anchor size="sm" onClick={() => setVerNumeracion(true)}>Configurar ahora</Anchor>
                     </Alert>
                 )}

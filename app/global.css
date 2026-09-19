@@ -159,3 +159,38 @@ html { scroll-behavior: smooth; }
 
 /* Al desplazarse a una sección desde el menú, deja libre el header fijo */
 #especialidades, #productos-section, #contacto { scroll-margin-top: 84px; }
+
+
+/* ------------------------------------------------------------------------------------------------
+   Contraste y consistencia entre el fondo y los textos
+   ------------------------------------------------------------------------------------------------ */
+
+/* Botón blanco: su texto usaba el color primario (mostaza) sobre blanco y casi no se leía */
+.mantine-Button-root[data-variant='white'] {
+    --button-color: var(--mantine-color-navy-9);
+    color: var(--mantine-color-navy-9) !important;
+}
+
+/* Panel del personal (fondo oscuro): los avisos de color son translúcidos y el texto oscuro se perdía; se les da un fondo claro sólido */
+[data-app-dark='true'] .mantine-Alert-root {
+    background-color: #ffffff;
+    background-image: linear-gradient(var(--alert-bg, transparent), var(--alert-bg, transparent));
+    border: 1px solid rgba(11, 27, 61, 0.12);
+}
+
+/* Lo mismo para etiquetas y botones "light": sobre el fondo oscuro su tinte translúcido dejaba el texto oscuro sobre oscuro.
+   Con una base blanca se ven exactamente igual que dentro de una tarjeta blanca. */
+[data-app-dark='true'] .mantine-Badge-root[data-variant='light'],
+[data-app-dark='true'] .mantine-Button-root[data-variant='light']:not([data-disabled]) {
+    background-color: #ffffff;
+    background-image: linear-gradient(var(--badge-bg, var(--button-bg, transparent)), var(--badge-bg, var(--button-bg, transparent)));
+}
+
+[data-app-dark='true'] .mantine-Alert-message {
+    color: var(--mantine-color-navy-9);
+}
+
+/* Etiqueta blanca: su texto usaba el color de la etiqueta (verde claro) sobre blanco */
+.mantine-Badge-root[data-variant='white'] {
+    color: var(--mantine-color-navy-9) !important;
+}

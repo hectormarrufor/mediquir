@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Container, Title, Text, Group, Stack, Box, Skeleton, UnstyledButton, Badge } from '@mantine/core';
+import { Container, Title, Text, Group, SimpleGrid, Stack, Box, Skeleton, UnstyledButton, Badge } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { useQuery } from '@tanstack/react-query';
 import CategoryIcon from '../CategoryIcon';
@@ -77,7 +77,7 @@ export default function CategorySection({ selectedCategory, onSelectCategory }) 
                     </Box>
                 ) : (
                     // ESCRITORIO: tarjetas con icono y conteo
-                    <Group gap="md" justify="center">
+                    <SimpleGrid cols={{ base: 3, md: 3, lg: Math.min(Math.max(categorias?.length || 6, 1), 6) }} spacing="md" maw={1500} mx="auto">
                         {categorias?.map((cat) => {
                             const isSelected = selectedCategory?.id === cat.id;
                             const total = contar(cat);
@@ -101,7 +101,7 @@ export default function CategorySection({ selectedCategory, onSelectCategory }) 
                                 </UnstyledButton>
                             );
                         })}
-                    </Group>
+                    </SimpleGrid>
                 )}
             </Container>
         </Box>

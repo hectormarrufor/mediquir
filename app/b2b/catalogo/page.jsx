@@ -61,7 +61,7 @@ function TarjetaProducto({ producto, tasa }) {
                     </Text>
                 </Box>
 
-                <Badge color={producto.disponible > 10 ? 'teal' : 'yellow'} variant="light" mt={4} w="fit-content" leftSection={producto.disponible > 10 ? <IconCircleCheck size={12} /> : <IconAlertTriangle size={12} />}>
+                <Badge color={producto.disponible > 10 ? 'teal' : 'orange'} variant="light" mt={4} w="fit-content" leftSection={producto.disponible > 10 ? <IconCircleCheck size={12} /> : <IconAlertTriangle size={12} />}>
                     {producto.disponible > 10 ? 'Disponible' : producto.disponible > 0 ? 'Pocas unidades' : 'Por confirmar'}
                 </Badge>
             </Stack>

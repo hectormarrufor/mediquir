@@ -51,8 +51,8 @@ export default function NotificacionesPage() {
         <Group>
           <ThemeIcon size="xl" radius="md" variant="light" color="brand.6"><IconBell /></ThemeIcon>
           <div>
-            <Title order={2}>Centro de Notificaciones</Title>
-            <Text c="dimmed">
+            <Title order={2} c="white">Centro de Notificaciones</Title>
+            <Text c="gray.4">
               Historial de alertas y avisos{noLeidas > 0 ? ` · ${noLeidas} sin leer` : ' · estás al día'}
             </Text>
           </div>

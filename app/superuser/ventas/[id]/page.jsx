@@ -143,7 +143,7 @@ export default function DetallePedidoMayorPage() {
         <Box p="md" maw={1400} mx="auto">
             {/* 👈 BLOQUE MODIFICADO EN LA CABECERA */}
             <Group>
-                <Button variant="subtle" color="gray" leftSection={<IconArrowLeft size={16} />} onClick={() => router.push('/superuser/ventas')}>
+                <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={() => router.push('/superuser/ventas')}>
                     Volver
                 </Button>
                 <Title order={2} c="blue.9">Pedido: {pedido.numeroDocumento}</Title>

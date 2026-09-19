@@ -25,7 +25,7 @@ export const theme = createTheme({
   primaryColor: "ochre",
   primaryShade: { light: 6, dark: 6 },
   autoContrast: true,
-  luminanceThreshold: 0.4,
+  luminanceThreshold: 0.3, // con fondos claros (mostaza, verde, naranja) el texto de botones y etiquetas pasa a oscuro: se lee mucho mejor
   
   fontFamily: "Inter, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
   fontFamilyMonospace: "JetBrains Mono, ui-monospace, SFMono-Regular, monospace",
@@ -84,7 +84,7 @@ export const theme = createTheme({
       styles: {
         root: {
           backgroundColor: 'var(--mantine-color-white)',
-          borderTop: '4px solid var(--mantine-color-petrolBlue-8)',
+          borderTop: '3px solid var(--mantine-color-brand-6)',
           borderLeft: '1px solid var(--mantine-color-petrolGray-2)',
           borderRight: '1px solid var(--mantine-color-petrolGray-2)',
           borderBottom: '1px solid var(--mantine-color-petrolGray-2)',
@@ -92,6 +92,9 @@ export const theme = createTheme({
         }
       }
     },
+
+    // Los enlaces usaban el color primario (mostaza) y casi no se leían sobre blanco
+    Anchor: { defaultProps: { c: 'brand.7' } },
 
     Input: {
       defaultProps: { variant: 'filled', radius: 'md' },
@@ -153,6 +156,17 @@ export const cssVariablesResolver = (theme) => {
   return {
     variables: {},
     light: {
+      // Contraste: el texto de las etiquetas, botones "light" y avisos usa un tono más oscuro del mismo color, y el texto atenuado
+      // ya no es un gris tan pálido (pasan de 2-3 a 4.5+ sobre blanco)
+      '--mantine-color-dimmed': '#647083',
+      ...Object.fromEntries(['teal', 'green', 'lime', 'cyan', 'orange', 'yellow', 'ochre'].flatMap((c) => [
+        [`--mantine-color-${c}-light-color`, theme.colors[c][9]],
+        [`--mantine-color-${c}-outline`, theme.colors[c][9]],
+      ])),
+      ...Object.fromEntries(['red', 'blue', 'gray', 'violet', 'grape', 'pink', 'indigo', 'brand', 'accent'].flatMap((c) => [
+        [`--mantine-color-${c}-light-color`, theme.colors[c][8]],
+        [`--mantine-color-${c}-outline`, theme.colors[c][8]],
+      ])),
       '--mm-gradient-brand': `linear-gradient(90deg, ${navy[9]} 0%, ${brand[6]} 55%, ${sky[6]} 100%)`,
       '--mm-gradient-accent': `linear-gradient(135deg, ${accent[5]} 0%, ${accent[6]} 55%, ${accent[7]} 100%)`,
       '--mm-gradient-highlight': `linear-gradient(90deg, transparent 0%, ${sky[3]} 30%, ${accent[6]} 70%, transparent 100%)`,

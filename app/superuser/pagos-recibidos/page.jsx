@@ -173,7 +173,7 @@ export default function PagosRecibidosPage() {
                                         </Table.Td>
                                         
                                         <Table.Td style={{ textAlign: 'right' }}>
-                                            <Text size="md" fw={800} c="teal.7">
+                                            <Text size="md" fw={800} c="teal.9">
                                                 {formatoMoneda(pago.monto)}
                                             </Text>
                                         </Table.Td>
@@ -185,7 +185,7 @@ export default function PagosRecibidosPage() {
                                                 </Badge>
                                             ) : (
                                                 <Group gap="xs" justify="center" wrap="nowrap">
-                                                    <Badge color="yellow.8" variant="light" leftSection={<IconClock size={12} />}>
+                                                    <Badge color="yellow" variant="light" leftSection={<IconClock size={12} />}>
                                                         Pendiente
                                                     </Badge>
                                                     <Tooltip label="Vincular a una venta">

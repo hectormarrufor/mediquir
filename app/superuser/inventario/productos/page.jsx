@@ -45,13 +45,14 @@ export default function InventarioProductosPage() {
     const tienePermiso = Boolean(data?.permisos?.editar);
     const puedeEditar = tienePermiso && !bloqueado;
     // Las columnas fijas (foto, código y producto) se quedan a la izquierda; el resto se puede reordenar
-    const esFijaIzq = (c) => Boolean(c.fija || c.sticky);
+    const esFijaIzq = (c) => Boolean((c.fija && c.key !== 'acciones') || c.sticky);
     const columnas = useMemo(() => {
         const base = COLUMNAS.filter((c) => c.fija || visibles.includes(c.key));
         const posicion = (k) => { const i = ordenCols.indexOf(k); return i === -1 ? 1000 + COLUMNAS.findIndex((c) => c.key === k) : i; };
         const izq = base.filter(esFijaIzq);
         const resto = base.filter((c) => !esFijaIzq(c)).sort((a, b) => posicion(a.key) - posicion(b.key));
-        return [...izq, ...resto].map((c) => (anchos[c.key] ? { ...c, ancho: anchos[c.key] } : c));
+        const fin = base.filter((c) => c.key === 'acciones'); // el menú de acciones siempre queda al final
+        return [...izq, ...resto, ...fin].map((c) => (anchos[c.key] ? { ...c, ancho: anchos[c.key] } : c));
     }, [visibles, ordenCols, anchos]);
     const cambiarAncho = (clave, ancho) => setAnchos((a) => ({ ...a, [clave]: ancho }));
     const restablecerAncho = (clave) => setAnchos((a) => { const { [clave]: _quitada, ...resto } = a; return resto; });

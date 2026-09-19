@@ -92,7 +92,7 @@ export default function NuevoCliente() {
     return (
         <Box p="md" maw={900} mx="auto">
             <Group mb="xl">
-                <Button variant="subtle" color="gray" leftSection={<IconArrowLeft size={16} />} onClick={() => router.back()}>
+                <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={() => router.back()}>
                     Volver
                 </Button>
                 <Title order={2} c="blue.9">Registrar Nuevo Cliente</Title>

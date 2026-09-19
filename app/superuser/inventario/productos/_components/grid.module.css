@@ -51,6 +51,13 @@
     cursor: pointer;
 }
 
+/* Ayuda de teclado bajo la hoja: las teclas eran gris muy claro sobre blanco */
+.ayuda kbd {
+    color: var(--mantine-color-navy-9);
+    background: #fff;
+    border-color: var(--mantine-color-gray-4);
+}
+
 /* Asa para cambiar el ancho: borde derecho del título */
 .resize {
     position: absolute;

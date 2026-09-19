@@ -96,7 +96,7 @@ export default function HeroSection({ searchQuery, onSearch }) {
             <Box className={classes.heroGlow} />
 
             <Container
-                fluid w="100%" pos="relative" px={{ base: 6, sm: 10 }} py={{ base: 32, md: 80 }}
+                fluid w="100%" pos="relative" px={{ base: 18, sm: 36, lg: 72 }} py={{ base: 32, md: 80 }}
                 style={{ zIndex: 3, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}
             >
                 <Box maw={640}>
