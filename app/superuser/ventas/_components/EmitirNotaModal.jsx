@@ -6,6 +6,7 @@ import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import { IconAlertTriangle, IconPlus, IconTrash } from '@tabler/icons-react';
 import { calcularFactura } from '@/app/constants/facturacion';
+import { PreguntarNumero, useNumeracion } from '@/app/superuser/_components/NumeracionFiscal';
 
 const MOTIVOS = {
     CREDITO: ['Devolución de mercancía', 'Descuento posterior a la factura', 'Error en la factura', 'Otro'],
@@ -32,6 +33,10 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
         enabled: opened,
         queryFn: () => pedirJson(`/api/ventas/${factura.id}/notas`),
     });
+
+    // La numeración de las notas la fija la persona (no siempre se empieza por la 1): si falta, se pregunta antes de emitir
+    const { data: numeracion } = useNumeracion(opened);
+    const serie = numeracion?.series?.find((s) => s.clave === (esCredito ? 'NC' : 'ND'));
 
     const [cantidades, setCantidades] = useState({});
     const [libres, setLibres] = useState([LIBRE()]);
@@ -88,7 +93,9 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
 
     return (
         <Modal opened={opened} onClose={onClose} size="xl" centered title={<Text fw={800}>{esCredito ? 'Nota de crédito' : 'Nota de débito'} · factura {factura.numeroDocumento}</Text>}>
-            {isLoading ? <Group justify="center" p="xl"><Loader /></Group> : (
+            {isLoading || !numeracion ? <Group justify="center" p="xl"><Loader /></Group> : (serie && !serie.configurado) ? (
+                <PreguntarNumero serie={serie} puedeEditar={numeracion.puedeEditar} />
+            ) : (
                 <Stack gap="md">
                     <Text size="sm" c="dimmed">
                         {esCredito

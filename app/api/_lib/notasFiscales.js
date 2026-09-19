@@ -19,7 +19,7 @@ const {
 } = db;
 
 export class ErrorNota extends Error {
-    constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
+    constructor(mensaje, status = 400, codigo = null) { super(mensaje); this.status = status; this.codigo = codigo; }
 }
 
 export const PREFIJO = { CREDITO: 'NC', DEBITO: 'ND' };
@@ -34,8 +34,10 @@ const aBsDoc = (monto, moneda, tasa) => (moneda === 'BS' ? r2(monto) : aBolivare
 export async function siguienteNumeroNota(tipo, transaction) {
     const prefijo = PREFIJO[tipo];
     if (!prefijo) throw new ErrorNota('Tipo de nota no válido');
-    let corr = await Correlativo.findOne({ where: { prefijo }, transaction, lock: transaction.LOCK.UPDATE });
-    if (!corr) corr = await Correlativo.create({ prefijo, siguienteNumero: 1, cerosRelleno: 5 }, { transaction });
+    const corr = await Correlativo.findOne({ where: { prefijo }, transaction, lock: transaction.LOCK.UPDATE });
+    if (!corr || !corr.configurado) {
+        throw new ErrorNota(`Antes de emitir la primera ${ETIQUETA[tipo].toLowerCase()} debes indicar con qué número empieza tu numeración`, 409, 'NUMERACION_PENDIENTE');
+    }
     const [{ maximo }] = await sequelize.query(
         `SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace("numeroDocumento", '\\D', '', 'g'), '') AS bigint)), 0) AS maximo
          FROM "NotasFiscales" WHERE origen = 'VENTA' AND "numeroDocumento" LIKE :patron`,

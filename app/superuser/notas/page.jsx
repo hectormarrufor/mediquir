@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Alert, Anchor, Badge, Box, Center, Group, Paper, SegmentedControl, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Anchor, Badge, Box, Button, Center, Group, Paper, SegmentedControl, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { IconAlertTriangle, IconFileDiff, IconSearch } from '@tabler/icons-react';
+import { IconAlertTriangle, IconFileDiff, IconListNumbers, IconSearch } from '@tabler/icons-react';
 import NotaAcciones from '../ventas/_components/NotaAcciones';
+import NumeracionFiscalModal, { useNumeracion } from '../_components/NumeracionFiscal';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 const fmtFecha = (v) => (v ? `${String(v).slice(8, 10)}/${String(v).slice(5, 7)}/${String(v).slice(0, 4)}` : '');
@@ -18,6 +19,9 @@ export default function NotasPage() {
     const [origen, setOrigen] = useState('');
     const [tipo, setTipo] = useState('');
     const [busqueda, setBusqueda] = useState('');
+    const [verNumeracion, setVerNumeracion] = useState(false);
+    const { data: numeracion } = useNumeracion();
+    const pendientes = (numeracion?.series || []).filter((s) => !s.configurado);
     const [q] = useDebouncedValue(busqueda.trim(), 300);
 
     const { data, isLoading, error } = useQuery({
@@ -39,10 +43,19 @@ export default function NotasPage() {
     return (
         <Box maw={1400} mx="auto" px="md" py="md">
             <Stack gap="md">
-                <Box>
-                    <Title order={2} c="white"><IconFileDiff size={26} style={{ verticalAlign: 'middle' }} /> Notas de crédito y débito</Title>
-                    <Text size="sm" c="gray.4">Las notas de venta se emiten desde el detalle de cada factura; las de compra, desde el historial de compras.</Text>
-                </Box>
+                <Group justify="space-between" align="flex-end" wrap="wrap">
+                    <Box>
+                        <Title order={2} c="white"><IconFileDiff size={26} style={{ verticalAlign: 'middle' }} /> Notas de crédito y débito</Title>
+                        <Text size="sm" c="gray.4">Las notas de venta se emiten desde el detalle de cada factura; las de compra, desde el historial de compras.</Text>
+                    </Box>
+                    <Button variant="white" leftSection={<IconListNumbers size={18} />} onClick={() => setVerNumeracion(true)}>Numeración fiscal</Button>
+                </Group>
+
+                {pendientes.length > 0 && (
+                    <Alert color="orange" icon={<IconAlertTriangle size={18} />} title="Falta configurar la numeración">
+                        Indica con qué número empieza: {pendientes.map((s) => s.etiqueta.toLowerCase()).join(', ')}. <Anchor size="sm" onClick={() => setVerNumeracion(true)}>Configurar ahora</Anchor>
+                    </Alert>
+                )}
 
                 {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}
 
@@ -78,7 +91,7 @@ export default function NotasPage() {
                                                     ? <Anchor size="sm" onClick={() => router.push(`/superuser/ventas/${n.ventaId}`)}>{n.facturaAfectada}</Anchor>
                                                     : n.facturaAfectada}
                                             </Table.Td>
-                                            <Table.Td>{n.numeroControl || <Text span size="xs" c="orange.8">Falta</Text>}</Table.Td>
+                                            <Table.Td>{n.numeroControl || <Text span size="xs" c="dimmed" title="Se asigna solo al imprimir la nota">Sin imprimir</Text>}</Table.Td>
                                             <Table.Td><Text size="xs" lineClamp={2} maw={260}>{n.motivo}</Text></Table.Td>
                                             <Table.Td ta="right" fw={700} c={n.tipo === 'CREDITO' ? 'red.7' : 'blue.7'}>{n.tipo === 'CREDITO' ? '−' : '+'}{n.moneda === 'BS' ? 'Bs ' : '$'}{nf(n.total)}</Table.Td>
                                             <Table.Td><NotaAcciones nota={n} onCambio={refrescar} /></Table.Td>
@@ -91,6 +104,7 @@ export default function NotasPage() {
                     <Text size="xs" c="dimmed" mt="sm">{notas.length} nota(s)</Text>
                 </Paper>
             </Stack>
+            <NumeracionFiscalModal opened={verNumeracion} onClose={() => setVerNumeracion(false)} />
         </Box>
     );
 }

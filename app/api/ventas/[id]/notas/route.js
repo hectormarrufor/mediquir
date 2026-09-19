@@ -42,7 +42,7 @@ export async function POST(request, { params }) {
         return NextResponse.json({ success: true, nota }, { status: 201 });
     } catch (error) {
         if (!t.finished) await t.rollback();
-        if (error instanceof ErrorNota) return NextResponse.json({ error: error.message }, { status: error.status });
+        if (error instanceof ErrorNota) return NextResponse.json({ error: error.message, codigo: error.codigo }, { status: error.status });
         console.error('Emitir nota:', error);
         return NextResponse.json({ error: 'No se pudo emitir la nota' }, { status: 500 });
     }

@@ -21,6 +21,12 @@ const Correlativo = sequelize.define('Correlativo', {
         type: DataTypes.INTEGER,
         allowNull: false,
         defaultValue: 5 // Para que formatee como F-00001
+    },
+    // false = falta preguntarle a la persona con qué número empieza esta numeración (notas de crédito y débito, número de control)
+    configurado: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true
     }
 }, {
     tableName: 'correlativos',

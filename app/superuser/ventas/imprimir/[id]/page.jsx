@@ -5,11 +5,19 @@ import { useParams } from 'next/navigation';
 import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 import { numeroALetras } from '@/app/utils/numeroALetras';
 import FacturaFormaLibre from './FacturaFormaLibre';
+import ControlFiscalPaso from '../../_components/ControlFiscalPaso';
+import { useControlFiscal } from '../../_lib/useControlFiscal';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function ImprimirRecibo() {
     const params = useParams();
     const [venta, setVenta] = useState(null);
     const [cargando, setCargando] = useState(true);
+    const { rolUsuario } = useAuth();
+    const guia = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('guia') === '1';
+    // A la factura se le asigna el número de control de la forma libre (correlativo compartido con las notas) al imprimirla
+    const necesitaControl = Boolean(venta && venta.tipoDocumento === 'FACTURA' && venta.statusDespacho !== 'Cancelado' && !guia);
+    const ctl = useControlFiscal({ origen: 'VENTA', id: venta?.id, activo: necesitaControl });
 
     useEffect(() => {
         const fetchVenta = async () => {
@@ -26,19 +34,26 @@ export default function ImprimirRecibo() {
         fetchVenta();
     }, [params.id]);
 
+    // Con ?guia=1 solo se revisa cómo cae la factura sobre la forma preimpresa: no se asigna número de control ni se imprime sola
     useEffect(() => {
-        // Con ?guia=1 no se imprime solo: sirve para revisar cómo cae la factura sobre la forma preimpresa
-        if (venta && !cargando && !new URLSearchParams(window.location.search).get('guia')) {
-            setTimeout(() => window.print(), 800); 
-        }
-    }, [venta, cargando]);
+        if (!venta || cargando || guia) return undefined;
+        if (necesitaControl && ctl.estado !== 'listo') return undefined; // primero se asigna el número de control
+        const temporizador = setTimeout(() => window.print(), 800);
+        return () => clearTimeout(temporizador);
+    }, [venta, cargando, guia, necesitaControl, ctl.estado]);
 
     if (cargando) return <div style={{ padding: '2rem', textAlign: 'center' }}>Cargando documento para imprimir...</div>;
     if (!venta || venta.error) return <div style={{ padding: '2rem', textAlign: 'center' }}>Venta no encontrada.</div>;
 
     const esFactura = venta.tipoDocumento === 'FACTURA';
     // Las facturas se imprimen sobre la forma libre preimpresa (media carta): sin membrete, logo ni franja legal
-    if (esFactura) return <FacturaFormaLibre venta={venta} guia={new URLSearchParams(window.location.search).get('guia') === '1'} />;
+    if (esFactura) {
+        if (necesitaControl && ctl.estado !== 'listo') return <ControlFiscalPaso estado={ctl.estado} mensaje={ctl.mensaje} onReintentar={() => ctl.asignar(false)} />;
+        const reasignar = rolUsuario === 'admin' && !guia
+            ? () => { if (window.confirm('¿La forma libre se dañó? Se toma el siguiente número de control y el actual queda sin usar.')) ctl.asignar(true); }
+            : null;
+        return <FacturaFormaLibre venta={ctl.control ? { ...venta, numeroControl: ctl.control } : venta} guia={guia} onReasignarControl={reasignar} />;
+    }
     const esNotaEntrega = venta.tipoDocumento === 'NOTA_ENTREGA';
     
     const tituloDocumento = esFactura ? 'Factura' : (esNotaEntrega ? 'Nota de Entrega' : 'Recibo de Venta');

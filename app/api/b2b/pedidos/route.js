@@ -190,8 +190,8 @@ export async function POST(request) {
             await notificarTodos({
                 title: aCredito ? 'Nuevo pedido B2B a crédito 📦' : 'Nuevo pedido B2B 📦',
                 body: aCredito
-                    ? `${cliente?.nombre || 'Un cliente'} hizo ${tipoDocumento === 'FACTURA' ? 'la factura' : 'la nota de entrega'} ${numeroDocumento} a crédito por $${factura.totalFinal.toFixed(2)} (${credito.diasCredito} días; crédito activo ${credito.activos + 1} de ${credito.maxPedidos}).${tipoDocumento === 'FACTURA' ? ' Falta su número de control.' : ''}`
-                    : `${cliente?.nombre || 'Un cliente'} hizo ${tipoDocumento === 'FACTURA' ? 'la factura' : 'el pedido'} ${numeroDocumento} por $${factura.totalFinal.toFixed(2)}.${tipoDocumento === 'FACTURA' ? ' Falta su número de control.' : ''}`,
+                    ? `${cliente?.nombre || 'Un cliente'} hizo ${tipoDocumento === 'FACTURA' ? 'la factura' : 'la nota de entrega'} ${numeroDocumento} a crédito por $${factura.totalFinal.toFixed(2)} (${credito.diasCredito} días; crédito activo ${credito.activos + 1} de ${credito.maxPedidos}).${tipoDocumento === 'FACTURA' ? ' Su número de control se asigna al imprimirla.' : ''}`
+                    : `${cliente?.nombre || 'Un cliente'} hizo ${tipoDocumento === 'FACTURA' ? 'la factura' : 'el pedido'} ${numeroDocumento} por $${factura.totalFinal.toFixed(2)}.${tipoDocumento === 'FACTURA' ? ' Su número de control se asigna al imprimirla.' : ''}`,
                 url: `/superuser/ventas/${venta.id}`,
                 tipo: 'Info',
             });

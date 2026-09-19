@@ -74,7 +74,7 @@ export default function RetencionIvaCard({ pedido, onCambio }) {
             <Text fw={700} mb="xs" c="blue.9"><IconReceiptTax size={16} style={{ verticalAlign: 'middle' }} /> Datos fiscales</Text>
 
             <Group gap="xs" align="flex-end" wrap="nowrap" mb="sm">
-                <TextInput size="xs" label="N° de control" placeholder="00-000000" value={control} onChange={(e) => setControl(e.currentTarget.value)} style={{ flex: 1 }} />
+                <TextInput size="xs" label="N° de control" description="Se asigna solo al imprimir la factura" placeholder="00-000000" value={control} onChange={(e) => setControl(e.currentTarget.value)} style={{ flex: 1 }} />
                 <Button size="xs" variant="light" onClick={guardarControl} loading={guardando} disabled={control === (pedido.numeroControl || '')}>Guardar</Button>
             </Group>
 
