@@ -94,6 +94,9 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
         return { ...item, cantidad: (Number(item.cantidadCompra) || 0) * f, precioCompraUnitario: (Number(item.precioCompra) || 0) / f };
     };
 
+    // Un vendedor registra la compra pero no ve costos ni cambia precios: el servidor le devuelve la simulación sin esos datos
+    const soloRegistro = Boolean(datosSimulacion?.[0]?.soloRegistro);
+
     const agregarAlCarritoCompra = (prod) => {
         const existe = carritoCompra.find(i => i.id === prod.id);
         if (existe) {
@@ -278,9 +281,11 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                                         <Text fw={600} size="md" lineClamp={1}>{prod.nombre}</Text>
                                                         <Text size="sm" c="dimmed">SKU: {prod.codigo} | Stock Actual: {prod.stockAlmacen}</Text>
                                                     </Box>
-                                                    <Badge color="blue" size="lg" variant="light">
-                                                        Costo: <PrecioVisual valor={prod.costoUsd} simbolo="$" size="sm" />
-                                                    </Badge>
+                                                    {prod.costoUsd !== undefined && (
+                                                        <Badge color="blue" size="lg" variant="light">
+                                                            Costo: <PrecioVisual valor={prod.costoUsd} simbolo="$" size="sm" />
+                                                        </Badge>
+                                                    )}
                                                 </Group>
                                             </Paper>
                                         ))}
@@ -462,11 +467,13 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                     <Table.Tr>
                                         <Table.Th><Text size="sm">Producto</Text></Table.Th>
                                         <Table.Th ta="center"><Text size="sm">Stock Previo / Compra</Text></Table.Th>
+                                        {!soloRegistro && <>
                                         <Table.Th ta="center"><Text size="sm">Costo Ponderado</Text></Table.Th>
                                         <Table.Th ta="center"><Text size="sm">Aumento</Text></Table.Th>
                                         <Table.Th><Text size="sm">Precio 6 (Actual ➔ Nuevo)</Text></Table.Th>
                                         <Table.Th><Text size="sm">Precio 7 (Actual ➔ Nuevo)</Text></Table.Th>
                                         <Table.Th ta="center"><Text size="sm">¿Modificar?</Text></Table.Th>
+                                        </>}
                                     </Table.Tr>
                                 </Table.Thead>
                                 <Table.Tbody>
@@ -483,6 +490,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                                         Existía: {sim.stockActual} | Entran: +{sim.cantidadComprada}
                                                     </Badge>
                                                 </Table.Td>
+                                                {!soloRegistro && <>
                                                 <Table.Td ta="center">
                                                     <Text size="sm" c="dimmed">Ant: ${sim.costoActual}</Text>
                                                     <Text size="md" fw={700} c="teal">Nuevo: ${sim.nuevoCostoPonderado}</Text>
@@ -506,6 +514,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                                         label="Aceptar"
                                                     />
                                                 </Table.Td>
+                                                </>}
                                             </Table.Tr>
                                         );
                                     })}

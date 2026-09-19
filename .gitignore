@@ -8,3 +8,8 @@ public/workbox-*.js
 ai-commit.js
 # build alternativo para pruebas automáticas (NEXT_DIST_DIR=.next-test)
 .next-test
+
+# respaldos de la base de datos (nunca al repositorio)
+Respaldos/
+respaldos/
+*.json.gz

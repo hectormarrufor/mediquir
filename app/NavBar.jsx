@@ -28,7 +28,7 @@ function DrawerItem({ icon: Icon, label, onClick, active, danger, index = 0 }) {
 }
 
 const NavBar = ({ router, close, opened }) => {
-    const { isAuthenticated, logout, nombre, imagen, rol, loading, clienteId } = useAuth();
+    const { isAuthenticated, logout, nombre, imagen, rol, loading, clienteId, esVendedor } = useAuth();
     const pathname = usePathname();
     const esInvitado = !loading && !isAuthenticated;
     const activeSection = useScrollSpy(SPY_IDS, Boolean(opened) && pathname === '/' && esInvitado);
@@ -126,7 +126,7 @@ const NavBar = ({ router, close, opened }) => {
                     <Text className={classes.drawerSection}>Navegación</Text>
                     <DrawerItem icon={IconHome} label="Inicio" index={i++} active={pathname === '/'} onClick={() => go('/')} />
                     <DrawerItem icon={IconDashboard} label="Panel admin" index={i++} active={pathname === '/superuser'} onClick={() => go('/superuser')} />
-                    <DrawerItem icon={IconEyeDollar} label="Gráfico BCV" index={i++} active={pathname.startsWith('/superuser/bcv')} onClick={() => go('/superuser/bcv')} />
+                    {!esVendedor && <DrawerItem icon={IconEyeDollar} label="Gráfico BCV" index={i++} active={pathname.startsWith('/superuser/bcv')} onClick={() => go('/superuser/bcv')} />}
                     {puedePedirNotificaciones && (
                         <DrawerItem icon={IconBell} label="Activar notificaciones" index={i++} onClick={handleEnableNotifications} />
                     )}

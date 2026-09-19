@@ -24,6 +24,8 @@ import DashboardTareas from '../components/DashboardTareas';
 import { notifications } from '@mantine/notifications';
 import dynamic from 'next/dynamic';
 
+const PanelInicio = dynamic(() => import('./_components/PanelInicio'), { ssr: false });
+const DashboardVendedor = dynamic(() => import('./_components/DashboardVendedor'), { ssr: false });
 const PosModal = dynamic(() => import('../components/admin/PosModal'), { ssr: false });
 const CompraModal = dynamic(() => import('../components/admin/CompraModal'), { ssr: false }); // 🔥 IMPORTAMOS EL MODAL DE COMPRAS 🔥
 
@@ -86,11 +88,18 @@ const FadeInSection = ({ children, delay = 0 }) => {
     );
 };
 
+// El vendedor tiene su propio panel (tareas, ventas, compras, inventario); el resto del personal ve el panel administrativo.
 export default function SuperUserHome() {
+    const { esVendedor, loading } = useAuth();
+    if (loading) return <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}><Loader size="sm" type="dots" /></Box>;
+    return esVendedor ? <DashboardVendedor /> : <PanelAdministrativo />;
+}
+
+function PanelAdministrativo() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
-    const { isAdmin, departamentos, departamento, rol, userId } = useAuth();
+    const { isAdmin, departamentos, departamento, rol, userId, nombre } = useAuth();
 
     const [precioBCV, setPrecioBCV] = useState(0);
     const [modalAbierto, setModalAbierto] = useState(false);
@@ -283,86 +292,15 @@ export default function SuperUserHome() {
                     />
                 )}
 
-                {/* --- CABECERA COMPACTA --- */}
-                <FadeInSection>
-                    <Group justify="space-between" align="center" mb="md">
-                        <Group gap="sm" align="center">
-                            <Title order={5} fw={800} c="dark.8" tt="uppercase" lts={1}>
-                                DASHBOARD OPERATIVO
-                            </Title>
-
-                            <Badge component={Link} href="/superuser/bcv" size="lg" variant="filled" color="teal.6" radius="sm" leftSection={<IconCurrencyDollar size={14} />} style={{ cursor: 'pointer', textTransform: 'none' }}>
-                                BCV Oficial: {precioBCV ? `${precioBCV} Bs.` : "Cargando..."}
-                            </Badge>
-
-                            {userId === 1 && (
-                                <ActionIcon variant="light" color="gray" size="sm" radius="md" onClick={() => setModalAbierto(true)}>
-                                    <IconSettings size={16} />
-                                </ActionIcon>
-                            )}
-                        </Group>
-
-                        {/* 🔥 BOTONES DE ACCIÓN RÁPIDA: POS Y REGISTRAR COMPRA 🔥 */}
-                        <Group gap="sm">
-                            <Button
-                                size="md"
-                                color="grape.8"
-                                leftSection={<IconReceipt size={20} />}
-                                onClick={() => setModalCompraAbierto(true)}
-                            >
-                                Registrar Factura Compra
-                            </Button>
-
-                            <Button
-                                size="md"
-                                color="blue.9"
-                                leftSection={<IconBuildingStore size={22} />}
-                                onClick={() => setModalPosAbierto(true)}
-                            >
-                                Registrar Venta Rápida (POS)
-                            </Button>
-                        </Group>
-                    </Group>
-                </FadeInSection>
-
-                {/* --- CUERPO PRINCIPAL --- */}
-                <Grid gutter="md" align="flex-start">
-
-                    {/* COLUMNA IZQUIERDA: Módulos */}
-                    <Grid.Col span={{ base: 12, lg: 5, xl: 6 }}>
-                        <Title order={6} mb="xs" c="gray.5" tt="uppercase" fz={11} lts={1}>Accesos Directos</Title>
-                        <SimpleGrid cols={{ base: 2, sm: 2, md: 2, lg: 2, xl: 3 }} spacing="xs">
-                            {opcionesVisibles.map((option, index) => (
-                                <FadeInSection key={option.href} delay={index * 0.02}>
-                                    <UnstyledButton component={Link} href={option.href} style={{ width: '100%', height: '100%', display: 'block' }}>
-                                        <Card p="xs" radius="md" style={glassCardStyle} onMouseEnter={(e) => handleHover(e, true)} onMouseLeave={(e) => handleHover(e, false)} h="100%">
-                                            <Group align="center" wrap="nowrap" gap="xs">
-                                                <ThemeIcon size={32} radius="md" variant="light" color={option.color}>
-                                                    <option.icon size={18} stroke={1.5} />
-                                                </ThemeIcon>
-                                                <Box style={{ flex: 1, minWidth: 0 }}>
-                                                    <Text fw={700} size="sm" c="dark.8" truncate>{option.title}</Text>
-                                                    <Text size={10} c="dimmed" truncate lh={1.1}>{option.description}</Text>
-                                                </Box>
-                                            </Group>
-                                        </Card>
-                                    </UnstyledButton>
-                                </FadeInSection>
-                            ))}
-                        </SimpleGrid>
-                    </Grid.Col>
-
-                    {/* COLUMNA DERECHA: Tareas */}
-                    <Grid.Col span={{ base: 12, lg: 7, xl: 6 }}>
-                        <FadeInSection delay={0.1}>
-                            <Title order={6} mb="xs" c="gray.5" tt="uppercase" fz={11} lts={1}>Centro de Tareas</Title>
-                            <Box style={glassCardStyle} radius="md" bg="white" h="100%">
-                                <DashboardTareas glassStyle={{ border: 'none', background: 'transparent', boxShadow: 'none' }} />
-                            </Box>
-                        </FadeInSection>
-                    </Grid.Col>
-
-                </Grid>
+                <PanelInicio
+                    nombre={nombre}
+                    tasa={precioBCV}
+                    onPos={() => setModalPosAbierto(true)}
+                    onCompra={() => setModalCompraAbierto(true)}
+                    onAjustes={userId === 1 ? () => setModalAbierto(true) : null}
+                    modulos={opcionesVisibles}
+                    tareas={<DashboardTareas glassStyle={{ border: 'none', background: 'transparent', boxShadow: 'none' }} />}
+                />
             </Box>
         </Box>
     );

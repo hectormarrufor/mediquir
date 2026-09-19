@@ -7,6 +7,48 @@ const {
 } = db;
 
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
+import { rolDe } from '@/app/constants/roles';
+import { requerirStaff } from '../../inventario/_lib';
+import { crearYNotificar, notificarCabezas } from '@/app/handlers/notificar';
+
+// Error de reglas de logística (permisos, estados) con su código HTTP
+class ErrorLogistica extends Error {
+    constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
+}
+
+// El vendedor solo firma; asignar, despachar y cobrar es de administración
+const ACCIONES_VENDEDOR = ['FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO'];
+
+// Descuenta el stock y deja las salidas como "Empacada". Solo el MAYOR descuenta aquí: el detal y las ventas web ya
+// descontaron al venderse (antes se descontaba de nuevo al empacar, restando el stock dos veces).
+async function ejecutarEmpaque(venta, t, empacadorId) {
+    if (venta.tipoVenta === 'MAYOR') {
+        for (const item of venta.detalles) {
+            if (item.isFicticio || item.afectaInventario === false) continue;
+            const productoDB = await Producto.findByPk(item.productoId, { transaction: t, lock: t.LOCK.UPDATE });
+            if (!productoDB) continue;
+            const stock = Number(productoDB.stockAlmacen) || 0;
+            if (stock < Number(item.cantidad)) {
+                throw new ErrorLogistica(`Sin existencia suficiente de "${productoDB.nombre}" (hay ${stock}, se necesitan ${item.cantidad})`, 409);
+            }
+            productoDB.stockAlmacen = stock - Number(item.cantidad);
+            productoDB.nroVentas = (Number(productoDB.nroVentas) || 0) + Number(item.cantidad);
+            await productoDB.save({ transaction: t });
+        }
+    }
+    await SalidaInventario.update(
+        { estado: 'Empacada', despachadoPorId: Number(empacadorId) || null },
+        { where: { ventaId: venta.id }, transaction: t }
+    );
+}
+
+// Usuarios que pueden ser asignados a logística: deben existir y ser personal (no clientes)
+async function validarPersonal(ids, t) {
+    for (const id of ids.filter(Boolean)) {
+        const u = await User.findByPk(Number(id), { attributes: ['id', 'empleadoId', 'clienteId'], transaction: t });
+        if (!u || !u.empleadoId || u.clienteId) throw new ErrorLogistica('El empacador y el etiquetador deben ser personal de la empresa');
+    }
+}
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -14,6 +56,8 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 // 🚀 GET: OBTENER DETALLE DE VENTA Y SU ENTORNO
 // ==========================================
 export async function GET(request, { params }) {
+    const acceso = await requerirStaff();
+    if (acceso.error) return acceso.error;
     try {
         const { id } = await params;
         let whereClause = {};
@@ -59,6 +103,20 @@ export async function GET(request, { params }) {
             return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
         }
 
+        // Un vendedor solo ve lo suyo y sin datos financieros (movimientos, cuentas por cobrar, abonos, costos)
+        if (rolDe(acceso.sesion) === 'vendedor') {
+            const yo = Number(acceso.sesion.id);
+            if (![venta.vendedorId, venta.empacadorId, venta.etiquetadorId].map(Number).includes(yo)) {
+                return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
+            }
+            const j = venta.toJSON();
+            j.movimientos = [];
+            j.cuentaPorCobrar = [];
+            j.abonos = [];
+            j.salidasInventario = (j.salidasInventario || []).map(({ costoAlMomento, ...resto }) => resto);
+            return NextResponse.json(j);
+        }
+
         return NextResponse.json(venta);
     } catch (error) {
         console.error('Error obteniendo detalle de venta:', error);
@@ -70,6 +128,11 @@ export async function GET(request, { params }) {
 // 📦 PUT: GESTIÓN LOGÍSTICA (EMPACAR, DESPACHAR Y ABONAR)
 // ==========================================
 export async function PUT(request, { params }) {
+    const acceso = await requerirStaff();
+    if (acceso.error) return acceso.error;
+    const rol = rolDe(acceso.sesion);
+    const yo = Number(acceso.sesion.id);
+
     const t = await sequelize.transaction();
 
     try {
@@ -87,31 +150,94 @@ export async function PUT(request, { params }) {
             return NextResponse.json({ error: 'Venta no encontrada' }, { status: 404 });
         }
 
+        if (rol === 'vendedor' && !ACCIONES_VENDEDOR.includes(accion)) {
+            await t.rollback();
+            return NextResponse.json({ error: 'Tu rol solo permite firmar tus tareas de empaque y etiquetado' }, { status: 403 });
+        }
+
+        const cerrada = ['Cancelado', 'Completado'].includes(venta.statusDespacho);
+
         // ==========================================================
-        // 🔥 ACCIÓN 1: EMPACAR (Asigna personal, descuenta stock y crea salidas)
+        // 📋 ASIGNAR: la administración indica quién empaca y quién etiqueta (no toca el stock)
+        // ==========================================================
+        if (accion === 'ASIGNAR') {
+            if (cerrada) throw new ErrorLogistica('Este pedido ya está cerrado', 409);
+            if (venta.empacadoAt && Number(empacadorId) !== Number(venta.empacadorId)) throw new ErrorLogistica('El empaque ya fue firmado: no se puede cambiar al empacador', 409);
+            if (venta.etiquetadoAt && Number(etiquetadorId) !== Number(venta.etiquetadorId)) throw new ErrorLogistica('El etiquetado ya fue firmado: no se puede cambiar al etiquetador', 409);
+            if (!empacadorId || !etiquetadorId) throw new ErrorLogistica('Indica quién empaca y quién etiqueta');
+
+            await validarPersonal([empacadorId, etiquetadorId], t);
+            const cambioEmpacador = Number(venta.empacadorId) !== Number(empacadorId);
+            const cambioEtiquetador = Number(venta.etiquetadorId) !== Number(etiquetadorId);
+            venta.empacadorId = Number(empacadorId);
+            venta.etiquetadorId = Number(etiquetadorId);
+            venta.asignadoAt = new Date();
+            await venta.save({ transaction: t });
+            await t.commit();
+
+            try {
+                const url = `/superuser/ventas/${venta.id}`;
+                if (cambioEmpacador) await crearYNotificar({ usuarioId: Number(empacadorId), title: 'Tienes un pedido por empacar 📦', body: `Pedido ${venta.numeroDocumento}: prepara la mercancía y firma cuando termines.`, url, tipo: 'Info' });
+                if (cambioEtiquetador) await crearYNotificar({ usuarioId: Number(etiquetadorId), title: 'Tienes un pedido por etiquetar 🏷️', body: `Pedido ${venta.numeroDocumento}: etiqueta las cajas cuando estén empacadas y firma.`, url, tipo: 'Info' });
+            } catch (e) {
+                console.error('No se pudo notificar la asignación:', e.message);
+            }
+            return NextResponse.json({ success: true, message: 'Personal asignado' });
+        }
+
+        // ==========================================================
+        // ✍️ FIRMAR_EMPAQUE: solo el empacador asignado. Descuenta el stock (mayor) y deja constancia con fecha y hora
+        // ==========================================================
+        if (accion === 'FIRMAR_EMPAQUE') {
+            if (Number(venta.empacadorId) !== yo) throw new ErrorLogistica('Este empaque no está asignado a ti', 403);
+            if (venta.empacadoAt) throw new ErrorLogistica('Ya firmaste este empaque', 409);
+            if (cerrada) throw new ErrorLogistica('Este pedido ya está cerrado', 409);
+
+            await ejecutarEmpaque(venta, t, yo);
+            venta.statusDespacho = 'Empacado';
+            venta.empacadoAt = new Date();
+            await venta.save({ transaction: t });
+            await t.commit();
+            return NextResponse.json({ success: true, message: 'Empaque firmado' });
+        }
+
+        // ==========================================================
+        // 🏷️ FIRMAR_ETIQUETADO: solo el etiquetador asignado, y después de que el empaque esté firmado
+        // ==========================================================
+        if (accion === 'FIRMAR_ETIQUETADO') {
+            if (Number(venta.etiquetadorId) !== yo) throw new ErrorLogistica('Este etiquetado no está asignado a ti', 403);
+            if (venta.etiquetadoAt) throw new ErrorLogistica('Ya firmaste este etiquetado', 409);
+            if (cerrada) throw new ErrorLogistica('Este pedido ya está cerrado', 409);
+            if (!venta.empacadoAt) throw new ErrorLogistica('Primero debe firmarse el empaque', 409);
+
+            venta.etiquetadoAt = new Date();
+            await venta.save({ transaction: t });
+            await t.commit();
+
+            try {
+                await notificarCabezas({ title: 'Pedido listo para despachar ✅', body: `El pedido ${venta.numeroDocumento} ya está empacado y etiquetado.`, url: `/superuser/ventas/${venta.id}` });
+            } catch (e) {
+                console.error('No se pudo avisar a administración:', e.message);
+            }
+            return NextResponse.json({ success: true, message: 'Etiquetado firmado' });
+        }
+
+        // ==========================================================
+        // 🔥 EMPACAR (atajo de administración): asigna y empaca en un solo paso. El empaque queda a nombre del empacador indicado.
         // ==========================================================
         if (accion === 'EMPACAR') {
+            if (cerrada) throw new ErrorLogistica('Este pedido ya está cerrado', 409);
+            if (venta.empacadoAt) throw new ErrorLogistica('Este pedido ya fue empacado', 409);
+            if (!empacadorId || !etiquetadorId) throw new ErrorLogistica('Indica quién empaca y quién etiqueta');
+            await validarPersonal([empacadorId, etiquetadorId], t);
+
+            await ejecutarEmpaque(venta, t, empacadorId);
             venta.statusDespacho = 'Empacado';
-            venta.empacadorId = empacadorId || null;
-            venta.etiquetadorId = etiquetadorId || null;
+            venta.empacadorId = Number(empacadorId);
+            venta.etiquetadorId = Number(etiquetadorId);
+            venta.asignadoAt = venta.asignadoAt || new Date();
+            venta.empacadoAt = new Date();
             await venta.save({ transaction: t });
-
-            for (const item of venta.detalles) {
-                if (!item.isFicticio && item.afectaInventario !== false) {
-                    const productoDB = await Producto.findByPk(item.productoId, { transaction: t });
-                    if (productoDB) {
-                        productoDB.stockAlmacen = (Number(productoDB.stockAlmacen) || 0) - Number(item.cantidad);
-                        productoDB.nroVentas = (Number(productoDB.nroVentas) || 0) + Number(item.cantidad);
-                        await productoDB.save({ transaction: t });
-                    }
-                }
-            }
-
-            // Actualizamos el estado de la salida de inventario a 'Empacada'
-            await SalidaInventario.update(
-                { estado: 'Empacada', despachadoPorId: Number(empacadorId) || null },
-                { where: { ventaId: venta.id }, transaction: t }
-            );
 
             await t.commit();
             return NextResponse.json({ success: true, message: 'Caja armada, personal asignado y stock descontado' });
@@ -121,6 +247,8 @@ export async function PUT(request, { params }) {
         // 🔥 ACCIÓN 2: DESPACHAR (Chofer, Fecha/Hora, y Gasto de Flete)
         // ==========================================================
         if (accion === 'DESPACHAR') {
+            if (venta.statusDespacho === 'Completado') throw new ErrorLogistica('Este pedido ya fue despachado', 409);
+            if (venta.statusDespacho === 'Cancelado') throw new ErrorLogistica('Este pedido está cancelado', 409);
             venta.statusDespacho = 'Completado';
             venta.quienRetira = quienRetira;
             venta.fechaHoraRetiro = fechaHoraRetiro ? new Date(fechaHoraRetiro) : new Date();
@@ -251,6 +379,7 @@ export async function PUT(request, { params }) {
 
     } catch (error) {
         if (!t.finished) await t.rollback();
+        if (error instanceof ErrorLogistica) return NextResponse.json({ error: error.message }, { status: error.status });
         console.error('Error procesando PUT de venta:', error);
         return NextResponse.json({ error: 'Error interno', detalle: error.message }, { status: 500 });
     }
@@ -260,6 +389,10 @@ export async function PUT(request, { params }) {
 // 🗑️ DELETE: ELIMINAR ÚLTIMA VENTA Y REVERTIR
 // ==========================================
 export async function DELETE(request, { params }) {
+    const acceso = await requerirStaff();
+    if (acceso.error) return acceso.error;
+    if (rolDe(acceso.sesion) === 'vendedor') return NextResponse.json({ error: 'Tu rol no permite eliminar ventas' }, { status: 403 });
+
     const t = await sequelize.transaction();
 
     try {

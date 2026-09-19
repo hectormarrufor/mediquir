@@ -98,8 +98,15 @@ export async function POST(request) {
         // Correlativo de nota de entrega
         let corr = await Correlativo.findOne({ where: { prefijo: 'NE' }, transaction: t, lock: t.LOCK.UPDATE });
         if (!corr) corr = await Correlativo.create({ prefijo: 'NE', siguienteNumero: 1, cerosRelleno: 5 }, { transaction: t });
-        const numeroDocumento = `NE-${String(corr.siguienteNumero).padStart(corr.cerosRelleno || 5, '0')}`;
-        corr.siguienteNumero += 1;
+        // Nunca por debajo del mayor número ya emitido (el POS también emite notas de entrega, a veces con número manual)
+        const [{ maximo }] = await sequelize.query(
+            `SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace("numeroDocumento", '\\D', '', 'g'), '') AS bigint)), 0) AS maximo
+             FROM "Ventas" WHERE "numeroDocumento" LIKE 'NE-%'`,
+            { type: sequelize.QueryTypes.SELECT, transaction: t }
+        );
+        const numeroSiguiente = Math.max(corr.siguienteNumero, Number(maximo) + 1);
+        const numeroDocumento = `NE-${String(numeroSiguiente).padStart(corr.cerosRelleno || 5, '0')}`;
+        corr.siguienteNumero = numeroSiguiente + 1;
         await corr.save({ transaction: t });
 
         const venta = await Venta.create({

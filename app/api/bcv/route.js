@@ -3,6 +3,16 @@ import https from 'https';
 import { NextResponse } from 'next/server';
 const cheerio = require  ('cheerio'); // Importación corregida para Next.js
 import BcvPrecioHistorico from '../../../models/BcvPrecioHistorico';
+import { requerirStaff } from '../inventario/_lib';
+
+// Forzar la actualización (scraping del BCV y de Binance + escritura en la base) solo lo puede pedir el cron de Vercel o el personal.
+// Antes cualquier visitante anónimo podía hacerlo con ?force=true.
+async function puedeForzar(request) {
+    const auth = request.headers.get('authorization');
+    if (process.env.CRON_SECRET && auth === `Bearer ${process.env.CRON_SECRET}`) return true;
+    const { error } = await requerirStaff();
+    return !error;
+}
 
 // Configuración para Binance
 const URL_BINANCE = 'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search';
@@ -38,7 +48,7 @@ export async function GET(request) {
     try {
         // Capturar parámetros de la URL
         const { searchParams } = new URL(request.url);
-        const forceUpdate = searchParams.get('force') === 'true';
+        const forceUpdate = searchParams.get('force') === 'true' && (await puedeForzar(request));
 
         // --- ZONA HORARIA CARACAS ---
         const now = new Date();

@@ -19,7 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 export default function DetallePedidoMayorPage() {
     const params = useParams();
     const router = useRouter();
-    const { userId } = useAuth();
+    const { userId, esVendedor } = useAuth();
 
     const [galeriaModal, setGaleriaModal] = useState({ imagenes: [], indice: 0 });
     const [modalEmpacar, setModalEmpacar] = useState(false);
@@ -50,9 +50,10 @@ export default function DetallePedidoMayorPage() {
     }, [pedido]);
 
     const { data: empleados } = useQuery({
-        queryKey: ['empleados-select'],
+        queryKey: ['personal-asignable'],
+        enabled: !esVendedor,
         queryFn: async () => {
-            const res = await fetch(`/api/rrhh/empleados`);
+            const res = await fetch(`/api/logistica/asignables`);
             if (!res.ok) return [];
             return res.json();
         }
@@ -96,6 +97,8 @@ export default function DetallePedidoMayorPage() {
     };
 
     const handleConfirmarEmpaque = (values) => handleAction('EMPACAR', { ...values, vendedorId: userId }, setModalEmpacar, 'Caja armada y stock descontado.');
+    const handleAsignar = (values) => handleAction('ASIGNAR', values, setModalEmpacar, 'Personal asignado. Les avisamos para que preparen el pedido.');
+    const handleFirmar = (accion, mensaje) => handleAction(accion, {}, null, mensaje);
     const handleConfirmarDespacho = (values) => handleAction('DESPACHAR', values, setModalDespacho, 'Despacho registrado y flete asentado.');
 
     // 🔥 HANDLER DE ABONO A CUENTA POR COBRAR 🔥
@@ -111,7 +114,7 @@ export default function DetallePedidoMayorPage() {
         }, setModalAbono, 'Abono registrado y saldo actualizado.');
     };
 
-    const opcionesEmpleados = empleados?.map(e => ({ value: String(e.id), label: `${e.nombre} ${e.apellido}` })) || [];
+    const opcionesEmpleados = empleados?.map(e => ({ value: String(e.id), label: e.nombre })) || [];
 
     const obtenerTodasLasImagenes = (producto) => {
         if (!producto) return [];
@@ -159,8 +162,8 @@ export default function DetallePedidoMayorPage() {
             <Tabs defaultValue="logistica" color="blue">
                 <Tabs.List mb="md">
                     <Tabs.Tab value="logistica" leftSection={<IconPackage size={16} />}>Logística y Resumen</Tabs.Tab>
-                    {esCredito && <Tabs.Tab value="cxc" leftSection={<IconCash size={16} />}>Cuentas por Cobrar y Abonos</Tabs.Tab>}
-                    <Tabs.Tab value="finanzas" leftSection={<IconReportMoney size={16} />}>Movimientos Financieros</Tabs.Tab>
+                    {esCredito && !esVendedor && <Tabs.Tab value="cxc" leftSection={<IconCash size={16} />}>Cuentas por Cobrar y Abonos</Tabs.Tab>}
+                    {!esVendedor && <Tabs.Tab value="finanzas" leftSection={<IconReportMoney size={16} />}>Movimientos Financieros</Tabs.Tab>}
                 </Tabs.List>
 
                 {/* ============================================================== */}
@@ -176,16 +179,36 @@ export default function DetallePedidoMayorPage() {
                                     <Stepper.Step label="Despachado" description="Entregado al chofer" icon={<IconTruck size={18} />} />
                                 </Stepper>
 
-                                {pasoActual === 0 && (
-                                    <Group mt="xl" justify="center">
-                                        <Button size="md" color="blue" leftSection={<IconPackage size={18} />} onClick={() => setModalEmpacar(true)}>Asignar Personal y Armar Caja</Button>
+                                {/* Firmas del personal asignado (el vendedor solo ve y firma lo suyo) */}
+                                {pedido.empacadorId && (
+                                    <Group mt="lg" gap="sm" justify="center">
+                                        <Badge size="lg" variant={pedido.empacadoAt ? 'filled' : 'light'} color={pedido.empacadoAt ? 'teal' : 'gray'}>
+                                            {pedido.empacadoAt ? `Empaque firmado · ${new Date(pedido.empacadoAt).toLocaleString('es-VE')}` : 'Empaque pendiente de firma'}
+                                        </Badge>
+                                        <Badge size="lg" variant={pedido.etiquetadoAt ? 'filled' : 'light'} color={pedido.etiquetadoAt ? 'teal' : 'gray'}>
+                                            {pedido.etiquetadoAt ? `Etiquetado firmado · ${new Date(pedido.etiquetadoAt).toLocaleString('es-VE')}` : 'Etiquetado pendiente de firma'}
+                                        </Badge>
                                     </Group>
                                 )}
-                                {pasoActual === 1 && (
-                                    <Group mt="xl" justify="center">
+                                <Group mt="xl" justify="center" gap="sm">
+                                    {Number(pedido.empacadorId) === Number(userId) && !pedido.empacadoAt && pedido.statusDespacho !== 'Cancelado' && (
+                                        <Button size="md" color="blue" loading={isSubmitting} leftSection={<IconPackage size={18} />} onClick={() => handleFirmar('FIRMAR_EMPAQUE', 'Empaque firmado.')}>Firmar empaque</Button>
+                                    )}
+                                    {Number(pedido.etiquetadorId) === Number(userId) && !pedido.etiquetadoAt && pedido.statusDespacho !== 'Cancelado' && (
+                                        <Button size="md" color="grape" loading={isSubmitting} disabled={!pedido.empacadoAt} leftSection={<IconPackage size={18} />} onClick={() => handleFirmar('FIRMAR_ETIQUETADO', 'Etiquetado firmado.')}>
+                                            {pedido.empacadoAt ? 'Firmar etiquetado' : 'Etiquetado (esperando empaque)'}
+                                        </Button>
+                                    )}
+                                    {!esVendedor && !pedido.empacadoAt && !['Completado', 'Cancelado'].includes(pedido.statusDespacho) && (
+                                        <Button size="md" color="blue" variant={pedido.empacadorId ? 'light' : 'filled'} leftSection={<IconPackage size={18} />}
+                                            onClick={() => { formEmpacar.setValues({ empacadorId: pedido.empacadorId ? String(pedido.empacadorId) : '', etiquetadorId: pedido.etiquetadorId ? String(pedido.etiquetadorId) : '' }); setModalEmpacar(true); }}>
+                                            {pedido.empacadorId ? 'Cambiar personal asignado' : 'Asignar personal'}
+                                        </Button>
+                                    )}
+                                    {!esVendedor && pasoActual === 1 && (
                                         <Button size="md" color="grape" leftSection={<IconTruck size={18} />} onClick={() => setModalDespacho(true)}>Registrar Chofer y Flete</Button>
-                                    </Group>
-                                )}
+                                    )}
+                                </Group>
                             </Paper>
 
                             <Paper withBorder p="md" radius="md" bg="white">
@@ -417,12 +440,20 @@ export default function DetallePedidoMayorPage() {
 
             {/* =================== MODALES =================== */}
 
-            <Modal opened={modalEmpacar} onClose={() => setModalEmpacar(false)} title={<Title order={4} c="blue.9">Asignar Personal de Logística</Title>} centered>
+            <Modal opened={modalEmpacar} onClose={() => setModalEmpacar(false)} title={<Title order={4} c="blue.9">Asignar personal de logística</Title>} centered>
                 <form onSubmit={formEmpacar.onSubmit(handleConfirmarEmpaque)}>
                     <Stack gap="md">
                         <Select label="Empacador" data={opcionesEmpleados} withAsterisk {...formEmpacar.getInputProps('empacadorId')} />
                         <Select label="Etiquetador" data={opcionesEmpleados} withAsterisk {...formEmpacar.getInputProps('etiquetadorId')} />
-                        <Button loading={isSubmitting} type="submit" fullWidth color="blue">Confirmar y Descontar Stock</Button>
+                        <Button loading={isSubmitting} fullWidth color="blue"
+                            onClick={() => {
+                                const v = formEmpacar.values;
+                                if (!v.empacadorId || !v.etiquetadorId) return notifications.show({ message: 'Elige quién empaca y quién etiqueta', color: 'orange' });
+                                handleAsignar(v);
+                            }}>
+                            Asignar (cada quien firma su parte)
+                        </Button>
+                        <Button loading={isSubmitting} type="submit" fullWidth variant="light" color="blue">Asignar y empacar ahora (descuenta stock)</Button>
                     </Stack>
                 </form>
             </Modal>

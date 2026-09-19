@@ -83,6 +83,10 @@ const Venta = sequelize.define('Venta', {
         type: DataTypes.INTEGER,
         allowNull: true
     },
+    // Firmas de logística: cuándo el empacador / etiquetador asignado confirmó que terminó su parte
+    asignadoAt: { type: DataTypes.DATE, allowNull: true },
+    empacadoAt: { type: DataTypes.DATE, allowNull: true },
+    etiquetadoAt: { type: DataTypes.DATE, allowNull: true },
     tipoEntrega: {
         type: DataTypes.ENUM('pickup', 'delivery', 'flete'),
         allowNull: false,

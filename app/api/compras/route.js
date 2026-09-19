@@ -2,10 +2,14 @@ import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
 import sequelize from '@/sequelize';
 import db from '@/models';
+import { requerirStaff } from '../inventario/_lib';
+import { rolDe } from '@/app/constants/roles';
 const { Proveedor, Producto, EntradaInventario, FacturaCompra, CategoriaFinanciera, MovimientoFinanciero, CuentaPorPagar, User, Empleado } = db;
 
 // GET: Listar historial de compras
 export async function GET(request) {
+    const acceso = await requerirStaff();
+    if (acceso.error) return acceso.error;
     try {
         const { searchParams } = new URL(request.url);
         const fechaInicio = searchParams.get('fechaInicio');
@@ -17,6 +21,9 @@ export async function GET(request) {
         } else if (fechaInicio) {
             whereClause.createdAt = { [Op.between]: [`${fechaInicio} 00:00:00`, `${fechaInicio} 23:59:59`] };
         }
+
+        // Un vendedor solo ve las compras que él registró
+        if (rolDe(acceso.sesion) === 'vendedor') whereClause.registradoPorId = Number(acceso.sesion.id);
 
         const facturas = await FacturaCompra.findAll({
             where: whereClause,
@@ -40,8 +47,12 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+    const acceso = await requerirStaff();
+    if (acceso.error) return acceso.error;
+    const esVend = rolDe(acceso.sesion) === 'vendedor';
     try {
         const body = await request.json();
+        if (esVend) body.registradoPorId = Number(acceso.sesion.id); // la compra queda a nombre de quien la registra
         const {
             simular,
             proveedorId, 
@@ -62,6 +73,9 @@ export async function POST(request) {
             referencia,
             registradoPorId
         } = body;
+
+        // Un vendedor registra la compra (stock y costo) pero NO cambia precios de venta
+        if (esVend && Array.isArray(detalles)) detalles.forEach((d) => { d.aceptarCambioPrecio = false; });
 
         if (!detalles || detalles.length === 0) {
             return NextResponse.json({ error: 'La compra no tiene productos' }, { status: 400 });
@@ -130,7 +144,9 @@ export async function POST(request) {
             return NextResponse.json({
                 modoSimulacion: true,
                 mensajePrompt: "Estos son los productos con su porcentaje de aumento ponderado, asi quedarian costo, precio6 y precio7. ¿Está seguro de que desea modificar estos precios?",
-                detallesSimulacion: simulacionResultados
+                detallesSimulacion: esVend
+                    ? simulacionResultados.map(({ costoActual, nuevoCostoPonderado, porcentajeAumento, precio6, precio7, ...resto }) => ({ ...resto, soloRegistro: true }))
+                    : simulacionResultados
             });
         }
 

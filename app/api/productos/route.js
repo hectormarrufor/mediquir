@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { Producto, Categoria, Marca, GrupoEquivalencia, Tag } from '@/models';
 import sequelize from '@/sequelize';
 import { requerirStaff } from '@/app/api/inventario/_lib';
-import { precioVentaWeb } from '@/app/constants/facturacion';
+import { precioVentaWeb, preciosBase, precioUnitario } from '@/app/constants/facturacion';
+import { rolDe } from '@/app/constants/roles';
 import { resolverEmpaque } from '@/app/constants/inventarioCampos';
 
 // =======================================================================
@@ -18,6 +19,7 @@ export async function GET(request) {
     try {
         const { sesion, error: noEsStaff } = await requerirStaff();
         const esPublico = Boolean(noEsStaff || !sesion);
+        const esVend = !esPublico && rolDe(sesion) === 'vendedor';
         if (esPublico && !fresco && cachePublico.datos && Date.now() - cachePublico.t < TTL_PUBLICO_MS) {
             return NextResponse.json(cachePublico.datos, { status: 200, headers: { 'Cache-Control': 'private, max-age=0' } });
         }
@@ -32,6 +34,17 @@ export async function GET(request) {
             order: [['createdAt', 'DESC']]
         });
         
+
+        // Un vendedor ve precios de venta ya resueltos pero nunca el costo (los faltantes se completan aquí, en el servidor)
+        if (esVend) {
+            const paraVendedor = productos.map((p) => {
+                const j = p.toJSON();
+                const { costoUsd, ...resto } = j;
+                const b = preciosBase(j, { sinCosto: true });
+                return { ...resto, precio6: precioUnitario(b.p6), precio7: precioUnitario(b.p7) };
+            });
+            return NextResponse.json(paraVendedor, { status: 200, headers: { 'Cache-Control': 'private, max-age=0' } });
+        }
 
         // El catálogo es público (landing), pero costos y precio mayor son solo del personal.
         if (esPublico) {

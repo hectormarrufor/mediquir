@@ -17,7 +17,7 @@ const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || '.next',
   // Importa solo los iconos/componentes que se usan en vez de cargar cada librería completa (menos módulos por compilar)
   experimental: {
-    optimizePackageImports: ['@mantine/core', '@mantine/hooks', '@mantine/dates', '@mantine/notifications', '@mantine/charts', '@tabler/icons-react', 'date-fns', 'dayjs'],
+    optimizePackageImports: ['@mantine/core', '@mantine/hooks', '@mantine/dates', '@mantine/charts', '@tabler/icons-react', 'date-fns', 'dayjs'],
   },
   serverExternalPackages: ['sequelize', 'pg', 'pg-hstore', 'pg-connection-string'],
   

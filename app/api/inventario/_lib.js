@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Categoria, Marca, GrupoEquivalencia, MenuPermission, sequelize } from '@/models';
 import { getSesion } from '../notificaciones/_lib';
+import { rolDe } from '@/app/constants/roles';
 
 // Clave del permiso "editar inventario como hoja de cálculo" en la tabla menu_permissions.
 // Se administra desde el mismo panel de Control de Accesos que el resto de módulos.
@@ -19,6 +20,7 @@ const nombres = (lista, campo = 'nombre') =>
 
 // Admin, o coincidencia por usuario / departamento / puesto (misma regla que el panel de accesos).
 export async function puedeEditarInventario(sesion) {
+    if (rolDe(sesion) === 'vendedor') return false; // un vendedor nunca cambia precios ni costos, aunque un permiso lo indique
     if (sesion.isAdmin) return true;
 
     const permiso = await MenuPermission.findOne({ where: { href: CLAVE_EDITAR }, attributes: ['allowedDepartments', 'allowedPositions', 'allowedUsers'] });

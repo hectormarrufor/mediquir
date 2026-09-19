@@ -1,436 +1,224 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  Paper, Title, Group, Text, SimpleGrid, 
-  LoadingOverlay, SegmentedControl, Stack, ThemeIcon, Badge, Tooltip,
-  Button, NumberInput, Card, Center, Box, rem
+    ActionIcon, Badge, Box, Button, Card, Chip, Group, NumberInput, Paper, SegmentedControl, SimpleGrid, Skeleton, Stack, Table, Text, ThemeIcon, Title, Tooltip,
 } from '@mantine/core';
-import { LineChart } from '@mantine/charts';
-import {
-  IconCurrencyDollar, IconCurrencyEuro, IconCoin,
-  IconArrowUpRight, IconArrowDownRight, IconScale, IconChartBar,
-  IconCalculator, IconEqual
-} from '@tabler/icons-react';
-import '@mantine/charts/styles.css';
+import { LineChart, Sparkline } from '@mantine/charts';
+import { useMediaQuery } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import 'dayjs/locale/es';
+import { IconArrowDownRight, IconArrowUpRight, IconCalculator, IconCoin, IconCurrencyDollar, IconCurrencyEuro, IconRefresh, IconScale } from '@tabler/icons-react';
+import { useAuth } from '@/hooks/useAuth';
+
 dayjs.locale('es');
 
-// --- SUB-COMPONENTE: CALCULADORA DE TASAS ---
-const CalculadoraDeTasas = ({ stats }) => {
-    const [monto, setMonto] = useState(undefined);
-    const [monedaBase, setMonedaBase] = useState('usd'); // 'usd', 'eur', 'usdt', 'bs'
+const bs = (v, d = 2) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: d, maximumFractionDigits: d }).format(Number(v) || 0);
+// Fecha corta en español sin depender de dayjs (en desarrollo hay dos copias y la de idioma queda en inglés)
+const corta = (f) => new Date(`${String(f).slice(0, 10)}T12:00:00Z`).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', timeZone: 'UTC' });
+const pct = (v) => `${v > 0 ? '+' : ''}${bs(v)}%`;
 
-    if (!stats) return null;
+const MONEDAS = {
+    usd: { nombre: 'Dólar BCV', corto: 'USD', color: 'brand.6', icono: IconCurrencyDollar, campo: 'monto' },
+    eur: { nombre: 'Euro BCV', corto: 'EUR', color: 'orange.6', icono: IconCurrencyEuro, campo: 'montoEur' },
+    usdt: { nombre: 'USDT Binance', corto: 'USDT', color: 'teal.6', icono: IconCoin, campo: 'montoUsdt' },
+};
 
-    // 1. Mapa de Tasas
-    const tasas = {
-        usd: stats.usd.monto,
-        eur: stats.eur.monto,
-        usdt: stats.usdt.monto,
-        bs: 1
-    };
+async function pedirJson(url) {
+    const res = await fetch(url);
+    const cuerpo = await res.json().catch(() => null);
+    if (!res.ok) throw new Error('No se pudo cargar');
+    return cuerpo;
+}
 
-    // 2. Calcular pivote en Bs
-    const totalEnBolivares = monto * tasas[monedaBase];
-
-    // 3. Helper para icono dinámico en el Input
-    const getCurrencyIcon = () => {
-        switch (monedaBase) {
-            case 'usd': return <IconCurrencyDollar style={{ width: rem(18), height: rem(18) }} />;
-            case 'eur': return <IconCurrencyEuro style={{ width: rem(18), height: rem(18) }} />;
-            case 'usdt': return <IconCoin style={{ width: rem(18), height: rem(18) }} />;
-            default: return <Text size="xs" fw={700}>Bs</Text>;
-        }
-    };
-
-    // 4. Renderizar tarjeta de resultado
-    const ResultadoCard = ({ codigo, icono: Icono, color, label }) => {
-        if (codigo === monedaBase) return null; 
-
-        const valorConvertido = totalEnBolivares / tasas[codigo];
-        
-        let porcentajeDif = 0;
-        let mostrarPorcentaje = false;
-
-        if (monedaBase !== 'bs' && codigo !== 'bs') {
-            mostrarPorcentaje = true;
-            porcentajeDif = ((valorConvertido - monto) / monto) * 100;
-        }
-
-        return (
-            <Card padding="sm" radius="md" withBorder style={{ backgroundColor: 'rgba(255,255,255,0.6)' }}>
-                <Group justify="space-between" wrap="nowrap">
-                    <Group gap="xs">
-                        <ThemeIcon color={color} variant="light" size="md" radius="xl">
-                            <Icono size={16} />
-                        </ThemeIcon>
-                        <div>
-                            <Text size="xs" c="dimmed" fw={700} tt="uppercase">{label}</Text>
-                            <Text fw={700} size="lg" style={{ lineHeight: 1.2 }}>
-                                {codigo === 'bs' ? 'Bs. ' : ''}
-                                {(valorConvertido || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                {codigo !== 'bs' ? ` ${codigo.toUpperCase()}` : ''}
-                            </Text>
-                        </div>
-                    </Group>
-
-                    {mostrarPorcentaje && (
-                        <Badge 
-                            color={porcentajeDif < 0 ? 'teal' : 'red'} 
-                            variant="light" 
-                            size="sm"
-                        >
-                            {porcentajeDif > 0 ? '+' : ''}{isNaN(porcentajeDif.toFixed(1)) ? 0 : porcentajeDif.toFixed(1)}%
-                        </Badge>
+// Tarjeta de una tasa: valor actual, cambio contra el registro anterior y minigráfico del rango elegido
+function TarjetaTasa({ clave, serie, cargando }) {
+    const m = MONEDAS[clave];
+    const valores = serie.map((r) => Number(r[m.campo])).filter((v) => v > 0);
+    const actual = valores[valores.length - 1];
+    const anterior = valores.length > 1 ? valores[valores.length - 2] : actual;
+    const cambio = anterior ? ((actual - anterior) / anterior) * 100 : 0;
+    const Icono = m.icono;
+    const sube = cambio > 0;
+    return (
+        <Card withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+                <Box>
+                    <Text size="xs" c="dimmed" fw={700} tt="uppercase">{m.nombre}</Text>
+                    {cargando ? <Skeleton h={34} w={130} mt={4} /> : <Text fz={30} fw={900} c="navy.9" lh={1.15}>Bs {bs(actual)}</Text>}
+                    {!cargando && (
+                        <Group gap={4} mt={2}>
+                            {cambio === 0 ? <Text size="sm" c="dimmed">Sin cambio</Text> : <>
+                                {sube ? <IconArrowUpRight size={16} color="var(--mantine-color-red-6)" /> : <IconArrowDownRight size={16} color="var(--mantine-color-teal-6)" />}
+                                <Text size="sm" fw={700} c={sube ? 'red.7' : 'teal.7'}>{pct(cambio)}</Text>
+                            </>}
+                            <Text size="xs" c="dimmed">vs registro anterior</Text>
+                        </Group>
                     )}
-                </Group>
-            </Card>
-        );
-    };
+                </Box>
+                <ThemeIcon variant="light" color={m.color} size={42} radius="md"><Icono size={22} /></ThemeIcon>
+            </Group>
+            {!cargando && valores.length > 1 && <Sparkline mt="md" h={44} data={valores} color={m.color} fillOpacity={0.15} curveType="monotone" areaProps={{ isAnimationActive: false }} />}
+        </Card>
+    );
+}
+
+function Calculadora({ ultimo }) {
+    const [monto, setMonto] = useState('');
+    const [base, setBase] = useState('usd');
+    const tasas = { usd: Number(ultimo.monto), eur: Number(ultimo.montoEur), usdt: Number(ultimo.montoUsdt), bs: 1 };
+    const cantidad = Number(monto) || 0;
+    const enBs = cantidad * tasas[base];
+    const resultados = ['bs', 'usd', 'eur', 'usdt'].filter((c) => c !== base && tasas[c] > 0);
 
     return (
-        <Paper withBorder p="md" radius="md" mt="md" bg="gray.0">
-            <Group mb="md" gap="xs">
-                <ThemeIcon color="violet" variant="light"><IconCalculator size={18} /></ThemeIcon>
-                <Title order={5}>Calculadora de Equivalencias</Title>
-            </Group>
-            
-            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg" mb="md">
-                {/* INPUTS Y SELECCIÓN DE MONEDA */}
-                <Paper p="md" radius="md" withBorder bg="white">
-                    <Stack gap="md">
-                        <Group justify="space-between">
-                             <Text size="sm" fw={700} c="dimmed" tt="uppercase">Tengo / Me cobran:</Text>
-                             <Text size="xs" c="dimmed">
-                                Base: <Text span fw={700} c="dark">Bs. {isNaN(totalEnBolivares) ? '0.00' : totalEnBolivares.toLocaleString('es-VE', { maximumFractionDigits: 2 })}</Text>
-                             </Text>
-                        </Group>
-                       
-                        {/* 1. INPUT NUMÉRICO */}
-                        <NumberInput
-                            value={monto}
-                            onChange={(val) => setMonto(val || undefined)}
-                            min={0}
-                            thousandSeparator="."
-                            decimalSeparator=","
-                            hideControls
-                            size="lg"
-                            radius="md"
-                            placeholder="0.00"
-                            leftSection={getCurrencyIcon()} // Icono cambia según selección
-                            styles={{ input: { fontSize: '1.2rem', fontWeight: 600 } }}
-                        />
-
-                        {/* 2. BUTTON GROUP (Segmented Control) */}
-                        <SegmentedControl
-                            value={monedaBase}
-                            onChange={setMonedaBase}
-                            fullWidth
-                            size="md"
-                            radius="md"
-                            color="blue"
-                            transitionDuration={200}
-                            data={[
-                                { 
-                                    value: 'usd', 
-                                    label: (
-                                        <Center>
-                                            <IconCurrencyDollar style={{ width: rem(16), height: rem(16) }} />
-                                            <Box ml={5}>USD</Box>
-                                        </Center>
-                                    ) 
-                                },
-                                { 
-                                    value: 'bs', 
-                                    label: (
-                                        <Center>
-                                            <Text span fw={700} size="xs" style={{ lineHeight: 1 }}>Bs</Text>
-                                            <Box ml={5}>Bolívar</Box>
-                                        </Center>
-                                    ) 
-                                },
-                                { 
-                                    value: 'eur', 
-                                    label: (
-                                        <Center>
-                                            <IconCurrencyEuro style={{ width: rem(16), height: rem(16) }} />
-                                            <Box ml={5}>EUR</Box>
-                                        </Center>
-                                    ) 
-                                },
-                                { 
-                                    value: 'usdt', 
-                                    label: (
-                                        <Center>
-                                            <IconCoin style={{ width: rem(16), height: rem(16) }} />
-                                            <Box ml={5}>USDT</Box>
-                                        </Center>
-                                    ) 
-                                },
-                            ]}
-                        />
-                    </Stack>
-                </Paper>
-
-                {/* OUTPUTS (Resultados) */}
-                <Stack gap="xs">
-                    <Text size="sm" fw={700} c="dimmed" tt="uppercase">Equivale a:</Text>
-                    <SimpleGrid cols={{ base: 1, sm: 2 }}>
-                        <ResultadoCard codigo="usdt" icono={IconCoin} color="teal" label="Binance (USDT)" />
-                        <ResultadoCard codigo="usd" icono={IconCurrencyDollar} color="blue" label="Dólar BCV" />
-                        <ResultadoCard codigo="eur" icono={IconCurrencyEuro} color="orange" label="Euro BCV" />
-                        <ResultadoCard codigo="bs" icono={IconChartBar} color="gray" label="Bolívares" />
-                    </SimpleGrid>
+        <Paper withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+            <Group gap="xs" mb="md"><ThemeIcon variant="light" color="violet"><IconCalculator size={18} /></ThemeIcon><Title order={5} c="navy.9">Calculadora de equivalencias</Title></Group>
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+                <Stack gap="sm">
+                    <NumberInput size="lg" placeholder="Monto" value={monto} onChange={setMonto} min={0} thousandSeparator="." decimalSeparator="," decimalScale={2} hideControls
+                        styles={{ input: { fontSize: '1.3rem', fontWeight: 700 } }} aria-label="Monto a convertir" />
+                    <SegmentedControl fullWidth color="navy.9" value={base} onChange={setBase} data={[{ value: 'usd', label: 'USD' }, { value: 'bs', label: 'Bs' }, { value: 'eur', label: 'EUR' }, { value: 'usdt', label: 'USDT' }]} />
+                    <Text size="xs" c="dimmed">Equivale a Bs {bs(enBs)}</Text>
                 </Stack>
+                <SimpleGrid cols={{ base: 1, xs: 2, md: 1, lg: 2 }} spacing="xs">
+                    {resultados.map((c) => (
+                        <Paper key={c} withBorder radius="md" p="sm" bg="gray.0">
+                            <Text size="xs" c="dimmed" fw={700} tt="uppercase">{c === 'bs' ? 'Bolívares' : MONEDAS[c].nombre}</Text>
+                            <Text fw={800} fz="lg" c="navy.9">{c === 'bs' ? 'Bs ' : ''}{bs(enBs / tasas[c])}{c !== 'bs' ? ` ${MONEDAS[c].corto}` : ''}</Text>
+                        </Paper>
+                    ))}
+                </SimpleGrid>
             </SimpleGrid>
         </Paper>
     );
-};
-// --- FIN SUB-COMPONENTE ---
+}
 
 export default function BcvDashboard() {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [rango, setRango] = useState('30d');
-  const [mounted, setMounted] = useState(false);
+    const queryClient = useQueryClient();
+    const { esVendedor } = useAuth();
+    const esMovil = useMediaQuery('(max-width: 48em)');
+    const [rango, setRango] = useState('30d');
+    const [mostrar, setMostrar] = useState(['usd', 'eur', 'usdt']);
+    const [actualizando, setActualizando] = useState(false);
 
-  // 1. Cargar Datos
-  useEffect(() => {
-    setMounted(true);
-    const fetchBcv = async () => {
-      try {
-        const res = await fetch('/api/bcv/obtenerTodos');
-        const result = await res.json();
-        if (result.success) setData(result.data);
-      } catch (error) {
-        console.error("Error cargando BCV:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchBcv();
-  }, []);
-
-  // 2. Filtrar Datos según el Rango
-  const chartData = useMemo(() => {
-    if (rango === 'todos') return data;
-    const dias = rango === '7d' ? 7 : 30;
-    const fechaLimite = new Date();
-    fechaLimite.setDate(fechaLimite.getDate() - dias);
-    return data.filter(item => new Date(item.fecha) >= fechaLimite);
-  }, [data, rango]);
-
-  // 3. Calcular Estadísticas y Spreads
-  const stats = useMemo(() => {
-    if (data.length === 0) return null;
-
-    const actual = data[data.length - 1];
-    const anterior = data.length > 1 ? data[data.length - 2] : actual;
-    const varUsd = ((actual.monto - anterior.monto) / anterior.monto) * 100;
-
-    const calcSpread = (target, base) => {
-        if (!base || !target) return 0;
-        return ((target - base) / base) * 100;
-    };
-
-    const spreadEurHoy = calcSpread(actual.montoEur, actual.monto);
-    const spreadUsdtHoy = calcSpread(actual.montoUsdt, actual.monto);
-
-    let sumaSpreadEur = 0;
-    let sumaSpreadUsdt = 0;
-    let countEur = 0;
-    let countUsdt = 0;
-
-    chartData.forEach(item => {
-        if (item.monto > 0) {
-            if (item.montoEur > 0) {
-                sumaSpreadEur += calcSpread(item.montoEur, item.monto);
-                countEur++;
-            }
-            if (item.montoUsdt > 0) {
-                sumaSpreadUsdt += calcSpread(item.montoUsdt, item.monto);
-                countUsdt++;
-            }
-        }
+    const { data, isLoading } = useQuery({
+        queryKey: ['bcv', 'historico'],
+        queryFn: async () => { const r = await pedirJson('/api/bcv/obtenerTodos'); return r.success ? r.data : []; },
+        refetchOnWindowFocus: true,
     });
 
-    return {
-      fecha: actual.fecha,
-      usd: {
-        monto: actual.monto,
-        variacion: Math.abs(varUsd).toFixed(2),
-        subio: varUsd >= 0
-      },
-      eur: {
-        monto: actual.montoEur,
-        spreadHoy: spreadEurHoy.toFixed(2),
-        spreadPromedio: countEur > 0 ? (sumaSpreadEur / countEur).toFixed(2) : 0
-      },
-      usdt: {
-        monto: actual.montoUsdt,
-        spreadHoy: spreadUsdtHoy.toFixed(2),
-        spreadPromedio: countUsdt > 0 ? (sumaSpreadUsdt / countUsdt).toFixed(2) : 0
-      }
+    const todos = data || [];
+    const serie = useMemo(() => {
+        if (rango === 'todos') return todos;
+        const dias = { '7d': 7, '30d': 30, '90d': 90 }[rango];
+        const limite = dayjs().subtract(dias, 'day').startOf('day');
+        return todos.filter((r) => !dayjs(r.fecha).isBefore(limite));
+    }, [todos, rango]);
+
+    const ultimo = todos[todos.length - 1];
+    const datosGrafico = serie.map((r) => ({ fecha: corta(r.fecha), usd: Number(r.monto) || null, eur: Number(r.montoEur) || null, usdt: Number(r.montoUsdt) || null }));
+
+    // Brecha (spread) del USDT y el euro contra el dólar BCV, y extremos del rango
+    const stats = useMemo(() => {
+        if (!serie.length) return null;
+        const usd = serie.map((r) => Number(r.monto)).filter((v) => v > 0);
+        const brechas = serie.filter((r) => r.monto > 0 && r.montoUsdt > 0).map((r) => ((r.montoUsdt - r.monto) / r.monto) * 100);
+        const hoy = ultimo && ultimo.monto > 0 && ultimo.montoUsdt > 0 ? ((ultimo.montoUsdt - ultimo.monto) / ultimo.monto) * 100 : 0;
+        return {
+            max: Math.max(...usd), min: Math.min(...usd),
+            variacionRango: usd.length > 1 ? ((usd[usd.length - 1] - usd[0]) / usd[0]) * 100 : 0,
+            brechaHoy: hoy, brechaPromedio: brechas.length ? brechas.reduce((a, b) => a + b, 0) / brechas.length : 0,
+        };
+    }, [serie, ultimo]);
+
+    const actualizar = async () => {
+        setActualizando(true);
+        try {
+            const r = await pedirJson('/api/bcv?force=true');
+            await queryClient.invalidateQueries({ queryKey: ['bcv'] });
+            notifications.show({ color: 'teal', title: 'Tasas actualizadas', message: `Dólar BCV: Bs ${bs(r.precio)}` });
+        } catch {
+            notifications.show({ color: 'red', title: 'No se pudo actualizar', message: 'Inténtalo de nuevo en unos minutos.' });
+        } finally {
+            setActualizando(false);
+        }
     };
-  }, [data, chartData]);
 
-  // Componente de Tarjeta KPI
-  const CurrencyCard = ({ title, amount, mainMetric, secondaryMetric, isBaseCurrency, icon: Icon, color }) => (
-    <Paper withBorder p="md" radius="md" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-      <div>
-        <Group justify="space-between" align="flex-start" mb="xs">
-          <div>
-            <Text c="dimmed" size="xs" tt="uppercase" fw={700}>{title}</Text>
-            <Text fw={700} size="xl" style={{ lineHeight: 1 }}>Bs. {amount?.toFixed(2)}</Text>
-          </div>
-          <ThemeIcon variant="light" color={color} size="lg" radius="md">
-            <Icon size="1.2rem" />
-          </ThemeIcon>
-        </Group>
-      </div>
-      
-      <Stack gap="xs" mt="sm">
-        <Group gap={5} align="center">
-            {isBaseCurrency ? (
-                <>
-                    {mainMetric.subio ? <IconArrowUpRight size={16} color="red" /> : <IconArrowDownRight size={16} color="green" />}
-                    <Text size="sm" c={mainMetric.subio ? 'red' : 'green'} fw={600}>
-                        {mainMetric.val}%
-                    </Text>
-                    <Text size="xs" c="dimmed">vs ayer</Text>
-                </>
-            ) : (
-                <Tooltip label="Porcentaje por encima del Dólar BCV hoy">
-                    <Group gap={4} style={{ cursor: 'help' }}>
-                        <IconScale size={16} color="gray" />
-                        <Text size="sm" fw={600} c="dark.3">
-                            Spread: <Text span c={color} fw={700}>+{mainMetric}%</Text>
-                        </Text>
+    const filas = [...todos].reverse().slice(0, 10);
+
+    return (
+        <Box maw={1400} mx="auto" px="md" py="md">
+            <Stack gap="lg">
+                <Group justify="space-between" align="flex-end" wrap="wrap">
+                    <Box>
+                        <Title order={2} c="white">Monitor cambiario</Title>
+                        <Text size="sm" c="gray.4">{ultimo ? `Última tasa: ${new Date(`${String(ultimo.fecha).slice(0, 10)}T12:00:00Z`).toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })}` : 'Tasas oficiales y brechas'}</Text>
+                    </Box>
+                    {!esVendedor && <Button variant="white" color="navy.9" leftSection={<IconRefresh size={16} />} loading={actualizando} onClick={actualizar}>Actualizar ahora</Button>}
+                </Group>
+
+                <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+                    {['usd', 'eur', 'usdt'].map((c) => <TarjetaTasa key={c} clave={c} serie={serie} cargando={isLoading} />)}
+                </SimpleGrid>
+
+                <SimpleGrid cols={{ base: 2, md: 4 }} spacing="md">
+                    {[
+                        { t: 'Brecha USDT hoy', v: stats ? pct(stats.brechaHoy) : '—', d: 'sobre el dólar BCV', i: IconScale, c: 'teal' },
+                        { t: 'Brecha promedio', v: stats ? pct(stats.brechaPromedio) : '—', d: 'en el rango elegido', i: IconScale, c: 'grape' },
+                        { t: 'Máximo del rango', v: stats ? `Bs ${bs(stats.max)}` : '—', d: 'Dólar BCV', i: IconArrowUpRight, c: 'red' },
+                        { t: 'Mínimo del rango', v: stats ? `Bs ${bs(stats.min)}` : '—', d: `Variación ${stats ? pct(stats.variacionRango) : ''}`, i: IconArrowDownRight, c: 'blue' },
+                    ].map((k) => (
+                        <Card key={k.t} withBorder radius="lg" p="sm" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+                            <Text size="xs" c="dimmed" fw={700} tt="uppercase" lineClamp={1}>{k.t}</Text>
+                            {isLoading ? <Skeleton h={24} w={90} mt={4} /> : <Text fz={{ base: 'md', sm: 'xl' }} fw={800} c="navy.9" lh={1.3}>{k.v}</Text>}
+                            <Text size="xs" c="dimmed" lineClamp={1}>{k.d}</Text>
+                        </Card>
+                    ))}
+                </SimpleGrid>
+
+                <Paper withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+                    <Group justify="space-between" mb="sm" wrap="wrap" gap="sm">
+                        <Title order={5} c="navy.9">Evolución de las tasas</Title>
+                        <SegmentedControl size="xs" color="navy.9" value={rango} onChange={setRango} data={[{ value: '7d', label: '7 días' }, { value: '30d', label: '30 días' }, { value: '90d', label: '90 días' }, { value: 'todos', label: 'Todo' }]} />
                     </Group>
-                </Tooltip>
-            )}
-        </Group>
+                    <Chip.Group multiple value={mostrar} onChange={(v) => setMostrar(v.length ? v : mostrar)}>
+                        <Group gap={6} mb="sm">{Object.entries(MONEDAS).map(([k, m]) => <Chip key={k} value={k} size="xs" variant="light" color={m.color.split('.')[0]}>{m.corto}</Chip>)}</Group>
+                    </Chip.Group>
+                    {isLoading ? <Skeleton h={300} /> : (
+                        <LineChart h={esMovil ? 260 : 340} data={datosGrafico} dataKey="fecha" curveType="monotone" withDots={datosGrafico.length <= 31 && !esMovil} connectNulls
+                            series={mostrar.map((k) => ({ name: k, label: MONEDAS[k].corto, color: MONEDAS[k].color }))} strokeWidth={2.5}
+                            valueFormatter={(v) => `Bs ${bs(v)}`} yAxisProps={{ domain: ['auto', 'auto'], width: 56, tickFormatter: (v) => bs(v, 0) }} tickLine="none" gridAxis="xy" withLegend />
+                    )}
+                </Paper>
 
-        {!isBaseCurrency && (
-             <Badge variant="light" color="gray" size="sm" leftSection={<IconChartBar size={10}/>} fullWidth>
-                Promedio {rango === 'todos' ? 'Hist.' : rango}: +{secondaryMetric}%
-             </Badge>
-        )}
-      </Stack>
-    </Paper>
-  );
+                {ultimo && <Calculadora ultimo={ultimo} />}
 
-  if (!mounted) return <LoadingOverlay visible />;
-
-  return (
-    <Paper p="md" radius="md">
-      <Stack gap="lg">
-        {/* HEADER */}
-        <Group justify="space-between" wrap="wrap">
-          <div>
-            <Title order={2}>Monitor Cambiario</Title>
-            <Text c="dimmed" size="sm">Análisis de brechas y equivalencias</Text>
-          </div>
-          <Group>
-            <Button variant="outline" onClick={() => {
-                fetch("/api/bcv?force=true").then(() => {
-                setLoading(true);
-                fetch('/api/bcv/obtenerTodos').then(res => res.json()).then(result => {
-                    if (result.success) setData(result.data);
-                    setLoading(false);
-                });
-                });
-            }}>
-                Actualizar
-            </Button>
-            <SegmentedControl
-                value={rango}
-                onChange={setRango}
-                data={[
-                { label: '7 Días', value: '7d' },
-                { label: '30 Días', value: '30d' },
-                { label: 'Histórico', value: 'todos' }
-                ]}
-            />
-          </Group>
-        </Group>
-
-        <LoadingOverlay visible={loading} />
-
-        {/* KPI CARDS */}
-        {stats && (
-          <SimpleGrid cols={{ base: 1, sm: 3 }}>
-            <CurrencyCard 
-              title="Dólar BCV (Base)" amount={stats.usd.monto} isBaseCurrency={true}
-              mainMetric={{ val: stats.usd.variacion, subio: stats.usd.subio }}
-              icon={IconCurrencyDollar} color="blue"
-            />
-            <CurrencyCard 
-              title="Euro BCV" amount={stats.eur.monto} isBaseCurrency={false}
-              mainMetric={stats.eur.spreadHoy} secondaryMetric={stats.eur.spreadPromedio}
-              icon={IconCurrencyEuro} color="orange"
-            />
-            <CurrencyCard 
-              title="USDT (Binance)" amount={stats.usdt.monto} isBaseCurrency={false}
-              mainMetric={stats.usdt.spreadHoy} secondaryMetric={stats.usdt.spreadPromedio}
-              icon={IconCoin} color="teal"
-            />
-          </SimpleGrid>
-        )}
-
-        {/* CALCULADORA (ACTUALIZADA) */}
-        {stats && <CalculadoraDeTasas stats={stats} />}
-
-        {/* GRÁFICO */}
-        <Paper withBorder p="md" radius="md">
-          <Group justify="space-between" mb="md">
-             <Title order={4}>Evolución de Tasas</Title>
-             <Badge variant="outline" color="gray">{chartData.length} registros</Badge>
-          </Group>
-
-          <LineChart
-            h={350}
-            data={chartData}
-            dataKey="fecha"
-            series={[
-              { name: 'monto', label: 'USD BCV', color: 'blue.6' },
-              { name: 'montoEur', label: 'EUR BCV', color: 'orange.6' },
-              { name: 'montoUsdt', label: 'USDT Binance', color: 'teal.6' }
-            ]}
-            tickLine="xy"
-            gridAxis="xy"
-            xAxisProps={{
-              tickFormatter: (value) => dayjs(value).format('DD MMM'), 
-            }}
-            yAxisProps={{ 
-                domain: ['auto', 'auto'],
-                tickFormatter: (value) => `${value}`
-            }}
-            valueFormatter={(val) => `Bs. ${val.toFixed(2)}`}
-            dotProps={{ r: 3, strokeWidth: 1 }}
-            activeDotProps={{ r: 5, strokeWidth: 1 }}
-            tooltipAnimationDuration={200}
-            strokeWidth={3}
-            lineProps={{
-                label: { 
-                  fill: '#495057', 
-                  fontSize: 12,
-                  fontWeight: 700,
-                  position: 'top',
-                  offset: 10,
-                  formatter: (val) => val.toFixed(0) 
-                } 
-            }}
-            withPointLabels
-            legendProps={{ verticalAlign: 'bottom', height: 50 }}
-            curveType="monotone"
-            withLegend
-            withTooltip
-          />
-        </Paper>
-      </Stack>
-    </Paper>
-  );
+                <Paper withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+                    <Title order={5} c="navy.9" mb="sm">Últimos registros</Title>
+                    <Table.ScrollContainer minWidth={460}>
+                        <Table verticalSpacing="xs" highlightOnHover>
+                            <Table.Thead><Table.Tr><Table.Th>Fecha</Table.Th><Table.Th ta="right">USD BCV</Table.Th><Table.Th ta="right">EUR BCV</Table.Th><Table.Th ta="right">USDT</Table.Th><Table.Th ta="right">Brecha USDT</Table.Th></Table.Tr></Table.Thead>
+                            <Table.Tbody>
+                                {isLoading ? <Table.Tr><Table.Td colSpan={5}><Skeleton h={30} /></Table.Td></Table.Tr> : filas.map((r) => {
+                                    const brecha = r.monto > 0 && r.montoUsdt > 0 ? ((r.montoUsdt - r.monto) / r.monto) * 100 : null;
+                                    return (
+                                        <Table.Tr key={r.fecha}>
+                                            <Table.Td>{dayjs(r.fecha).format('DD/MM/YYYY')}</Table.Td>
+                                            <Table.Td ta="right"><Text fw={700} size="sm">{bs(r.monto)}</Text></Table.Td>
+                                            <Table.Td ta="right">{r.montoEur > 0 ? bs(r.montoEur) : '—'}</Table.Td>
+                                            <Table.Td ta="right">{r.montoUsdt > 0 ? bs(r.montoUsdt) : '—'}</Table.Td>
+                                            <Table.Td ta="right">{brecha === null ? '—' : <Badge variant="light" color="teal">{pct(brecha)}</Badge>}</Table.Td>
+                                        </Table.Tr>
+                                    );
+                                })}
+                            </Table.Tbody>
+                        </Table>
+                    </Table.ScrollContainer>
+                </Paper>
+            </Stack>
+        </Box>
+    );
 }

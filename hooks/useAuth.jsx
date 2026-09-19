@@ -1,4 +1,5 @@
 'use client';
+import { rolDe } from '@/app/constants/roles';
 
 import { useState, useEffect, createContext, useContext } from 'react';
 import { useRouter } from 'next/navigation';
@@ -131,6 +132,8 @@ export function AuthProvider({ children }) {
         departamentos: user?.departamentos || [],
         puestos: user?.puestos ? user.puestos : [],
         isAdmin: user?.isAdmin || null,
+        rolUsuario: rolDe(user),                 // admin | vendedor | personal | cliente
+        esVendedor: rolDe(user) === 'vendedor',
         isCliente: user?.isCliente, 
         clienteId: user?.clienteId || null,
         empleadoId: user?.empleadoId || null,

@@ -106,18 +106,24 @@ export async function POST(req) {
 
         let correlativoRegistro = await Correlativo.findOne({
             where: { prefijo: prefijoCorr },
-            transaction
+            transaction,
+            lock: transaction.LOCK.UPDATE
         });
-
-        let numeroDocGenerado = `${prefijoCorr}-00001`;
-        if (correlativoRegistro) {
-            const num = correlativoRegistro.siguienteNumero;
-            const ceros = correlativoRegistro.cerosRelleno || 5;
-            numeroDocGenerado = `${prefijoCorr}-${String(num).padStart(ceros, '0')}`;
-
-            correlativoRegistro.siguienteNumero += 1;
-            await correlativoRegistro.save({ transaction });
+        if (!correlativoRegistro) {
+            correlativoRegistro = await Correlativo.create({ prefijo: prefijoCorr, siguienteNumero: 1, cerosRelleno: 5 }, { transaction });
         }
+
+        // Nunca por debajo del mayor número ya emitido: antes, sin la fila del correlativo, todas las compras web usaban V-00001
+        const [{ maximo }] = await sequelize.query(
+            `SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace("numeroDocumento", '\\D', '', 'g'), '') AS bigint)), 0) AS maximo
+             FROM "Ventas" WHERE "numeroDocumento" LIKE :patron`,
+            { replacements: { patron: `${prefijoCorr}-%` }, type: sequelize.QueryTypes.SELECT, transaction }
+        );
+        const num = Math.max(correlativoRegistro.siguienteNumero, Number(maximo) + 1);
+        const ceros = correlativoRegistro.cerosRelleno || 5;
+        const numeroDocGenerado = `${prefijoCorr}-${String(num).padStart(ceros, '0')}`;
+        correlativoRegistro.siguienteNumero = num + 1;
+        await correlativoRegistro.save({ transaction });
 
         // 4. CREACIÓN DE LA VENTA (Primero creamos la venta para obtener su ID)
         const nuevaVenta = await Venta.create({

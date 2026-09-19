@@ -19,7 +19,7 @@ import PrecioVisual from '../ui/PrecioVisual';
 import { useAuth } from '@/hooks/useAuth';
 import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 import { numeroALetras } from '@/app/utils/numeroALetras';
-import { calcularFactura, aBolivares, aDolares } from '@/app/constants/facturacion';
+import { calcularFactura, aBolivares, aDolares, precioPorTarifa } from '@/app/constants/facturacion';
 
 export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
     const queryClient = useQueryClient(); // 🔥 INSTANCIADO PARA INVALIDAR QUERIES
@@ -51,7 +51,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
 
     const [zoomPreview, setZoomPreview] = useState(true);
 
-    const { userId } = useAuth();
+    const { userId, esVendedor } = useAuth();
     const isMobile = useMediaQuery('(max-width: 768px)');
 
     const getImageUrl = (path) => {
@@ -130,37 +130,15 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tipoVenta]);
 
+    // Misma función que usa el servidor para cobrarle a un vendedor: el precio que se ve es el que se acepta.
+    // Un vendedor no ve costos, así que el Precio 6 faltante nunca se rellena con el costo.
     const calcularPrecioInfo = (producto, tarifa) => {
-        const costo = Number(producto.costoUsd) || 0;
-        const p6 = Number(producto.precio6) || costo;
-        let p7 = Number(producto.precio7) || (costo * 1.5);
-        let tieneDescuento = false;
-        
-        const descuento = Number(producto.porcentajeDescuento) || 0;
-        if (descuento > 0) {
-            p7 = p7 - (p7 * (descuento / 100));
-            tieneDescuento = true;
-        }
-
-        let precioFinal = 0;
-        let monedaSimbolo = 'USD';
-
-        switch(tarifa) {
-            case 'precio7': precioFinal = p7; monedaSimbolo = '$'; break;
-            case 'precio6': precioFinal = p6; monedaSimbolo = '$'; break;
-            case 'precio1': precioFinal = aBolivares(costo * 1.35, tasaBcv); monedaSimbolo = 'Bs'; break;
-            case 'precio4': precioFinal = aBolivares(p7, tasaBcv); monedaSimbolo = 'Bs'; break;
-            case 'precio5': precioFinal = aBolivares(p6, tasaBcv); monedaSimbolo = 'Bs'; break;
-            default: precioFinal = p7; monedaSimbolo = '$';
-        }
-
-        const aplicaDescuento = tieneDescuento && (tarifa === 'precio7' || tarifa === 'precio4');
-
-        return { 
-            precio: precioFinal, 
-            simbolo: monedaSimbolo, 
-            tieneDescuento: aplicaDescuento,
-            porcentajeDescuento: aplicaDescuento ? descuento : 0 
+        const { precio, moneda, descuento } = precioPorTarifa(producto, tarifa, tasaBcv, { sinCosto: esVendedor });
+        return {
+            precio,
+            simbolo: moneda === 'BS' ? 'Bs' : '$',
+            tieneDescuento: descuento > 0,
+            porcentajeDescuento: descuento,
         };
     };
 
@@ -285,6 +263,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
         try {
             const payload = {
                 vendedorId: userId,
+                tipoPrecio: formVenta.values.tipoPrecio, // el servidor recalcula el precio de un vendedor con esta tarifa
                 tipoVenta,
                 tipoDocumento: tipoDocumentoActual === 'VENTA RAPIDA' ? 'VENTA_RAPIDA' : (tipoDocumentoActual === 'NOTA DE ENTREGA' ? 'NOTA_ENTREGA' : 'FACTURA'),
                 numeroDocumentoManual: formVenta.values.numeroDocumento, 
@@ -386,9 +365,12 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
 
                             <Group wrap="nowrap" mb="sm" gap="xs">
                                 <TextInput style={{ flex: 1 }} placeholder="Buscar producto..." value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.currentTarget.value)} data-autofocus />
-                                <Button color="grape" variant="light" px="sm" onClick={() => setModalFicticio(true)} title="Agregar Ítem Ficticio (1010)">
-                                    + Ficticio
-                                </Button>
+                                {/* El producto genérico (precio escrito a mano) es solo de administración */}
+                                {!esVendedor && (
+                                    <Button color="grape" variant="light" px="sm" onClick={() => setModalFicticio(true)} title="Agregar Ítem Ficticio (1010)">
+                                        + Ficticio
+                                    </Button>
+                                )}
                             </Group>
 
                             <ScrollArea style={{ flex: 1, maxHeight: isMobile ? 350 : 'none' }} type="auto">
@@ -479,9 +461,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                     data={[
                                         { value: 'precio7', label: 'P7 (Detal USD)' },
                                         { value: 'precio6', label: 'P6 (Mayor USD)' },
-                                        { value: 'precio1', label: 'P1 (35% en Bs)' },
                                         { value: 'precio4', label: 'P4 (P7 en Bs)' },
-                                        { value: 'precio5', label: 'P5 (P6 en Bs)' }
+                                        { value: 'precio5', label: 'P5 (P6 en Bs)' },
+                                        ...(esVendedor ? [] : [{ value: 'precio1', label: 'P1 (35% en Bs)' }]), // deriva del costo: solo administración
                                     ]}
                                     {...formVenta.getInputProps('tipoPrecio')}
                                 />

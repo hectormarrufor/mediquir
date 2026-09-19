@@ -146,3 +146,32 @@ export function precioVentaWeb(producto) {
 export function precioMayor(producto) {
     return Number(producto?.precio6) > 0 ? precioUnitario(producto.precio6) : precioVentaWeb({ ...producto, porcentajeDescuento: 0 });
 }
+
+// ------------------------------------------------------------------------------------------------
+// Tarifas del POS. Las usan el POS (para mostrar) y el servidor (para cobrar a un vendedor), así el
+// precio que ve el vendedor es siempre el que el servidor acepta.
+//   precio7 = detal (con el descuento del producto) · precio6 = mayor · precio4/5 = las mismas en bolívares
+//   precio1 = costo x 1,35 en bolívares (deriva del costo: solo para administración)
+// ------------------------------------------------------------------------------------------------
+export const TARIFAS_VENDEDOR = ['precio7', 'precio6', 'precio4', 'precio5'];
+
+// Precios base de un producto. Con `sinCosto` nunca se usa el costo para rellenar el Precio 6 (quien vende no debe
+// poder deducir el costo de un producto sin Precio 6); en ese caso cae al Precio 7.
+export function preciosBase(producto, { sinCosto = false } = {}) {
+    const costo = Number(producto?.costoUsd) || 0;
+    const p7 = Number(producto?.precio7) > 0 ? Number(producto.precio7) : costo * 1.5;
+    const p6 = Number(producto?.precio6) > 0 ? Number(producto.precio6) : (sinCosto ? p7 : costo);
+    return { costo, p6, p7, descuento: Number(producto?.porcentajeDescuento) || 0 };
+}
+
+export function precioPorTarifa(producto, tarifa, tasa, opciones) {
+    const { costo, p6, p7, descuento } = preciosBase(producto, opciones);
+    const p7Final = descuento > 0 ? p7 - p7 * (descuento / 100) : p7;
+    switch (tarifa) {
+        case 'precio6': return { precio: precioUnitario(p6), moneda: 'USD', descuento: 0 };
+        case 'precio1': return { precio: aBolivares(costo * 1.35, tasa), moneda: 'BS', descuento: 0 };
+        case 'precio4': return { precio: aBolivares(p7Final, tasa), moneda: 'BS', descuento };
+        case 'precio5': return { precio: aBolivares(p6, tasa), moneda: 'BS', descuento: 0 };
+        default: return { precio: precioUnitario(p7Final), moneda: 'USD', descuento }; // precio7
+    }
+}

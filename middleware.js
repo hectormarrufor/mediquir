@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
+import { rolDe } from './app/constants/roles';
 
 // ------------------------------------------------------------------------------------------------
 // Quién puede llamar a cada API (regla central: TODO lo que no esté aquí exige sesión de PERSONAL).
@@ -28,6 +29,28 @@ const PUBLICAS = [
 
 // Cualquier usuario con sesión (personal o cliente); la ruta valida lo demás.
 const CUALQUIER_SESION = [/^\/api\/notificaciones(\/|$)/, /^\/api\/users\/change-password$/, /^\/api\/suscribir(\/|$)/];
+
+// Vendedor (puesto "Vendedor"): solo lo que necesita para vender, comprar y cumplir sus tareas de logística.
+// Todo lo demás (finanzas, RRHH, costos, edición de inventario, usuarios...) queda cerrado. Cada ruta además filtra
+// SUS datos (solo lo suyo) y recalcula precios en el servidor.
+const VENDEDOR_API = [
+    ['GET', /^\/api\/(categorias|marcas|grupos-equivalencia|tags|proveedores|correlativos)$/],
+    ['POST', /^\/api\/proveedores$/],
+    ['GET', /^\/api\/clientes(\/[^/]+)?$/],
+    ['POST', /^\/api\/clientes$/],
+    ['GET', /^\/api\/ventas$/],
+    ['POST', /^\/api\/ventas$/],
+    ['GET', /^\/api\/ventas\/[^/]+$/],
+    ['PUT', /^\/api\/ventas\/[^/]+$/],       // solo las acciones de firma (lo valida la ruta)
+    ['GET', /^\/api\/compras$/],
+    ['POST', /^\/api\/compras$/],
+    ['GET', /^\/api\/vendedor\/[^/]+$/],
+    ['GET', /^\/api\/inventario\/lista-precios$/],
+];
+const VENDEDOR_PAGINAS = [
+    /^\/superuser$/, /^\/superuser\/ventas(\/.*)?$/, /^\/superuser\/compras$/,
+    /^\/superuser\/inventario\/consulta$/, /^\/superuser\/clientes(\/nuevo)?$/, /^\/superuser\/notificaciones$/,
+];
 
 const json = (mensaje, status) => NextResponse.json({ error: mensaje }, { status });
 
@@ -60,7 +83,11 @@ export async function middleware(request) {
             return pathname.startsWith('/api/b2b/') ? NextResponse.next() : json('Acceso restringido al personal', 403);
         }
         // El personal no usa las rutas del portal de clientes
-        return pathname.startsWith('/api/b2b/') ? json('Ruta exclusiva de clientes', 403) : NextResponse.next();
+        if (pathname.startsWith('/api/b2b/')) return json('Ruta exclusiva de clientes', 403);
+        if (rolDe(sesion) === 'vendedor' && !VENDEDOR_API.some(([m, patron]) => m === metodo && patron.test(pathname))) {
+            return json('Tu rol no permite esta acción', 403);
+        }
+        return NextResponse.next();
     }
 
     // ---------- Páginas ----------
@@ -77,6 +104,10 @@ export async function middleware(request) {
     if (esCliente && !pathname.startsWith('/b2b')) return NextResponse.redirect(new URL('/b2b', request.url));
     // El personal no entra al portal de clientes
     if (!esCliente && pathname.startsWith('/b2b')) return NextResponse.redirect(new URL('/superuser', request.url));
+    // El vendedor solo entra a sus pantallas; cualquier otra lo devuelve a su panel
+    if (rolDe(sesion) === 'vendedor' && pathname.startsWith('/superuser') && !VENDEDOR_PAGINAS.some((p) => p.test(pathname))) {
+        return NextResponse.redirect(new URL('/superuser', request.url));
+    }
 
     return NextResponse.next();
 }

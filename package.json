@@ -2,6 +2,9 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "dev:webpack": "next dev",
+    "respaldo": "node scripts/respaldo/respaldar.js",
+    "respaldo:verificar": "node scripts/respaldo/respaldar.js --verificar",
+    "respaldo:keepalive": "node scripts/respaldo/respaldar.js --keepalive",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

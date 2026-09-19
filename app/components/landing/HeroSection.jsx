@@ -41,7 +41,9 @@ export default function HeroSection({ searchQuery, onSearch }) {
     });
 
     const totalProductos = productos?.length || 0;
-    const usaVideo = !isMobile && !videoError;
+    // El video se ve igual en móvil y escritorio (silenciado y en línea, como exigen los navegadores móviles para reproducirse solo);
+    // si el video falla se cae al fundido de fotos.
+    const usaVideo = !videoError;
 
     // Sin video (móvil o error): fundido lento entre fotos
     useEffect(() => {
@@ -58,13 +60,13 @@ export default function HeroSection({ searchQuery, onSearch }) {
     const scrollToCatalog = () => document.getElementById('productos-section')?.scrollIntoView({ behavior: 'smooth' });
 
     return (
-        <Box className={classes.hero} pos="relative" mih={{ base: 440, sm: 560, md: 640 }} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <Box className={classes.hero} pos="relative" mih={{ base: 440, sm: 616, md: 704 }} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             {/* FONDO */}
             <Box pos="absolute" inset={0} style={{ zIndex: 0, backgroundColor: 'var(--mantine-color-navy-9)' }}>
                 {usaVideo ? (
                     <video
                         src="/tenants/mediquir/hero-video.mp4"
-                        poster={HERO_IMAGES[0].lg}
+                        poster={isMobile ? HERO_IMAGES[0].sm : HERO_IMAGES[0].lg}
                         autoPlay loop muted playsInline preload="metadata"
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         onError={() => setVideoError(true)}

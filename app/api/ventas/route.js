@@ -5,9 +5,12 @@ import db from '@/models';
 const { Venta, VentaDetalle, Producto, Marca, Correlativo, CategoriaFinanciera, MovimientoFinanciero, Cliente, User, Empleado, SalidaInventario, CuentaPorCobrar } = db;
 import { requerirStaff } from '../inventario/_lib';
 import { tasaVigente } from '../_lib/tasaBcv';
-import { calcularFactura, aBolivares, aDolares, REGLAS } from '@/app/constants/facturacion';
+import { calcularFactura, aBolivares, aDolares, REGLAS, precioPorTarifa, TARIFAS_VENDEDOR } from '@/app/constants/facturacion';
+import { rolDe } from '@/app/constants/roles';
 
-class ErrorNegocio extends Error {}
+class ErrorNegocio extends Error {
+    constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
+}
 import { notificarTodos } from '@/app/handlers/notificar';
 
 export async function GET(request) {
@@ -28,6 +31,13 @@ export async function GET(request) {
             whereClause.createdAt = {
                 [Op.between]: [`${fechaInicio} 00:00:00`, `${fechaInicio} 23:59:59`]
             };
+        }
+
+        // Un vendedor solo ve las ventas/pedidos donde figura como vendedor, empacador o etiquetador, y sin datos financieros
+        const esVend = rolDe(acceso.sesion) === 'vendedor';
+        if (esVend) {
+            const yo = Number(acceso.sesion.id);
+            whereClause[Op.or] = [{ vendedorId: yo }, { empacadorId: yo }, { etiquetadorId: yo }];
         }
 
         const ventas = await Venta.findAll({
@@ -58,10 +68,10 @@ export async function GET(request) {
                         attributes: ['nombre', 'apellido']
                     }]
                 },
-                {
+                ...(esVend ? [] : [{
                     model: MovimientoFinanciero,
                     as: 'movimientos'
-                }
+                }])
             ],
             order: [['createdAt', 'DESC']]
         });
@@ -92,6 +102,13 @@ export async function POST(request) {
             return NextResponse.json({ error: 'El carrito está vacío' }, { status: 400 });
         }
         if (!['MAYOR', 'DETAL'].includes(tipoVenta)) throw new ErrorNegocio('Tipo de venta inválido');
+
+        // Un vendedor no fija precios: cobra por tarifa, con el precio que calcula el servidor, y sin productos genéricos de precio libre
+        const esVend = rolDe(acceso.sesion) === 'vendedor';
+        if (esVend) {
+            if (detalles.some((d) => d.isFicticio)) throw new ErrorNegocio('Solo administración puede vender productos genéricos con precio libre', 403);
+            if (!TARIFAS_VENDEDOR.includes(body.tipoPrecio)) throw new ErrorNegocio('Tarifa de precio no permitida', 403);
+        }
         if (!['USD', 'BS'].includes(moneda)) throw new ErrorNegocio('Moneda inválida');
         if (condicionPago === 'Credito' && !clienteId) throw new ErrorNegocio('Una venta a crédito requiere un cliente');
 
@@ -107,12 +124,19 @@ export async function POST(request) {
             productos.set(Number(item.productoId), producto);
         }
 
-        const renglonesEntrada = detalles.map((item) => {
+        const renglonesEntrada = detalles.map((rawItem) => {
+            let item = rawItem;
             if (!(Number(item.precioUnitario) > 0)) throw new ErrorNegocio('Todos los renglones deben tener un precio mayor a 0');
             const producto = item.isFicticio ? null : productos.get(Number(item.productoId));
+            if (esVend) {
+                const tarifa = precioPorTarifa(producto, body.tipoPrecio, tasaCambio, { sinCosto: true });
+                if (tarifa.moneda !== moneda) throw new ErrorNegocio('La moneda no corresponde a la tarifa elegida');
+                item = { ...item, precioUnitario: tarifa.precio };
+            }
             const alicuota = producto ? Number(producto.porcentajeIva) || 0 : REGLAS.alicuotaGeneral;
             // El POS decide si la venta lleva IVA; la alícuota de cada producto la fija su ficha
-            const aplicaIva = Boolean(item.aplicaIva) && alicuota > 0;
+            // En una FACTURA de un vendedor el IVA no es opcional
+            const aplicaIva = (esVend && tipoDocumento === 'FACTURA' ? true : Boolean(item.aplicaIva)) && alicuota > 0;
             return { precioUnitario: item.precioUnitario, cantidad: item.cantidad, aplicaIva, porcentajeIva: alicuota };
         });
         let factura;
@@ -127,17 +151,30 @@ export async function POST(request) {
         let corr = await Correlativo.findOne({ where: { prefijo }, transaction: t, lock: t.LOCK.UPDATE });
         if (!corr) corr = await Correlativo.create({ prefijo, siguienteNumero: 1, cerosRelleno: 5 }, { transaction: t });
 
+        // El número nunca baja del mayor ya emitido con ese prefijo (aunque falte la fila del correlativo), y si el número
+        // pedido a mano ya existe se usa el siguiente libre: antes una venta con número repetido fallaba con un error interno.
+        const [{ maximo }] = await sequelize.query(
+            `SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace("numeroDocumento", '\\D', '', 'g'), '') AS bigint)), 0) AS maximo
+             FROM "Ventas" WHERE "numeroDocumento" LIKE :patron`,
+            { replacements: { patron: `${prefijo}-%` }, type: sequelize.QueryTypes.SELECT, transaction: t }
+        );
+        const siguienteLibre = Math.max(corr.siguienteNumero, Number(maximo) + 1);
+
         const numeroExtraido = parseInt(String(numeroDocumentoManual || '').replace(/\D/g, ''), 10);
-        const numeroBase = (!isNaN(numeroExtraido) && numeroExtraido > 0) ? numeroExtraido : corr.siguienteNumero;
-        corr.siguienteNumero = numeroBase + 1;
+        let numeroDocumento = numeroDocumentoManual || '';
+        let numeroBase = (!isNaN(numeroExtraido) && numeroExtraido > 0) ? numeroExtraido : siguienteLibre;
+        if (!numeroDocumento || await Venta.findOne({ where: { numeroDocumento }, attributes: ['id'], transaction: t })) {
+            numeroBase = siguienteLibre;
+            numeroDocumento = `${prefijo}-${String(numeroBase).padStart(corr.cerosRelleno || 5, '0')}`;
+        }
+        corr.siguienteNumero = Math.max(corr.siguienteNumero, numeroBase + 1);
         await corr.save({ transaction: t });
-        const numeroDocumento = numeroDocumentoManual || `${prefijo}-${String(numeroBase).padStart(corr.cerosRelleno || 5, '0')}`;
 
         // --- 3. VENTA ---
         const fechaVencimiento = condicionPago === 'Credito' ? new Date(Date.now() + 15 * 86400000) : null;
         const nuevaVenta = await Venta.create({
             clienteId: clienteId || null,
-            vendedorId: vendedorId || null,
+            vendedorId: esVend ? Number(acceso.sesion.id) : (vendedorId || null),
             tipoVenta, tipoDocumento, numeroDocumento,
             statusDespacho: tipoVenta === 'DETAL' ? 'Completado' : 'Pendiente',
             moneda, tasaCambio,
@@ -164,7 +201,7 @@ export async function POST(request) {
         for (let i = 0; i < detalles.length; i++) {
             const item = detalles[i];
             const renglon = factura.renglones[i];
-            const afectaInventario = !item.isFicticio && item.afectaInventario !== false;
+            const afectaInventario = !item.isFicticio && (esVend || item.afectaInventario !== false); // un vendedor siempre mueve inventario
 
             await VentaDetalle.create({
                 ventaId: nuevaVenta.id,
@@ -172,7 +209,7 @@ export async function POST(request) {
                 isFicticio: item.isFicticio || false,
                 nombreFicticio: item.isFicticio ? item.nombreFicticio : null,
                 aplicaIva: renglon.aplicaIva,
-                afectaInventario: item.isFicticio ? false : item.afectaInventario !== false,
+                afectaInventario: item.isFicticio ? false : (esVend || item.afectaInventario !== false),
                 cantidad: renglon.cantidad,
                 precioUnitario: renglon.precioUnitario,
                 subtotal: renglon.monto,
@@ -197,7 +234,7 @@ export async function POST(request) {
                 costoAlMomento: Number(productoDB.costoUsd) || 0,
                 justificacion: `Venta ${numeroDocumento}`,
                 estado: tipoVenta === 'DETAL' ? 'Entregada' : 'Pendiente',
-                solicitadoPorId: vendedorId || null,
+                solicitadoPorId: esVend ? Number(acceso.sesion.id) : (vendedorId || null),
             }, { transaction: t });
         }
 
@@ -262,7 +299,7 @@ export async function POST(request) {
 
     } catch (error) {
         if (!t.finished) await t.rollback();
-        if (error instanceof ErrorNegocio) return NextResponse.json({ error: error.message }, { status: 400 });
+        if (error instanceof ErrorNegocio) return NextResponse.json({ error: error.message }, { status: error.status });
         console.error('Error procesando venta:', error);
         return NextResponse.json({ error: 'Error interno al procesar la venta' }, { status: 500 });
     }
