@@ -467,21 +467,22 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
 
                             <Group grow mb="sm" align="flex-end">
                                 {/* 🔥 SECCIÓN CLIENTE MODIFICADA CON BOTÓN DE AGREGAR 🔥 */}
-                                {tipoVenta === 'MAYOR' && (
-                                    <Group wrap="nowrap" gap="xs">
-                                        <Select 
-                                            style={{ flex: 1 }}
-                                            label="Cliente Mayorista" 
-                                            placeholder="Seleccione..." 
-                                            searchable 
-                                            data={clientes?.map(c => ({ value: c.id.toString(), label: `${c.nombre} (RIF: ${c.identificacion})` })) || []} 
-                                            {...formVenta.getInputProps('clienteId')} 
-                                        />
-                                        <Button variant="light" color="grape" onClick={() => setModalCrearCliente(true)} px="xs" title="Crear Cliente Nuevo">
-                                            <IconPlus size={18} />
-                                        </Button>
-                                    </Group>
-                                )}
+                                {/* Al mayor el cliente es obligatorio; al detal es opcional (venta sola, sin cliente) y se puede crear uno nuevo con cédula, nombre y teléfono */}
+                                <Group wrap="nowrap" gap="xs" align="flex-end">
+                                    <Select
+                                        style={{ flex: 1 }}
+                                        label={tipoVenta === 'MAYOR' ? 'Cliente Mayorista' : 'Cliente (opcional)'}
+                                        placeholder={tipoVenta === 'MAYOR' ? 'Seleccione...' : 'Sin cliente'}
+                                        searchable
+                                        clearable={tipoVenta !== 'MAYOR'}
+                                        nothingFoundMessage="No hay coincidencias: crea uno con el botón +"
+                                        data={clientes?.map(c => ({ value: c.id.toString(), label: `${c.nombre} (${tipoVenta === 'MAYOR' ? 'RIF' : 'C.I./RIF'}: ${c.identificacion})` })) || []}
+                                        {...formVenta.getInputProps('clienteId')}
+                                    />
+                                    <Button variant="light" color="grape" onClick={() => setModalCrearCliente(true)} px="xs" title="Crear cliente nuevo">
+                                        <IconPlus size={18} />
+                                    </Button>
+                                </Group>
                                 <Select 
                                     label="Tarifa" 
                                     data={[
@@ -641,19 +642,20 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
             </Modal>
 
             {/* 🔥 MODAL SECUNDARIO: CREAR CLIENTE EN CALIENTE 🔥 */}
-            <Modal opened={modalCrearCliente} onClose={() => setModalCrearCliente(false)} size="lg" title={<Title order={4} c="grape">Registrar Nuevo Cliente</Title>} centered zIndex={2000}>
+            <Modal opened={modalCrearCliente} onClose={() => setModalCrearCliente(false)} size="lg" title={<Title order={4} c="grape">{tipoVenta === 'MAYOR' ? 'Registrar Nuevo Cliente' : 'Cliente nuevo al detal'}</Title>} centered zIndex={2000}>
                 <form onSubmit={formNuevoCliente.onSubmit(async (values) => {
                     try {
+                        if (!String(values.identificacion || '').trim() || !String(values.nombre || '').trim()) throw new Error('La cédula y el nombre son obligatorios');
                         const res = await fetch('/api/clientes', {
-                            method: 'POST', 
-                            headers: { 'Content-Type': 'application/json' }, 
-                            body: JSON.stringify(values)
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(tipoVenta === 'MAYOR' ? values : { identificacion: values.identificacion.trim(), nombre: values.nombre.trim(), telefono: values.telefono?.trim() || null })
                         });
                         const data = await res.json();
                         if (!res.ok) throw new Error(data.error);
 
                         notifications.show({ title: 'Cliente Creado', message: 'El cliente ha sido guardado y seleccionado exitosamente.', color: 'green' });
-                        queryClient.invalidateQueries(['clientes-pos']);
+                        await queryClient.invalidateQueries({ queryKey: ['clientes-pos'] });
                         formVenta.setFieldValue('clienteId', String(data.id));
                         setModalCrearCliente(false);
                         formNuevoCliente.reset();
@@ -662,18 +664,20 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                     }
                 })}>
                     <Stack gap="sm">
-                        <TextInput size="md" label="RIF / Cédula" placeholder="Ej: J-12345678-9 o V-12345678" withAsterisk {...formNuevoCliente.getInputProps('identificacion')} />
-                        <TextInput size="md" label="Razón Social / Nombre" placeholder="Ej: Farmacia San Pedro" withAsterisk {...formNuevoCliente.getInputProps('nombre')} />
-                        <TextInput size="md" label="Teléfono" placeholder="Ej: 0414-1234567" {...formNuevoCliente.getInputProps('telefono')} />
-                        <TextInput size="md" label="Correo Electrónico" placeholder="contacto@cliente.com" {...formNuevoCliente.getInputProps('email')} />
-                        <TextInput size="md" label="Dirección Fiscal" placeholder="Ej: Av. Principal, Local 4..." {...formNuevoCliente.getInputProps('direccion')} />
-                        
-                        <Group grow>
-                            <Checkbox label="Contribuyente Especial" size="md" mt={8} {...formNuevoCliente.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })} />
-                            <Select size="md" label="Retención Default" data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} {...formNuevoCliente.getInputProps('retencionIvaPorDefecto', { transform: (v) => Number(v) })} />
-                        </Group>
-                        
-                        <TextInput size="md" label="Notas Adicionales" placeholder="(Opcional)" {...formNuevoCliente.getInputProps('notas')} />
+                        <TextInput size="md" label={tipoVenta === 'MAYOR' ? 'RIF / Cédula' : 'Cédula'} placeholder={tipoVenta === 'MAYOR' ? 'Ej: J-12345678-9 o V-12345678' : 'Ej: V-12345678'} withAsterisk data-autofocus {...formNuevoCliente.getInputProps('identificacion')} />
+                        <TextInput size="md" label={tipoVenta === 'MAYOR' ? 'Razón Social / Nombre' : 'Nombre'} placeholder={tipoVenta === 'MAYOR' ? 'Ej: Farmacia San Pedro' : 'Ej: María Pérez'} withAsterisk {...formNuevoCliente.getInputProps('nombre')} />
+                        <TextInput size="md" label="Teléfono" placeholder="Ej: 0414-1234567 (opcional)" {...formNuevoCliente.getInputProps('telefono')} />
+                        {tipoVenta === 'MAYOR' && (
+                            <>
+                                <TextInput size="md" label="Correo Electrónico" placeholder="contacto@cliente.com" {...formNuevoCliente.getInputProps('email')} />
+                                <TextInput size="md" label="Dirección Fiscal" placeholder="Ej: Av. Principal, Local 4..." {...formNuevoCliente.getInputProps('direccion')} />
+                                <Group grow>
+                                    <Checkbox label="Contribuyente Especial" size="md" mt={8} {...formNuevoCliente.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })} />
+                                    <Select size="md" label="Retención Default" data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} {...formNuevoCliente.getInputProps('retencionIvaPorDefecto', { transform: (v) => Number(v) })} />
+                                </Group>
+                                <TextInput size="md" label="Notas Adicionales" placeholder="(Opcional)" {...formNuevoCliente.getInputProps('notas')} />
+                            </>
+                        )}
                         <Button size="md" type="submit" color="grape" mt="md">Guardar y Seleccionar Cliente</Button>
                     </Stack>
                 </form>

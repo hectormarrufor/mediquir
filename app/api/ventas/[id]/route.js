@@ -34,10 +34,13 @@ async function ejecutarEmpaque(venta, t, empacadorId) {
             const productoDB = await Producto.findByPk(item.productoId, { transaction: t, lock: t.LOCK.UPDATE });
             if (!productoDB) continue;
             const stock = Number(productoDB.stockAlmacen) || 0;
-            if (stock < Number(item.cantidad)) {
+            // Pedido confirmado tras la revisión de existencias: administración aseguró que consigue lo que falta por fuera, así que solo se
+            // descuenta lo que sí hay en almacén (el stock nunca queda negativo y lo de afuera no pasa por el inventario)
+            const conseguidoAfuera = venta.revisionStock === 'RESUELTA';
+            if (stock < Number(item.cantidad) && !conseguidoAfuera) {
                 throw new ErrorLogistica(`Sin existencia suficiente de "${productoDB.nombre}" (hay ${stock}, se necesitan ${item.cantidad})`, 409);
             }
-            productoDB.stockAlmacen = stock - Number(item.cantidad);
+            productoDB.stockAlmacen = stock - Math.min(stock, Number(item.cantidad));
             productoDB.nroVentas = (Number(productoDB.nroVentas) || 0) + Number(item.cantidad);
             await productoDB.save({ transaction: t });
         }

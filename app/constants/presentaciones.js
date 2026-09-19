@@ -127,8 +127,7 @@ export const nivelMayor = (entrega) => entrega.reduce((m, e) => (ORDEN[e.nivel] 
 export function codigosAceptados(entrega, producto) {
     const codigos = codigosDe(producto);
     const mayor = nivelMayor(entrega);
-    const niveles = mayor === 'UNIDAD' ? ['UNIDAD', 'CAJA', 'BULTO'] : [mayor];
-    return niveles.filter((n) => codigos[n]).map((n) => ({ nivel: n, codigo: codigos[n] }));
+    return codigos[mayor] ? [{ nivel: mayor, codigo: codigos[mayor] }] : [];
 }
 
 // Nivel del código que coincide con lo escrito o escaneado (null si ninguno)

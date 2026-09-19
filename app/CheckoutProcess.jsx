@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { avisoDespacho } from '@/app/constants/horario';
 import { Box, Stepper, Button, Group, Radio, Stack, Text, Paper, Loader, Alert, Divider, ThemeIcon, Checkbox, TextInput, Select } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconBuildingStore, IconMotorbike, IconCheck, IconAlertCircle, IconUser, IconGps, IconMapPinCheck } from '@tabler/icons-react';
@@ -163,6 +164,9 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
     const totalPagarUSD = Number((subtotal + totalImpuestos + costoDeliveryFinal).toFixed(2));
     const totalPagarBS = tasaBcv > 0 ? aBolivares(totalPagarUSD, tasaBcv) : 0; // el servidor recalcula con su propia tasa y precios
     const requierePagoOnline = metodoEntrega === 'delivery' || Boolean(pagoOnlinePickup);
+    // Fuera del horario de despacho (4:30 p. m. entre semana, 12:30 p. m. el sábado) el cliente debe saber que saldrá al día siguiente
+    const avisoHorario = requierePagoOnline ? avisoDespacho() : null;
+    const [aceptaHorario, setAceptaHorario] = useState(false);
 
     const handleSiguiente = () => {
         if (activeStep === 0 && formCliente.validate().hasErrors) return;
@@ -443,6 +447,13 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                             <Group justify="space-between" mt={5}><Text fw={700} size="sm" c="dimmed">Total BS (Tasa: {tasaBcv}):</Text><Text fw={900} size="lg" c="blue.7">Bs {totalPagarBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text></Group>
                         </Paper>
 
+                        {avisoHorario && (
+                            <Alert color="orange" variant="light" icon={<IconAlertCircle size={18} />} title={`Tu pedido saldrá ${avisoHorario.cuando}`}>
+                                <Text size="sm">{avisoHorario.texto}</Text>
+                                <Checkbox mt="sm" checked={aceptaHorario} onChange={(e) => setAceptaHorario(e.currentTarget.checked)} label={`Entiendo que mi pedido se despachará ${avisoHorario.cuando} y quiero continuar`} />
+                            </Alert>
+                        )}
+
                         {requierePagoOnline ? (
                             <Paper withBorder p="md" radius="md" style={{ borderColor: '#005AAA' }}>
                                 <Text fw={700} c="#005AAA" mb="xs">Datos para Pago Móvil ({metodoEntrega === 'pickup' ? 'Retiro Prepagado' : 'Delivery'})</Text>
@@ -472,7 +483,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                     <Stack align="center" ta="center" mt={50} mb={30}>
                         <Box bg="teal.1" p={20} style={{ borderRadius: '50%' }}><IconCheck size={50} color="teal" /></Box>
                         <Text fw={900} size="xl" mt="md">¡Orden Confirmada!</Text>
-                        <Text c="dimmed" maw={300}>{requierePagoOnline ? 'Pago validado con éxito. Tu pedido está en preparación.' : 'Tus insumos están reservados para pago en tienda.'}</Text>
+                        <Text c="dimmed" maw={300}>{requierePagoOnline ? `Pago validado con éxito. Tu pedido está en preparación${avisoHorario ? ` y se despachará ${avisoHorario.cuando}` : ''}.` : 'Tus insumos están reservados para pago en tienda.'}</Text>
                     </Stack>
                 </Stepper.Completed>
             </Stepper>
@@ -496,7 +507,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                             onClick={() => procesarCompra(1)}
                             loading={procesandoPago}
                             loaderProps={{ type: 'dots' }}
-                            disabled={requierePagoOnline && referencia.length < 4}
+                            disabled={(requierePagoOnline && referencia.length < 4) || (Boolean(avisoHorario) && !aceptaHorario)}
                         >
                             {procesandoPago ? mensajeCarga : 'Confirmar Orden'}
                         </Button>

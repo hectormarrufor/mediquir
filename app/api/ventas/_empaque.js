@@ -71,9 +71,10 @@ function describirPedido(entrega, producto) {
  *  · ¿es el PRODUCTO correcto? (cualquiera de sus códigos lo confirma)
  *  · ¿es la PRESENTACIÓN correcta? (el código debe ser del nivel que se entrega)
  * Devuelve { productoOk, aceptado, nivelEscaneado, alerta: { tipo: 'error'|'aviso', titulo, detalle } | null }
- *  · Se piden UNIDADES: la unidad, o la caja/bulto de origen, verifican (con aviso si es la caja: "saca unidades, no la entregues cerrada").
- *  · Se piden CAJAS o BULTOS: solo vale el código de ese nivel. Otro nivel del mismo producto se RECHAZA con alerta roja,
- *    salvo que ese nivel no tenga código registrado: entonces identifica el producto, la alerta roja se mantiene y la presentación queda por conteo.
+ *  · Siempre manda el código de la presentación que piden (la de mayor nivel). Otro nivel del mismo producto se RECHAZA con alerta roja.
+ *  · Solo si la presentación pedida NO tiene código registrado sirve el de otra presentación del mismo producto:
+ *    si piden unidades, con aviso amarillo ("saca las unidades, no la entregues cerrada"); si piden cajas o bultos, la alerta roja se mantiene
+ *    y la presentación queda por conteo y foto.
  */
 export function evaluarCodigo(detalle, codigo, escaneado = false) {
     const producto = detalle.producto;
@@ -91,6 +92,18 @@ export function evaluarCodigo(detalle, codigo, escaneado = false) {
 
     if (mayor === 'UNIDAD') {
         if (nivelEscaneado === 'UNIDAD') return { productoOk: true, aceptado: true, nivelEscaneado, alerta: null };
+        // La unidad SÍ tiene código: hay que escanear ese, no el de la caja o el bulto
+        if (conocidos.UNIDAD) {
+            const unidad = presentacionesDe(producto)[0].singular.toUpperCase();
+            return {
+                productoOk: true, aceptado: false, nivelEscaneado,
+                alerta: {
+                    tipo: 'error', titulo: '¡ESA NO ES LA PRESENTACIÓN QUE PIDEN!',
+                    detalle: `Escaneaste ${tiene}. Lo que te piden es ${pedido}. No es lo mismo: trae las unidades sueltas, no una ${nivelEscaneado === 'CAJA' ? 'caja' : 'bulto'} cerrada. Escanea el código del ${unidad}.`,
+                },
+            };
+        }
+        // La unidad no tiene código: sirve el de la caja o el bulto de donde se sacan
         return {
             productoOk: true, aceptado: true, nivelEscaneado,
             alerta: { tipo: 'aviso', titulo: 'PRODUCTO CORRECTO, PERO SON UNIDADES', detalle: `Escaneaste ${tiene}. Te piden ${pedido}: saca esas unidades de ahí. NO entregues la ${nivelEscaneado === 'CAJA' ? 'caja' : 'unidad de bulto'} cerrada.` },

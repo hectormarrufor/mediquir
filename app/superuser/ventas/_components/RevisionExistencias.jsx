@@ -81,7 +81,7 @@ export default function RevisionExistencias({ pedido, onCambio }) {
                         Confirmar pedido
                     </Button>
                 </Group>
-                {hayFaltantes && <Alert color="orange" variant="light" icon={<IconAlertTriangle size={16} />}>Aún faltan existencias en almacén. Puedes confirmar si ya conseguiste el producto, pero registra la compra o entrada antes de empacar: el stock se descuenta al empacar.</Alert>}
+                {hayFaltantes && <Alert color="orange" variant="light" icon={<IconAlertTriangle size={16} />}>Aún faltan existencias en almacén. Al confirmar se asume que consigues lo que falta por fuera: al empacar solo se descuenta del inventario lo que sí hay (el stock nunca queda negativo).</Alert>}
                 {pedido.revisionNota && <Text size="xs" c="dimmed" style={{ whiteSpace: 'pre-line' }}>Ajustes hechos: {'\n'}{pedido.revisionNota}</Text>}
             </Stack>
         </Paper>

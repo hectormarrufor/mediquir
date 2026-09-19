@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { ActionIcon, Badge, Box, Button, Card, Grid, Group, Paper, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, Tooltip, UnstyledButton } from '@mantine/core';
 import { LineChart } from '@mantine/charts';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/useAuth';
+import ErroresEmpaqueCard from './ErroresEmpaqueCard';
 import {
     IconAlertTriangle, IconArrowDownRight, IconArrowRight, IconArrowUpRight, IconBuildingStore, IconCash, IconCheck, IconClockExclamation, IconPackage,
     IconReceipt, IconSettings, IconTruckDelivery, IconWallet,
@@ -47,6 +49,7 @@ function Pulso({ icono: Icono, color, titulo, valor, detalle, cambio, href, carg
 
 // Panel de inicio del personal: cabecera, pulso del negocio, alertas, módulos y tareas
 export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, modulos, tareas }) {
+    const { isAdmin } = useAuth();
     const { data, isLoading } = useQuery({ queryKey: ['dashboard', 'resumen'], queryFn: () => pedirJson('/api/dashboard/resumen'), refetchInterval: 120000, refetchOnWindowFocus: true });
     const d = data;
 
@@ -125,6 +128,9 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
                         </Paper>
                     </Grid.Col>
                 </Grid>
+
+                {/* Quién se equivoca más al empacar (solo administradores) */}
+                {isAdmin && <ErroresEmpaqueCard />}
 
                 {/* Módulos */}
                 <Box>

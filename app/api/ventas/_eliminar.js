@@ -4,7 +4,7 @@ import { list, del } from '@vercel/blob';
 import db from '../../../models/index.js';
 
 const {
-    Venta, VentaDetalle, VentaEmpaqueItem, Producto, SalidaInventario, MovimientoFinanciero, Abono, CuentaPorCobrar, RetencionIva,
+    Venta, VentaDetalle, VentaEmpaqueItem, EmpaqueError, Producto, SalidaInventario, MovimientoFinanciero, Abono, CuentaPorCobrar, RetencionIva,
     NotaFiscal, NotaFiscalDetalle, PagoSms, Correlativo, Notificacion, NotificacionLeida, Sequelize,
 } = db;
 
@@ -83,6 +83,7 @@ export async function eliminarVenta({ venta, transaction: t }) {
     await Abono.destroy({ where: { ventaId: id }, transaction: t }); // incluye los "abonos" de retenciones y notas de crédito
     await CuentaPorCobrar.destroy({ where: { ventaId: id }, transaction: t });
     await VentaEmpaqueItem.destroy({ where: { ventaId: id }, transaction: t });
+    await EmpaqueError.destroy({ where: { ventaId: id }, transaction: t }); // los errores de empaque de los empleados se van con el pedido
     await VentaDetalle.destroy({ where: { ventaId: id }, transaction: t });
     await venta.destroy({ transaction: t });
 
