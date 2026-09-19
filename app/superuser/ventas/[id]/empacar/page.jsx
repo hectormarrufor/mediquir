@@ -48,6 +48,7 @@ export default function EmpacarPage() {
     const [conteo, setConteo] = useState({ BULTO: '', CAJA: '', UNIDAD: '' }); // lo que el empacador cuenta por nivel
     const [motivo, setMotivo] = useState('');
     const [errorItem, setErrorItem] = useState(null);
+    const [aviso, setAviso] = useState(null); // { tipo: 'error' | 'aviso' | 'ok', titulo, detalle } sobre el código escaneado
     const [enviando, setEnviando] = useState(false);
     const [verEscaner, setVerEscaner] = useState(false);
     const [tipoFoto, setTipoFoto] = useState(null);
@@ -75,7 +76,23 @@ export default function EmpacarPage() {
     const actual = items.find((i) => i.estado !== 'OK');
     const empezado = comenzado || hechos > 0 || Boolean(venta.empaqueIniciadoAt);
 
-    const limpiar = () => { setCodigo(''); setEscaneado(false); setMarca(''); setConteo({ BULTO: '', CAJA: '', UNIDAD: '' }); setMotivo(''); setErrorItem(null); };
+    const limpiar = () => { setCodigo(''); setEscaneado(false); setMarca(''); setConteo({ BULTO: '', CAJA: '', UNIDAD: '' }); setMotivo(''); setErrorItem(null); setAviso(null); };
+
+    // Pregunta al servidor qué se tiene en la mano según el código (no guarda nada)
+    const comprobarCodigo = async (valor, escaneo) => {
+        if (!actual || String(valor || '').trim().length < 4) return;
+        try {
+            const res = await fetch(`/api/ventas/${id}/empaque`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accion: 'COMPROBAR_CODIGO', detalleId: actual.detalleId, codigo: valor, escaneado: escaneo }),
+            });
+            const r = await res.json();
+            if (!res.ok) { setAviso({ tipo: 'error', titulo: 'NO SE PUDO COMPROBAR', detalle: r.error || 'Intenta de nuevo.' }); return; }
+            setAviso(r.alerta || { tipo: 'ok', titulo: 'CÓDIGO CORRECTO', detalle: 'Es el producto y la presentación que piden.' });
+        } catch {
+            setAviso({ tipo: 'error', titulo: 'SIN CONEXIÓN', detalle: 'No se pudo comprobar el código.' });
+        }
+    };
 
     const confirmarItem = async () => {
         setEnviando(true);
@@ -86,7 +103,7 @@ export default function EmpacarPage() {
                 body: JSON.stringify({ accion: 'VERIFICAR_ITEM', detalleId: actual.detalleId, codigo, escaneado, marcaElegida: marca, empacado: { bultos: Number(conteo.BULTO || 0), cajas: Number(conteo.CAJA || 0), sueltas: Number(conteo.UNIDAD || 0) }, observacion: motivo }),
             });
             const r = await res.json();
-            if (!res.ok) { setErrorItem(r.error || 'No se pudo verificar'); return; }
+            if (!res.ok) { if (r.alerta) { setAviso(r.alerta); setErrorItem(null); } else setErrorItem(r.error || 'No se pudo verificar'); return; }
             if (r.estado === 'NOVEDAD') notifications.show({ title: 'Novedad reportada', message: 'Avisamos a administración.', color: 'orange' });
             limpiar();
             await refetch();
@@ -172,7 +189,9 @@ export default function EmpacarPage() {
         const de = { BULTO: 'del BULTO', CAJA: 'de la CAJA', UNIDAD: 'de la UNIDAD' };
         const soloUnidad = actual.nivelRequerido === 'UNIDAD';
         const dondeCodigo = (actual.nivelesCodigo || []).map((n) => de[n]).join(' o ');
-        const etiquetaCodigo = actual.nivelesCodigo?.length > 1 || (soloUnidad && actual.nivelesCodigo?.[0] !== 'UNIDAD')
+        const etiquetaCodigo = !actual.nivelesCodigo?.length
+            ? 'Código de barras (de cualquier presentación de este producto)'
+            : actual.nivelesCodigo?.length > 1 || (soloUnidad && actual.nivelesCodigo?.[0] !== 'UNIDAD')
             ? `Código de barras (${dondeCodigo}${soloUnidad ? ', o de donde las sacaste' : ''})`
             : `Código de barras ${dondeCodigo}`;
 
@@ -208,9 +227,21 @@ export default function EmpacarPage() {
                                         <TextInput
                                             label={etiquetaCodigo} size="md" value={codigo} autoComplete="off" inputMode="numeric"
                                             description={`${actual.nivelRequerido && actual.nivelRequerido !== 'UNIDAD' ? 'No sirve el código de una unidad suelta. ' : ''}Escríbelo (o solo sus últimos 4 dígitos)${escanerDisponible() ? ' o escanéalo con la cámara' : ''}`}
-                                            onChange={(e) => { setCodigo(e.currentTarget.value); setEscaneado(false); }}
+                                            onChange={(e) => { setCodigo(e.currentTarget.value); setEscaneado(false); setAviso(null); }}
                                             rightSection={escanerDisponible() ? <ActionIcon variant="light" size="lg" onClick={() => setVerEscaner(true)}><IconScan size={20} /></ActionIcon> : null}
                                         />
+                                    )}
+                                    {actual.modo === 'codigo' && codigo.trim().length >= 4 && !aviso && (
+                                        <Button variant="light" onClick={() => comprobarCodigo(codigo, escaneado)}>Comprobar el código</Button>
+                                    )}
+                                    {aviso && (
+                                        <Alert
+                                            color={aviso.tipo === 'ok' ? 'teal' : aviso.tipo === 'aviso' ? 'yellow' : 'red'} variant={aviso.tipo === 'error' ? 'filled' : 'light'}
+                                            icon={aviso.tipo === 'ok' ? <IconCheck size={26} /> : <IconAlertTriangle size={26} />}
+                                            title={<Text fw={900} fz={aviso.tipo === 'error' ? 22 : 16} lh={1.2} tt="uppercase">{aviso.titulo}</Text>}
+                                        >
+                                            <Text fw={aviso.tipo === 'ok' ? 500 : 700} fz={aviso.tipo === 'error' ? 17 : 14}>{aviso.detalle}</Text>
+                                        </Alert>
                                     )}
                                     {actual.modo === 'marca' && actual.nivelRequerido && actual.nivelRequerido !== 'UNIDAD' && <Alert color="gray" variant="light">Esta presentación no tiene código de barras registrado: se comprueba por la marca del empaque.</Alert>}
                                     {actual.modo === 'marca' && (
@@ -246,7 +277,7 @@ export default function EmpacarPage() {
                         </Stack>
                     </Paper>
                 </Stack>
-                <EscanerCodigo opened={verEscaner} onClose={() => setVerEscaner(false)} onDetectar={(v) => { setCodigo(v); setEscaneado(true); setVerEscaner(false); }} />
+                <EscanerCodigo opened={verEscaner} onClose={() => setVerEscaner(false)} onDetectar={(v) => { setCodigo(v); setEscaneado(true); setVerEscaner(false); comprobarCodigo(v, true); }} />
             </Container>
         );
     }

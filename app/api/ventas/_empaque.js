@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import db from '@/models/index';
-import { codigoCoincide, codigosAceptados, entregaDe, normalizarCodigo } from '@/app/constants/presentaciones';
+import { codigoCoincide, codigosAceptados, codigosDe, entregaDe, nivelDelCodigo, nivelMayor, normalizarCodigo, presentacionDe } from '@/app/constants/presentaciones';
 
 const { Venta, VentaDetalle, Producto, Marca, GrupoEquivalencia, VentaEmpaqueItem, User, Empleado } = db;
 
@@ -45,6 +45,70 @@ export const codigosDelRenglon = (detalle) => {
     return entrega.length ? codigosAceptados(entrega, detalle.producto) : [];
 };
 
+// Cómo se llama lo que el empacador tiene en la mano según el código que escaneó
+function describirNivel(producto, nivel) {
+    const p = presentacionDe(producto, nivel);
+    if (nivel === 'UNIDAD') return 'una UNIDAD suelta';
+    if (nivel === 'CAJA') return `una CAJA cerrada de ${p?.unidades ?? '?'} unidades`;
+    const cajas = Number(producto.cajasPorBulto) > 1 ? ` (${producto.cajasPorBulto} cajas)` : '';
+    return `un BULTO cerrado de ${p?.unidades ?? '?'} unidades${cajas}`;
+}
+
+// Lo que piden, sin ambigüedad: "1 BULTO cerrado de 1000 unidades (10 cajas)" o "50 UNIDADES SUELTAS"
+function describirPedido(entrega, producto) {
+    return entrega.map((e) => {
+        if (e.nivel === 'UNIDAD') return `${e.cantidad} UNIDADES${entrega.length > 1 ? ' SUELTAS' : ''}`;
+        const nombre = e.nivel === 'CAJA' ? (e.cantidad === 1 ? 'CAJA cerrada' : 'CAJAS cerradas') : (e.cantidad === 1 ? 'BULTO cerrado' : 'BULTOS cerrados');
+        const cajas = e.nivel === 'BULTO' && Number(producto.cajasPorBulto) > 1 ? ` (${producto.cajasPorBulto} cajas)` : '';
+        return `${e.cantidad} ${nombre} de ${e.unidadesCada} unidades${e.cantidad === 1 ? "" : " c/u"}${cajas}`;
+    }).join(' + ');
+}
+
+/**
+ * Evalúa un código escaneado o tecleado contra el renglón. Separa dos preguntas:
+ *  · ¿es el PRODUCTO correcto? (cualquiera de sus códigos lo confirma)
+ *  · ¿es la PRESENTACIÓN correcta? (el código debe ser del nivel que se entrega)
+ * Devuelve { productoOk, aceptado, nivelEscaneado, alerta: { tipo: 'error'|'aviso', titulo, detalle } | null }
+ *  · Se piden UNIDADES: la unidad, o la caja/bulto de origen, verifican (con aviso si es la caja: "saca unidades, no la entregues cerrada").
+ *  · Se piden CAJAS o BULTOS: solo vale el código de ese nivel. Otro nivel del mismo producto se RECHAZA con alerta roja,
+ *    salvo que ese nivel no tenga código registrado: entonces identifica el producto, la alerta roja se mantiene y la presentación queda por conteo.
+ */
+export function evaluarCodigo(detalle, codigo, escaneado = false) {
+    const producto = detalle.producto;
+    const entrega = entregaDeDetalle(detalle);
+    const conocidos = codigosDe(producto);
+    const todos = Object.entries(conocidos).map(([nivel, cod]) => ({ nivel, codigo: cod }));
+    const nivelEscaneado = nivelDelCodigo(todos, codigo, escaneado);
+    const pedido = describirPedido(entrega, producto);
+
+    if (!nivelEscaneado) {
+        return { productoOk: false, aceptado: false, nivelEscaneado: null, alerta: { tipo: 'error', titulo: 'ESE CÓDIGO NO ES DE ESTE PRODUCTO', detalle: `Revisa que estés tomando el producto correcto. Te piden: ${pedido}.` } };
+    }
+    const mayor = nivelMayor(entrega);
+    const tiene = describirNivel(producto, nivelEscaneado);
+
+    if (mayor === 'UNIDAD') {
+        if (nivelEscaneado === 'UNIDAD') return { productoOk: true, aceptado: true, nivelEscaneado, alerta: null };
+        return {
+            productoOk: true, aceptado: true, nivelEscaneado,
+            alerta: { tipo: 'aviso', titulo: 'PRODUCTO CORRECTO, PERO SON UNIDADES', detalle: `Escaneaste ${tiene}. Te piden ${pedido}: saca esas unidades de ahí. NO entregues la ${nivelEscaneado === 'CAJA' ? 'caja' : 'unidad de bulto'} cerrada.` },
+        };
+    }
+    if (nivelEscaneado === mayor) return { productoOk: true, aceptado: true, nivelEscaneado, alerta: null };
+
+    const hayCodigoDelNivel = Boolean(conocidos[mayor]);
+    const detalleBase = `Escaneaste ${tiene}. Lo que te piden es ${pedido}. No es lo mismo: ${mayor === 'BULTO' ? 'trae el BULTO completo, no una caja' : 'trae las CAJAS cerradas, no unidades sueltas'}.`;
+    return {
+        productoOk: true, aceptado: !hayCodigoDelNivel, nivelEscaneado,
+        alerta: {
+            tipo: 'error', titulo: '¡ESA NO ES LA PRESENTACIÓN QUE PIDEN!',
+            detalle: hayCodigoDelNivel
+                ? `${detalleBase} Escanea el código ${mayor === 'BULTO' ? 'del BULTO' : 'de la CAJA'}.`
+                : `${detalleBase} Es el producto correcto, pero este nivel no tiene código de barras registrado: el sistema no puede comprobarlo, así que asegúrate de tomar exactamente ${pedido}.`,
+        },
+    };
+}
+
 // ¿Cómo se comprueba este renglón?
 //   codigo: el producto trae el código de barras del NIVEL que se entrega (unidad, caja o bulto): se escanea o se escribe
 //   marca : ese nivel no tiene código (p. ej. una hojilla de bisturí): se elige la marca que dice el empaque
@@ -52,7 +116,7 @@ export const codigosDelRenglon = (detalle) => {
 // OJO: el código interno (`codigo`, ej. 0483) NO sirve para esto: el empacador no lo ve en el producto físico.
 export function modoVerificacion(detalle) {
     if (detalle.isFicticio || !detalle.producto) return 'manual';
-    if (codigosDelRenglon(detalle).length) return 'codigo';
+    if (Object.keys(codigosDe(detalle.producto)).length) return 'codigo'; // cualquier código del producto (unidad, caja o bulto) sirve para identificarlo
     if (detalle.producto.marca?.nombre) return 'marca';
     return 'manual';
 }

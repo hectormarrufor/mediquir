@@ -22,6 +22,7 @@ import { numeroALetras } from '@/app/utils/numeroALetras';
 import { calcularFactura, aBolivares, aDolares, precioPorTarifa } from '@/app/constants/facturacion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
+import { presentacionesDe, presentacionDe } from '@/app/constants/presentaciones';
 
 export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
     const queryClient = useQueryClient(); // 🔥 INSTANCIADO PARA INVALIDAR QUERIES
@@ -169,15 +170,19 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
     }, [formVenta.values.tipoPrecio, tasaBcv]);
 
 
-    const agregarAlCarrito = (producto) => {
+    // Un renglón por producto Y presentación: 2 cajas + 50 sueltas del mismo producto son dos renglones.
+    // `cantidad` siempre son UNIDADES (precio, stock y factura no cambian); `cantidadPres` es lo que se pide (2 cajas).
+    const agregarAlCarrito = (producto, presentacion = 'UNIDAD', n = 1) => {
         const info = calcularPrecioInfo(producto, formVenta.values.tipoPrecio);
-        const existe = carrito.find(item => item.id === producto.id && !item.isFicticio);
+        const pres = presentacionDe(producto, presentacion) || presentacionDe(producto, 'UNIDAD');
+        const clave = `${producto.id}:${pres.clave}`;
+        const existe = carrito.find(item => item.clave === clave);
         const imgProducto = getImageUrl(producto.imagen);
         const imgMarca = getImageUrl(producto.marca?.imagen);
 
         if (existe) {
-            setCarrito(carrito.map(item => item.id === producto.id && !item.isFicticio ? { 
-                ...item, cantidad: item.cantidad + 1, precio: info.precio, simbolo: info.simbolo,
+            setCarrito(carrito.map(item => item.clave === clave ? { 
+                ...item, cantidadPres: item.cantidadPres + n, cantidad: (item.cantidadPres + n) * pres.unidades, precio: info.precio, simbolo: info.simbolo,
                 tieneDescuento: info.tieneDescuento, porcentajeDescuento: info.porcentajeDescuento,
                 porcentajeIva: Number(producto.porcentajeIva) || 0,
                 imagen: imgProducto, marcaImagen: imgMarca, marcaNombre: producto.marca?.nombre
@@ -188,7 +193,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                 precio: info.precio, simbolo: info.simbolo, 
                 tieneDescuento: info.tieneDescuento, porcentajeDescuento: info.porcentajeDescuento,
                 porcentajeIva: Number(producto.porcentajeIva) || 0, 
-                cantidad: 1, imagen: imgProducto, marcaImagen: imgMarca, marcaNombre: producto.marca?.nombre,
+                clave, presentacion: pres.clave, presentacionEtiqueta: pres.etiqueta, unidadesPorPres: pres.unidades, cantidadPres: n, cantidad: n * pres.unidades,
+                imagen: imgProducto, marcaImagen: imgMarca, marcaNombre: producto.marca?.nombre,
                 isFicticio: false,
                 afectaInventario: true
             }]);
@@ -202,6 +208,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
         
         setCarrito([...carrito, {
             id: `ficticio-${Date.now()}`,
+            clave: `ficticio-${Date.now()}`, presentacion: 'UNIDAD', unidadesPorPres: 1, cantidadPres: Math.max(1, Math.floor(Number(values.cantidad) || 1)),
             isFicticio: true,
             codigo: '1010',
             nombre: values.nombre || 'Producto Genérico',
@@ -217,28 +224,28 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
         formFicticio.reset();
     };
 
-    const cambiarCantidad = (id, delta) => {
+    const cambiarCantidad = (clave, delta) => {
         setCarrito(carrito.map(item => {
-            if (item.id === id) {
-                const nuevaCantidad = item.cantidad + delta;
-                return nuevaCantidad > 0 ? { ...item, cantidad: nuevaCantidad } : null;
+            if (item.clave === clave) {
+                const nueva = item.cantidadPres + delta;
+                return nueva > 0 ? { ...item, cantidadPres: nueva, cantidad: nueva * item.unidadesPorPres } : null;
             }
             return item;
         }).filter(Boolean));
     };
 
-    const setCantidadAbsoluta = (id, cantidad) => {
+    const setCantidadAbsoluta = (clave, cantidad) => {
         if (cantidad === undefined || cantidad === null || cantidad === '') return;
         const cant = Math.floor(Number(cantidad));
-        if (!(cant > 0)) return eliminarItem(id);
-        setCarrito(carrito.map(item => item.id === id ? { ...item, cantidad: cant } : item));
+        if (!(cant > 0)) return eliminarItem(clave);
+        setCarrito(carrito.map(item => item.clave === clave ? { ...item, cantidadPres: cant, cantidad: cant * item.unidadesPorPres } : item));
     };
 
-    const toggleAfectaInventario = (id, value) => {
-        setCarrito(carrito.map(item => item.id === id ? { ...item, afectaInventario: value } : item));
+    const toggleAfectaInventario = (clave, value) => {
+        setCarrito(carrito.map(item => item.clave === clave ? { ...item, afectaInventario: value } : item));
     };
 
-    const eliminarItem = (id) => setCarrito(carrito.filter(item => item.id !== id));
+    const eliminarItem = (clave) => setCarrito(carrito.filter(item => item.clave !== clave));
 
     const llevaIva = (item) => Boolean(formVenta.values.conIva) && (item.isFicticio ? Boolean(item.aplicaIva) : item.porcentajeIva > 0);
     const costoFleteNum = Number(formVenta.values.costoFlete) || 0;
@@ -287,7 +294,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                     productoId: item.isFicticio ? null : item.id, 
                     isFicticio: item.isFicticio || false,
                     nombreFicticio: item.isFicticio ? item.nombre : null,
-                    cantidad: item.cantidad, 
+                    cantidad: item.cantidad, // siempre en unidades
+                    presentacionPedida: item.isFicticio ? null : item.presentacion,
+                    cantidadPresentacion: item.isFicticio ? null : item.cantidadPres,
                     precioUnitario: item.precio, 
                     subtotal: montoRenglonDe(carrito.indexOf(item)),
                     aplicaIva: formVenta.values.conIva ? (item.isFicticio ? item.aplicaIva : item.porcentajeIva > 0) : false,
@@ -407,9 +416,16 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                                         </Box>
                                                     </Group>
 
-                                                    <Badge color={infoPreview.simbolo === 'Bs' ? 'teal' : 'blue'} variant="light" size="lg" px={isMobile ? 4 : 8}>
-                                                        <PrecioVisual valor={infoPreview.precio} simbolo={infoPreview.simbolo} size="sm" fw={700} />
-                                                    </Badge>
+                                                    <Stack gap={4} align="flex-end">
+                                                        <Badge color={infoPreview.simbolo === 'Bs' ? 'teal' : 'blue'} variant="light" size="lg" px={isMobile ? 4 : 8}>
+                                                            <PrecioVisual valor={infoPreview.precio} simbolo={infoPreview.simbolo} size="sm" fw={700} />
+                                                        </Badge>
+                                                        {presentacionesDe(prod).filter((p) => p.clave !== 'UNIDAD').map((p) => (
+                                                            <Button key={p.clave} size="compact-xs" color="grape" variant="light" onClick={(e) => { e.stopPropagation(); agregarAlCarrito(prod, p.clave); }}>
+                                                                + {p.etiqueta}
+                                                            </Button>
+                                                        ))}
+                                                    </Stack>
                                                 </Group>
                                             </Paper>
                                         );
@@ -510,7 +526,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                     </Table.Thead>
                                     <Table.Tbody>
                                         {carrito.map((item, idxItem) => (
-                                            <Table.Tr key={item.id}>
+                                            <Table.Tr key={item.clave}>
                                                 <Table.Td>
                                                     <Group gap="xs" wrap="nowrap">
                                                         {item.isFicticio ? (
@@ -529,6 +545,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                                                 )}
                                                             </Group>
                                                             {!item.isFicticio && item.marcaNombre && <Text size="xs" c="dimmed">{item.marcaNombre}</Text>}
+                                                            {!item.isFicticio && item.presentacion !== 'UNIDAD' && (
+                                                                <Badge size="sm" color="grape" variant="filled" tt="none" mt={2}>{item.presentacionEtiqueta} · {item.cantidad} unidades</Badge>
+                                                            )}
                                                             {item.isFicticio && <Text size="xs" c="dimmed">Código: 1010</Text>}
                                                             
                                                             {!item.isFicticio && (
@@ -538,7 +557,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                                                     color="teal"
                                                                     label="Afectar inventario"
                                                                     checked={item.afectaInventario}
-                                                                    onChange={(e) => toggleAfectaInventario(item.id, e.currentTarget.checked)}
+                                                                    onChange={(e) => toggleAfectaInventario(item.clave, e.currentTarget.checked)}
                                                                 />
                                                             )}
                                                         </Box>
@@ -547,18 +566,18 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                                 
                                                 <Table.Td>
                                                     <Group gap="xs" wrap="nowrap" justify="center">
-                                                        <ActionIcon size="md" color="gray" variant="light" onClick={() => cambiarCantidad(item.id, -1)}>
+                                                        <ActionIcon size="md" color="gray" variant="light" onClick={() => cambiarCantidad(item.clave, -1)}>
                                                             <IconMinus size={16} />
                                                         </ActionIcon>
                                                         
                                                         <NumberInput
-                                                            value={item.cantidad}
-                                                            onChange={(val) => setCantidadAbsoluta(item.id, val)}
+                                                            value={item.cantidadPres}
+                                                            onChange={(val) => setCantidadAbsoluta(item.clave, val)}
                                                             min={1} allowDecimal={false} size="sm" w={75} hideControls
                                                             styles={{ input: { textAlign: 'center', fontWeight: 900, fontSize: '1rem', color: '#1971c2', backgroundColor: '#f8f9fa' } }}
                                                         />
                                                         
-                                                        <ActionIcon size="md" color="blue" variant="light" onClick={() => cambiarCantidad(item.id, 1)}>
+                                                        <ActionIcon size="md" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)}>
                                                             <IconPlus size={16} />
                                                         </ActionIcon>
                                                     </Group>
@@ -571,7 +590,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                                     <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="sm" fw={800} />
                                                 </Table.Td>
                                                 <Table.Td style={{ textAlign: 'right' }}>
-                                                    <ActionIcon color="red" variant="subtle" onClick={() => eliminarItem(item.id)}>
+                                                    <ActionIcon color="red" variant="subtle" onClick={() => eliminarItem(item.clave)}>
                                                         <IconTrash size={18} />
                                                     </ActionIcon>
                                                 </Table.Td>

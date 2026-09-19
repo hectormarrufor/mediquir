@@ -3,9 +3,9 @@ import { requerirStaff } from '@/app/api/inventario/_lib';
 import { rolDe } from '@/app/constants/roles';
 import { notificarCabezas } from '@/app/handlers/notificar';
 import db from '@/models/index';
-import { codigosDe, nivelDelCodigo, nivelMayor, NOMBRE_NIVEL, textoEntrega, unidadesDeEntrega } from '@/app/constants/presentaciones';
+import { nivelMayor, textoEntrega } from '@/app/constants/presentaciones';
 import {
-    buscarVentaParaEmpaque, codigosDelRenglon, entregaDeDetalle, imagenDe, nombreDe, modoVerificacion, opcionesDeMarca,
+    buscarVentaParaEmpaque, codigosDelRenglon, entregaDeDetalle, evaluarCodigo, imagenDe, nombreDe, modoVerificacion, opcionesDeMarca,
 } from '../../_empaque';
 
 const { sequelize, Venta, VentaEmpaqueItem } = db;
@@ -121,8 +121,15 @@ export async function POST(request, { params }) {
             return NextResponse.json({ success: true });
         }
 
-        if (accion !== 'VERIFICAR_ITEM') throw new ErrorEmpaque('Acción no válida');
+        if (!['VERIFICAR_ITEM', 'COMPROBAR_CODIGO'].includes(accion)) throw new ErrorEmpaque('Acción no válida');
         if (Number(venta.empacadorId) !== yo) throw new ErrorEmpaque('Este empaque no está asignado a ti', 403);
+
+        // Solo evalúa el código (no guarda nada): el wizard lo usa al escanear para avisar de inmediato qué se tiene en la mano
+        if (accion === 'COMPROBAR_CODIGO') {
+            const ev = evaluarCodigo(detalle, codigo, Boolean(escaneado));
+            await t.commit();
+            return NextResponse.json({ aceptado: ev.aceptado, productoOk: ev.productoOk, alerta: ev.alerta });
+        }
 
         const [reg] = await VentaEmpaqueItem.findOrCreate({
             where: { ventaDetalleId: detalle.id },
@@ -138,21 +145,13 @@ export async function POST(request, { params }) {
         let coincide = true;
         let nivelVerificado = null;
         const entrega = entregaDeDetalle(detalle);
-        let avisoNivel = null;
+        let alerta = null;
         if (modo === 'codigo') {
-            const aceptados = codigosDelRenglon(detalle);
-            nivelVerificado = nivelDelCodigo(aceptados, codigo, Boolean(escaneado));
-            coincide = Boolean(nivelVerificado);
+            const ev = evaluarCodigo(detalle, codigo, Boolean(escaneado));
+            alerta = ev.alerta;
+            coincide = ev.aceptado;
+            nivelVerificado = ev.aceptado ? ev.nivelEscaneado : null;
             metodo = escaneado && coincide ? 'escaneo' : 'codigo';
-            if (!coincide) {
-                // ¿Es un código válido del producto pero de OTRA presentación? (p. ej. la unidad cuando se piden cajas)
-                const otros = Object.entries(codigosDe(detalle.producto)).map(([nivel, cod]) => ({ nivel, codigo: cod }));
-                const otro = nivelDelCodigo(otros, codigo, Boolean(escaneado));
-                const exigido = aceptados.map((a) => NOMBRE_NIVEL[a.nivel]).join(' o ');
-                avisoNivel = otro
-                    ? `Ese es el código ${NOMBRE_NIVEL[otro]}, pero este renglón se entrega en ${textoEntrega(entrega)}: escanea el código ${exigido}.`
-                    : null;
-            }
         } else if (modo === 'marca') {
             coincide = String(marcaElegida || '') === detalle.producto.marca.nombre;
             metodo = 'marca';
@@ -162,10 +161,10 @@ export async function POST(request, { params }) {
             reg.intentosFallidos += 1;
             await reg.save({ transaction: t });
             await t.commit();
-            const msg = avisoNivel || (modo === 'codigo'
+            const msg = alerta ? `${alerta.titulo} ${alerta.detalle}` : (modo === 'codigo'
                 ? 'Ese código de barras no corresponde al producto pedido. Revisa que estés tomando el producto correcto.'
                 : 'Esa no es la marca del producto pedido. Revisa que estés tomando el producto correcto.');
-            return NextResponse.json({ error: msg, intentosFallidos: reg.intentosFallidos }, { status: 422 });
+            return NextResponse.json({ error: msg, alerta, intentosFallidos: reg.intentosFallidos }, { status: 422 });
         }
 
         // 2) ¿Lo que se metió coincide con lo pedido? El empacador cuenta por nivel (bultos, cajas, sueltas); sin desglose (clientes viejos) se compara el total

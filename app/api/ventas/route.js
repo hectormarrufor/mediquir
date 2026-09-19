@@ -9,6 +9,18 @@ import { crearRetencionPendiente } from '../_lib/retencionesVenta';
 import { calcularFactura, aBolivares, aDolares, REGLAS, precioPorTarifa, TARIFAS_VENDEDOR } from '@/app/constants/facturacion';
 import { rolDe } from '@/app/constants/roles';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
+import { presentacionDe } from '@/app/constants/presentaciones';
+
+// Presentación que se pidió ("2 cajas") validada contra la ficha del producto y contra la cantidad en unidades;
+// si algo no cuadra el renglón queda sin presentación (se entrega según el desglose por defecto)
+function presentacionValida(item, producto, unidades) {
+    const vacio = { presentacionPedida: null, cantidadPresentacion: null, unidadesPorPresentacion: null };
+    if (!producto || !['UNIDAD', 'CAJA', 'BULTO'].includes(item.presentacionPedida)) return vacio;
+    const pres = presentacionDe(producto, item.presentacionPedida);
+    const n = Number(item.cantidadPresentacion);
+    if (!pres || !Number.isInteger(n) || n < 1 || n * pres.unidades !== Number(unidades)) return vacio;
+    return { presentacionPedida: pres.clave, cantidadPresentacion: n, unidadesPorPresentacion: pres.unidades };
+}
 
 class ErrorNegocio extends Error {
     constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
@@ -217,6 +229,7 @@ export async function POST(request) {
                 aplicaIva: renglon.aplicaIva,
                 afectaInventario: item.isFicticio ? false : (esVend || item.afectaInventario !== false),
                 cantidad: renglon.cantidad,
+                ...presentacionValida(item, item.isFicticio ? null : productos.get(Number(item.productoId)), renglon.cantidad),
                 precioUnitario: renglon.precioUnitario,
                 subtotal: renglon.monto,
             }, { transaction: t });
