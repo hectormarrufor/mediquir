@@ -36,3 +36,126 @@
   font-weight: 700 !important;
   color: var(--mantine-color-dimmed);
 }
+
+/* =====================================================================
+   FONDO GLOBAL + AJUSTES BASE (2026)
+   El fondo lo dibuja <AppBackground /> con capas: malla de degradados,
+   resplandores animados, cuadrícula difuminada y grano sutil.
+   NO poner background en <html>: taparía la capa con z-index negativo.
+   ===================================================================== */
+body {
+  background: #F3F7FC;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+html { scroll-behavior: smooth; }
+
+::selection { background: alpha(var(--mantine-color-brand-6), 0.22); color: var(--mantine-color-navy-9); }
+
+* { scrollbar-width: thin; scrollbar-color: alpha(var(--mantine-color-navy-9), 0.28) transparent; }
+
+:focus-visible { outline: 2px solid var(--mantine-color-brand-6); outline-offset: 2px; }
+
+.app-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--bg-base);
+}
+
+.app-bg[data-variant='light'] {
+  --bg-base: linear-gradient(180deg, #F8FBFF 0%, #EEF4FB 100%);
+  --bg-blob-a: alpha(var(--mantine-color-brand-5), 0.26);
+  --bg-blob-b: alpha(var(--mantine-color-sky-3), 0.40);
+  --bg-blob-c: alpha(var(--mantine-color-accent-6), 0.09);
+  --bg-grid: alpha(var(--mantine-color-navy-9), 0.045);
+  --bg-noise: 0.05;
+}
+
+.app-bg[data-variant='dark'] {
+  --bg-base: linear-gradient(160deg, #050D1F 0%, #0A1A3A 55%, #06122B 100%);
+  --bg-blob-a: alpha(var(--mantine-color-brand-5), 0.42);
+  --bg-blob-b: alpha(var(--mantine-color-sky-3), 0.20);
+  --bg-blob-c: alpha(var(--mantine-color-accent-6), 0.10);
+  --bg-grid: rgba(255, 255, 255, 0.04);
+  --bg-noise: 0.07;
+}
+
+.app-bg__photo {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 0.22;
+  mix-blend-mode: luminosity;
+}
+
+.app-bg__blob {
+  position: absolute;
+  border-radius: 50%;
+  will-change: transform;
+}
+
+.app-bg__blob--a {
+  width: 62vmax; height: 62vmax; top: -22vmax; left: -18vmax;
+  background: radial-gradient(closest-side, var(--bg-blob-a), transparent);
+  animation: app-bg-drift-a 30s ease-in-out infinite alternate;
+}
+
+.app-bg__blob--b {
+  width: 56vmax; height: 56vmax; right: -20vmax; bottom: -22vmax;
+  background: radial-gradient(closest-side, var(--bg-blob-b), transparent);
+  animation: app-bg-drift-b 36s ease-in-out infinite alternate;
+}
+
+.app-bg__blob--c {
+  width: 34vmax; height: 34vmax; top: 38%; right: 8%;
+  background: radial-gradient(closest-side, var(--bg-blob-c), transparent);
+  animation: app-bg-drift-a 42s ease-in-out infinite alternate-reverse;
+}
+
+.app-bg__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 25%, #000 0%, transparent 72%);
+  mask-image: radial-gradient(ellipse at 50% 25%, #000 0%, transparent 72%);
+}
+
+.app-bg__noise {
+  position: absolute;
+  inset: 0;
+  opacity: var(--bg-noise);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+@keyframes app-bg-drift-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(6vmax, 5vmax, 0) scale(1.12); }
+}
+
+@keyframes app-bg-drift-b {
+  from { transform: translate3d(0, 0, 0) scale(1.05); }
+  to   { transform: translate3d(-7vmax, -4vmax, 0) scale(0.95); }
+}
+
+/* Móvil y "reducir movimiento": sin animación (ahorra batería) y cuadrícula más fina */
+@media (max-width: 48em) {
+  .app-bg__blob { animation: none; }
+  .app-bg__grid { background-size: 40px 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-bg__blob { animation: none; }
+  html { scroll-behavior: auto; }
+}
+
+/* Al desplazarse a una sección desde el menú, deja libre el header fijo */
+#especialidades, #productos-section, #contacto { scroll-margin-top: 84px; }

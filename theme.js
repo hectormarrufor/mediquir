@@ -11,9 +11,17 @@ export const theme = createTheme({
   colors: {
     ochre: ["#fdf9e8", "#f8efcd", "#eedb9b", "#e4c665", "#ddb437", "#d8a81a", "#d6a009", "#be8c00", "#a97c00", "#926a00"],
     petrolBlue: ["#eef4fa", "#dce7f3", "#b7cee6", "#8fb3d8", "#6e9dcc", "#588ec5", "#4b86c2", "#1a4768", "#123652", "#0a2338"],
-    petrolGray: ["#f4f6f8", "#e8eaed", "#d1d5db", "#b3bcca", "#94a3b8", "#74879e", "#5f738c", "#475569", "#334155", "#1e293b"]
+    petrolGray: ["#f4f6f8", "#e8eaed", "#d1d5db", "#b3bcca", "#94a3b8", "#74879e", "#5f738c", "#475569", "#334155", "#1e293b"],
+
+    // --- PALETA DE MARCA MEDIQUIR (landing, header, menú) ---
+    // En CSS: var(--mantine-color-brand-6), alpha(var(--mantine-color-navy-9), 0.4), etc.
+    // En componentes: color="brand.6", c="navy.9", bg="accent.6".
+    navy:   ["#eef2fa", "#dce4f3", "#b9c7e4", "#93a7d1", "#6d86bd", "#4c67a2", "#354d85", "#213765", "#142650", "#0b1b3d"], // 9 = #0B1B3D
+    brand:  ["#e6f1fc", "#cce2f7", "#99c5ef", "#66a7e6", "#338add", "#0e72cc", "#005aaa", "#004c90", "#003d74", "#002e58"], // 6 = #005AAA
+    accent: ["#fff0eb", "#ffddd2", "#ffbba5", "#ff9577", "#ff6e48", "#ff4b1e", "#f93200", "#d42b00", "#af2400", "#8a1d00"], // 6 = #F93200
+    sky:    ["#eaf6ff", "#d3ecff", "#a9dbff", "#6cc0ff", "#45aeff", "#1f9bff", "#0a85e6", "#086cbc", "#06548f", "#043b64"]  // 3 = #6CC0FF
   },
-  
+
   primaryColor: "ochre",
   primaryShade: { light: 6, dark: 6 },
   autoContrast: true,
@@ -134,3 +142,25 @@ export const theme = createTheme({
     },
   }
 });
+
+// Tokens compuestos (degradados, vidrio, sombras) derivados de la paleta del tema.
+// Mantine ya expone cada color como --mantine-color-<nombre>-<n>; aquí solo se añaden
+// las combinaciones que se repiten en landing, header y menú, para tener UNA fuente de verdad.
+// Uso en CSS: background: var(--mm-gradient-accent);
+export const cssVariablesResolver = (theme) => {
+  const { navy, brand, accent, sky } = theme.colors;
+
+  return {
+    variables: {},
+    light: {
+      '--mm-gradient-brand': `linear-gradient(90deg, ${navy[9]} 0%, ${brand[6]} 55%, ${sky[6]} 100%)`,
+      '--mm-gradient-accent': `linear-gradient(135deg, ${accent[5]} 0%, ${accent[6]} 55%, ${accent[7]} 100%)`,
+      '--mm-gradient-highlight': `linear-gradient(90deg, transparent 0%, ${sky[3]} 30%, ${accent[6]} 70%, transparent 100%)`,
+      '--mm-glass-bg': 'rgba(255, 255, 255, 0.72)',
+      '--mm-glass-border': 'rgba(255, 255, 255, 0.8)',
+      '--mm-glass-filter': 'blur(14px) saturate(140%)',
+      '--mm-shadow-card': `0 8px 28px ${theme.colors.navy[9]}12`,
+    },
+    dark: {},
+  };
+};
