@@ -11,6 +11,7 @@ import { rolDe } from '@/app/constants/roles';
 import { requerirStaff } from '../../inventario/_lib';
 import { crearYNotificar, notificarCabezas } from '@/app/handlers/notificar';
 import { RetencionIva } from '@/models';
+import { faltantesDeEmpaque, reiniciarEmpaque } from '../_empaque';
 
 // Error de reglas de logística (permisos, estados) con su código HTTP
 class ErrorLogistica extends Error {
@@ -180,6 +181,8 @@ export async function PUT(request, { params }) {
             await validarPersonal([empacadorId, etiquetadorId], t);
             const cambioEmpacador = Number(venta.empacadorId) !== Number(empacadorId);
             const cambioEtiquetador = Number(venta.etiquetadorId) !== Number(etiquetadorId);
+            // La evidencia (renglones verificados y fotos) es de una sola persona: si cambia el empacador se empieza de cero
+            if (cambioEmpacador && venta.empacadorId) await reiniciarEmpaque(venta, t);
             venta.empacadorId = Number(empacadorId);
             venta.etiquetadorId = Number(etiquetadorId);
             venta.asignadoAt = new Date();
@@ -188,7 +191,7 @@ export async function PUT(request, { params }) {
 
             try {
                 const url = `/superuser/ventas/${venta.id}`;
-                if (cambioEmpacador) await crearYNotificar({ usuarioId: Number(empacadorId), title: 'Tienes un pedido por empacar 📦', body: `Pedido ${venta.numeroDocumento}: prepara la mercancía y firma cuando termines.`, url, tipo: 'Info' });
+                if (cambioEmpacador) await crearYNotificar({ usuarioId: Number(empacadorId), title: 'Tienes un pedido por empacar 📦', body: `Pedido ${venta.numeroDocumento}: empácalo paso a paso desde tu teléfono; al terminar quedas como responsable.`, url: `${url}/empacar`, tipo: 'Info' });
                 if (cambioEtiquetador) await crearYNotificar({ usuarioId: Number(etiquetadorId), title: 'Tienes un pedido por etiquetar 🏷️', body: `Pedido ${venta.numeroDocumento}: etiqueta las cajas cuando estén empacadas y firma.`, url, tipo: 'Info' });
             } catch (e) {
                 console.error('No se pudo notificar la asignación:', e.message);
@@ -204,9 +207,13 @@ export async function PUT(request, { params }) {
             if (venta.empacadoAt) throw new ErrorLogistica('Ya firmaste este empaque', 409);
             if (cerrada) throw new ErrorLogistica('Este pedido ya está cerrado', 409);
 
+            const faltantes = await faltantesDeEmpaque(venta, t);
+            if (faltantes.length) throw new ErrorLogistica(faltantes[0], 409);
+
             await ejecutarEmpaque(venta, t, yo);
             venta.statusDespacho = 'Empacado';
             venta.empacadoAt = new Date();
+            venta.empaqueVerificado = true;
             await venta.save({ transaction: t });
             await t.commit();
             return NextResponse.json({ success: true, message: 'Empaque firmado' });

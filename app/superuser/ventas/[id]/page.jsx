@@ -15,6 +15,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import PrecioVisual from '@/app/components/ui/PrecioVisual';
 import RetencionIvaCard from '../_components/RetencionIvaCard';
+import EvidenciaEmpaque from '../_components/EvidenciaEmpaque';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function DetallePedidoMayorPage() {
@@ -193,7 +194,7 @@ export default function DetallePedidoMayorPage() {
                                 )}
                                 <Group mt="xl" justify="center" gap="sm">
                                     {Number(pedido.empacadorId) === Number(userId) && !pedido.empacadoAt && pedido.statusDespacho !== 'Cancelado' && (
-                                        <Button size="md" color="blue" loading={isSubmitting} leftSection={<IconPackage size={18} />} onClick={() => handleFirmar('FIRMAR_EMPAQUE', 'Empaque firmado.')}>Firmar empaque</Button>
+                                        <Button size="md" color="blue" loading={isSubmitting} leftSection={<IconPackage size={18} />} onClick={() => router.push(`/superuser/ventas/${params.id}/empacar`)}>Empacar paso a paso</Button>
                                     )}
                                     {Number(pedido.etiquetadorId) === Number(userId) && !pedido.etiquetadoAt && pedido.statusDespacho !== 'Cancelado' && (
                                         <Button size="md" color="grape" loading={isSubmitting} disabled={!pedido.empacadoAt} leftSection={<IconPackage size={18} />} onClick={() => handleFirmar('FIRMAR_ETIQUETADO', 'Etiquetado firmado.')}>
@@ -211,6 +212,8 @@ export default function DetallePedidoMayorPage() {
                                     )}
                                 </Group>
                             </Paper>
+
+                            <EvidenciaEmpaque ventaId={pedido.id} puedeLiberar={!esVendedor} />
 
                             <Paper withBorder p="md" radius="md" bg="white">
                                 <Text fw={700} size="lg" mb="md">Contenido del Pedido</Text>
@@ -456,7 +459,7 @@ export default function DetallePedidoMayorPage() {
                             }}>
                             Asignar (cada quien firma su parte)
                         </Button>
-                        <Button loading={isSubmitting} type="submit" fullWidth variant="light" color="blue">Asignar y empacar ahora (descuenta stock)</Button>
+                        <Button loading={isSubmitting} type="submit" fullWidth variant="light" color="blue">Empacar ya sin verificación (atajo de administración)</Button>
                     </Stack>
                 </form>
             </Modal>

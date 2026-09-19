@@ -90,6 +90,11 @@ const Venta = sequelize.define('Venta', {
     asignadoAt: { type: DataTypes.DATE, allowNull: true },
     empacadoAt: { type: DataTypes.DATE, allowNull: true },
     etiquetadoAt: { type: DataTypes.DATE, allowNull: true },
+    // Evidencia del empaque verificado (wizard): fotos de la caja y si el empaque pasó por la verificación renglón a renglón
+    fotoCajaAbiertaUrl: { type: DataTypes.TEXT, allowNull: true },
+    fotoCajaSelladaUrl: { type: DataTypes.TEXT, allowNull: true },
+    empaqueIniciadoAt: { type: DataTypes.DATE, allowNull: true },
+    empaqueVerificado: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     tipoEntrega: {
         type: DataTypes.ENUM('pickup', 'delivery', 'flete'),
         allowNull: false,
@@ -115,6 +120,7 @@ Venta.associate = (models) => {
     Venta.hasMany(models.MovimientoFinanciero, { foreignKey: 'ventaId', as: 'movimientos' });
     Venta.hasMany(models.SalidaInventario, { foreignKey: 'ventaId', as: 'salidasInventario' });
     Venta.hasMany(models.CuentaPorCobrar, { foreignKey: 'ventaId', as: 'cuentaPorCobrar' });
+    Venta.hasMany(models.VentaEmpaqueItem, { foreignKey: 'ventaId', as: 'empaqueItems', onDelete: 'CASCADE' });
     Venta.hasOne(models.PagoSms, { foreignKey: 'ventaId', as: 'pagoSms' })
 };
 

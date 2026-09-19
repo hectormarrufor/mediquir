@@ -43,6 +43,8 @@ const VENDEDOR_API = [
     ['POST', /^\/api\/ventas$/],
     ['GET', /^\/api\/ventas\/[^/]+$/],
     ['PUT', /^\/api\/ventas\/[^/]+$/],       // solo las acciones de firma (lo valida la ruta)
+    ['GET', /^\/api\/ventas\/[^/]+\/empaque$/],        // wizard de empaque: solo el empacador asignado (lo valida la ruta)
+    ['POST', /^\/api\/ventas\/[^/]+\/empaque(\/foto)?$/],
     ['GET', /^\/api\/compras$/],
     ['POST', /^\/api\/compras$/],
     ['GET', /^\/api\/vendedor\/[^/]+$/],
