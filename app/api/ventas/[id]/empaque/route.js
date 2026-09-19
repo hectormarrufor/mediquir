@@ -129,7 +129,7 @@ export async function POST(request, { params }) {
         let metodo = 'manual';
         let coincide = true;
         if (modo === 'codigo') {
-            coincide = codigoCoincide(detalle.producto.codigo, codigo, Boolean(escaneado));
+            coincide = codigoCoincide(detalle.producto.codigoBarras, codigo, Boolean(escaneado));
             metodo = escaneado && coincide ? 'escaneo' : 'codigo';
         } else if (modo === 'marca') {
             coincide = String(marcaElegida || '') === detalle.producto.marca.nombre;
@@ -141,7 +141,7 @@ export async function POST(request, { params }) {
             await reg.save({ transaction: t });
             await t.commit();
             const msg = modo === 'codigo'
-                ? 'Ese código no corresponde al producto pedido. Revisa que estés tomando el producto correcto.'
+                ? 'Ese código de barras no corresponde al producto pedido. Revisa que estés tomando el producto correcto.'
                 : 'Esa no es la marca del producto pedido. Revisa que estés tomando el producto correcto.';
             return NextResponse.json({ error: msg, intentosFallidos: reg.intentosFallidos }, { status: 422 });
         }

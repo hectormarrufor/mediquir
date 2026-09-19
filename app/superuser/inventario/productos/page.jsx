@@ -32,7 +32,7 @@ export default function InventarioProductosPage() {
     const { data: opciones } = useOpcionesInventario();
     const edicion = useEdicionInventario(opciones);
 
-    const [visibles, setVisibles] = useLocalStorage({ key: 'inv.columnas.v3', defaultValue: VISIBLES_POR_DEFECTO });
+    const [visibles, setVisibles] = useLocalStorage({ key: 'inv.columnas.v4', defaultValue: VISIBLES_POR_DEFECTO });
     const [bloqueado, setBloqueado] = useLocalStorage({ key: 'inv.bloqueado', defaultValue: false });
     const [contraidos, setContraidos] = useState(() => new Set());
     const [fotoDe, setFotoDe] = useState(null);

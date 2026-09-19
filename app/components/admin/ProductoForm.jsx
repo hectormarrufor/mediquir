@@ -56,7 +56,7 @@ export default function ProductoForm({ productId = null }) {
     // --- FORMULARIO PRINCIPAL ---
     const form = useForm({
         initialValues: {
-            nombre: '', codigo: '', categoriaId: '', marcaId: '', grupoEquivalenciaId: '',
+            nombre: '', codigo: '', codigoBarras: '', categoriaId: '', marcaId: '', grupoEquivalenciaId: '',
             tags: [], costoUsd: '', precio6: '', precio7: '', porcentajeDescuento: '',
             conIva: true, presentacion: 'unidad', unidadesPorCaja: '', cajasPorBulto: '', unidadesPorBulto: '',
             stockAlmacen: '', stockMinimo: '', imagen: null
@@ -91,6 +91,7 @@ export default function ProductoForm({ productId = null }) {
             form.setValues({
                 nombre: productoDB.nombre,
                 codigo: productoDB.codigo,
+                codigoBarras: productoDB.codigoBarras || '',
                 categoriaId: productoDB.categoriaId?.toString() || '',
                 marcaId: productoDB.marcaId?.toString() || '',
                 grupoEquivalenciaId: productoDB.grupoEquivalenciaId?.toString() || '',
@@ -157,6 +158,7 @@ export default function ProductoForm({ productId = null }) {
                 precio6: values.precio6 ? Number(values.precio6) : 0,
                 precio7: values.precio7 ? Number(values.precio7) : 0,
                 porcentajeIva: values.conIva ? 16 : 0,
+                codigoBarras: String(values.codigoBarras || '').trim() || null,
                 unidadesPorCaja: values.presentacion === 'caja' ? Number(values.unidadesPorCaja) : null,
                 cajasPorBulto: values.presentacion === 'caja' ? (Number(values.cajasPorBulto) || 1) : null,
                 // Con cajas: cajas x unidades por caja. Sin cajas: las unidades que trae el bulto directamente.
@@ -302,6 +304,15 @@ export default function ProductoForm({ productId = null }) {
                                     // 🔥 Fuerza a MAYÚSCULAS
                                     onChange={(e) => form.setFieldValue('codigo', e.currentTarget.value.toUpperCase())}
                                     error={form.errors.codigo}
+                                />
+                            </Grid.Col>
+
+                            <Grid.Col span={{ base: 12, md: 4 }}>
+                                <TextInput
+                                    label="Código de barras" placeholder="Opcional" inputMode="numeric"
+                                    description="El impreso en el empaque; vacío si no trae"
+                                    value={form.values.codigoBarras}
+                                    onChange={(e) => form.setFieldValue('codigoBarras', e.currentTarget.value.replace(/\s/g, ''))}
                                 />
                             </Grid.Col>
 

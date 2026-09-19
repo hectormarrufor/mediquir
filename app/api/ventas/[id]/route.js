@@ -9,12 +9,13 @@ const {
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
 import { rolDe } from '@/app/constants/roles';
 import { requerirStaff } from '../../inventario/_lib';
-import { crearYNotificar, notificarCabezas } from '@/app/handlers/notificar';
+import { crearYNotificar, notificarCabezas, notificarUsuario } from '@/app/handlers/notificar';
 import { RetencionIva } from '@/models';
 import { faltantesDeEmpaque, reiniciarEmpaque } from '../_empaque';
 import { borrarFotosSobrantes } from '../_fotosEmpaque';
 import { registrarAbono, ErrorAbono } from '../../_lib/abonos';
 import { recalcularCobro } from '../../_lib/retencionesVenta';
+import { eliminarVenta, borrarArchivosDeVenta } from '../_eliminar';
 
 // Error de reglas de logística (permisos, estados) con su código HTTP
 class ErrorLogistica extends Error {
@@ -194,8 +195,8 @@ export async function PUT(request, { params }) {
 
             try {
                 const url = `/superuser/ventas/${venta.id}`;
-                if (cambioEmpacador) await crearYNotificar({ usuarioId: Number(empacadorId), title: 'Tienes un pedido por empacar 📦', body: `Pedido ${venta.numeroDocumento}: empácalo paso a paso desde tu teléfono; al terminar quedas como responsable.`, url: `${url}/empacar`, tipo: 'Info' });
-                if (cambioEtiquetador) await crearYNotificar({ usuarioId: Number(etiquetadorId), title: 'Tienes un pedido por etiquetar 🏷️', body: `Pedido ${venta.numeroDocumento}: etiqueta las cajas cuando estén empacadas y firma.`, url, tipo: 'Info' });
+                if (cambioEmpacador) await notificarUsuario(Number(empacadorId), { title: 'Tienes un pedido por empacar 📦', body: `Pedido ${venta.numeroDocumento}: empácalo paso a paso desde tu teléfono; al terminar quedas como responsable.`, url: `${url}/empacar`, tipo: 'Info' });
+                if (cambioEtiquetador) await notificarUsuario(Number(etiquetadorId), { title: 'Tienes un pedido por etiquetar 🏷️', body: `Pedido ${venta.numeroDocumento}: etiqueta las cajas cuando estén empacadas y firma.`, url, tipo: 'Info' });
             } catch (e) {
                 console.error('No se pudo notificar la asignación:', e.message);
             }
@@ -422,49 +423,28 @@ export async function DELETE(request, { params }) {
             }, { status: 400 });
         }
 
-        // Revertir inventario si afectaba almacén y la venta era DETAL, ONLINE o ya estaba empacada/completada
-        for (const item of ventaAMatar.detalles) {
-            if (!item.isFicticio && item.afectaInventario !== false) {
-                if (
-                    ventaAMatar.tipoVenta === 'DETAL' || 
-                    ventaAMatar.tipoVenta === 'ONLINE' || // 👈 Añadido para incluir las ventas online
-                    ventaAMatar.statusDespacho === 'Empacado' || 
-                    ventaAMatar.statusDespacho === 'Completado'
-                ) {
-                    const producto = await Producto.findByPk(item.productoId, { transaction: t });
-                    if (producto) {
-                        producto.stockAlmacen = Number(producto.stockAlmacen) + Number(item.cantidad);
-                        producto.nroVentas = Math.max(0, Number(producto.nroVentas) - Number(item.cantidad));
-                        await producto.save({ transaction: t });
-                    }
-                }
-            }
-        }
-
-        // 🔥 DESTRUIR EN CASCADA TODOS LOS REGISTROS ASOCIADOS (INCLUYENDO CUENTAS Y ABONOS) 🔥
-        await MovimientoFinanciero.destroy({ where: { ventaId: id }, transaction: t });
-        await SalidaInventario.destroy({ where: { ventaId: id }, transaction: t });
-        await Abono.destroy({ where: { ventaId: id }, transaction: t });              // Novedad: Borra historial de pagos
-        await CuentaPorCobrar.destroy({ where: { ventaId: id }, transaction: t });    // Novedad: Borra la cuenta por cobrar
-        await VentaDetalle.destroy({ where: { ventaId: id }, transaction: t });
-
-        // Destruir venta principal
-        await ventaAMatar.destroy({ transaction: t });
-
-        // Retroceder correlativo
-        let prefijo = ventaAMatar.tipoDocumento === 'FACTURA' ? 'F' : (ventaAMatar.tipoDocumento === 'NOTA_ENTREGA' ? 'NE' : 'V');
-        let corr = await Correlativo.findOne({ where: { prefijo }, transaction: t });
-
-        if (corr && corr.siguienteNumero > 1) {
-            corr.siguienteNumero -= 1;
-            await corr.save({ transaction: t });
-        }
+        // Elimina la venta con TODO lo que cuelga de ella: inventario, notas de crédito y débito, retenciones, abonos, cuenta por cobrar,
+        // movimientos, evidencia de empaque y notificaciones; libera el pago móvil enlazado y retrocede los correlativos
+        const { archivos, controles, resumen } = await eliminarVenta({ venta: ventaAMatar, transaction: t });
 
         await t.commit();
 
+        // Archivos del Blob (comprobantes de retención y fotos de empaque): fuera de la transacción para no retenerla durante la red
+        let archivosBorrados = 0;
+        try {
+            archivosBorrados = await borrarArchivosDeVenta(ventaAMatar.numeroDocumento, archivos);
+        } catch (e) {
+            console.error('No se pudieron borrar los archivos del Blob de la venta eliminada:', archivos, e.message);
+        }
+
+        const partes = [];
+        if (resumen.notas) partes.push(`${resumen.notas} nota(s) de crédito o débito`);
+        if (resumen.retenciones) partes.push('su retención de IVA');
+        if (archivosBorrados) partes.push(`${archivosBorrados} archivo(s) del Blob`);
         return NextResponse.json({
             success: true,
-            message: 'La última venta fue eliminada (junto con su cuenta por cobrar y abonos) y el correlativo retrocedió.'
+            message: `La última venta fue eliminada con todo su rastro${partes.length ? ` (${partes.join(', ')})` : ''} y los correlativos retrocedieron.${controles.length ? ` Los números de control ya asignados (${controles.join(', ')}) no retroceden solos: ajústalos en Numeración fiscal si esa forma no se gastó.` : ''}`,
+            ...resumen, archivosBorrados, controles,
         }, { status: 200 });
 
     } catch (error) {

@@ -189,8 +189,8 @@ export default function EmpacarPage() {
                                 <>
                                     {actual.modo === 'codigo' && (
                                         <TextInput
-                                            label="Código del producto" size="md" value={codigo} autoComplete="off"
-                                            description="Escanea el código de barras o escribe los últimos 4 dígitos del código"
+                                            label="Código de barras del producto" size="md" value={codigo} autoComplete="off" inputMode="numeric"
+                                            description={`Escríbelo (o solo sus últimos 4 dígitos)${escanerDisponible() ? ' o escanéalo con la cámara' : ''}`}
                                             onChange={(e) => { setCodigo(e.currentTarget.value); setEscaneado(false); }}
                                             rightSection={escanerDisponible() ? <ActionIcon variant="light" size="lg" onClick={() => setVerEscaner(true)}><IconScan size={20} /></ActionIcon> : null}
                                         />

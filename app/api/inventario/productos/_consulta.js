@@ -44,6 +44,7 @@ export function construirWhere(f) {
             [Op.or]: [
                 { nombre: { [Op.iLike]: patron } },
                 { codigo: { [Op.iLike]: patron } },
+                { codigoBarras: { [Op.iLike]: patron } }, // se puede escanear un código de barras en el buscador
                 { '$marca.nombre$': { [Op.iLike]: patron } },
                 sequelize.literal(`EXISTS (SELECT 1 FROM "GruposEquivalencia" g WHERE g."id" = "Producto"."grupoEquivalenciaId" AND g."nombre" ILIKE ${sequelize.escape(patron)})`),
                 sequelize.literal(`EXISTS (SELECT 1 FROM "ProductoTags" pt JOIN "Tags" t ON t."id" = pt."tagId"

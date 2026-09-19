@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
-import { Cliente, Marca, Producto, Venta, VentaDetalle } from '@/models';
+import { Cliente, Marca, Producto, Venta, VentaDetalle, VentaEmpaqueItem } from '@/models';
 import { aDolares } from '@/app/constants/facturacion';
 import { requerirStaff } from '../../inventario/_lib';
 import { tasaVigente } from '../../_lib/tasaBcv';
@@ -70,12 +70,20 @@ export async function GET() {
             tasaVigente().catch(() => null),
         ]);
 
+        // Avance del empaque paso a paso: cuántos productos ya verificó de cada pedido
+        const idsEmpacar = porEmpacar.map((v) => v.id);
+        const verificados = new Map();
+        if (idsEmpacar.length) {
+            const items = await VentaEmpaqueItem.findAll({ where: { ventaId: idsEmpacar, estado: 'OK' }, attributes: ['ventaId'], raw: true });
+            items.forEach((i) => verificados.set(i.ventaId, (verificados.get(i.ventaId) || 0) + 1));
+        }
+
         const detal = ventasHoy.filter((v) => v.tipoVenta === 'DETAL');
         const suma = (lista) => Number(lista.reduce((a, v) => a + totalEnUsd(v), 0).toFixed(2));
 
         return NextResponse.json({
             tasa,
-            porEmpacar: porEmpacar.map(tarea),
+            porEmpacar: porEmpacar.map((v) => ({ ...tarea(v), renglones: v.detalles.length, verificados: verificados.get(v.id) || 0, iniciado: Boolean(v.empaqueIniciadoAt) || verificados.has(v.id) })),
             porEtiquetar: porEtiquetar.map(tarea),
             firmadas: firmadas.map((v) => ({
                 id: v.id, numero: v.numeroDocumento, cliente: v.cliente?.nombre || 'Cliente al detal',

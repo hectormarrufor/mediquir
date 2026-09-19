@@ -215,6 +215,10 @@ export async function notificarSinGuardarEnDB(data) {
     }
 }
 
+// Puestos que reciben los avisos importantes. OJO: en la base los administradores tienen el puesto "Administrador" (masculino);
+// antes solo estaba "Administradora" y esos avisos no les llegaban.
+const PUESTOS_CABEZAS = ['Presidente', 'Desarrollador Web', 'Administradora', 'Administrador', 'Gerente Operacional'];
+
 // 4. WRAPPERS
 export async function notificarAdmins(payload) {
     return crearYNotificar({ ...payload, departamentos: ['IT', 'Presidencia'] });
@@ -249,7 +253,7 @@ export async function notificarAdministracion(payload) {
 }
 
 export async function notificarCabezas(payload) {
-    return crearYNotificar({ ...payload, puestos: ['Presidente', 'Desarrollador Web', 'Administradora', "Gerente Operacional"] });
+    return crearYNotificar({ ...payload, puestos: PUESTOS_CABEZAS });
 }
 
 export async function notificarDev(payload) {
@@ -257,7 +261,7 @@ export async function notificarDev(payload) {
 }
 
 export async function notificarCabezasSinPush(payload) {
-    return crearSinNotificar({ ...payload, puestos: ['Presidente', 'Desarrollador Web', 'Administradora', "Gerente Operacional"] });
+    return crearSinNotificar({ ...payload, puestos: PUESTOS_CABEZAS });
 }
 
 export async function notificarTodosSinPush(payload) {

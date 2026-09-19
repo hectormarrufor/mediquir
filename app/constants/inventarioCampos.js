@@ -12,6 +12,7 @@ export const PRESENTACIONES = [
 
 export const CAMPOS = {
     codigo: { tipo: 'texto', max: 60, requerido: true },
+    codigoBarras: { tipo: 'texto', max: 64 }, // opcional: vacío = el producto no trae código de barras
     nombre: { tipo: 'texto', max: 255, requerido: true },
     imagen: { tipo: 'texto', max: 255 },
     stockAlmacen: { tipo: 'numero', min: 0, max: 99999999, decimales: 2 },

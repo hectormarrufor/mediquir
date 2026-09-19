@@ -11,7 +11,7 @@ export function buscarVentaParaEmpaque(id, opciones = {}) {
         where: UUID_REGEX.test(id) ? { id } : { numeroDocumento: id },
         include: [
             { model: VentaDetalle, as: 'detalles', include: [{
-                model: Producto, as: 'producto', attributes: ['id', 'nombre', 'codigo', 'imagen'],
+                model: Producto, as: 'producto', attributes: ['id', 'nombre', 'codigo', 'codigoBarras', 'imagen'],
                 include: [
                     { model: Marca, as: 'marca', attributes: ['id', 'nombre', 'imagen'] },
                     { model: GrupoEquivalencia, as: 'grupoEquivalencia', attributes: ['id', 'nombre', 'imagen'] },
@@ -23,12 +23,17 @@ export function buscarVentaParaEmpaque(id, opciones = {}) {
     });
 }
 
+// Las imágenes se guardan como nombre de archivo ("0899_1786496446230.jpg"): el navegador necesita la URL completa del Blob
+const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL || '';
+const aUrl = (ruta) => (!ruta ? null : (/^(https?:)?\/\//.test(ruta) || ruta.startsWith('data:')) ? ruta : `${BLOB}/${ruta}`);
+
 // Foto que guía al empacador: la del producto; si no tiene, la de su grupo de equivalencia; en última instancia la de la marca
-export const imagenDe = (producto) => producto?.imagen || producto?.grupoEquivalencia?.imagen || producto?.marca?.imagen || null;
+export const imagenDe = (producto) => aUrl(producto?.imagen || producto?.grupoEquivalencia?.imagen || producto?.marca?.imagen);
 
 export const nombreDe = (detalle) => (detalle.isFicticio ? detalle.nombreFicticio : detalle.producto?.nombre) || 'Producto';
 
-export const normalizarCodigo = (s) => String(s ?? '').trim().toLowerCase();
+// Sin espacios ni mayúsculas: un espacio suelto al teclear o registrar el código no debe impedir la coincidencia
+export const normalizarCodigo = (s) => String(s ?? '').replace(/\s+/g, '').toLowerCase();
 
 // El código escaneado o tecleado corresponde al producto: código completo, sus últimos dígitos (mínimo 4) o,
 // si vino de la cámara, un código de barras que contenga el código del producto
@@ -41,10 +46,14 @@ export function codigoCoincide(esperado, ingresado, escaneado = false) {
     return d.length >= 4 && d.length < e.length && e.endsWith(d);
 }
 
-// ¿Cómo se comprueba este renglón? codigo: tiene código · marca: no tiene código, se elige la marca · manual: ni una cosa ni la otra
+// ¿Cómo se comprueba este renglón?
+//   codigo: el producto trae código de barras (`codigoBarras`, el impreso en el empaque): se escanea o se escribe
+//   marca : no trae código de barras (p. ej. una hojilla de bisturí): se elige la marca que dice el empaque
+//   manual: ni código de barras ni marca registrada
+// OJO: el código interno (`codigo`, ej. 0483) NO sirve para esto: el empacador no lo ve en el producto físico.
 export function modoVerificacion(detalle) {
     if (detalle.isFicticio || !detalle.producto) return 'manual';
-    if (detalle.producto.codigo) return 'codigo';
+    if (detalle.producto.codigoBarras) return 'codigo';
     if (detalle.producto.marca?.nombre) return 'marca';
     return 'manual';
 }

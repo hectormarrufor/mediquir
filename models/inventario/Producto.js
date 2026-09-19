@@ -33,6 +33,12 @@ const Producto = sequelize.define('Producto', {
         allowNull: true, 
         unique: true, // Es vital que sea único para que no haya dos SKUs iguales
     },
+    // Código de barras IMPRESO en el empaque (EAN/UPC), distinto del código interno. Vacío = el producto no trae código de barras.
+    // El empaque de pedidos lo usa para comprobar que se tomó el producto correcto (sin él se verifica por la marca).
+    codigoBarras: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+    },
     // --- ESTRUCTURA DE PRECIOS Y COSTOS (En USD) ---
     costoUsd: { 
         type: DataTypes.DECIMAL(12, 5), // costo de UNA unidad: necesita más decimales (p. ej. 0.00825 por guante)

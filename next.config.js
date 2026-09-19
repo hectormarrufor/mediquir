@@ -18,6 +18,12 @@ const nextConfig = {
   // Importa solo los iconos/componentes que se usan en vez de cargar cada librería completa (menos módulos por compilar)
   experimental: {
     optimizePackageImports: ['@mantine/core', '@mantine/hooks', '@mantine/dates', '@mantine/charts', '@tabler/icons-react', 'date-fns', 'dayjs'],
+    // `npm run dev` usa Turbopack, que ignora la función `webpack` de abajo (esa solo aplica a `next build` y a `dev:webpack`).
+    // Declarar esta sección con su valor por defecto le dice a Next que Turbopack está contemplado y quita el aviso
+    // "Webpack is configured while Turbopack is not". No cambia nada de cómo compila.
+    turbo: {
+      resolveExtensions: ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.json'],
+    },
   },
   serverExternalPackages: ['sequelize', 'pg', 'pg-hstore', 'pg-connection-string'],
   

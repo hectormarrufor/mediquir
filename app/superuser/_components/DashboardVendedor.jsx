@@ -65,6 +65,7 @@ function Acceso({ icono: Icono, color, titulo, descripcion, onClick }) {
 
 // Una tarea de logística (empacar o etiquetar) con su lista de productos y el botón para firmarla
 function TarjetaTarea({ tarea, tipo, onFirmar }) {
+    const router = useRouter();
     const [abierto, { toggle }] = useDisclosure(false);
     const esEmpaque = tipo === 'empaque';
     const esperando = !esEmpaque && !tarea.empacado; // no se puede etiquetar lo que aún no está empacado
@@ -102,10 +103,14 @@ function TarjetaTarea({ tarea, tipo, onFirmar }) {
             <Group justify="space-between" mt="md" wrap="wrap">
                 {esperando
                     ? <Badge color="gray" variant="light" leftSection={<IconClock size={12} />}>Esperando que se firme el empaque</Badge>
-                    : <Text size="xs" c="dimmed">{esEmpaque ? 'Al firmar se descuenta el stock y queda constancia con tu nombre.' : 'Firma cuando las cajas estén etiquetadas.'}</Text>}
-                <Button size="sm" color={esEmpaque ? 'brand.6' : 'accent.6'} disabled={esperando} leftSection={<IconCircleCheck size={16} />} onClick={() => onFirmar(tarea, tipo)}>
-                    {esEmpaque ? 'Firmar empaque' : 'Firmar etiquetado'}
-                </Button>
+                    : <Text size="xs" c="dimmed">{esEmpaque ? (tarea.iniciado ? `Llevas ${tarea.verificados} de ${tarea.renglones} productos verificados.` : 'Verificas cada producto y tomas fotos de la caja; al confirmar quedas como responsable.') : 'Firma cuando las cajas estén etiquetadas.'}</Text>}
+                {esEmpaque ? (
+                    <Button size="sm" color="brand.6" leftSection={<IconPackage size={16} />} onClick={() => router.push(`/superuser/ventas/${tarea.id}/empacar`)}>
+                        {tarea.iniciado ? 'Continuar empaque' : 'Empacar paso a paso'}
+                    </Button>
+                ) : (
+                    <Button size="sm" color="accent.6" disabled={esperando} leftSection={<IconCircleCheck size={16} />} onClick={() => onFirmar(tarea, tipo)}>Firmar etiquetado</Button>
+                )}
             </Group>
         </Paper>
     );
