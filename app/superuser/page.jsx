@@ -47,6 +47,13 @@ const menuOptions = [
     { title: 'Pagos Moviles recibidos', href: '/superuser/pagos-recibidos', description: 'Gestión de pagos móviles recibidos.', icon: IconCurrencyDollar, color: 'blue' },
 ];
 
+// Permisos que no son una pantalla del menú, pero se administran en el mismo panel de Control de Accesos.
+// Los administradores siempre pueden; el resto, solo si su usuario, puesto o departamento está aquí.
+// (El servidor lo valida en app/api/inventario/_lib.js con la misma clave.)
+const permisosExtra = [
+    { title: 'Inventario · edición tipo hoja de cálculo', href: 'inventario:editar', description: 'Editar stock, costos y precios directamente en la hoja de inventario.', icon: IconArchive, color: 'teal' },
+];
+
 const FadeInSection = ({ children, delay = 0 }) => {
     const [isVisible, setVisible] = useState(false);
     const domRef = useRef(null);
@@ -241,7 +248,7 @@ export default function SuperUserHome() {
                 <Modal opened={modalAbierto} onClose={() => setModalAbierto(false)} title={<Text fw={700} size="md">Control de Accesos</Text>} size="xl">
                     <Stack gap="xs">
                         <Box style={{ maxHeight: '65vh', overflowY: 'auto', paddingRight: '5px' }}>
-                            {menuOptions.map((opt) => (
+                            {[...menuOptions, ...permisosExtra].map((opt) => (
                                 <Paper key={opt.href} withBorder p="xs" radius="sm" mb="xs" bg="gray.0">
                                     <Group mb="xs" gap="xs">
                                         <ThemeIcon size="sm" variant="light" color={opt.color}><opt.icon size={14} /></ThemeIcon>

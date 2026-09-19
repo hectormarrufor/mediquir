@@ -1,0 +1,261 @@
+/* Hoja de inventario: comportamiento tipo Excel (celda activa, edición en línea, estados de guardado). */
+
+.contenedor {
+    position: relative;
+    overflow: auto;
+    max-height: calc(100vh - 410px);
+    min-height: 320px;
+    border: 1px solid var(--mantine-color-gray-3);
+    border-radius: var(--mantine-radius-md);
+    background: #fff;
+    outline: none;
+}
+
+.contenedor:focus-visible {
+    box-shadow: 0 0 0 2px alpha(var(--mantine-color-brand-6), 0.35);
+}
+
+.cargando {
+    opacity: 0.55;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
+.tabla {
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+    font-size: 13px;
+}
+
+.th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    padding: 8px 10px;
+    background: var(--mantine-color-gray-0);
+    border-bottom: 2px solid var(--mantine-color-gray-3);
+    border-right: 1px solid var(--mantine-color-gray-2);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--mantine-color-gray-7);
+    white-space: nowrap;
+    user-select: none;
+}
+
+.thOrden {
+    cursor: pointer;
+}
+
+.thOrden:hover {
+    background: var(--mantine-color-gray-1);
+    color: var(--mantine-color-navy-9);
+}
+
+.thActivo {
+    color: var(--mantine-color-brand-7);
+}
+
+.td {
+    position: relative;
+    height: 40px;
+    padding: 0 10px;
+    border-bottom: 1px solid var(--mantine-color-gray-2);
+    border-right: 1px solid var(--mantine-color-gray-1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: #fff;
+    cursor: cell;
+}
+
+.derecha {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.solo {
+    cursor: default;
+    color: var(--mantine-color-gray-8);
+}
+
+/* Columna del producto fija a la izquierda al desplazar en horizontal */
+.fija {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    box-shadow: 1px 0 0 var(--mantine-color-gray-3);
+}
+
+.th.fija {
+    z-index: 4;
+}
+
+.fila:hover .td {
+    background: color-mix(in srgb, var(--mantine-color-brand-6) 6%, #fff);
+}
+
+/* Estado del stock: franja de color en el borde izquierdo de la fila */
+.fila[data-stock='agotado'] .td:first-child {
+    box-shadow: inset 4px 0 0 var(--mantine-color-red-6);
+}
+
+.fila[data-stock='bajo'] .td:first-child {
+    box-shadow: inset 4px 0 0 var(--mantine-color-orange-5);
+}
+
+.fila[data-stock='agotado'] .stock {
+    color: var(--mantine-color-red-7);
+    font-weight: 800;
+}
+
+.fila[data-stock='bajo'] .stock {
+    color: var(--mantine-color-orange-8);
+    font-weight: 800;
+}
+
+/* Celda activa (seleccionada) */
+.td[data-activa] {
+    outline: 2px solid var(--mantine-color-brand-6);
+    outline-offset: -2px;
+    background: color-mix(in srgb, var(--mantine-color-brand-6) 9%, #fff);
+}
+
+.td[data-editando] {
+    padding: 0;
+    overflow: visible;
+    z-index: 5;
+    background: #fff;
+    box-shadow: 0 0 0 2px var(--mantine-color-brand-6), 0 8px 24px alpha(var(--mantine-color-navy-9), 0.25);
+}
+
+.editor {
+    width: 100%;
+    height: 40px;
+    padding: 0 10px;
+    font-size: 13px;
+}
+
+.errorEdicion {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 6;
+    padding: 4px 8px;
+    border-radius: 0 0 6px 6px;
+    background: var(--mantine-color-red-7);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Estado de guardado por celda */
+.td[data-estado='guardando'] {
+    background: color-mix(in srgb, var(--mantine-color-brand-6) 14%, #fff);
+}
+
+.td[data-estado='guardando']::after {
+    content: '';
+    position: absolute;
+    right: 4px;
+    top: 4px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 2px solid var(--mantine-color-brand-6);
+    border-top-color: transparent;
+    animation: girar 0.7s linear infinite;
+}
+
+.td[data-estado='ok'] {
+    animation: guardado 1.4s ease-out;
+}
+
+.td[data-estado='error'] {
+    background: color-mix(in srgb, var(--mantine-color-red-6) 14%, #fff);
+    outline: 2px solid var(--mantine-color-red-6);
+    outline-offset: -2px;
+}
+
+@keyframes girar {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes guardado {
+    0% { background: color-mix(in srgb, var(--mantine-color-teal-5) 45%, #fff); }
+    100% { background: #fff; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .td[data-estado='ok'],
+    .td[data-estado='guardando']::after {
+        animation: none;
+    }
+}
+
+.puntoDeficit {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: var(--mantine-color-red-6);
+}
+
+.margenAlto { color: var(--mantine-color-teal-8); font-weight: 700; }
+.margenBajo { color: var(--mantine-color-red-7); font-weight: 700; }
+
+.ayuda kbd {
+    padding: 1px 6px;
+    border: 1px solid var(--mantine-color-gray-4);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 11px;
+    font-family: inherit;
+}
+
+/* ---- Filas padre (grupo de equivalencia) y sus hermanos ---- */
+.filaGrupo .td {
+    background-color: #eef4fa;
+    font-weight: 700;
+    color: var(--mantine-color-navy-9);
+    border-bottom: 1px solid var(--mantine-color-gray-3);
+}
+
+.filaGrupo:hover .td {
+    background: #e4eef8;
+}
+
+.grupoNombre {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hijoNombre {
+    display: block;
+    padding-left: 22px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: relative;
+}
+
+.hijoNombre::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    border-left: 1.5px solid var(--mantine-color-gray-4);
+    border-bottom: 1.5px solid var(--mantine-color-gray-4);
+    transform: translateY(-70%);
+}
+
+.noAplica {
+    color: var(--mantine-color-gray-4);
+}

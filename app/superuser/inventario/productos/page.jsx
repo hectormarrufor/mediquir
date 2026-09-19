@@ -1,921 +1,172 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useForm } from '@mantine/form';
-import ImageDropzone from '@/app/components/ImageDropzone';
-import {
-    Box, Button, Group, Title, Table, Badge, ActionIcon,
-    Loader, Center, Text, Paper, Avatar, TextInput, Select,
-    ScrollArea, Stack, Tooltip, Card, Grid, Divider, ThemeIcon, Progress,
-    Modal,
-    NumberInput
-} from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
-import {
-    IconPlus, IconEdit, IconTrash, IconSearch,
-    IconFilter, IconBox, IconTags, IconSitemap, IconX, IconSortAscending, IconCalendar
-} from '@tabler/icons-react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, Badge, Box, Button, Group, Paper, Skeleton, Text, Title, Tooltip } from '@mantine/core';
+import { useLocalStorage, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import dayjs from 'dayjs';
-import { useAuth } from '../../../../hooks/useAuth';
+import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
+import { IconAlertCircle, IconEye, IconPencil } from '@tabler/icons-react';
+import { COLUMNAS, VISIBLES_POR_DEFECTO, aplanarEntradas } from './_lib/columnas';
+import { useInventarioParams } from './_hooks/useInventarioParams';
+import { useEdicionInventario, useListaInventario, useOpcionesInventario, useResumenInventario } from './_hooks/useInventario';
+import BarraFiltros from './_components/BarraFiltros';
+import FotoModal from './_components/FotoModal';
+import InventarioGrid from './_components/InventarioGrid';
+import ListaMovil from './_components/ListaMovil';
+import PaginacionInventario from './_components/PaginacionInventario';
+import ResumenKpis from './_components/ResumenKpis';
+import classes from './_components/grid.module.css';
 
-// =======================================================================
-// 1. TARJETA MÓVIL INDIVIDUAL
-// =======================================================================
-const ProductoCardMovil = ({ prod, stockPorGrupos, onEdit, onDelete, onImageClick, esGrupo, onEditFinanzas, onEditStock, onEditPresentacion }) => {
-    const { isAdmin } = useAuth(); // 🔥 Extraemos el rol también en móvil
-    const isCriticoIndividual = Number(prod.stockAlmacen) <= Number(prod.stockMinimo);
-    const imgSrc = prod.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}` : (prod.marca?.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.marca.imagen}` : null);
-
-    return (
-        <Card withBorder radius="md" p="md" shadow="sm" bg="white">
-            <Group wrap="nowrap" align="flex-start" justify="space-between" mb="sm">
-                <Group wrap="nowrap" gap="sm" style={{ flex: 1 }}>
-                    <Avatar
-                        src={imgSrc} alt={prod.nombre} radius="sm" size="lg" color="blue"
-                        styles={{ image: { objectFit: 'contain' } }}
-                        style={{ cursor: imgSrc ? 'pointer' : 'default' }}
-                        onClick={() => imgSrc && onImageClick(imgSrc)}
-                    >
-                        {prod.nombre.charAt(0)}
-                    </Avatar>
-                    <Box style={{ flex: 1 }}>
-                        <Text fw={700} size="sm" lh={1.2} lineClamp={2}>{prod.nombre}</Text>
-                        <Group gap={4} mt={4}>
-                            <Text size="xs" c="dimmed">{prod.codigo}</Text>
-                            {prod.marca && <Badge size="xs" variant="dot" color="grape">{prod.marca.nombre}</Badge>}
-                        </Group>
-                    </Box>
-                </Group>
-                {!esGrupo && (
-                    <Badge color={isCriticoIndividual ? 'red' : 'green'} variant="light" size="xs">
-                        {isCriticoIndividual ? 'Crítico' : 'Óptimo'}
-                    </Badge>
-                )}
-            </Group>
-
-            <Divider variant="dotted" mb="sm" />
-
-            <Grid gutter="xs" mb="sm">
-                <Grid.Col span={6}>
-                    <Group justify="space-between" align="center">
-                        <Box>
-                            <Text size="xs" c="dimmed">Presentación</Text>
-                            <Text size="sm" tt="capitalize" fw={500} lh={1.1}>
-                                {prod.presentacion}
-                                {prod.presentacion === 'caja' && prod.unidadesPorCaja && <Text span size="xs" c="dimmed"> ({prod.unidadesPorCaja}u)</Text>}
-                            </Text>
-                        </Box>
-                        {isAdmin && (
-                            <ActionIcon variant="light" color="orange" size="xs" onClick={() => onEditPresentacion(prod)}>
-                                <IconEdit size={12} />
-                            </ActionIcon>
-                        )}
-                    </Group>
-                </Grid.Col>
-
-
-                {/* 🔥 FINANZAS CON EDICIÓN RÁPIDA MÓVIL 🔥 */}
-                <Grid.Col span={8}>
-                    <Group gap="xs" align="flex-start">
-                        <Box>
-                            <Text size="xs" c="dimmed">Finanzas</Text>
-                            <Text size="xs" fw={700} c="green.8" lh={1.1}>C: ${Number(prod.costoUsd).toFixed(2)}</Text>
-                            {Number(prod.precio6) > 0 && <Text size="xs" fw={600} c="blue.7" lh={1.1}>P6: ${Number(prod.precio6).toFixed(3)}</Text>}
-                            {Number(prod.precio7) > 0 && <Text size="xs" fw={600} c="grape.7" lh={1.1}>P7: ${Number(prod.precio7).toFixed(3)}</Text>}
-                            {Number(prod.precioDescuento) > 0 && <Badge color="red" size="xs" mt={2} variant="filled">OFERTA: ${Number(prod.precioDescuento).toFixed(2)}</Badge>}
-                        </Box>
-                        {isAdmin && (
-                            <ActionIcon variant="light" color="blue" size="sm" onClick={() => onEditFinanzas(prod)} mt={16}>
-                                <IconEdit size={14} />
-                            </ActionIcon>
-                        )}
-                    </Group>
-                </Grid.Col>
-
-                {/* 🔥 STOCK CON EDICIÓN RÁPIDA MÓVIL 🔥 */}
-                <Grid.Col span={4}>
-                    <Text size="xs" c="dimmed">Stock Actual</Text>
-                    <Group gap={4} align="center" mt={2}>
-                        <Text size="sm" fw={900} lh={1.1}>{Number(prod.stockAlmacen)}</Text>
-                        {isAdmin && (
-                            <ActionIcon variant="light" color="teal" size="xs" onClick={() => onEditStock(prod)}>
-                                <IconEdit size={12} />
-                            </ActionIcon>
-                        )}
-                    </Group>
-                </Grid.Col>
-            </Grid>
-
-            {prod.tags && prod.tags.length > 0 && (
-                <Group gap={4} mb="sm">
-                    {prod.tags.map(t => <Badge key={t.id} size="xs" color="gray" variant="light" style={{ textTransform: 'lowercase' }}>#{t.nombre}</Badge>)}
-                </Group>
-            )}
-
-            <Group justify="space-between" align="center" mt="sm" mb="sm">
-                <Group gap={4}>
-                    <IconCalendar size={14} color="gray" />
-                    <Text size="xs" c="dimmed">Modificado: {dayjs(prod.updatedAt).format('DD/MM/YY HH:mm')}</Text>
-                </Group>
-            </Group>
-
-            <Group grow gap="xs">
-                <Button variant="light" color="blue" size="xs" leftSection={<IconEdit size={16} />} onClick={onEdit}>Editar Completo</Button>
-                <Button variant="light" color="red" size="xs" leftSection={<IconTrash size={16} />} onClick={onDelete}>Eliminar</Button>
-            </Group>
-        </Card>
-    );
-};
-
-// =======================================================================
-// 2. COMPONENTE RENDERIZADOR DE LISTA
-// =======================================================================
-const ProductosVista = ({ items, stockPorGrupos, isMobile, onEdit, onDelete, onImageClick, esGrupo, onEditFinanzas, onEditStock, onEditPresentacion }) => {
-    const { isAdmin } = useAuth();
-    if (isMobile) {
-        return (
-            <Stack gap="xs">
-                {items.map((prod) => (
-                    <ProductoCardMovil
-                        key={prod.id} prod={prod} stockPorGrupos={stockPorGrupos}
-                        onEdit={() => onEdit(prod.id)} onDelete={() => onDelete(prod.id, prod.nombre)}
-                        onImageClick={onImageClick} esGrupo={esGrupo}
-                        onEditFinanzas={onEditFinanzas}
-                        onEditStock={onEditStock}
-                        onEditPresentacion={onEditPresentacion}
-                    />
-                ))}
-            </Stack>
-        );
-    }
-
-    return (
-        <ScrollArea offsetScrollbars>
-            <Table striped highlightOnHover withTableBorder withColumnBorders bg="white" style={{ minWidth: 1000 }}>
-                <Table.Thead bg="blue.0">
-                    <Table.Tr>
-                        <Table.Th w={60}></Table.Th>
-                        <Table.Th>Producto y Marca</Table.Th>
-                        <Table.Th>Presentación</Table.Th>
-                        <Table.Th>Etiquetas</Table.Th>
-                        <Table.Th>Finanzas (USD)</Table.Th>
-                        <Table.Th>Stock Actual</Table.Th>
-                        {!esGrupo && <Table.Th>Estado Alerta</Table.Th>}
-                        <Table.Th>Modificado</Table.Th>
-                        <Table.Th ta="center">Acciones</Table.Th>
-                    </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                    {items.map((prod) => {
-                        const isCriticoIndividual = Number(prod.stockAlmacen) <= Number(prod.stockMinimo);
-                        const imgSrc = prod.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.imagen}` : (prod.marca?.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${prod.marca.imagen}` : null);
-
-                        return (
-                            <Table.Tr key={prod.id}>
-                                <Table.Td>
-                                    <Avatar
-                                        src={imgSrc} alt={prod.nombre} radius="sm" size="lg" color="blue"
-                                        styles={{ image: { objectFit: 'contain' } }}
-                                        style={{ cursor: imgSrc ? 'pointer' : 'default' }}
-                                        onClick={() => imgSrc && onImageClick(imgSrc)}
-                                    >
-                                        {prod.nombre.charAt(0)}
-                                    </Avatar>
-                                </Table.Td>
-                                <Table.Td>
-                                    <Stack gap={2}>
-                                        <Text fw={700} size="sm" lh={1.1}>{prod.nombre}</Text>
-                                        <Group gap="xs">
-                                            <Text size="xs" c="dimmed">{prod.codigo}</Text>
-                                            {prod.marca && <Badge size="xs" variant="dot" color="grape">{prod.marca.nombre}</Badge>}
-                                        </Group>
-                                    </Stack>
-                                </Table.Td>
-                                <Table.Td>
-                                    <Group gap="xs" wrap="nowrap">
-                                        <Box>
-                                            <Text size="sm" tt="capitalize" fw={500}>{prod.presentacion}</Text>
-                                            {prod.presentacion === 'caja' && prod.unidadesPorCaja && <Text size="xs" c="dimmed">({prod.unidadesPorCaja} unds/caja)</Text>}
-                                            <Text size="xs" c="gray.6">Bulto: {prod.unidadesPorBulto}</Text>
-                                        </Box>
-                                        {isAdmin && (
-                                            <ActionIcon variant="light" color="orange" size="sm" onClick={() => onEditPresentacion(prod)}>
-                                                <IconEdit size={14} />
-                                            </ActionIcon>
-                                        )}
-                                    </Group>
-                                </Table.Td>
-                                <Table.Td>
-                                    <Group gap={4} maw={200}>
-                                        {prod.tags?.map(t => <Badge key={t.id} size="xs" color="gray" variant="light" style={{ textTransform: 'lowercase' }}>#{t.nombre}</Badge>)}
-                                        {(!prod.tags || prod.tags.length === 0) && <Text size="xs" c="dimmed">-</Text>}
-                                    </Group>
-                                </Table.Td>
-                                <Table.Td>
-                                    <Group justify="space-between" align="flex-start" wrap="nowrap">
-                                        <Box>
-                                            <Text fw={700} c="green.8" title="Costo Base">C: ${Number(prod.costoUsd).toFixed(2)}</Text>
-                                            {Number(prod.precio6) > 0 && <Text size="xs" fw={600} c="blue.7">P6: ${Number(prod.precio6).toFixed(3)}</Text>}
-                                            {Number(prod.precio7) > 0 && <Text size="xs" fw={600} c="grape.7">P7: ${Number(prod.precio7).toFixed(3)}</Text>}
-                                            {Number(prod.porcentajeDescuento) > 0 && (
-                                                <Badge color="red" size="xs" mt={4} variant="filled">
-                                                    OFERTA: ${(Number(prod.precio7) - (Number(prod.precio7) * (Number(prod.porcentajeDescuento) / 100))).toFixed(3)}
-                                                </Badge>
-                                            )}
-                                        </Box>
-                                        {isAdmin && (
-                                            /* 🔥 AQUÍ USAMOS LA PROP QUE LLEGA DESDE EL PADRE */
-                                            <ActionIcon variant="light" color="blue" size="sm" onClick={() => onEditFinanzas(prod)}>
-                                                <IconEdit size={14} />
-                                            </ActionIcon>
-                                        )}
-                                    </Group>
-                                </Table.Td>
-                                <Table.Td>
-                                    <Group gap="xs" wrap="nowrap">
-                                        <Text fw={900} size="md">{Number(prod.stockAlmacen)}</Text>
-                                        {isAdmin && (
-                                            /* 🔥 AQUÍ TAMBIÉN USAMOS LA PROP QUE LLEGA DESDE EL PADRE */
-                                            <ActionIcon variant="light" color="teal" size="sm" onClick={() => onEditStock(prod)}>
-                                                <IconEdit size={14} />
-                                            </ActionIcon>
-                                        )}
-                                    </Group>
-                                </Table.Td>
-                                {!esGrupo && (
-                                    <Table.Td>
-                                        <Badge color={isCriticoIndividual ? 'red' : 'green'} variant="light">
-                                            {isCriticoIndividual ? 'Crítico' : 'Óptimo'}
-                                        </Badge>
-                                    </Table.Td>
-                                )}
-                                <Table.Td>
-                                    <Group gap={4} wrap="nowrap">
-                                        <IconCalendar size={14} color="gray" />
-                                        <Box>
-                                            <Text size="sm" fw={500}>{dayjs(prod.updatedAt).format('DD/MM/YY')}</Text>
-                                            <Text size="xs" c="dimmed">{dayjs(prod.updatedAt).format('hh:mm A')}</Text>
-                                        </Box>
-                                    </Group>
-                                </Table.Td>
-                                <Table.Td ta="center">
-                                    <Group gap="xs" justify="center" wrap="nowrap">
-                                        <ActionIcon variant="light" color="blue" title="Editar" onClick={() => onEdit(prod.id)}><IconEdit size={16} /></ActionIcon>
-                                        <ActionIcon variant="light" color="red" title="Eliminar" onClick={() => onDelete(prod.id, prod.nombre)}><IconTrash size={16} /></ActionIcon>
-                                    </Group>
-                                </Table.Td>
-                            </Table.Tr>
-                        );
-                    })}
-                </Table.Tbody>
-            </Table>
-        </ScrollArea>
-    );
-};
-
-// =======================================================================
-// 3. COMPONENTE PRINCIPAL
-// =======================================================================
-export default function ListaProductos() {
+// Inventario: hoja de cálculo paginada en el servidor. Cargar la página cuesta lo mismo con 600 o con 60.000 productos.
+// Cada grupo de equivalencia es una fila padre (con la foto, el stock total y el MÍNIMO del grupo) y sus hermanos debajo.
+export default function InventarioProductosPage() {
     const router = useRouter();
     const queryClient = useQueryClient();
-    const isMobile = useMediaQuery('(max-width: 768px)');
+    const isMobile = useMediaQuery('(max-width: 48em)');
 
-    // --- ESTADOS DE FILTROS Y ORDEN ---
-    const [search, setSearch] = useState('');
-    const [filterCategoria, setFilterCategoria] = useState(null);
-    const [filterMarca, setFilterMarca] = useState(null);
-    const [filterTag, setFilterTag] = useState(null);
-    const [filterDescuento, setFilterDescuento] = useState(null);
-    const [sortBy, setSortBy] = useState('fechaDesc');
-    const [imagenAmpliada, setImagenAmpliada] = useState(null);
+    const { params, setParams, hayFiltros, limpiarFiltros } = useInventarioParams();
+    const { data, isPending, isFetching, isPlaceholderData, isError, error, refetch } = useListaInventario(params);
+    const { data: resumen, isFetching: cargandoResumen } = useResumenInventario();
+    const { data: opciones } = useOpcionesInventario();
+    const edicion = useEdicionInventario(opciones);
 
-    // --- ESTADOS PARA MODAL DE EDICIÓN DE GRUPO ---
-    const [modalEditGrupo, setModalEditGrupo] = useState(false);
-    const [grupoSeleccionado, setGrupoSeleccionado] = useState(null);
-    const [isSubmittingGrupo, setIsSubmittingGrupo] = useState(false);
+    const [visibles, setVisibles] = useLocalStorage({ key: 'inv.columnas.v3', defaultValue: VISIBLES_POR_DEFECTO });
+    const [bloqueado, setBloqueado] = useLocalStorage({ key: 'inv.bloqueado', defaultValue: false });
+    const [contraidos, setContraidos] = useState(() => new Set());
+    const [fotoDe, setFotoDe] = useState(null);
 
-    // --- NUEVOS ESTADOS PARA EDICIÓN RÁPIDA ---
-    const [modalFinanzas, setModalFinanzas] = useState(false);
-    const [modalStock, setModalStock] = useState(false);
-    const [modalPresentacion, setModalPresentacion] = useState(false);
-    const [prodEditando, setProdEditando] = useState(null);
-    const [isUpdatingRapido, setIsUpdatingRapido] = useState(false);
+    const entries = data?.entries ?? [];
+    const tienePermiso = Boolean(data?.permisos?.editar);
+    const puedeEditar = tienePermiso && !bloqueado;
+    const columnas = useMemo(() => COLUMNAS.filter((c) => c.fija || visibles.includes(c.key)), [visibles]);
+    const items = useMemo(() => aplanarEntradas(entries, contraidos), [entries, contraidos]);
 
-    const formFinanzas = useForm({
-        initialValues: { costoUsd: 0, precio6: 0, precio7: 0, porcentajeDescuento: 0 },
-        validate: {
-            costoUsd: (value) => (Number(value) <= 0 ? 'Debe ser mayor a 0' : null)
-        }
-    });
+    // Si tras filtrar la página actual ya no existe, vuelve a la última que sí
+    useEffect(() => {
+        if (data && data.entries.length === 0 && params.page > 1 && !isPlaceholderData) setParams({ page: data.totalPages }, { resetPage: false });
+    }, [data, params.page, isPlaceholderData, setParams]);
 
-    const formStock = useForm({
-        initialValues: { stockAlmacen: 0 },
-        validate: { stockAlmacen: (value) => (Number(value) < 0 ? 'No puede ser negativo' : null) }
-    });
-    const formPresentacion = useForm({
-        initialValues: { presentacion: '', unidadesPorCaja: '', unidadesPorBulto: 1 },
-        validate: {
-            presentacion: (value) => (!value ? 'Requerido' : null),
-            unidadesPorBulto: (value) => (Number(value) < 1 ? 'Mínimo 1' : null)
-        }
-    });
-
-    const sortOptions = [
-        { value: 'fechaDesc', label: 'Más recientes (Act.)' },
-        { value: 'fechaAsc', label: 'Más antiguos (Act.)' },
-        { value: 'nombreAsc', label: 'Nombre (A-Z)' },
-        { value: 'nombreDesc', label: 'Nombre (Z-A)' },
-        { value: 'precioAsc', label: 'Menor Costo' },
-        { value: 'precioDesc', label: 'Mayor Costo' }
-    ];
-
-    // --- FETCHES ---
-    const { data: productos, isLoading, isError } = useQuery({
-        queryKey: ['productos'],
-        queryFn: async () => {
-            const res = await fetch('/api/productos');
-            if (!res.ok) throw new Error('Error al cargar los productos');
-            return res.json();
-        }
-    });
-
-    const { data: categorias } = useQuery({
-        queryKey: ['categorias'],
-        queryFn: async () => {
-            const res = await fetch('/api/categorias');
-            if (!res.ok) return [];
-            return res.json();
-        }
-    });
-    const catOptions = categorias?.map(c => ({ value: c.id.toString(), label: c.nombre })) || [];
-
-    const formGrupo = useForm({
-        initialValues: { nombre: '', stockMinimoGlobal: 0, categoriaId: '', imagen: null },
-        validate: {
-            nombre: (val) => (val.trim().length < 2 ? 'Mínimo 2 caracteres' : null),
-            categoriaId: (val) => (!val ? 'Selecciona una categoría' : null)
-        }
-    });
-
-    // --- 1. LÓGICAS DERIVADAS Y CÁLCULOS ---
-    const stockPorGrupos = useMemo(() => {
-        if (!productos) return {};
-        const sums = {};
-        productos.forEach(p => {
-            if (p.grupoEquivalencia) sums[p.grupoEquivalencia.id] = (sums[p.grupoEquivalencia.id] || 0) + Number(p.stockAlmacen);
-        });
-        return sums;
-    }, [productos]);
-
-    const filterOptions = useMemo(() => {
-        if (!productos) return { categorias: [], marcas: [], tags: [] };
-        const catSet = new Set(), marcasSet = new Set(), tagsSet = new Set();
-        productos.forEach(p => {
-            if (p.categoria?.nombre) catSet.add(p.categoria.nombre);
-            if (p.marca?.nombre) marcasSet.add(p.marca.nombre);
-            p.tags?.forEach(t => tagsSet.add(t.nombre));
-        });
-        return {
-            categorias: Array.from(catSet).sort(),
-            marcas: Array.from(marcasSet).sort(),
-            tags: Array.from(tagsSet).sort()
-        };
-    }, [productos]);
-
-    const productosFiltrados = useMemo(() => {
-        if (!productos) return [];
-        let filtrados = productos;
-
-        if (search) {
-            const lowerSearch = search.toLowerCase();
-            filtrados = filtrados.filter(p => (p.nombre?.toLowerCase().includes(lowerSearch) || p.codigo?.toLowerCase().includes(lowerSearch)));
-        }
-        if (filterCategoria) filtrados = filtrados.filter(p => p.categoria?.nombre === filterCategoria);
-        if (filterMarca) filtrados = filtrados.filter(p => p.marca?.nombre === filterMarca);
-        if (filterTag) filtrados = filtrados.filter(p => p.tags?.some(t => t.nombre === filterTag));
-
-        // 🔥 Lógica del filtro de descuento 🔥
-        if (filterDescuento === 'con_descuento') {
-            filtrados = filtrados.filter(p => Number(p.precioDescuento) > 0);
-        } else if (filterDescuento === 'sin_descuento') {
-            filtrados = filtrados.filter(p => !p.precioDescuento || Number(p.precioDescuento) <= 0);
-        }
-
-        return filtrados;
-    }, [productos, search, filterCategoria, filterMarca, filterTag, filterDescuento]);
-
-    const productosOrdenados = useMemo(() => {
-        let result = [...productosFiltrados];
-        switch (sortBy) {
-            case 'nombreAsc': result.sort((a, b) => a.nombre.localeCompare(b.nombre)); break;
-            case 'nombreDesc': result.sort((a, b) => b.nombre.localeCompare(a.nombre)); break;
-            case 'precioAsc': result.sort((a, b) => Number(a.costoUsd) - Number(b.costoUsd)); break;
-            case 'precioDesc': result.sort((a, b) => Number(b.costoUsd) - Number(a.costoUsd)); break;
-            case 'fechaAsc': result.sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt)); break;
-            case 'fechaDesc':
-            default: result.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)); break;
-        }
-        return result;
-    }, [productosFiltrados, sortBy]);
-
-    // --- 3. AGRUPACIÓN DINÁMICA CON "INTELIGENCIA DE FECHAS" (Convertido a Array) ---
-    const inventarioAnidado = useMemo(() => {
-        const agrupado = productosOrdenados.reduce((acc, producto) => {
-            const catNombre = producto.categoria?.nombre || 'Sin Categoría';
-            const timestamp = new Date(producto.updatedAt).getTime();
-
-            // Si la categoría no existe en el acumulador, la creamos con sus fechas base
-            if (!acc[catNombre]) {
-                acc[catNombre] = {
-                    nombre: catNombre,
-                    grupos: {},
-                    sinGrupo: [],
-                    maxDate: timestamp,
-                    minDate: timestamp,
-                };
-            } else {
-                acc[catNombre].maxDate = Math.max(acc[catNombre].maxDate, timestamp);
-                acc[catNombre].minDate = Math.min(acc[catNombre].minDate, timestamp);
-            }
-
-            if (producto.grupoEquivalencia) {
-                const gId = producto.grupoEquivalencia.id;
-                // Si el grupo no existe, lo creamos
-                if (!acc[catNombre].grupos[gId]) {
-                    acc[catNombre].grupos[gId] = {
-                        // 🔥 INYECTAMOS categoriaId DEL PRODUCTO PARA AUTO-RELLENAR EL MODAL 🔥
-                        info: { ...producto.grupoEquivalencia, categoriaId: producto.categoriaId },
-                        productos: [],
-                        maxDate: timestamp,
-                        minDate: timestamp,
-                    };
-                } else {
-                    acc[catNombre].grupos[gId].maxDate = Math.max(acc[catNombre].grupos[gId].maxDate, timestamp);
-                    acc[catNombre].grupos[gId].minDate = Math.min(acc[catNombre].grupos[gId].minDate, timestamp);
-                }
-                acc[catNombre].grupos[gId].productos.push(producto);
-            } else {
-                acc[catNombre].sinGrupo.push(producto);
-            }
-            return acc;
-        }, {});
-
-        // Convertimos el Diccionario a un Arreglo para poder ordenarlo
-        const categoriasArray = Object.values(agrupado);
-
-        // 1. Ordenar las Categorías según el parámetro
-        if (sortBy === 'fechaDesc') {
-            categoriasArray.sort((a, b) => b.maxDate - a.maxDate);
-        } else if (sortBy === 'fechaAsc') {
-            categoriasArray.sort((a, b) => a.minDate - b.minDate);
-        } else {
-            categoriasArray.sort((a, b) => a.nombre.localeCompare(b.nombre));
-        }
-
-        // 2. Convertir a Array y Ordenar los Grupos internos de cada categoría
-        categoriasArray.forEach(cat => {
-            cat.gruposArray = Object.values(cat.grupos);
-            if (sortBy === 'fechaDesc') {
-                cat.gruposArray.sort((a, b) => b.maxDate - a.maxDate);
-            } else if (sortBy === 'fechaAsc') {
-                cat.gruposArray.sort((a, b) => a.minDate - b.minDate);
-            } else {
-                cat.gruposArray.sort((a, b) => a.info.nombre.localeCompare(b.info.nombre));
-            }
-        });
-
-        return categoriasArray;
-    }, [productosOrdenados, sortBy]);
-
-    // --- ACCIONES Y HANDLERS ---
-    const eliminarProducto = async (id, nombre) => {
-        if (confirm(`¿Estás seguro de eliminar "${nombre}"? Esta acción no se puede deshacer.`)) {
-            try {
-                const res = await fetch(`/api/productos/${id}`, { method: 'DELETE' });
-                if (!res.ok) throw new Error('Error al eliminar');
-                notifications.show({ title: 'Éxito', message: 'Producto eliminado', color: 'green' });
-                queryClient.invalidateQueries({ queryKey: ['productos'] });
-            } catch (error) {
-                notifications.show({ title: 'Error', message: error.message, color: 'red' });
-            }
-        }
+    // Clic en un encabezado: ascendente -> descendente -> orden por defecto
+    const onOrden = (clave) => {
+        if (params.sort !== clave) setParams({ sort: clave, dir: 'asc' });
+        else if (params.dir === 'asc') setParams({ sort: clave, dir: 'desc' });
+        else setParams({ sort: '', dir: '' });
     };
 
-    const abrirModalFinanzas = (prod) => {
-        setProdEditando(prod);
-        formFinanzas.setValues({
-            costoUsd: Number(prod.costoUsd),
-            precio6: Number(prod.precio6),
-            precio7: Number(prod.precio7),
-            porcentajeDescuento: Number(prod.porcentajeDescuento) || 0 // Directo de la BD
-        });
-        setModalFinanzas(true);
+    const alternarGrupo = (id) => setContraidos((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+    const todosLosGrupos = entries.filter((e) => e.tipo === 'grupo').map((e) => e.grupo.id);
+    const filasVisibles = entries.flatMap((e) => (e.tipo === 'producto' ? [e.fila] : e.filas));
+    const mapaFilas = () => new Map(filasVisibles.map((f) => [f.id, f]));
+    const irFicha = (id) => router.push(`/superuser/inventario/productos/${id}/editar`);
+
+    // Una edición puede ser de un producto o de la fila padre de un grupo
+    const editar = (item, edit, valor) => (edit.tabla === 'grupo'
+        ? edicion.editarGrupo(item.grupo, edit.campo, valor)
+        : edicion.editarCelda(item.fila, edit.campo, valor));
+
+    const cambiarImagen = (item, nombre) => (item.k === 'grupo' ? edicion.editarGrupo(item.grupo, 'imagen', nombre) : edicion.editarCelda(item.fila, 'imagen', nombre));
+
+    const cambiarFotoMarca = async (marca, nombre) => {
+        const res = await fetch(`/api/marcas/${marca.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nombre: marca.nombre, imagen: nombre }) });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'No se pudo actualizar la marca');
+        await queryClient.invalidateQueries({ queryKey: ['productos'] });
+        setFotoDe(null);
     };
 
-    const abrirModalStock = (prod) => {
-        setProdEditando(prod);
-        formStock.setValues({ stockAlmacen: Number(prod.stockAlmacen) });
-        setModalStock(true);
+    const pegarBloque = async (lote, problemas, celdas) => {
+        if (!lote.length) {
+            notifications.show({ color: 'orange', title: 'No hay nada que pegar', message: problemas[0] || 'Los valores pegados son iguales a los actuales.' });
+            return;
+        }
+        const aviso = problemas.length ? `\n\n${problemas.length} aviso(s):\n- ${problemas.slice(0, 5).join('\n- ')}` : '';
+        if (!window.confirm(`Se modificarán ${celdas} celdas en ${lote.length} producto(s).${aviso}\n\n¿Aplicar los cambios?`)) return;
+        await edicion.aplicarBloque(lote, mapaFilas());
     };
 
-    const abrirModalPresentacion = (prod) => {
-        setProdEditando(prod);
-        formPresentacion.setValues({
-            presentacion: prod.presentacion || '',
-            unidadesPorCaja: prod.unidadesPorCaja || '',
-            unidadesPorBulto: prod.unidadesPorBulto || 1
-        });
-        setModalPresentacion(true);
-    };
+    const guardarMovil = (fila, cambios) => edicion.aplicarBloque(
+        [{ id: fila.id, cambios, ...('stockAlmacen' in cambios ? { esperado: { stockAlmacen: fila.stockAlmacen } } : {}) }],
+        mapaFilas()
+    );
 
-    const handleActualizarRapido = async (tipo, values) => {
-        setIsUpdatingRapido(true);
+    const eliminar = async (fila) => {
+        if (!window.confirm(`¿Eliminar "${fila.nombre}"? Esta acción no se puede deshacer.`)) return;
         try {
-            let payload = {};
-
-            if (tipo === 'finanzas') {
-                payload = {
-                    costoUsd: Number(values.costoUsd),
-                    precio6: Number(values.precio6),
-                    precio7: Number(values.precio7),
-                    porcentajeDescuento: Number(values.porcentajeDescuento) || 0 // Directo a la BD
-                };
-            } else if (tipo === 'stock') {
-                payload = { stockAlmacen: Number(values.stockAlmacen) };
-            } else if (tipo === 'presentacion') {
-                payload = {
-                    presentacion: values.presentacion,
-                    unidadesPorCaja: values.presentacion === 'caja' ? Number(values.unidadesPorCaja) : null,
-                    unidadesPorBulto: Number(values.unidadesPorBulto)
-                };
-            }
-
-            const res = await fetch(`/api/productos/${prodEditando.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!res.ok) throw new Error('Error al actualizar');
-
-            notifications.show({ title: 'Éxito', message: 'Actualizado correctamente', color: 'green' });
+            const res = await fetch(`/api/productos/${fila.id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'No se pudo eliminar');
+            notifications.show({ color: 'teal', message: `"${fila.nombre}" eliminado` });
             queryClient.invalidateQueries({ queryKey: ['productos'] });
-            setModalFinanzas(false);
-            setModalStock(false);
-            setModalPresentacion(false);
-        } catch (error) {
-            notifications.show({ title: 'Error', message: error.message, color: 'red' });
-        } finally {
-            setIsUpdatingRapido(false);
+        } catch (e) {
+            notifications.show({ color: 'red', title: 'Error', message: e.message });
         }
     };
-
-    const abrirModalGrupo = (grupo) => {
-        setGrupoSeleccionado(grupo);
-        // 🔥 El grupo ahora SÍ trae el categoriaId heredado del producto 🔥
-        formGrupo.setValues({
-            nombre: grupo.nombre,
-            stockMinimoGlobal: grupo.stockMinimoGlobal || 0,
-            categoriaId: grupo.categoriaId ? grupo.categoriaId.toString() : '',
-            imagen: grupo.imagen || null
-        });
-        setModalEditGrupo(true);
-    };
-
-    const handleActualizarGrupoRapido = async (values) => {
-        setIsSubmittingGrupo(true);
-        try {
-            let payload = {
-                nombre: values.nombre,
-                stockMinimoGlobal: Number(values.stockMinimoGlobal),
-                categoriaId: Number(values.categoriaId)
-            };
-
-            if (values.imagen && typeof values.imagen.arrayBuffer === 'function') {
-                notifications.show({ id: 'upload-g', title: 'Subiendo...', message: 'Espera...', loading: true });
-                const fileExt = values.imagen.name.split('.').pop();
-                const uniqueFilename = `grupo_${Date.now()}.${fileExt}`;
-
-                const response = await fetch(`/api/upload?filename=${encodeURIComponent(uniqueFilename)}`, { method: 'POST', body: values.imagen });
-                if (!response.ok) throw new Error('Falló la subida');
-
-                payload.imagen = uniqueFilename;
-                notifications.update({ id: 'upload-g', title: 'Éxito', message: 'Imagen subida', color: 'green' });
-            }
-
-            const res = await fetch(`/api/grupos-equivalencia/${grupoSeleccionado.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!res.ok) throw new Error('Error al actualizar');
-
-            queryClient.invalidateQueries({ queryKey: ['productos'] });
-            setModalEditGrupo(false);
-            notifications.show({ title: 'Éxito', message: 'Grupo actualizado', color: 'green' });
-        } catch (error) {
-            notifications.show({ title: 'Error', message: error.message, color: 'red' });
-        } finally {
-            setIsSubmittingGrupo(false);
-        }
-    };
-
-    if (isLoading) return <Center h="50vh"><Loader size="lg" /></Center>;
-    if (isError) return <Center h="50vh"><Text c="red">Error al cargar inventario.</Text></Center>;
-
-    // Variables de Estadísticas / KPIs
-    const kpiTotalProductos = productos?.length || 0;
-    const kpiMostrados = productosFiltrados?.length || 0;
-    const kpiGrupos = Object.keys(stockPorGrupos).length;
 
     return (
-        <Box p={isMobile ? "xs" : "md"} maw={1400} mx="auto">
-            {/* CABECERA */}
-            <Group justify="space-between" mb="xl" align="center">
-                <Title order={2} c="blue.9" size={isMobile ? "h3" : "h2"}>Inventario</Title>
-                <Button leftSection={<IconPlus size={16} />} onClick={() => router.push('/superuser/inventario/productos/nuevo')} color="blue" size={isMobile ? "sm" : "md"} radius="md">
-                    {isMobile ? 'Nuevo' : 'Nuevo Producto'}
-                </Button>
+        <Box p={isMobile ? 'xs' : 'md'} maw={1700} mx="auto">
+            <Group justify="space-between" align="center" mb="sm">
+                <Box>
+                    <Title order={2} c="white" fz={isMobile ? 22 : 28} tt="none" display="block" pb={0}>Inventario</Title>
+                    <Text size="sm" c="gray.4">Hoja de control de productos, costos, precios y existencias</Text>
+                </Box>
+                {data && (
+                    tienePermiso
+                        ? <Badge size="lg" variant="light" color={puedeEditar ? 'teal' : 'gray'} leftSection={puedeEditar ? <IconPencil size={14} /> : <IconEye size={14} />}>{puedeEditar ? 'Edición activa' : 'Edición bloqueada'}</Badge>
+                        : <Tooltip label="Pide al administrador el permiso de edición de inventario"><Badge size="lg" variant="light" color="gray" leftSection={<IconEye size={14} />}>Solo lectura</Badge></Tooltip>
+                )}
             </Group>
 
-            {/* 🔥 KPIs / ESTADÍSTICAS 🔥 */}
-            <Grid mb="xl">
-                <Grid.Col span={{ base: 12, md: 4 }}>
-                    <Paper withBorder p="md" radius="md" shadow="sm" bg="blue.0">
-                        <Group align="center">
-                            <ThemeIcon color="blue" size="xl" radius="md" variant="light"><IconBox size={24} /></ThemeIcon>
-                            <Box>
-                                <Text size="xs" c="blue.9" tt="uppercase" fw={700}>Total Registrados</Text>
-                                <Text size="xl" fw={900} c="blue.9">{kpiTotalProductos} Productos</Text>
-                            </Box>
-                        </Group>
-                    </Paper>
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 4 }}>
-                    <Paper withBorder p="md" radius="md" shadow="sm" bg="teal.0">
-                        <Group align="center">
-                            <ThemeIcon color="teal" size="xl" radius="md" variant="light"><IconSitemap size={24} /></ThemeIcon>
-                            <Box>
-                                <Text size="xs" c="teal.9" tt="uppercase" fw={700}>Grupos de Equivalencia</Text>
-                                <Text size="xl" fw={900} c="teal.9">{kpiGrupos} Grupos</Text>
-                            </Box>
-                        </Group>
-                    </Paper>
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 4 }}>
-                    <Paper withBorder p="md" radius="md" shadow="sm" bg="gray.0">
-                        <Group align="center">
-                            <ThemeIcon color="gray" size="xl" radius="md" variant="light"><IconFilter size={24} /></ThemeIcon>
-                            <Box>
-                                <Text size="xs" c="gray.7" tt="uppercase" fw={700}>Resultados del Filtro</Text>
-                                <Text size="xl" fw={900} c="gray.9">{kpiMostrados} Coincidencias</Text>
-                            </Box>
-                        </Group>
-                    </Paper>
-                </Grid.Col>
-            </Grid>
+            <ResumenKpis resumen={resumen} params={params} setParams={setParams} cargando={cargandoResumen} />
 
-            {/* PANEL DE FILTROS AVANZADO Y ORDENAMIENTO */}
-            <Paper p="md" radius="md" withBorder bg="gray.0" mb="xl">
-                <Grid align="flex-end">
-                    <Grid.Col span={{ base: 12, md: 3 }}>
-                        <TextInput label="Buscar" placeholder="Nombre o SKU..." leftSection={<IconSearch size={16} />} value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 6, md: 2 }}>
-                        <Select label="Categoría" placeholder="Todas" data={filterOptions.categorias} value={filterCategoria} onChange={setFilterCategoria} clearable searchable leftSection={<IconBox size={16} />} />
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 6, md: 2 }}>
-                        <Select label="Marca" placeholder="Todas" data={filterOptions.marcas} value={filterMarca} onChange={setFilterMarca} clearable searchable leftSection={<IconFilter size={16} />} />
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 6, md: 2 }}>
-                        <Select label="Etiqueta" placeholder="Todas" data={filterOptions.tags} value={filterTag} onChange={setFilterTag} clearable searchable leftSection={<IconTags size={16} />} />
-                    </Grid.Col>
+            <BarraFiltros
+                params={params} setParams={setParams} hayFiltros={hayFiltros} limpiarFiltros={limpiarFiltros}
+                opciones={opciones} isMobile={isMobile}
+                columnasVisibles={visibles} setColumnasVisibles={setVisibles}
+                puedeEditar={tienePermiso} bloqueado={bloqueado} setBloqueado={setBloqueado}
+                onDeshacer={edicion.deshacer} hayHistorial={edicion.hayHistorial}
+                grupos={todosLosGrupos} contraidos={contraidos} setContraidos={setContraidos}
+                onNuevo={() => router.push('/superuser/inventario/productos/nuevo')}
+            />
 
-                    {/* 🔥 NUEVO SELECT DE FILTRO DE DESCUENTO 🔥 */}
-                    <Grid.Col span={{ base: 6, md: 1.5 }}>
-                        <Select
-                            label="Ofertas"
-                            placeholder="Todos"
-                            data={[
-                                { value: 'con_descuento', label: 'Con Descuento' },
-                                { value: 'sin_descuento', label: 'Sin Descuento' }
-                            ]}
-                            value={filterDescuento}
-                            onChange={setFilterDescuento}
-                            clearable
-                            allowDeselect
-                        />
-                    </Grid.Col>
-
-                    <Grid.Col span={{ base: 12, md: 1.5 }}>
-                        <Select label="Ordenar por" data={sortOptions} value={sortBy} onChange={setSortBy} leftSection={<IconSortAscending size={16} />} allowDeselect={false} />
-                    </Grid.Col>
-                </Grid>
-            </Paper>
-
-            {/* RENDERIZADO ANIDADO (Ahora recorremos el Array ordenado) */}
-            {inventarioAnidado.length === 0 ? (
-                <Paper p="xl" withBorder ta="center" radius="md"><Text c="dimmed">No se encontraron productos con esos filtros.</Text></Paper>
+            {isError && !data ? (
+                <Alert color="red" icon={<IconAlertCircle size={18} />} title="No se pudo cargar el inventario" variant="light">
+                    {error?.message} <Button size="compact-sm" variant="white" ml="sm" onClick={() => refetch()} tt="none">Reintentar</Button>
+                </Alert>
+            ) : isPending ? (
+                <Skeleton h={480} radius="md" />
             ) : (
-                inventarioAnidado.map((catData) => (
-                    <Box key={catData.nombre} mb={isMobile ? "xl" : 40}>
+                <>
+                    {isMobile ? (
+                        <ListaMovil entries={entries} puedeEditar={tienePermiso} onGuardar={guardarMovil} onGuardarGrupo={(g, valor) => edicion.editarGrupo(g, 'stockMinimoGlobal', valor)} onFicha={irFicha} />
+                    ) : (
+                        <InventarioGrid
+                            items={items} columnas={columnas} opciones={opciones}
+                            puedeEditar={puedeEditar} estados={edicion.estados}
+                            orden={{ sort: params.sort, dir: params.dir }} onOrden={onOrden}
+                            onEditar={editar} onPegarBloque={pegarBloque} onDeshacer={edicion.deshacer}
+                            onFicha={irFicha} onEliminar={eliminar} onFoto={setFotoDe} onToggleGrupo={alternarGrupo}
+                            cargando={isPlaceholderData || edicion.procesando}
+                        />
+                    )}
 
-                        <Group mb="md" gap="xs">
-                            <IconBox color="#1971c2" size={28} />
-                            <Title order={3} c="blue.9">{catData.nombre}</Title>
-                            <Badge color="blue" variant="light" radius="xl" size="lg">
-                                {catData.gruposArray.reduce((sum, g) => sum + g.productos.length, 0) + catData.sinGrupo.length}
-                            </Badge>
-                        </Group>
+                    <Paper withBorder radius="md" px="sm" pb="sm" mt="sm" bg="white">
+                        <PaginacionInventario
+                            page={data.page} pageSize={data.pageSize} total={data.total} totalProductos={data.totalProductos} totalPages={data.totalPages}
+                            onPagina={(p) => setParams({ page: p }, { resetPage: false })}
+                            onTamano={(n) => setParams({ pageSize: n })}
+                            isMobile={isMobile} cargando={isFetching}
+                        />
+                    </Paper>
 
-                        {/* GRUPOS DE EQUIVALENCIA */}
-                        {catData.gruposArray.map(grupo => {
-                            const totalGrupo = stockPorGrupos[grupo.info.id] || 0;
-                            const minimoGlobal = grupo.info.stockMinimoGlobal;
-                            const isCritico = totalGrupo <= minimoGlobal;
-                            const porcentaje = minimoGlobal > 0 ? Math.min((totalGrupo / minimoGlobal) * 100, 100) : 100;
-
-                            return (
-                                <Paper key={grupo.info.id} withBorder p={isMobile ? "sm" : "md"} mb="lg" radius="md" bg="gray.0">
-                                    <Group justify="space-between" mb="xs">
-                                        <Group gap="xs">
-                                            <Avatar
-                                                src={grupo.info.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${grupo.info.imagen}` : null}
-                                                radius="md" size="md" color="teal"
-                                                styles={{ image: { objectFit: 'contain' } }}
-                                                style={{ cursor: grupo.info.imagen ? 'pointer' : 'default' }}
-                                                onClick={() => grupo.info.imagen && setImagenAmpliada(`${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${grupo.info.imagen}`)}
-                                            >
-                                                {grupo.info.nombre?.charAt(0).toUpperCase()}
-                                            </Avatar>
-                                            <Title order={5} c="teal.9">Grupo: {grupo.info.nombre}</Title>
-                                            <ActionIcon variant="light" color="teal" size="sm" onClick={() => abrirModalGrupo(grupo.info)} title="Editar Grupo">
-                                                <IconEdit size={14} />
-                                            </ActionIcon>
-                                        </Group>
-                                        <Group gap="sm">
-                                            <Text size="sm" fw={600} c={isCritico ? 'red.7' : 'teal.7'}>
-                                                Stock Total: {totalGrupo} / {minimoGlobal}
-                                            </Text>
-                                            <Badge color={isCritico ? 'red' : 'teal'} variant="filled">
-                                                {isCritico ? 'Déficit' : 'Óptimo'}
-                                            </Badge>
-                                        </Group>
-                                    </Group>
-
-                                    <Progress value={porcentaje} color={isCritico ? 'red' : 'teal'} size="sm" mb="md" radius="xl" striped={!isCritico} />
-
-                                    <ProductosVista
-                                        items={grupo.productos} stockPorGrupos={stockPorGrupos} isMobile={isMobile}
-                                        onEdit={(id) => router.push(`/superuser/inventario/productos/${id}/editar`)}
-                                        onDelete={eliminarProducto} onImageClick={setImagenAmpliada} esGrupo={true}
-                                        // 🔥 INYECTAMOS LAS FUNCIONES AQUÍ 🔥
-                                        onEditFinanzas={abrirModalFinanzas}
-                                        onEditStock={abrirModalStock}
-                                        onEditPresentacion={abrirModalPresentacion}
-                                    />
-                                </Paper>
-                            );
-                        })}
-
-                        {/* PRODUCTOS SIN GRUPO */}
-                        {catData.sinGrupo.length > 0 && (
-                            <Box mt="md" pl={catData.gruposArray.length > 0 ? "md" : 0}>
-                                {catData.gruposArray.length > 0 && (
-                                    <Title order={6} mb="sm" c="gray.6" tt="uppercase" lts={1}>
-                                        Productos Individuales
-                                    </Title>
-                                )}
-                                <ProductosVista
-                                    items={catData.sinGrupo} stockPorGrupos={stockPorGrupos} isMobile={isMobile}
-                                    onEdit={(id) => router.push(`/superuser/inventario/productos/${id}/editar`)}
-                                    onDelete={eliminarProducto} onImageClick={setImagenAmpliada} esGrupo={false}
-                                    // 🔥 Y LAS INYECTAMOS AQUÍ TAMBIÉN 🔥
-                                    onEditFinanzas={abrirModalFinanzas}
-                                    onEditStock={abrirModalStock}
-                                    onEditPresentacion={abrirModalPresentacion}
-                                />
-                            </Box>
-                        )}
-                    </Box>
-                ))
+                    {puedeEditar && !isMobile && (
+                        <Text size="xs" c="gray.4" mt="sm" className={classes.ayuda}>
+                            <kbd>↑↓←→</kbd> / <kbd>Tab</kbd> moverse · <kbd>Enter</kbd> o <kbd>F2</kbd> editar · escribir reemplaza el valor · <kbd>Esc</kbd> cancela ·{' '}
+                            <kbd>Supr</kbd> vacía · <kbd>Ctrl</kbd>+<kbd>V</kbd> pega desde Excel · <kbd>Ctrl</kbd>+<kbd>Z</kbd> deshace · clic en la foto para verla o cambiarla
+                        </Text>
+                    )}
+                </>
             )}
 
-            {/* LIGHTBOX */}
-            <Modal opened={!!imagenAmpliada} onClose={() => setImagenAmpliada(null)} size="auto" centered withCloseButton={false} styles={{ root: { zIndex: 9999 }, content: { backgroundColor: 'transparent', boxShadow: 'none' }, body: { padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' } }}>
-                {imagenAmpliada && (
-                    <Box pos="relative">
-                        <ActionIcon onClick={() => setImagenAmpliada(null)} radius="xl" color="dark" variant="filled" pos="absolute" top={-15} right={-15} style={{ zIndex: 10, border: '2px solid white' }}>
-                            <IconX size={16} />
-                        </ActionIcon>
-                        <img src={imagenAmpliada} alt="Vista ampliada" style={{ maxWidth: '100vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: '8px' }} />
-                    </Box>
-                )}
-            </Modal>
-
-            {/* MODAL DE EDICIÓN COMPLETA DE GRUPO */}
-            <Modal opened={modalEditGrupo} onClose={() => setModalEditGrupo(false)} title={<Title order={4}>Editar Grupo de Equivalencia</Title>} centered>
-                <form onSubmit={formGrupo.onSubmit(handleActualizarGrupoRapido)}>
-                    <Stack gap="md">
-                        <TextInput label="Nombre del Grupo" {...formGrupo.getInputProps('nombre')} autoFocus />
-                        <Select label="Categoría Padre" data={catOptions} searchable {...formGrupo.getInputProps('categoriaId')} />
-                        <NumberInput label="Stock Mínimo Global" min={0} {...formGrupo.getInputProps('stockMinimoGlobal')} />
-                        <ImageDropzone label="Imagen de Portada (Opcional)" form={formGrupo} fieldPath="imagen" />
-                        <Button type="submit" loading={isSubmittingGrupo} color="teal" fullWidth size="md">
-                            Guardar Cambios
-                        </Button>
-                    </Stack>
-                </form>
-            </Modal>
-
-            {/* 🔥 MODAL DE EDICIÓN RÁPIDA: FINANZAS 🔥 */}
-            <Modal opened={modalFinanzas} onClose={() => setModalFinanzas(false)} title={<Title order={4}>Actualizar Finanzas</Title>} centered>
-                {prodEditando && (
-                    <form onSubmit={formFinanzas.onSubmit((v) => handleActualizarRapido('finanzas', v))}>
-                        <Stack gap="md">
-                            <Text fw={600} c="blue.9" mb="xs">{prodEditando.nombre}</Text>
-                            <NumberInput label="Costo (USD)" prefix="$" decimalScale={2} withAsterisk {...formFinanzas.getInputProps('costoUsd')} />
-                            <Grid>
-                                <Grid.Col span={6}>
-                                    <NumberInput label="Precio 6 (Mayor)" prefix="$" decimalScale={2} {...formFinanzas.getInputProps('precio6')} />
-                                </Grid.Col>
-                                <Grid.Col span={6}>
-                                    <NumberInput label="Precio 7 (Detal)" prefix="$" decimalScale={2} {...formFinanzas.getInputProps('precio7')} />
-                                </Grid.Col>
-                            </Grid>
-
-                            <Divider label="Promociones E-commerce" labelPosition="center" my="sm" />
-
-                            <NumberInput
-                                label="% Descuento sobre Precio 7"
-                                description="Al aplicar un % se activará la oferta en la Landing Page."
-                                suffix="%"
-                                min={0}
-                                max={99}
-                                {...formFinanzas.getInputProps('porcentajeDescuento')}
-                            />
-
-                            {/* Previsualización del precio con descuento */}
-                            {formFinanzas.values.porcentajeDescuento > 0 && formFinanzas.values.precio7 > 0 && (
-                                <Badge color="red" size="lg" variant="light" fullWidth>
-                                    Precio en Tienda: ${(formFinanzas.values.precio7 - (formFinanzas.values.precio7 * (formFinanzas.values.porcentajeDescuento / 100))).toFixed(2)}
-                                </Badge>
-                            )}
-
-                            <Button type="submit" loading={isUpdatingRapido} color="blue" fullWidth mt="md">
-                                Guardar Finanzas
-                            </Button>
-                        </Stack>
-                    </form>
-                )}
-            </Modal>
-
-            {/* 🔥 MODAL DE EDICIÓN RÁPIDA: STOCK 🔥 */}
-            <Modal opened={modalStock} onClose={() => setModalStock(false)} title={<Title order={4}>Ajuste Rápido de Stock</Title>} centered size="sm">
-                {prodEditando && (
-                    <form onSubmit={formStock.onSubmit((v) => handleActualizarRapido('stock', v))}>
-                        <Stack gap="md">
-                            <Text fw={600} ta="center" c="teal.9">{prodEditando.nombre}</Text>
-                            <NumberInput
-                                label="Stock Físico Disponible"
-                                size="lg"
-                                min={0}
-                                {...formStock.getInputProps('stockAlmacen')}
-                            />
-                            <Button type="submit" loading={isUpdatingRapido} color="teal" fullWidth mt="sm" size="md">
-                                Confirmar Inventario
-                            </Button>
-                        </Stack>
-                    </form>
-                )}
-            </Modal>
-            <Modal opened={modalPresentacion} onClose={() => setModalPresentacion(false)} title={<Title order={4}>Logística y Presentación</Title>} centered>
-                {prodEditando && (
-                    <form onSubmit={formPresentacion.onSubmit((v) => handleActualizarRapido('presentacion', v))}>
-                        <Stack gap="md">
-                            <Text fw={600} c="orange.9">{prodEditando.nombre}</Text>
-                            <Select
-                                label="Presentación Venta"
-                                data={[{ value: 'unidad', label: 'Unidad' }, { value: 'par', label: 'Par' }, { value: 'paqx2', label: 'Paquete x2' }, { value: 'paqx4', label: 'Paquete x4' }, { value: 'caja', label: 'Caja' }]}
-                                withAsterisk
-                                {...formPresentacion.getInputProps('presentacion')}
-                            />
-                            {formPresentacion.values.presentacion === 'caja' && (
-                                <NumberInput label="Unidades por Caja" min={1} {...formPresentacion.getInputProps('unidadesPorCaja')} />
-                            )}
-                            <NumberInput label="Unidades por Bulto" min={1} {...formPresentacion.getInputProps('unidadesPorBulto')} />
-                            <Button type="submit" loading={isUpdatingRapido} color="orange" fullWidth mt="sm">
-                                Guardar Logística
-                            </Button>
-                        </Stack>
-                    </form>
-                )}
-            </Modal>
+            <FotoModal item={fotoDe} onCerrar={() => setFotoDe(null)} onCambiarImagen={cambiarImagen} onCambiarMarca={cambiarFotoMarca} />
         </Box>
     );
 }
