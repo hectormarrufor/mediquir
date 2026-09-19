@@ -20,7 +20,10 @@ if (!globalForDb.sequelize) {
     pool: {
       max: 2,           // 1 para una transacción + 1 de holgura; techo = instancias × 2
       min: 0,
-      idle: 4000,       // < idle_session_timeout (5000): el cliente cierra antes que el servidor
+      // Una conexión ociosa vive como máximo idle + evict (~3 s), siempre por debajo del
+      // idle_session_timeout del servidor (5 s). Con idle 4000 llegaba a ~5 s y a veces se
+      // reutilizaba una conexión que Aiven ya había cerrado ("Connection terminated unexpectedly").
+      idle: 2000,
       evict: 1000,
       acquire: 15000,   // falla antes del maxDuration en vez de colgarse
     },
