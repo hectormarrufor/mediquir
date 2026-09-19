@@ -81,7 +81,7 @@ function TablaRetenciones({ filas }) {
 export default function CierreTab() {
     const { nombre } = useAuth();
     const [modo, setModo] = useState('mes');
-    const [mes, setMes] = useState(dayjs().subtract(1, 'month').startOf('month').toDate()); // por defecto, el mes que se acaba de cerrar
+    const [mes, setMes] = useState(dayjs().startOf('month').toDate()); // por defecto, el mes en curso (para cerrar el anterior, se elige arriba)
     const [rango, setRango] = useState([dayjs().startOf('month').toDate(), new Date()]);
     const [generando, setGenerando] = useState(false);
 
@@ -143,6 +143,11 @@ export default function CierreTab() {
                                         <Button size="xs" variant="light" leftSection={<IconDownload size={14} />} onClick={() => descargarCsvLibro(tipo, data)} disabled={!data[tipo].filas.length}>CSV (Excel)</Button>
                                     </Group>
                                 </Group>
+                                {tipo === 'ventas' && data.ventas.retencionesPendientes?.cant > 0 && (
+                                    <Alert color="orange" variant="light" mb="xs" p="xs">
+                                        {data.ventas.retencionesPendientes.cant} retención(es) de IVA sin comprobante (Bs {dinero(data.ventas.retencionesPendientes.ivaRetenido)}): {data.ventas.retencionesPendientes.facturas.join(', ')}. No entran al libro hasta cargar el comprobante que emite el cliente, desde el detalle de cada factura.
+                                    </Alert>
+                                )}
                                 {tipo === 'ventas' && data.ventas.noFiscales?.cant > 0 && (
                                     <Alert color="gray" variant="light" mb="xs" p="xs">{data.ventas.noFiscales.cant} documento(s) que no son factura (notas de entrega o ventas rápidas, Bs {dinero(data.ventas.noFiscales.total)}) no van en el libro de ventas.</Alert>
                                 )}

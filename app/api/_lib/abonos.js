@@ -4,7 +4,7 @@
 import db from '../../../models/index.js';
 import { aBolivares, aDolares } from '../../constants/facturacion.js';
 
-const { Abono, CuentaPorCobrar, MovimientoFinanciero, CategoriaFinanciera } = db;
+const { Abono, CuentaPorCobrar, MovimientoFinanciero, CategoriaFinanciera, RetencionIva } = db;
 
 export class ErrorAbono extends Error {
     constructor(mensaje, status = 400, codigo = null) { super(mensaje); this.status = status; this.codigo = codigo; }
@@ -85,9 +85,13 @@ export async function registrarAbono({ venta, monto, moneda, tasa, metodoPago, r
         await pagoSms.save({ transaction: t });
     }
 
-    // Reparto del abono: el IVA es la misma proporción de la factura (la factura incluye subtotal + flete + IVA)
-    const total = Number(venta.totalFinal);
-    const proporcionIva = total > 0 ? (Number(venta.montoIva) || 0) / total : 0;
+    // Reparto del abono: el IVA es la misma proporción de lo que se cobra (la factura incluye subtotal + flete + IVA).
+    // Si el cliente retuvo IVA, esa parte se la paga al SENIAT: lo que queda por cobrar tiene menos IVA.
+    const retenciones = await RetencionIva.findAll({ where: { ventaId: venta.id }, attributes: ['ivaRetenido'], transaction: t });
+    const retenidoBs = retenciones.reduce((a, r) => a + Number(r.ivaRetenido), 0);
+    const retenido = venta.moneda === 'BS' ? retenidoBs : (retenidoBs > 0 ? aDolares(retenidoBs, Number(venta.tasaCambio) || 1) : 0);
+    const total = Number(venta.totalFinal) - retenido;
+    const proporcionIva = total > 0 ? Math.max(0, (Number(venta.montoIva) || 0) - retenido) / total : 0;
     const ivaUsd = r2(abonoUsd * proporcionIva);
     const ivaBs = r2(abonoBs * proporcionIva);
     const comun = {

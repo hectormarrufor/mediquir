@@ -58,7 +58,7 @@ export default function B2BPedidoDetalle() {
             <Group justify="space-between" align="flex-start" wrap="wrap">
                 <Box>
                     <Title order={2} c="navy.9">{isLoading ? <Skeleton h={30} w={200} /> : `Pedido ${p.numero}`}</Title>
-                    {p && <Text size="sm" c="dimmed">{fmtFechaHora(p.fecha)} · {p.tipoEntrega === 'pickup' ? 'Retiro en tienda' : 'Envío'}</Text>}
+                    {p && <Text size="sm" c="dimmed">{fmtFechaHora(p.fecha)} · {p.tipoEntrega === 'pickup' ? 'Retiro en tienda' : 'Envío'}{p.tipoEntrega !== 'pickup' && p.quienRetira ? ` · Retira: ${p.quienRetira}` : ''}</Text>}
                 </Box>
                 {p && <BadgesPedido pedido={p} />}
             </Group>

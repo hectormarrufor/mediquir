@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ActionIcon, Alert, Box, Button, Divider, Grid, Group, Image, Modal, NumberInput, Paper, SegmentedControl, Stack, Table, Text, Title } from '@mantine/core';
+import { ActionIcon, Alert, Box, Button, Divider, Grid, Group, Image, Modal, NumberInput, Paper, SegmentedControl, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -46,6 +46,7 @@ export default function B2BCarrito() {
     const { items, listo, factura: facturaConIva, facturaSinIva, vaciar } = useB2BCart();
     const { tasa } = useTasaBcv();
     const [tipoEntrega, setTipoEntrega] = useState('pickup');
+    const [transporte, setTransporte] = useState('');
     const [formaPago, setFormaPago] = useState('Contado');
     // Factura: con IVA · Nota de entrega: sin IVA. Sirven tanto para pagar de contado como a crédito
     const [documento, setDocumento] = useState('NOTA_ENTREGA');
@@ -66,7 +67,7 @@ export default function B2BCarrito() {
             const r = await pedirJson('/api/b2b/pedidos', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tipoEntrega, condicionPago: pago, tipoDocumento: documento, items: items.map((i) => ({ productoId: i.producto.id, cantidad: i.cantidad })) }),
+                body: JSON.stringify({ tipoEntrega, transporte: tipoEntrega === 'flete' ? transporte : '', condicionPago: pago, tipoDocumento: documento, items: items.map((i) => ({ productoId: i.producto.id, cantidad: i.cantidad })) }),
             });
             vaciar();
             queryClient.invalidateQueries({ queryKey: ['b2b'] });
@@ -114,7 +115,12 @@ export default function B2BCarrito() {
                         <Box>
                             <Text size="sm" fw={600} mb={4}>Entrega</Text>
                             <SegmentedControl fullWidth color="navy.9" value={tipoEntrega} onChange={setTipoEntrega} data={[{ value: 'pickup', label: 'Retiro en tienda' }, { value: 'flete', label: 'Envío (flete)' }]} />
-                            {tipoEntrega === 'flete' && <Text size="xs" c="dimmed" mt={4}>El costo del flete lo coordinamos contigo al preparar el pedido.</Text>}
+                            {tipoEntrega === 'flete' && (
+                                <>
+                                    <TextInput size="xs" mt="xs" label="Empresa de transporte que retira tu pedido" placeholder="Ej: MRW, Zoom, o tu propio chofer" maxLength={120} value={transporte} onChange={(e) => setTransporte(e.currentTarget.value)} />
+                                    <Text size="xs" c="dimmed" mt={4}>El costo del flete lo coordinamos contigo al preparar el pedido y se suma a tu total.</Text>
+                                </>
+                            )}
                         </Box>
                         <Box>
                             <Text size="sm" fw={600} mb={4}>Documento</Text>

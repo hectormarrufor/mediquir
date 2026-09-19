@@ -14,6 +14,7 @@ import { RetencionIva } from '@/models';
 import { faltantesDeEmpaque, reiniciarEmpaque } from '../_empaque';
 import { borrarFotosSobrantes } from '../_fotosEmpaque';
 import { registrarAbono, ErrorAbono } from '../../_lib/abonos';
+import { recalcularCobro } from '../../_lib/retencionesVenta';
 
 // Error de reglas de logística (permisos, estados) con su código HTTP
 class ErrorLogistica extends Error {
@@ -271,6 +272,33 @@ export async function PUT(request, { params }) {
         }
 
         // ==========================================================
+        // 🚚 DATOS_ENVIO: quién retira el pedido (empresa de transporte o chofer) y el flete que se le cobra al cliente.
+        // Se puede fijar en cualquier momento antes del despacho. El flete se suma al total de la factura (sin IVA) y a lo que debe el cliente.
+        // ==========================================================
+        if (accion === 'DATOS_ENVIO') {
+            if (cerrada) throw new ErrorLogistica('Este pedido ya está cerrado', 409);
+            if (venta.tipoEntrega === 'pickup') throw new ErrorLogistica('Este pedido es retiro en tienda: no lleva transporte ni flete', 409);
+
+            const flete = Math.round(Number(body.costoFlete ?? venta.costoFlete ?? 0) * 100) / 100;
+            if (!Number.isFinite(flete) || flete < 0) throw new ErrorLogistica('El flete debe ser un monto igual o mayor a 0');
+            const actual = Number(venta.costoFlete) || 0;
+
+            if (flete !== actual) {
+                if (venta.statusPago === 'Pagado') throw new ErrorLogistica('Esta factura ya está pagada: el flete no se puede cambiar', 409);
+                venta.costoFlete = flete;
+                venta.totalFinal = Math.round((Number(venta.subtotal) + Number(venta.montoIva) + flete) * 100) / 100;
+                const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, transaction: t });
+                if (cxc) { cxc.montoTotal = venta.totalFinal; await cxc.save({ transaction: t }); }
+                await venta.save({ transaction: t });
+                await recalcularCobro(venta, t); // el saldo vuelve a ser total - abonos (retención incluida)
+            }
+            venta.quienRetira = String(body.quienRetira ?? '').trim().slice(0, 120) || null;
+            await venta.save({ transaction: t });
+            await t.commit();
+            return NextResponse.json({ success: true, totalFinal: venta.totalFinal });
+        }
+
+        // ==========================================================
         // 🔥 ACCIÓN 2: DESPACHAR (Chofer, Fecha/Hora, y Gasto de Flete)
         // ==========================================================
         if (accion === 'DESPACHAR') {
@@ -279,7 +307,7 @@ export async function PUT(request, { params }) {
             venta.statusDespacho = 'Completado';
             venta.quienRetira = quienRetira;
             venta.fechaHoraRetiro = fechaHoraRetiro ? new Date(fechaHoraRetiro) : new Date();
-            venta.costoFlete = Number(costoFlete) || 0;
+            // El flete que se le cobra al cliente (venta.costoFlete) se fija en DATOS_ENVIO; aquí solo se asienta lo que pagó la empresa
             await venta.save({ transaction: t });
 
             // Marcamos las salidas de inventario como Entregadas

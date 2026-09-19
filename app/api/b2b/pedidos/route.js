@@ -3,6 +3,7 @@ import { Cliente, Correlativo, CuentaPorCobrar, Producto, SalidaInventario, Vent
 import { notificarTodos } from '@/app/handlers/notificar';
 import { calcularFactura, precioMayor } from '@/app/constants/facturacion';
 import { requerirCliente } from '../../_lib/acceso';
+import { crearRetencionPendiente } from '../../_lib/retencionesVenta';
 import { tasaVigente } from '../../_lib/tasaBcv';
 import { ESTADOS_ACTIVOS, Op, creditoDeCliente, hoyCaracas, resumenPedido, ventasDelCliente } from '../_lib';
 
@@ -130,6 +131,8 @@ export async function POST(request) {
             tipoDocumento,
             numeroDocumento,
             tipoEntrega,
+            // Con envío, el cliente dice qué empresa de transporte pasa a buscar el pedido (administración lo puede corregir)
+            quienRetira: tipoEntrega === 'flete' ? (String(body.transporte ?? '').trim().slice(0, 120) || null) : null,
             statusDespacho: 'Pendiente',
             condicionPago: aCredito ? 'Credito' : 'Contado',
             fechaVencimiento: aCredito ? new Date(Date.now() + credito.diasCredito * 86400000) : null,
@@ -176,6 +179,9 @@ export async function POST(request) {
                 solicitadoPorId: sesion.id || null,
             }, { transaction: t });
         }
+
+        // Factura a un contribuyente especial: la retención de IVA queda calculada (falta el comprobante del cliente) y se descuenta del saldo
+        const retencion = await crearRetencionPendiente({ venta, transaction: t });
 
         await t.commit();
 

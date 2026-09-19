@@ -16,6 +16,7 @@ import { notifications } from '@mantine/notifications';
 import PrecioVisual from '@/app/components/ui/PrecioVisual';
 import RetencionIvaCard from '../_components/RetencionIvaCard';
 import EvidenciaEmpaque from '../_components/EvidenciaEmpaque';
+import EnvioCard from '../_components/EnvioCard';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function DetallePedidoMayorPage() {
@@ -208,7 +209,7 @@ export default function DetallePedidoMayorPage() {
                                         </Button>
                                     )}
                                     {!esVendedor && pasoActual === 1 && (
-                                        <Button size="md" color="grape" leftSection={<IconTruck size={18} />} onClick={() => setModalDespacho(true)}>Registrar Chofer y Flete</Button>
+                                        <Button size="md" color="grape" leftSection={<IconTruck size={18} />} onClick={() => { formDespacho.setFieldValue('quienRetira', pedido.quienRetira || ''); setModalDespacho(true); }}>Registrar Chofer y Flete</Button>
                                     )}
                                 </Group>
                             </Paper>
@@ -311,6 +312,8 @@ export default function DetallePedidoMayorPage() {
                                     <Text size="xs" c="dimmed">Etiquetador:</Text>
                                     <Text size="sm" fw={600}>{pedido.etiquetador?.empleado ? `${pedido.etiquetador.empleado.nombre} ${pedido.etiquetador.empleado.apellido}` : 'Pendiente'}</Text>
                                 </Paper>
+
+                                {!esVendedor && <EnvioCard pedido={pedido} onCambio={refetch} />}
 
                                 {!esVendedor && <RetencionIvaCard pedido={pedido} onCambio={refetch} />}
 
@@ -484,7 +487,7 @@ export default function DetallePedidoMayorPage() {
                             <>
                                 <TextInput label="Chofer / Agencia de Delivery" withAsterisk {...formDespacho.getInputProps('quienRetira')} />
                                 <TextInput type="datetime-local" label="Fecha y Hora de Entrega a Agencia" withAsterisk {...formDespacho.getInputProps('fechaHoraRetiro')} />
-                                <NumberInput label="Costo del Flete (Gasto)" decimalScale={2} withAsterisk {...formDespacho.getInputProps('costoFlete')} />
+                                <NumberInput label="Lo que pagó la empresa por el flete (gasto)" description="El flete que se le cobra al cliente se fija en «Envío y transporte»" decimalScale={2} withAsterisk {...formDespacho.getInputProps('costoFlete')} />
                                 <Text size="xs" c="dimmed">ℹ️ Al registrar esto, recuerda contactar a la agencia de delivery para el despacho.</Text>
                             </>
                         )}
