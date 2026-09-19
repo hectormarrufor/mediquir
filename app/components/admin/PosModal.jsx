@@ -19,6 +19,7 @@ import PrecioVisual from '../ui/PrecioVisual';
 import { useAuth } from '@/hooks/useAuth';
 import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 import { numeroALetras } from '@/app/utils/numeroALetras';
+import { calcularFactura, aBolivares, aDolares } from '@/app/constants/facturacion';
 
 export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
     const queryClient = useQueryClient(); // 🔥 INSTANCIADO PARA INVALIDAR QUERIES
@@ -147,9 +148,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
         switch(tarifa) {
             case 'precio7': precioFinal = p7; monedaSimbolo = '$'; break;
             case 'precio6': precioFinal = p6; monedaSimbolo = '$'; break;
-            case 'precio1': precioFinal = costo * 1.35 * tasaBcv; monedaSimbolo = 'Bs'; break;
-            case 'precio4': precioFinal = p7 * tasaBcv; monedaSimbolo = 'Bs'; break;
-            case 'precio5': precioFinal = p6 * tasaBcv; monedaSimbolo = 'Bs'; break;
+            case 'precio1': precioFinal = aBolivares(costo * 1.35, tasaBcv); monedaSimbolo = 'Bs'; break;
+            case 'precio4': precioFinal = aBolivares(p7, tasaBcv); monedaSimbolo = 'Bs'; break;
+            case 'precio5': precioFinal = aBolivares(p6, tasaBcv); monedaSimbolo = 'Bs'; break;
             default: precioFinal = p7; monedaSimbolo = '$';
         }
 
@@ -225,7 +226,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
             nombre: values.nombre || 'Producto Genérico',
             precio: Number(values.precio),
             simbolo: esMonedaBs ? 'Bs' : '$',
-            cantidad: Number(values.cantidad),
+            cantidad: Math.max(1, Math.floor(Number(values.cantidad) || 1)),
             aplicaIva: values.aplicaIva,
             tieneDescuento: false,
             afectaInventario: false 
@@ -247,8 +248,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
 
     const setCantidadAbsoluta = (id, cantidad) => {
         if (cantidad === undefined || cantidad === null || cantidad === '') return;
-        const cant = Number(cantidad);
-        if (cant <= 0) return eliminarItem(id);
+        const cant = Math.floor(Number(cantidad));
+        if (!(cant > 0)) return eliminarItem(id);
         setCarrito(carrito.map(item => item.id === id ? { ...item, cantidad: cant } : item));
     };
 
@@ -258,35 +259,16 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
 
     const eliminarItem = (id) => setCarrito(carrito.filter(item => item.id !== id));
 
-    let subtotal = 0;
-    let montoIva = 0;
-    let totalExento = 0;
-    let baseImponible = 0;
-
-    carrito.forEach(item => {
-        const itemSub = item.precio * item.cantidad;
-        subtotal += itemSub;
-
-        let llevaIva = false;
-        
-        if (formVenta.values.conIva) {
-            if (item.isFicticio) {
-                llevaIva = item.aplicaIva;
-            } else {
-                llevaIva = item.porcentajeIva > 0;
-            }
-        }
-
-        if (llevaIva) {
-            baseImponible += itemSub;
-            montoIva += itemSub * 0.16; 
-        } else {
-            totalExento += itemSub;
-        }
-    });
-
+    const llevaIva = (item) => Boolean(formVenta.values.conIva) && (item.isFicticio ? Boolean(item.aplicaIva) : item.porcentajeIva > 0);
     const costoFleteNum = Number(formVenta.values.costoFlete) || 0;
-    const totalFinal = subtotal + montoIva + costoFleteNum;
+    const factura = carrito.length
+        ? calcularFactura({
+            renglones: carrito.map((item) => ({ precioUnitario: item.precio, cantidad: item.cantidad, aplicaIva: llevaIva(item), porcentajeIva: item.isFicticio ? undefined : item.porcentajeIva })),
+            costoFlete: costoFleteNum,
+        })
+        : { renglones: [], subtotal: 0, exento: 0, baseImponible: 0, montoIva: 0, totalFinal: 0 };
+    const { subtotal, montoIva, totalFinal, baseImponible, exento: totalExento } = factura;
+    const montoRenglonDe = (idx) => factura.renglones[idx]?.monto ?? 0;
     const simboloMoneda = esMonedaBs ? 'Bs' : '$';
 
     const handleRevisarVenta = () => {
@@ -321,7 +303,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                     nombreFicticio: item.isFicticio ? item.nombre : null,
                     cantidad: item.cantidad, 
                     precioUnitario: item.precio, 
-                    subtotal: item.precio * item.cantidad,
+                    subtotal: montoRenglonDe(carrito.indexOf(item)),
                     aplicaIva: formVenta.values.conIva ? (item.isFicticio ? item.aplicaIva : item.porcentajeIva > 0) : false,
                     afectaInventario: item.afectaInventario 
                 }))
@@ -354,14 +336,16 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
 
     const tituloDocumento = tipoDocumentoActual === 'FACTURA' ? 'Factura' : (tipoDocumentoActual === 'NOTA DE ENTREGA' ? 'Nota de Entrega' : 'Recibo de Venta');
     
-    const prevTotalBs = esMonedaBs ? totalFinal : totalFinal * tasaBcv;
-    const prevTotalUsd = esMonedaBs ? totalFinal / tasaBcv : totalFinal;
-    const prevIvaBs = esMonedaBs ? montoIva : montoIva * tasaBcv;
-    const prevIvaUsd = esMonedaBs ? montoIva / tasaBcv : montoIva;
-    const prevExentoBs = esMonedaBs ? totalExento : totalExento * tasaBcv;
-    const prevExentoUsd = esMonedaBs ? totalExento / tasaBcv : totalExento;
-    const prevBaseBs = esMonedaBs ? baseImponible : baseImponible * tasaBcv;
-    const prevBaseUsd = esMonedaBs ? baseImponible / tasaBcv : baseImponible;
+    const aBs = (v) => (esMonedaBs ? v : aBolivares(v, tasaBcv));
+    const aUsd = (v) => (esMonedaBs ? aDolares(v, tasaBcv) : v);
+    const prevTotalBs = aBs(totalFinal);
+    const prevTotalUsd = aUsd(totalFinal);
+    const prevIvaBs = aBs(montoIva);
+    const prevIvaUsd = aUsd(montoIva);
+    const prevExentoBs = aBs(totalExento);
+    const prevExentoUsd = aUsd(totalExento);
+    const prevBaseBs = aBs(baseImponible);
+    const prevBaseUsd = aUsd(baseImponible);
     
     const clienteSeleccionado = clientes?.find(c => c.id.toString() === formVenta.values.clienteId?.toString());
     const formatoNumero = (num) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
@@ -533,7 +517,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                         </Table.Tr>
                                     </Table.Thead>
                                     <Table.Tbody>
-                                        {carrito.map(item => (
+                                        {carrito.map((item, idxItem) => (
                                             <Table.Tr key={item.id}>
                                                 <Table.Td>
                                                     <Group gap="xs" wrap="nowrap">
@@ -578,7 +562,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                                         <NumberInput
                                                             value={item.cantidad}
                                                             onChange={(val) => setCantidadAbsoluta(item.id, val)}
-                                                            min={1} size="sm" w={75} hideControls
+                                                            min={1} allowDecimal={false} size="sm" w={75} hideControls
                                                             styles={{ input: { textAlign: 'center', fontWeight: 900, fontSize: '1rem', color: '#1971c2', backgroundColor: '#f8f9fa' } }}
                                                         />
                                                         
@@ -592,7 +576,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                                     <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="sm" fw={500} />
                                                 </Table.Td>
                                                 <Table.Td style={{ textAlign: 'right' }}>
-                                                    <PrecioVisual valor={item.precio * item.cantidad} simbolo={item.simbolo} size="sm" fw={800} />
+                                                    <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="sm" fw={800} />
                                                 </Table.Td>
                                                 <Table.Td style={{ textAlign: 'right' }}>
                                                     <ActionIcon color="red" variant="subtle" onClick={() => eliminarItem(item.id)}>
@@ -691,11 +675,11 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                         <TextInput label="Descripción del artículo" withAsterisk {...formFicticio.getInputProps('nombre')} />
                         <NumberInput 
                             label={`Precio Unitario (${esMonedaBs ? 'Bs' : 'USD'})`} 
-                            withAsterisk decimalScale={2} 
+                            withAsterisk decimalScale={3} 
                             description="Ingresa el precio en la moneda seleccionada."
                             {...formFicticio.getInputProps('precio')} 
                         />
-                        <NumberInput label="Cantidad" withAsterisk min={1} {...formFicticio.getInputProps('cantidad')} />
+                        <NumberInput label="Cantidad" withAsterisk min={1} allowDecimal={false} {...formFicticio.getInputProps('cantidad')} />
                         <Checkbox 
                             label={<Text fw={600}>Lleva IVA (16%)</Text>} 
                             description="Si desmarcas, será EXENTO."
@@ -785,7 +769,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                         </td>
                                         <td style={{textAlign: 'right'}}>{formatoNumero(d.precio)}</td>
                                         <td style={{textAlign: 'center'}}>{formatoNumero(d.cantidad)}</td>
-                                        <td style={{textAlign: 'right'}}>{formatoNumero(d.precio * d.cantidad)}</td>
+                                        <td style={{textAlign: 'right'}}>{formatoNumero(montoRenglonDe(index))}</td>
                                     </tr>
                                 ))}
                             </tbody>

@@ -1,3 +1,4 @@
+import { requerirAdmin } from '../_lib/acceso';
 // Ruta: app/api/test-cron/route.js
 
 import { NextResponse } from 'next/server';
@@ -14,6 +15,8 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60; 
 
 export async function GET(request) {
+    const acceso = await requerirAdmin();
+    if (acceso.error) return acceso.error;
     // 🔒 Pequeña seguridad: Solo se ejecuta si pasas el query param correcto
     // Ejemplo de uso: http://localhost:3000/api/test-cron?secret=mediquir
     const { searchParams } = new URL(request.url);

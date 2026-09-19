@@ -5,13 +5,17 @@ import { Box, Stepper, Button, Group, Radio, Stack, Text, Paper, Loader, Alert, 
 import { useForm } from '@mantine/form';
 import { IconBuildingStore, IconMotorbike, IconCheck, IconAlertCircle, IconUser, IconGps, IconMapPinCheck } from '@tabler/icons-react';
 import { useCart } from './components/landing/CartContext';
+import { aBolivares } from '@/app/constants/facturacion';
+import { useTasaBcv } from '@/hooks/useTasaBcv';
 
 // Coordenadas base de Mediquir en Ciudad Ojeda
 const MEDIQUIR_LOCATION = { lat: 10.195099414915264, lng: -71.31187255102861 };
 const TARIFA_BASE_DELIVERY = 1.5;
 const TARIFA_POR_KM = 0.5;
 
-export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 }) {
+export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp }) {
+    const { tasa: tasaHook } = useTasaBcv();
+    const tasaBcv = Number(tasaProp) > 0 ? Number(tasaProp) : (tasaHook || 0);
 
     const { cart, subtotal, totalImpuestos, clearCart } = useCart();
     const [mensajeCarga, setMensajeCarga] = useState('Procesando orden...');
@@ -155,8 +159,8 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
     };
 
     const costoDeliveryFinal = metodoEntrega === 'delivery' ? costoDelivery : 0;
-    const totalPagarUSD = subtotal + totalImpuestos + costoDeliveryFinal;
-    const totalPagarBS = totalPagarUSD * tasaBcv;
+    const totalPagarUSD = Number((subtotal + totalImpuestos + costoDeliveryFinal).toFixed(2));
+    const totalPagarBS = tasaBcv > 0 ? aBolivares(totalPagarUSD, tasaBcv) : 0; // el servidor recalcula con su propia tasa y precios
     const requierePagoOnline = metodoEntrega === 'delivery' || Boolean(pagoOnlinePickup);
 
     const handleSiguiente = () => {
@@ -225,7 +229,6 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
                 body: JSON.stringify({
                     cart, cliente: clientePayload, metodoEntrega, pagoOnlinePickup,
                     coordenadasGPS, costoDelivery: costoDeliveryFinal,
-                    totalPagarUSD, totalImpuestos, tasaBcv,
                     pagoMovil: requierePagoOnline ? { referencia } : null
                 })
             });
@@ -436,7 +439,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv = 36.5 })
                             {metodoEntrega === 'delivery' && <Group justify="space-between"><Text size="sm">Delivery:</Text><Text size="sm">${costoDelivery.toFixed(2)}</Text></Group>}
                             <Divider my="sm" />
                             <Group justify="space-between"><Text fw={900} size="lg">Total USD:</Text><Text fw={900} size="xl" c="#0B1B3D">${totalPagarUSD.toFixed(2)}</Text></Group>
-                            <Group justify="space-between" mt={5}><Text fw={700} size="sm" c="dimmed">Total BS (Tasa: {tasaBcv}):</Text><Text fw={900} size="lg" c="blue.7">Bs {totalPagarBS.toFixed(2)}</Text></Group>
+                            <Group justify="space-between" mt={5}><Text fw={700} size="sm" c="dimmed">Total BS (Tasa: {tasaBcv}):</Text><Text fw={900} size="lg" c="blue.7">Bs {totalPagarBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text></Group>
                         </Paper>
 
                         {requierePagoOnline ? (

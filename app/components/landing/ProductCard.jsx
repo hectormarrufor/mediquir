@@ -7,7 +7,9 @@ import { notifications } from '@mantine/notifications';
 import { useCart } from './CartContext';
 import ImageCarousel from './ImageCarousel';
 import ProductDetail from './ProductDetail';
-import { getProductImages, getPricing, getPresentacionLabel } from './productUtils';
+import { getProductImages, getPricing, getPresentacionLabel, formatearPrecio, formatearBs } from './productUtils';
+import { aBolivares } from '@/app/constants/facturacion';
+import { useTasaBcv } from '@/hooks/useTasaBcv';
 import classes from './landing.module.css';
 
 export default function ProductCard({ product, isMobile }) {
@@ -17,6 +19,7 @@ export default function ProductCard({ product, isMobile }) {
 
     const images = useMemo(() => getProductImages(product), [product]);
     const { stock, precioBase, porcentajeAhorro, hasDiscount, precioFinal, isOutOfStock, isLowStock } = getPricing(product);
+    const { tasa } = useTasaBcv();
     const enCarrito = cart.find((item) => item.product.id === product.id)?.quantity || 0;
     const puedeAgregar = !isOutOfStock && enCarrito < stock;
 
@@ -98,11 +101,12 @@ export default function ProductCard({ product, isMobile }) {
                     <Group justify="space-between" align="flex-end" wrap="nowrap" mt="auto" pt={6} gap={6}>
                         <Box>
                             {hasDiscount && (
-                                <Text td="line-through" fz={11} c="dimmed" lh={1}>${precioBase.toFixed(2)}</Text>
+                                <Text td="line-through" fz={11} c="dimmed" lh={1}>${formatearPrecio(precioBase)}</Text>
                             )}
                             <Text fw={800} fz={{ base: 16, sm: 20 }} lh={1.15} c={hasDiscount ? 'red.7' : 'brand.6'}>
-                                Ref ${precioFinal.toFixed(2)}
+                                Ref ${formatearPrecio(precioFinal)}
                             </Text>
+                            {tasa && <Text fz={{ base: 11, sm: 12 }} fw={600} c="dimmed" lh={1.2}>Bs {formatearBs(aBolivares(precioFinal, tasa))}</Text>}
                         </Box>
                         <ActionIcon
                             size={isMobile ? 36 : 40}

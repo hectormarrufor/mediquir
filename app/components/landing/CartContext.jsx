@@ -1,5 +1,6 @@
 'use client';
 
+import { calcularFactura } from '@/app/constants/facturacion';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const CartContext = createContext();
@@ -91,7 +92,7 @@ export function CartProvider({ children }) {
     const verifyStockBeforeCheckout = async () => {
         setIsVerifying(true);
         try {
-            const res = await fetch('/api/productos');
+            const res = await fetch('/api/productos?fresh=1');
             if (!res.ok) throw new Error("Error consultando inventario");
             
             const productosBD = await res.json();
@@ -128,20 +129,18 @@ export function CartProvider({ children }) {
 
    // En CartContext.jsx, actualiza los cálculos finales antes del return:
 
-    const subtotal = cart.reduce((acc, item) => {
-        const stockDispo = Number(item.product.stockAlmacen || 0);
-        if (stockDispo <= 0) return acc;
-        return acc + (item.precioFinal * item.quantity);
-    }, 0);
-
-    const totalImpuestos = cart.reduce((acc, item) => {
-        const stockDispo = Number(item.product.stockAlmacen || 0);
-        if (stockDispo <= 0) return acc;
-        
-        // Usamos el campo directo de tu BD (0 o 16)
-        const porcentajeIva = Number(item.product.porcentajeIva) || 0; 
-        return acc + (item.precioFinal * item.quantity * (porcentajeIva / 100));
-    }, 0);
+    // Mismas reglas que el servidor: renglón redondeado a 2 decimales, IVA sobre la base imponible (solo lo con existencia)
+    const disponibles = cart.filter((item) => Number(item.product.stockAlmacen || 0) > 0 && Number.isInteger(item.quantity) && item.quantity > 0);
+    const factura = disponibles.length
+        ? calcularFactura({
+            renglones: disponibles.map((item) => {
+                const porcentajeIva = Number(item.product.porcentajeIva) || 0;
+                return { precioUnitario: item.precioFinal, cantidad: item.quantity, aplicaIva: porcentajeIva > 0, porcentajeIva };
+            }),
+        })
+        : { subtotal: 0, montoIva: 0 };
+    const subtotal = factura.subtotal;
+    const totalImpuestos = factura.montoIva;
 
     const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
 

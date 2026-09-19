@@ -1,6 +1,7 @@
 // app/api/superuser/permissions/route.js
 import { NextResponse } from 'next/server';
 import db from '@/models';
+import { requerirAdmin } from '../../_lib/acceso';
 
 export async function GET() {
     try {
@@ -24,6 +25,9 @@ export async function GET() {
 }
 
 export async function POST(req) {
+    // Quién ve cada módulo lo decide solo un administrador (antes cualquier visitante podía reescribirlo)
+    const acceso = await requerirAdmin();
+    if (acceso.error) return acceso.error;
     try {
         const body = await req.json();
         const entries = Object.entries(body);

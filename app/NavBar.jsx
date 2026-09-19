@@ -5,7 +5,7 @@ import { Avatar, Box, Group, Loader, Text, UnstyledButton } from '@mantine/core'
 import { usePathname } from 'next/navigation';
 import {
     IconLogout, IconLogin, IconDashboard, IconEyeDollar, IconBell,
-    IconBrandWhatsapp, IconHome, IconShoppingBag, IconReceipt
+    IconBrandWhatsapp, IconHome, IconShoppingBag, IconReceipt, IconLayoutDashboard, IconWallet
 } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
 import { tenant } from '@/config/tenant';
@@ -113,8 +113,10 @@ const NavBar = ({ router, close, opened }) => {
             {isAuthenticated && clienteId && (
                 <>
                     <Text className={classes.drawerSection}>Mi cuenta</Text>
-                    <DrawerItem icon={IconShoppingBag} label="Tienda" index={i++} active={pathname === '/tienda'} onClick={() => go('/tienda')} />
-                    <DrawerItem icon={IconReceipt} label="Mis pedidos" index={i++} active={pathname.startsWith('/tienda/pedidos')} onClick={() => go('/tienda/pedidos')} />
+                    <DrawerItem icon={IconLayoutDashboard} label="Inicio" index={i++} active={pathname === '/b2b'} onClick={() => go('/b2b')} />
+                    <DrawerItem icon={IconShoppingBag} label="Catálogo" index={i++} active={pathname.startsWith('/b2b/catalogo')} onClick={() => go('/b2b/catalogo')} />
+                    <DrawerItem icon={IconReceipt} label="Mis pedidos" index={i++} active={pathname.startsWith('/b2b/pedidos')} onClick={() => go('/b2b/pedidos')} />
+                    <DrawerItem icon={IconWallet} label="Cuentas por pagar" index={i++} active={pathname.startsWith('/b2b/cuentas')} onClick={() => go('/b2b/cuentas')} />
                 </>
             )}
 

@@ -42,7 +42,7 @@ const Venta = sequelize.define('Venta', {
         allowNull: true 
     },
     statusDespacho: {
-        type: DataTypes.ENUM('Pendiente', 'Parcial', 'Completado', 'Cancelado'),
+        type: DataTypes.ENUM('Pendiente', 'Empacado', 'Parcial', 'Completado', 'Cancelado'),
         defaultValue: 'Pendiente'
     },
 

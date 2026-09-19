@@ -10,7 +10,8 @@ import BestSellersSection from './components/landing/BestSellersSection';
 import FooterSection from './components/landing/FooterSection';
 import { useCart } from './components/landing/CartContext';
 import CheckoutProcess from './CheckoutProcess';
-import { getMainImage, PLACEHOLDER_IMG } from './components/landing/productUtils';
+import { getMainImage, PLACEHOLDER_IMG, formatearPrecio, formatearBs } from './components/landing/productUtils';
+import { aBolivares } from '@/app/constants/facturacion';
 
 export default function LandingMediquir() {
     const [bcv, setBcv] = useState(undefined);
@@ -198,7 +199,7 @@ export default function LandingMediquir() {
                                                 />
                                                 <Box flex={1}>
                                                     <Text size="sm" fw={700} lineClamp={2} c="navy.9">{item.product.nombre}</Text>
-                                                    <Text size="xs" c="dimmed" fw={600}>Ref ${item.precioFinal.toFixed(2)}</Text>
+                                                    <Text size="xs" c="dimmed" fw={600}>Ref ${formatearPrecio(item.precioFinal)}{bcv ? ` · Bs ${formatearBs(aBolivares(item.precioFinal, bcv))}` : ''}</Text>
 
                                                     {isOut && (
                                                         <Badge color="red" size="xs" variant="filled" mt={4}>
@@ -243,8 +244,12 @@ export default function LandingMediquir() {
                         <Box pos="absolute" bottom={0} left={0} right={0} p="md" bg="white" style={{ borderTop: '1px solid #E9ECEF' }}>
                             <Group justify="space-between" mb="md">
                                 <Text fw={700} size="md" c="gray.7">Subtotal:</Text>
-                                <Text fw={900} size="xl" c="brand.6">Ref ${subtotal.toFixed(2)}</Text>
+                                <Box ta="right">
+                                    <Text fw={900} size="xl" c="brand.6" lh={1.1}>Ref ${subtotal.toFixed(2)}</Text>
+                                    {bcv && <Text size="sm" fw={600} c="dimmed">Bs {formatearBs(aBolivares(subtotal, bcv))}</Text>}
+                                </Box>
                             </Group>
+                            <Text size="xs" c="dimmed" mb="sm">Subtotal sin IVA. El IVA (16%) de los productos que lo llevan se calcula al pagar.</Text>
                             <Button
                                 fullWidth
                                 size="lg"

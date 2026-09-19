@@ -15,6 +15,10 @@ const nextConfig = {
   // Permite levantar un segundo `next dev` (p. ej. para pruebas automáticas) con otra carpeta de build
   // y así no pisar la de tu servidor: NEXT_DIST_DIR=.next-test npx next dev -p 3010
   distDir: process.env.NEXT_DIST_DIR || '.next',
+  // Importa solo los iconos/componentes que se usan en vez de cargar cada librería completa (menos módulos por compilar)
+  experimental: {
+    optimizePackageImports: ['@mantine/core', '@mantine/hooks', '@mantine/dates', '@mantine/notifications', '@mantine/charts', '@tabler/icons-react', 'date-fns', 'dayjs'],
+  },
   serverExternalPackages: ['sequelize', 'pg', 'pg-hstore', 'pg-connection-string'],
   
   // NUEVO: Configuración de dominios externos permitidos para next/image

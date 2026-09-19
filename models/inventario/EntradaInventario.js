@@ -25,7 +25,7 @@ const EntradaInventario = sequelize.define('EntradaInventario', {
     },
     // El costo unitario al que entró este lote (Vital para calcular rentabilidad futura)
     costoUnitario: {
-        type: DataTypes.DECIMAL(10, 3),
+        type: DataTypes.DECIMAL(12, 5), // costo POR UNIDAD de cada compra; sin redondeo
         allowNull: false,
     },
     // 🔥 TRAZABILIDAD 🔥

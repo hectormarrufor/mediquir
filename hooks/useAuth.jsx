@@ -82,12 +82,12 @@ export function AuthProvider({ children }) {
             // --- 🚀 NUEVA LÓGICA DE REDIRECCIÓN INTELIGENTE ---
             if (fetched?.clienteId) {
                 // Si el usuario tiene un cliente asociado, va directo a la tienda
-                router.push('/tienda');
+                router.push('/b2b');
             } else {
                 // Verificamos si es chofer o superusuario administrativo
 
             if (fetched?.clienteId) {
-                router.push('/tienda'); // Redirige al portal del cliente
+                router.push('/b2b'); // Redirige al portal del cliente
             }  else {
                 router.push('/superuser');
             }

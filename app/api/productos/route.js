@@ -2,13 +2,26 @@ import { NextResponse } from 'next/server';
 import { Producto, Categoria, Marca, GrupoEquivalencia, Tag } from '@/models';
 import sequelize from '@/sequelize';
 import { requerirStaff } from '@/app/api/inventario/_lib';
+import { precioVentaWeb } from '@/app/constants/facturacion';
 import { resolverEmpaque } from '@/app/constants/inventarioCampos';
 
 // =======================================================================
 // GET: Listar todo el inventario con sus relaciones completas
 // =======================================================================
-export async function GET() {
+// Catálogo público en memoria por 30 s: evita repetir la consulta pesada (600+ productos con relaciones) por cada visitante.
+// Solo la versión pública se guarda; la de personal (con costos) siempre se calcula en el momento.
+const TTL_PUBLICO_MS = 30_000;
+let cachePublico = { t: 0, datos: null };
+
+export async function GET(request) {
+    const fresco = new URL(request.url).searchParams.get('fresh') === '1'; // el chequeo previo al pago pide datos al instante
     try {
+        const { sesion, error: noEsStaff } = await requerirStaff();
+        const esPublico = Boolean(noEsStaff || !sesion);
+        if (esPublico && !fresco && cachePublico.datos && Date.now() - cachePublico.t < TTL_PUBLICO_MS) {
+            return NextResponse.json(cachePublico.datos, { status: 200, headers: { 'Cache-Control': 'private, max-age=0' } });
+        }
+
         const productos = await Producto.findAll({
             include: [
                 { model: Categoria, as: 'categoria', attributes: ['id', 'nombre'] },
@@ -19,6 +32,18 @@ export async function GET() {
             order: [['createdAt', 'DESC']]
         });
         
+
+        // El catálogo es público (landing), pero costos y precio mayor son solo del personal.
+        if (esPublico) {
+            const publicos = productos.map((p) => {
+                const j = p.toJSON();
+                const { costoUsd, precio6, ...resto } = j;
+                // La landing calcula el precio web con precio7; si falta se le entrega ya resuelto (sin revelar el costo)
+                return { ...resto, precio7: precioVentaWeb({ precio7: j.precio7, costoUsd, porcentajeDescuento: 0 }) };
+            });
+            cachePublico = { t: Date.now(), datos: publicos };
+            return NextResponse.json(publicos, { status: 200, headers: { 'Cache-Control': 'private, max-age=0' } });
+        }
         return NextResponse.json(productos, { status: 200 });
     } catch (error) {
         console.error("Error al obtener productos:", error);

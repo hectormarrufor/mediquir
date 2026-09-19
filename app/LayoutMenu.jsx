@@ -37,7 +37,7 @@ const LayoutMenu = ({ router }) => {
     }
 
     // ESTADO: AUTENTICADO
-    const handleMainMenuClick = () => router.push(clienteId ? '/tienda' : '/superuser');
+    const handleMainMenuClick = () => router.push(clienteId ? '/b2b' : '/superuser');
     const rolTexto = rol ? rol.charAt(0).toUpperCase() + rol.slice(1) : '';
 
     return (
@@ -45,7 +45,7 @@ const LayoutMenu = ({ router }) => {
             <Group gap="sm" wrap="nowrap">
                 <UnstyledButton className={classes.pill} onClick={handleMainMenuClick}>
                     <IconLayoutDashboard size={18} stroke={1.8} />
-                    {clienteId ? 'Ir a Tienda' : 'Menú Principal'}
+                    {clienteId ? 'Mi portal' : 'Menú Principal'}
                 </UnstyledButton>
 
                 <Menu

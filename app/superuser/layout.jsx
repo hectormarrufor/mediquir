@@ -19,7 +19,7 @@ export default function SuperuserLayout({ children }) {
 
             // SEGURIDAD: Si un cliente intenta entrar a /superuser o sus subrutas
             if (user?.clienteId) {
-                router.push('/tienda');
+                router.push('/b2b');
             }
         }
     }, [user, loading, isAuthenticated, router]);

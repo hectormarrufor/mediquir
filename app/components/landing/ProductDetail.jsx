@@ -6,7 +6,9 @@ import { IconMinus, IconPlus, IconShoppingCartPlus, IconCheck } from '@tabler/ic
 import { notifications } from '@mantine/notifications';
 import ImageCarousel from './ImageCarousel';
 import { useCart } from './CartContext';
-import { getProductImages, getPricing, getPresentacionLabel } from './productUtils';
+import { getProductImages, getPricing, getPresentacionLabel, formatearPrecio, formatearBs } from './productUtils';
+import { aBolivares } from '@/app/constants/facturacion';
+import { useTasaBcv } from '@/hooks/useTasaBcv';
 
 
 function DetailBody({ product, onClose, isMobile }) {
@@ -14,6 +16,8 @@ function DetailBody({ product, onClose, isMobile }) {
     const { addToCart, cart } = useCart();
 
     const { stock, precioBase, porcentajeAhorro, hasDiscount, precioFinal, isOutOfStock, isLowStock } = getPricing(product);
+    const { tasa } = useTasaBcv();
+    const porcentajeIva = Number(product?.porcentajeIva) || 0;
     const enCarrito = cart.find((item) => item.product.id === product.id)?.quantity || 0;
     const disponible = Math.max(0, stock - enCarrito);
 
@@ -56,15 +60,22 @@ function DetailBody({ product, onClose, isMobile }) {
 
                     <Group align="flex-end" gap="xs">
                         <Text fw={900} fz={30} lh={1} c={hasDiscount ? 'red.7' : 'brand.6'}>
-                            Ref ${precioFinal.toFixed(2)}
+                            Ref ${formatearPrecio(precioFinal)}
                         </Text>
                         {hasDiscount && (
                             <>
-                                <Text td="line-through" c="dimmed" size="md">${precioBase.toFixed(2)}</Text>
+                                <Text td="line-through" c="dimmed" size="md">${formatearPrecio(precioBase)}</Text>
                                 <Badge color="red.7" variant="filled">-{porcentajeAhorro}%</Badge>
                             </>
                         )}
                     </Group>
+
+                    {tasa && (
+                        <Text fw={700} size="lg" c="dimmed" lh={1.2}>Bs {formatearBs(aBolivares(precioFinal, tasa))} <Text span size="xs" fw={500}>· tasa BCV {formatearBs(tasa)}</Text></Text>
+                    )}
+                    <Text size="xs" c="dimmed">
+                        {porcentajeIva > 0 ? `Precio sin IVA. Se añade IVA ${porcentajeIva}% al facturar.` : 'Producto exento de IVA.'}
+                    </Text>
 
                     {isOutOfStock ? (
                         <Text c="red.7" fw={700} mt="sm">Producto temporalmente agotado.</Text>
@@ -101,7 +112,7 @@ function DetailBody({ product, onClose, isMobile }) {
                                 leftSection={<IconShoppingCartPlus size={20} />}
                                 onClick={handleAdd}
                             >
-                                Agregar • ${(precioFinal * quantity).toFixed(2)}
+                                Agregar • ${formatearPrecio(precioFinal * quantity)}
                             </Button>
                         </Stack>
                     )}

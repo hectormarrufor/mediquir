@@ -2,6 +2,7 @@
 
 import { Cliente } from '@/models';
 import { NextResponse } from 'next/server';
+import { requerirStaff } from '@/app/api/inventario/_lib';
 
 export async function GET(request) {
     const { searchParams } = new URL(request.url);
@@ -17,7 +18,11 @@ export async function GET(request) {
         });
 
         if (cliente) {
-            return NextResponse.json({ success: true, cliente }, { status: 200 });
+            // Esta ruta es pública (autocompletar del checkout): quien no es personal solo recibe el nombre,
+            // no teléfono, correo ni dirección de una persona por el solo hecho de conocer su cédula.
+            const { error: noEsStaff } = await requerirStaff();
+            const visible = noEsStaff ? { nombre: cliente.nombre } : cliente;
+            return NextResponse.json({ success: true, cliente: visible }, { status: 200 });
         } else {
             return NextResponse.json({ success: false, message: 'Cliente no encontrado' }, { status: 404 });
         }

@@ -6,6 +6,8 @@ const {
     Correlativo, Abono, CuentaPorCobrar, User, Empleado, GrupoEquivalencia
 } = db;
 
+import { aBolivares, aDolares } from '@/app/constants/facturacion';
+
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // ==========================================
@@ -143,10 +145,10 @@ export async function PUT(request, { params }) {
 
                 if (venta.moneda === 'USD') {
                     montoUsd = fleteNum;
-                    montoVes = fleteNum * tasa;
+                    montoVes = aBolivares(fleteNum, tasa);
                 } else {
                     montoVes = fleteNum;
-                    montoUsd = tasa > 0 ? fleteNum / tasa : 0;
+                    montoUsd = tasa > 0 ? aDolares(fleteNum, tasa) : 0;
                 }
 
                 await MovimientoFinanciero.create({
@@ -186,29 +188,33 @@ export async function PUT(request, { params }) {
                 return NextResponse.json({ error: 'Esta cuenta ya está pagada en su totalidad' }, { status: 400 });
             }
 
-            // 2. Homologar el monto a la moneda base de la CxC
-            let montoAbonadoHomologado = Number(montoAbono);
-            if (monedaAbono !== cxc.moneda) {
-                if (cxc.moneda === 'USD' && monedaAbono === 'BS') {
-                    montoAbonadoHomologado = Number(montoAbono) / Number(tasaCambioAbono);
-                } else if (cxc.moneda === 'BS' && monedaAbono === 'USD') {
-                    montoAbonadoHomologado = Number(montoAbono) * Number(tasaCambioAbono);
-                }
-            }
+            // 2. Validaciones y conversión EXACTA (dólares <-> bolívares a la tasa del pago)
+            const monto = Number(montoAbono);
+            if (!(monto > 0)) { await t.rollback(); return NextResponse.json({ error: 'El monto del abono debe ser mayor a 0' }, { status: 400 }); }
+            if (!['USD', 'BS'].includes(monedaAbono)) { await t.rollback(); return NextResponse.json({ error: 'Moneda del abono inválida' }, { status: 400 }); }
+            const tasaAbono = Number(tasaCambioAbono) > 0 ? Number(tasaCambioAbono) : Number(venta.tasaCambio);
+            if (!(tasaAbono > 0)) { await t.rollback(); return NextResponse.json({ error: 'Tasa de cambio inválida' }, { status: 400 }); }
 
-            // 3. Crear el Abono Histórico
+            const abonoUsd = monedaAbono === 'USD' ? monto : aDolares(monto, tasaAbono);
+            const abonoBs = monedaAbono === 'BS' ? monto : aBolivares(monto, tasaAbono);
+            // A la moneda de la cuenta (la que se descuenta del saldo)
+            const montoAbonadoHomologado = cxc.moneda === 'USD' ? abonoUsd : abonoBs;
+
+            // 3. Abono histórico (con las columnas reales de la tabla Abonos)
             const nuevoAbono = await Abono.create({
                 ventaId: venta.id,
-                cuentaPorCobrarId: cxc.id,
-                monto: Number(montoAbonadoHomologado.toFixed(2)),
-                moneda: cxc.moneda,
-                fecha: new Date(),
-                metodoPago,
-                referencia
+                fechaPago: new Date(),
+                metodoPago: metodoPago || 'No especificado',
+                referencia: referencia || null,
+                montoUsd: abonoUsd,
+                montoVes: abonoBs,
+                montoBs: abonoBs,
+                tasaBcvAplicada: tasaAbono,
+                tasaCambio: tasaAbono,
             }, { transaction: t });
 
-            // 4. Actualizar saldos
-            cxc.saldoPendiente = Math.max(0, Number(cxc.saldoPendiente) - Number(montoAbonadoHomologado));
+            // 4. Actualizar saldos (sin decimales flotantes sobrantes)
+            cxc.saldoPendiente = Math.max(0, Number((Number(cxc.saldoPendiente) - montoAbonadoHomologado).toFixed(2)));
 
             // Si se completó el pago, pasar a histórico
             if (cxc.saldoPendiente <= 0) {
@@ -222,17 +228,14 @@ export async function PUT(request, { params }) {
             let catAbono = await CategoriaFinanciera.findOne({ where: { nombre: 'Ingreso por Cobranza (CxC)' }, transaction: t });
             if (!catAbono) catAbono = await CategoriaFinanciera.create({ nombre: 'Ingreso por Cobranza (CxC)', tipo: 'INGRESO' }, { transaction: t });
 
-            const mUsdAbono = monedaAbono === 'USD' ? Number(montoAbono) : Number(montoAbono) / Number(tasaCambioAbono);
-            const mBsAbono = monedaAbono === 'BS' ? Number(montoAbono) : Number(montoAbono) * Number(tasaCambioAbono);
-
             await MovimientoFinanciero.create({
                 tipo: 'INGRESO',
                 fecha: new Date(),
                 metodoPago,
                 referencia: referencia || `Abono CxC - Doc: ${venta.numeroDocumento}`,
-                montoUsd: Number(mUsdAbono.toFixed(2)),
-                tasaBcvAplicada: Number(tasaCambioAbono),
-                montoVes: Number(mBsAbono.toFixed(2)),
+                montoUsd: abonoUsd,
+                tasaBcvAplicada: tasaAbono,
+                montoVes: abonoBs,
                 descripcion: `Abono a Cuenta por Cobrar - Venta ${venta.numeroDocumento}`,
                 categoriaId: catAbono.id,
                 ventaId: venta.id,

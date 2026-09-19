@@ -1,3 +1,4 @@
+import { requerirAdmin } from '../_lib/acceso';
 import { NextResponse } from 'next/server';
 import webpush from 'web-push';
 import db from '@/models'; // Asegúrate de que esta ruta a tus modelos sea la correcta
@@ -16,6 +17,8 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
 }
 
 export async function GET(request) {
+    const acceso = await requerirAdmin();
+    if (acceso.error) return acceso.error;
     try {
         if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
             return NextResponse.json({ error: 'Faltan las variables de entorno VAPID.' }, { status: 400 });

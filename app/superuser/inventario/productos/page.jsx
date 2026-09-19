@@ -12,6 +12,7 @@ import { useInventarioParams } from './_hooks/useInventarioParams';
 import { useEdicionInventario, useListaInventario, useOpcionesInventario, useResumenInventario } from './_hooks/useInventario';
 import BarraFiltros from './_components/BarraFiltros';
 import FotoModal from './_components/FotoModal';
+import ListaPreciosModal from './_components/ListaPreciosModal';
 import InventarioGrid from './_components/InventarioGrid';
 import ListaMovil from './_components/ListaMovil';
 import PaginacionInventario from './_components/PaginacionInventario';
@@ -35,6 +36,7 @@ export default function InventarioProductosPage() {
     const [bloqueado, setBloqueado] = useLocalStorage({ key: 'inv.bloqueado', defaultValue: false });
     const [contraidos, setContraidos] = useState(() => new Set());
     const [fotoDe, setFotoDe] = useState(null);
+    const [listaPrecios, setListaPrecios] = useState(false);
 
     const entries = data?.entries ?? [];
     const tienePermiso = Boolean(data?.permisos?.editar);
@@ -125,6 +127,7 @@ export default function InventarioProductosPage() {
                 onDeshacer={edicion.deshacer} hayHistorial={edicion.hayHistorial}
                 grupos={todosLosGrupos} contraidos={contraidos} setContraidos={setContraidos}
                 onNuevo={() => router.push('/superuser/inventario/productos/nuevo')}
+                onListaPrecios={() => setListaPrecios(true)}
             />
 
             {isError && !data ? (
@@ -166,6 +169,7 @@ export default function InventarioProductosPage() {
                 </>
             )}
 
+            <ListaPreciosModal opened={listaPrecios} onClose={() => setListaPrecios(false)} params={params} hayFiltros={hayFiltros} />
             <FotoModal item={fotoDe} onCerrar={() => setFotoDe(null)} onCambiarImagen={cambiarImagen} onCambiarMarca={cambiarFotoMarca} />
         </Box>
     );

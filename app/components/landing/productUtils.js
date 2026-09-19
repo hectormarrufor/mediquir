@@ -1,3 +1,4 @@
+import { precioVentaWeb } from '@/app/constants/facturacion';
 // Utilidades compartidas por la landing (tarjeta, detalle, carrito y secciones).
 
 const BLOB_BASE = process.env.NEXT_PUBLIC_BLOB_BASE_URL || '';
@@ -32,6 +33,14 @@ export function getProductImages(product) {
     return images;
 }
 
+// Precio unitario para mostrar: 2 a 3 decimales, sin redondear a centavos (un precio de 0.003 no debe verse como 0.00)
+const FORMATO_PRECIO = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+export const formatearPrecio = (v) => FORMATO_PRECIO.format(Number(v) || 0);
+
+// Bolívares: 2 decimales, formato venezolano (23.787,68)
+const FORMATO_BS = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const formatearBs = (v) => FORMATO_BS.format(Number(v) || 0);
+
 export const getMainImage = (product) => getProductImages(product)[0].src;
 
 export function getPricing(product) {
@@ -39,7 +48,7 @@ export function getPricing(product) {
     const precioBase = Number(product?.precio7) > 0 ? Number(product.precio7) : Number(product?.costoUsd) * 1.5;
     const porcentajeAhorro = Number(product?.porcentajeDescuento) || 0;
     const hasDiscount = porcentajeAhorro > 0;
-    const precioFinal = hasDiscount ? precioBase - precioBase * (porcentajeAhorro / 100) : precioBase;
+    const precioFinal = precioVentaWeb(product);
 
     return {
         stock,

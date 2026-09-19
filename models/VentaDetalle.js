@@ -42,7 +42,7 @@ const VentaDetalle = sequelize.define('VentaDetalle', {
         defaultValue: true
     },
     subtotal: {
-        type: DataTypes.DECIMAL(12, 3),
+        type: DataTypes.DECIMAL(14, 5), // precio (3 decimales) x cantidad (2 decimales), exacto
         allowNull: false
     },
     afectaInventario: {

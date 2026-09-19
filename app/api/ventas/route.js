@@ -2,10 +2,17 @@ import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
 import sequelize from '@/sequelize'; // 🔥 IMPORTACIÓN CORRECTA DE LA INSTANCIA DE DB
 import db from '@/models';
-const { Venta, VentaDetalle, Producto, Marca, Correlativo, CategoriaFinanciera, MovimientoFinanciero, Cliente, User, Empleado, SalidaInventario } = db;
+const { Venta, VentaDetalle, Producto, Marca, Correlativo, CategoriaFinanciera, MovimientoFinanciero, Cliente, User, Empleado, SalidaInventario, CuentaPorCobrar } = db;
+import { requerirStaff } from '../inventario/_lib';
+import { tasaVigente } from '../_lib/tasaBcv';
+import { calcularFactura, aBolivares, aDolares, REGLAS } from '@/app/constants/facturacion';
+
+class ErrorNegocio extends Error {}
 import { notificarTodos } from '@/app/handlers/notificar';
 
 export async function GET(request) {
+    const acceso = await requerirStaff();
+    if (acceso.error) return acceso.error;
     try {
         const { searchParams } = new URL(request.url);
         const fechaInicio = searchParams.get('fechaInicio');
@@ -67,133 +74,157 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+    // Solo el personal registra ventas por esta vía (el POS)
+    const acceso = await requerirStaff();
+    if (acceso.error) return acceso.error;
+
     const t = await sequelize.transaction();
 
     try {
         const body = await request.json();
         const {
-            tipoVenta, tipoDocumento, clienteId, moneda, tasaCambio,
-            condicionPago, quienRetira, costoFlete, subtotal, montoIva,
-            totalFinal, detalles, metodoPago, referencia,
-            numeroDocumentoManual,
-            vendedorId
+            tipoVenta, tipoDocumento, clienteId, moneda, condicionPago, quienRetira, costoFlete,
+            detalles, metodoPago, referencia, numeroDocumentoManual, vendedorId,
         } = body;
 
-        if (!detalles || detalles.length === 0) {
+        if (!Array.isArray(detalles) || detalles.length === 0) {
             await t.rollback();
             return NextResponse.json({ error: 'El carrito está vacío' }, { status: 400 });
         }
+        if (!['MAYOR', 'DETAL'].includes(tipoVenta)) throw new ErrorNegocio('Tipo de venta inválido');
+        if (!['USD', 'BS'].includes(moneda)) throw new ErrorNegocio('Moneda inválida');
+        if (condicionPago === 'Credito' && !clienteId) throw new ErrorNegocio('Una venta a crédito requiere un cliente');
 
-        // --- 1. CORRELATIVO ---
-        let prefijo = tipoDocumento === 'FACTURA' ? 'F' : (tipoDocumento === 'NOTA_ENTREGA' ? 'NE' : 'V');
-        let corr = await Correlativo.findOne({ where: { prefijo }, transaction: t });
+        // La tasa la pone el servidor, no el navegador
+        const tasaCambio = await tasaVigente({ transaction: t });
 
-        if (!corr) {
-            corr = await Correlativo.create({ prefijo, siguienteNumero: 1, cerosRelleno: 5 }, { transaction: t });
+        // --- 1. CÁLCULO EXACTO DE RENGLONES Y TOTALES (mismas reglas que el POS) ---
+        const productos = new Map();
+        for (const item of detalles) {
+            if (item.isFicticio) continue;
+            const producto = await Producto.findByPk(item.productoId, { transaction: t, lock: t.LOCK.UPDATE });
+            if (!producto) throw new ErrorNegocio(`Producto no encontrado (id ${item.productoId})`);
+            productos.set(Number(item.productoId), producto);
         }
 
-        const numeroExtraido = parseInt(numeroDocumentoManual.replace(/\D/g, ''), 10);
+        const renglonesEntrada = detalles.map((item) => {
+            if (!(Number(item.precioUnitario) > 0)) throw new ErrorNegocio('Todos los renglones deben tener un precio mayor a 0');
+            const producto = item.isFicticio ? null : productos.get(Number(item.productoId));
+            const alicuota = producto ? Number(producto.porcentajeIva) || 0 : REGLAS.alicuotaGeneral;
+            // El POS decide si la venta lleva IVA; la alícuota de cada producto la fija su ficha
+            const aplicaIva = Boolean(item.aplicaIva) && alicuota > 0;
+            return { precioUnitario: item.precioUnitario, cantidad: item.cantidad, aplicaIva, porcentajeIva: alicuota };
+        });
+        let factura;
+        try {
+            factura = calcularFactura({ renglones: renglonesEntrada, costoFlete });
+        } catch (e) {
+            throw new ErrorNegocio(e.message);
+        }
+
+        // --- 2. CORRELATIVO ---
+        const prefijo = tipoDocumento === 'FACTURA' ? 'F' : (tipoDocumento === 'NOTA_ENTREGA' ? 'NE' : 'V');
+        let corr = await Correlativo.findOne({ where: { prefijo }, transaction: t, lock: t.LOCK.UPDATE });
+        if (!corr) corr = await Correlativo.create({ prefijo, siguienteNumero: 1, cerosRelleno: 5 }, { transaction: t });
+
+        const numeroExtraido = parseInt(String(numeroDocumentoManual || '').replace(/\D/g, ''), 10);
         const numeroBase = (!isNaN(numeroExtraido) && numeroExtraido > 0) ? numeroExtraido : corr.siguienteNumero;
         corr.siguienteNumero = numeroBase + 1;
         await corr.save({ transaction: t });
+        const numeroDocumento = numeroDocumentoManual || `${prefijo}-${String(numeroBase).padStart(corr.cerosRelleno || 5, '0')}`;
 
-        const numeroDocumento = numeroDocumentoManual;
-
-        if (condicionPago === 'Credito') {
-            let fechaVencimiento = new Date();
-            fechaVencimiento.setDate(fechaVencimiento.getDate() + 15); // O los días de crédito correspondientes
-
-            await CuentaPorCobrar.create({
-                clienteId: clienteId || null,
-                ventaId: nuevaVenta.id,
-                montoTotal: Number(totalFinal),
-                saldoPendiente: Number(totalFinal),
-                moneda,
-                tasaCambio: Number(tasaCambio) || 1.00,
-                fechaVencimiento,
-                estado: 'Pendiente'
-            }, { transaction: t });
-        }
-
-        // --- 3. CREAR VENTA ---
+        // --- 3. VENTA ---
+        const fechaVencimiento = condicionPago === 'Credito' ? new Date(Date.now() + 15 * 86400000) : null;
         const nuevaVenta = await Venta.create({
             clienteId: clienteId || null,
             vendedorId: vendedorId || null,
             tipoVenta, tipoDocumento, numeroDocumento,
             statusDespacho: tipoVenta === 'DETAL' ? 'Completado' : 'Pendiente',
-            moneda, tasaCambio: Number(tasaCambio) || 1.00,
+            moneda, tasaCambio,
             condicionPago, statusPago: condicionPago === 'Contado' ? 'Pagado' : 'Pendiente',
             fechaVencimiento, quienRetira: quienRetira || null,
-            costoFlete: Number(costoFlete) || 0.00,
-            subtotal: Number(subtotal), montoIva: Number(montoIva), totalFinal: Number(totalFinal)
+            costoFlete: factura.flete,
+            subtotal: factura.subtotal, montoIva: factura.montoIva, totalFinal: factura.totalFinal,
         }, { transaction: t });
 
-        // --- 4. DETALLES E INVENTARIO ---
-        for (const item of detalles) {
-            await VentaDetalle.create({
+        if (condicionPago === 'Credito') {
+            await CuentaPorCobrar.create({
+                clienteId,
                 ventaId: nuevaVenta.id,
-                productoId: item.isFicticio ? null : item.productoId,
-                isFicticio: item.isFicticio || false,
-                nombreFicticio: item.isFicticio ? item.nombreFicticio : null,
-                aplicaIva: item.aplicaIva,
-                afectaInventario: item.afectaInventario,
-                cantidad: Number(item.cantidad),
-                precioUnitario: Number(item.precioUnitario),
-                subtotal: Number(item.subtotal)
+                montoTotal: factura.totalFinal,
+                saldoPendiente: factura.totalFinal,
+                moneda,
+                tasaCambio,
+                fechaVencimiento,
+                estado: 'Pendiente',
             }, { transaction: t });
-
-            // Si no es ficticio y afecta inventario...
-            if (!item.isFicticio && item.afectaInventario !== false) {
-                const productoDB = await Producto.findByPk(item.productoId, { transaction: t });
-                if (productoDB) {
-                    // Si es detal, descuenta stock de inmediato. Si es mayor, se descontará al armar la caja, pero generamos la salida inicial.
-                    if (tipoVenta === 'DETAL') {
-                        productoDB.stockAlmacen = (Number(productoDB.stockAlmacen) || 0) - Number(item.cantidad);
-                    }
-                    productoDB.nroVentas = (Number(productoDB.nroVentas) || 0) + Number(item.cantidad);
-                    await productoDB.save({ transaction: t });
-
-                    // Registro histórico de salida
-                    await SalidaInventario.create({
-                        ventaId: nuevaVenta.id,
-                        productoId: productoDB.id,
-                        cantidad: Number(item.cantidad),
-                        costoAlMomento: Number(productoDB.costoUsd) || 0,
-                        justificacion: `Venta ${numeroDocumento}`,
-                        estado: tipoVenta === 'DETAL' ? 'Entregada' : 'Pendiente',
-                        solicitadoPorId: vendedorId || null
-                    }, { transaction: t });
-                }
-            }
         }
 
-        // --- 5. FINANZAS CONTADO (SEPARANDO TU DINERO DEL IVA DEL SENIAT) ---
+        // --- 4. DETALLES E INVENTARIO ---
+        for (let i = 0; i < detalles.length; i++) {
+            const item = detalles[i];
+            const renglon = factura.renglones[i];
+            const afectaInventario = !item.isFicticio && item.afectaInventario !== false;
+
+            await VentaDetalle.create({
+                ventaId: nuevaVenta.id,
+                productoId: item.isFicticio ? null : Number(item.productoId),
+                isFicticio: item.isFicticio || false,
+                nombreFicticio: item.isFicticio ? item.nombreFicticio : null,
+                aplicaIva: renglon.aplicaIva,
+                afectaInventario: item.isFicticio ? false : item.afectaInventario !== false,
+                cantidad: renglon.cantidad,
+                precioUnitario: renglon.precioUnitario,
+                subtotal: renglon.monto,
+            }, { transaction: t });
+
+            if (!afectaInventario) continue;
+            const productoDB = productos.get(Number(item.productoId));
+            const stock = Number(productoDB.stockAlmacen) || 0;
+
+            // Detal descuenta el stock de inmediato; el mayor lo descuenta al armar la caja
+            if (tipoVenta === 'DETAL') {
+                if (stock < renglon.cantidad) throw new ErrorNegocio(`Inventario insuficiente: ${productoDB.nombre} (disponible ${stock})`);
+                productoDB.stockAlmacen = stock - renglon.cantidad;
+            }
+            productoDB.nroVentas = (Number(productoDB.nroVentas) || 0) + renglon.cantidad;
+            await productoDB.save({ transaction: t });
+
+            await SalidaInventario.create({
+                ventaId: nuevaVenta.id,
+                productoId: productoDB.id,
+                cantidad: renglon.cantidad,
+                costoAlMomento: Number(productoDB.costoUsd) || 0,
+                justificacion: `Venta ${numeroDocumento}`,
+                estado: tipoVenta === 'DETAL' ? 'Entregada' : 'Pendiente',
+                solicitadoPorId: vendedorId || null,
+            }, { transaction: t });
+        }
+
+        // --- 5. FINANZAS CONTADO (se separa el ingreso propio del IVA que se le debe al SENIAT) ---
         if (condicionPago === 'Contado') {
-            // A. INGRESO REAL (Subtotal)
+            const aUsd = (v) => (moneda === 'USD' ? v : aDolares(v, tasaCambio));
+            const aBs = (v) => (moneda === 'BS' ? v : aBolivares(v, tasaCambio));
+
             let catVentas = await CategoriaFinanciera.findOne({ where: { nombre: 'Ingresos por Ventas' }, transaction: t });
             if (!catVentas) catVentas = await CategoriaFinanciera.create({ nombre: 'Ingresos por Ventas', tipo: 'INGRESO' }, { transaction: t });
 
-            const mUsdSub = moneda === 'USD' ? Number(subtotal) : Number(subtotal) / Number(tasaCambio);
-            const mBsSub = moneda === 'BS' ? Number(subtotal) : Number(subtotal) * Number(tasaCambio);
-
+            // El flete también lo cobra la empresa: forma parte del ingreso
+            const ingreso = Number((factura.subtotal + factura.flete).toFixed(2));
             await MovimientoFinanciero.create({
                 tipo: 'INGRESO', fecha: new Date(), metodoPago, referencia,
-                montoUsd: mUsdSub, tasaBcvAplicada: Number(tasaCambio), montoVes: mBsSub,
-                descripcion: `Venta ${numeroDocumento} (Subtotal)`, categoriaId: catVentas.id, ventaId: nuevaVenta.id
+                montoUsd: aUsd(ingreso), tasaBcvAplicada: tasaCambio, montoVes: aBs(ingreso),
+                descripcion: `Venta ${numeroDocumento} (Subtotal${factura.flete > 0 ? ' + flete' : ''})`, categoriaId: catVentas.id, ventaId: nuevaVenta.id,
             }, { transaction: t });
 
-            // B. IMPUESTO DEL ESTADO (IVA Recaudado - No es tu ganancia)
-            if (Number(montoIva) > 0) {
+            if (factura.montoIva > 0) {
                 let catIva = await CategoriaFinanciera.findOne({ where: { nombre: 'IVA Recaudado' }, transaction: t });
                 if (!catIva) catIva = await CategoriaFinanciera.create({ nombre: 'IVA Recaudado', tipo: 'INGRESO' }, { transaction: t });
 
-                const mUsdIva = moneda === 'USD' ? Number(montoIva) : Number(montoIva) / Number(tasaCambio);
-                const mBsIva = moneda === 'BS' ? Number(montoIva) : Number(montoIva) * Number(tasaCambio);
-
                 await MovimientoFinanciero.create({
                     tipo: 'INGRESO', fecha: new Date(), metodoPago, referencia,
-                    montoUsd: mUsdIva, tasaBcvAplicada: Number(tasaCambio), montoVes: mBsIva,
-                    descripcion: `IVA de Venta ${numeroDocumento} (Impuesto SENIAT)`, categoriaId: catIva.id, ventaId: nuevaVenta.id
+                    montoUsd: aUsd(factura.montoIva), tasaBcvAplicada: tasaCambio, montoVes: aBs(factura.montoIva),
+                    descripcion: `IVA de Venta ${numeroDocumento} (Impuesto SENIAT)`, categoriaId: catIva.id, ventaId: nuevaVenta.id,
                 }, { transaction: t });
             }
         }
@@ -231,7 +262,8 @@ export async function POST(request) {
 
     } catch (error) {
         if (!t.finished) await t.rollback();
+        if (error instanceof ErrorNegocio) return NextResponse.json({ error: error.message }, { status: 400 });
         console.error('Error procesando venta:', error);
-        return NextResponse.json({ error: 'Error interno', detalle: error.message }, { status: 500 });
+        return NextResponse.json({ error: 'Error interno al procesar la venta' }, { status: 500 });
     }
 }

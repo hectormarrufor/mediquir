@@ -67,6 +67,12 @@ export async function POST(request) {
             return NextResponse.json({ error: 'La compra no tiene productos' }, { status: 400 });
         }
 
+        // No se compra ni se vende a granel: toda cantidad es un entero positivo
+        const cantidadInvalida = detalles.find((item) => !Number.isInteger(Number(item.cantidad)) || Number(item.cantidad) < 1);
+        if (cantidadInvalida) {
+            return NextResponse.json({ error: 'Las cantidades deben ser números enteros mayores a 0' }, { status: 400 });
+        }
+
         const simulacionResultados = [];
 
         // --- FASE 1: SIMULACIÓN DE COSTOS PONDERADOS ---
@@ -100,10 +106,11 @@ export async function POST(request) {
             const factorAumento = 1 + (porcentajeAumento / 100);
 
             const p6Actual = Number(producto.precio6) || 0;
-            const p6Nuevo = p6Actual > 0 ? Number((p6Actual * factorAumento).toFixed(2)) : 0;
+            // Los precios se guardan con 3 decimales (así están en la base): antes se recortaban a 2 y un precio de 0.003 se perdía
+            const p6Nuevo = p6Actual > 0 ? Number((p6Actual * factorAumento).toFixed(3)) : 0;
 
             const p7Actual = Number(producto.precio7) || 0;
-            const p7Nuevo = p7Actual > 0 ? Number((p7Actual * factorAumento).toFixed(2)) : 0;
+            const p7Nuevo = p7Actual > 0 ? Number((p7Actual * factorAumento).toFixed(3)) : 0;
 
             simulacionResultados.push({
                 productoId: producto.id,
@@ -111,8 +118,8 @@ export async function POST(request) {
                 codigo: producto.codigo,
                 stockActual,
                 cantidadComprada,
-                costoActual: Number(costoActual.toFixed(4)),
-                nuevoCostoPonderado: Number(nuevoCostoPonderado.toFixed(4)),
+                costoActual: Number(costoActual.toFixed(5)),
+                nuevoCostoPonderado: Number(nuevoCostoPonderado.toFixed(5)), // el costo por unidad se guarda con 5 decimales
                 porcentajeAumento: Number(porcentajeAumento.toFixed(2)),
                 precio6: { actual: p6Actual, nuevo: p6Nuevo },
                 precio7: { actual: p7Actual, nuevo: p7Nuevo }

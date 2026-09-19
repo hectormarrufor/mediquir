@@ -31,7 +31,7 @@ const page = () => {
     if (isAuthenticated) {
       // Redirección dinámica basada en el rol/perfil
       if (user?.clienteId) {
-        router.push('/tienda');
+        router.push('/b2b');
       } else {
         router.push('/superuser');
       }
@@ -47,10 +47,9 @@ const page = () => {
   useEffect(() => {
     const fetchAdminUser = async () => {
       try {
-        const response = await fetch('/api/users'); // Ajusta la ruta según tu backend
-        const users = await response.json();
-        const adminUser = users.find(user => user.isAdmin);
-        if (adminUser) {
+        const response = await fetch('/api/users/hay-admin');
+        const { hayAdmin: existeAdmin } = await response.json();
+        if (existeAdmin) {
           setHayAdmin(true);
         } else {
           setHayAdmin(false);

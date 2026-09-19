@@ -3,7 +3,6 @@
     "typeRoots": ["./node_modules/@types"],
     "ignoreDeprecations": "6.0",
     "types": [],
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
     }

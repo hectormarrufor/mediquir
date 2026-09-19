@@ -31,7 +31,7 @@ const SalidaInventario = sequelize.define('SalidaInventario', {
         defaultValue: 'Pendiente',
     },
     costoAlMomento: {
-        type: DataTypes.DECIMAL(10, 2),
+        type: DataTypes.DECIMAL(12, 5), // costo POR UNIDAD al vender; sin redondeo a centavos
         allowNull: false,
     },
     solicitadoPorId: {

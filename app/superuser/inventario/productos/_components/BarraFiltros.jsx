@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActionIcon, Button, Checkbox, Group, Menu, Paper, SegmentedControl, Select, SimpleGrid, Stack, Switch, TextInput, Tooltip } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import { IconArrowBackUp, IconChevronsDown, IconChevronsUp, IconColumns3, IconDownload, IconFilterOff, IconLock, IconLockOpen, IconPlus, IconSearch, IconX } from '@tabler/icons-react';
+import { IconArrowBackUp, IconChevronsDown, IconChevronsUp, IconColumns3, IconDownload, IconFileTypePdf, IconFilterOff, IconLock, IconLockOpen, IconPlus, IconSearch, IconX } from '@tabler/icons-react';
 import { COLUMNAS } from '../_lib/columnas';
 import { aQueryString } from '../_hooks/useInventarioParams';
 
@@ -19,7 +19,7 @@ const aOpciones = (lista) => (lista || []).map((o) => ({ value: String(o.id), la
 export default function BarraFiltros({
     params, setParams, hayFiltros, limpiarFiltros, opciones, isMobile,
     columnasVisibles, setColumnasVisibles, puedeEditar, bloqueado, setBloqueado,
-    onDeshacer, hayHistorial, onNuevo, grupos = [], contraidos = new Set(), setContraidos = () => {},
+    onDeshacer, hayHistorial, onNuevo, onListaPrecios, grupos = [], contraidos = new Set(), setContraidos = () => {},
 }) {
     // La búsqueda se envía al servidor 300 ms después de dejar de teclear
     const [texto, setTexto] = useState(params.q);
@@ -85,6 +85,9 @@ export default function BarraFiltros({
                 </Menu>
             )}
 
+            <Tooltip label="PDF con fotos: elige Precio 6 o Precio 7">
+                <Button size="xs" variant="default" leftSection={<IconFileTypePdf size={14} />} onClick={onListaPrecios} tt="none">Lista de precios</Button>
+            </Tooltip>
             <Tooltip label="Descarga todo el resultado filtrado para Excel">
                 <Button component="a" href={hrefCsv} size="xs" variant="default" leftSection={<IconDownload size={14} />} tt="none">CSV</Button>
             </Tooltip>
