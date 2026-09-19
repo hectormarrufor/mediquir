@@ -12,11 +12,11 @@ export const NIVELES = ['BULTO', 'CAJA', 'UNIDAD']; // de mayor a menor
 const ORDEN = { BULTO: 3, CAJA: 2, UNIDAD: 1 };
 
 const BASE = {
-    unidad: { etiqueta: 'Unidad', singular: 'unidad', plural: 'unidades' },
-    caja: { etiqueta: 'Unidad', singular: 'unidad', plural: 'unidades' }, // valor antiguo: ya no se usa
-    par: { etiqueta: 'Par', singular: 'par', plural: 'pares' },
-    paqx2: { etiqueta: 'Paquete x2', singular: 'paquete x2', plural: 'paquetes x2' },
-    paqx4: { etiqueta: 'Paquete x4', singular: 'paquete x4', plural: 'paquetes x4' },
+    unidad: { etiqueta: 'Unidad', singular: 'unidad', plural: 'unidades', corto: 'und' },
+    caja: { etiqueta: 'Unidad', singular: 'unidad', plural: 'unidades', corto: 'und' }, // valor antiguo: ya no se usa
+    par: { etiqueta: 'Par', singular: 'par', plural: 'pares', corto: 'pares' },
+    paqx2: { etiqueta: 'Paquete x2', singular: 'paquete x2', plural: 'paquetes x2', corto: 'paq x2' },
+    paqx4: { etiqueta: 'Paquete x4', singular: 'paquete x4', plural: 'paquetes x4', corto: 'paq x4' },
 };
 
 const entero = (v) => { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null; };
@@ -26,9 +26,10 @@ export function presentacionesDe(producto) {
     const base = BASE[producto?.presentacion] || BASE.unidad;
     const porCaja = entero(producto?.unidadesPorCaja);
     const porBulto = entero(producto?.unidadesPorBulto);
-    const lista = [{ clave: 'UNIDAD', etiqueta: base.etiqueta, singular: base.singular, plural: base.plural, unidades: 1 }];
-    if (porCaja && porCaja > 1) lista.push({ clave: 'CAJA', etiqueta: `Caja x${porCaja}`, singular: 'caja', plural: 'cajas', unidades: porCaja });
-    if (porBulto && porBulto > 1 && porBulto > (porCaja || 1)) lista.push({ clave: 'BULTO', etiqueta: `Bulto x${porBulto}`, singular: 'bulto', plural: 'bultos', unidades: porBulto });
+    // `corto` dice de qué son las unidades de una caja o un bulto ("Caja x50 pares"): así no se confunde con unidades sueltas
+    const lista = [{ clave: 'UNIDAD', etiqueta: base.etiqueta, singular: base.singular, plural: base.plural, corto: base.corto, unidades: 1 }];
+    if (porCaja && porCaja > 1) lista.push({ clave: 'CAJA', etiqueta: `Caja x${porCaja} ${base.corto}`, singular: 'caja', plural: 'cajas', corto: base.corto, unidades: porCaja });
+    if (porBulto && porBulto > 1 && porBulto > (porCaja || 1)) lista.push({ clave: 'BULTO', etiqueta: `Bulto x${porBulto} ${base.corto}`, singular: 'bulto', plural: 'bultos', corto: base.corto, unidades: porBulto });
     return lista;
 }
 
@@ -77,6 +78,7 @@ export function entregaDe(detalle, producto) {
         .map((n) => ({
             nivel: n, cantidad: conteo[n],
             unidadesCada: factores[n] || (n === 'UNIDAD' ? 1 : presentacionDe(producto, n)?.unidades || 1),
+            unidadCorta: (BASE[producto?.presentacion] || BASE.unidad).corto,
             nombre: nombreNivel(producto, n, conteo[n]),
         }));
 }

@@ -86,6 +86,10 @@ const Venta = sequelize.define('Venta', {
     // Firmas de logística: cuándo el empacador / etiquetador asignado confirmó que terminó su parte
     // Datos fiscales de la factura
     numeroControl: { type: DataTypes.STRING(30), allowNull: true },
+    // Pedido B2B que pidió más de lo que hay en almacén: PENDIENTE hasta que administración lo confirme o ajuste (sin cuenta por cobrar ni retención aún)
+    revisionStock: { type: DataTypes.STRING(10), allowNull: true },
+    revisionNota: { type: DataTypes.TEXT, allowNull: true },
+    revisionResueltaAt: { type: DataTypes.DATE, allowNull: true },
     tipoTransaccion: { type: DataTypes.STRING(2), allowNull: false, defaultValue: '01' }, // 01 = registro
     asignadoAt: { type: DataTypes.DATE, allowNull: true },
     empacadoAt: { type: DataTypes.DATE, allowNull: true },

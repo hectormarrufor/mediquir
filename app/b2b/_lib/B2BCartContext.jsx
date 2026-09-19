@@ -43,12 +43,8 @@ export function B2BCartProvider({ children }) {
     }, [items, listo]);
 
     // Cuántas presentaciones de esta clase caben todavía, sin pasarse de la existencia (que está en unidades) contando lo que ya hay en otros renglones
-    const tope = (prev, producto, presentacion) => {
-        const factor = presentacionDe(producto, presentacion)?.unidades || 1;
-        if (!(producto.disponible > 0)) return Infinity;
-        const enOtros = prev.filter((i) => i.producto.id === producto.id && i.presentacion !== presentacion).reduce((a, i) => a + unidadesDe(i), 0);
-        return Math.max(0, Math.floor((producto.disponible - enOtros) / factor));
-    };
+    // Ya no se limita por existencias: si se pide más de lo que hay, el pedido pasa por revisión y administración confirma si lo consigue
+    const tope = () => 9999;
 
     const fijarCantidad = useCallback((producto, cantidad, presentacion = 'UNIDAD') => {
         const n = Math.floor(Number(cantidad));

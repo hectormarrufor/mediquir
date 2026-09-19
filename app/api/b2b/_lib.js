@@ -80,7 +80,8 @@ export function resumenPedido(venta, hoy) {
         numero: venta.numeroDocumento,
         fecha: venta.createdAt,
         estado: venta.statusDespacho,
-        estadoEtiqueta: ETIQUETAS_DESPACHO[venta.statusDespacho] || venta.statusDespacho,
+        enRevision: venta.revisionStock === 'PENDIENTE', // faltan existencias: administración lo confirma antes de pedir pago o retención
+        estadoEtiqueta: venta.revisionStock === 'PENDIENTE' && venta.statusDespacho === 'Pendiente' ? 'En revisión' : (ETIQUETAS_DESPACHO[venta.statusDespacho] || venta.statusDespacho),
         tipoEntrega: venta.tipoEntrega,
         condicionPago: venta.condicionPago,
         subtotal: Number(venta.subtotal),

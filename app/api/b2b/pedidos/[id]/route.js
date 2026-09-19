@@ -29,6 +29,8 @@ export async function GET(request, { params }) {
 
         return NextResponse.json({
             ...resumen,
+            // Ajustes que hizo administración al confirmar (renglones quitados o reducidos por falta de existencias)
+            ajustes: venta.revisionStock === 'RESUELTA' ? venta.revisionNota : null,
             quienRetira: venta.quienRetira,
             fechaRetiro: venta.fechaHoraRetiro,
             cancelable,

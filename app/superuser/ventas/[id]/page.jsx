@@ -16,6 +16,7 @@ import { notifications } from '@mantine/notifications';
 import PrecioVisual from '@/app/components/ui/PrecioVisual';
 import RetencionIvaCard from '../_components/RetencionIvaCard';
 import EvidenciaEmpaque from '../_components/EvidenciaEmpaque';
+import RevisionExistencias from '../_components/RevisionExistencias';
 import EnvioCard from '../_components/EnvioCard';
 import NotasFacturaCard from '../_components/NotasFacturaCard';
 import { useAuth } from '@/hooks/useAuth';
@@ -214,6 +215,8 @@ export default function DetallePedidoMayorPage() {
                                     )}
                                 </Group>
                             </Paper>
+
+                            {!esVendedor && <RevisionExistencias pedido={pedido} onCambio={() => refetch()} />}
 
                             <EvidenciaEmpaque ventaId={pedido.id} puedeLiberar={!esVendedor} />
 

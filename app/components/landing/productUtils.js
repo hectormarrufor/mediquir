@@ -1,4 +1,5 @@
 import { precioVentaWeb } from '@/app/constants/facturacion';
+import { presentacionesDe } from '@/app/constants/presentaciones';
 // Utilidades compartidas por la landing (tarjeta, detalle, carrito y secciones).
 
 const BLOB_BASE = process.env.NEXT_PUBLIC_BLOB_BASE_URL || '';
@@ -60,6 +61,9 @@ export function getPricing(product) {
         isLowStock: stock > 0 && stock <= 5,
     };
 }
+
+// En la tienda se vende por unidad (o par, paquete) y por caja cerrada; el bulto es solo del portal B2B
+export const presentacionesTienda = (product) => presentacionesDe(product).filter((p) => p.clave !== 'BULTO');
 
 export function getPresentacionLabel(product) {
     switch (product?.presentacion) {

@@ -45,6 +45,7 @@ export async function POST(request, { params }) {
         const venta = await Venta.findOne({ where: { id, clienteId: acceso.clienteId }, transaction: t, lock: t.LOCK.UPDATE });
         if (!venta) throw new ErrorPago('Pedido no encontrado', 404);
         if (venta.statusDespacho === 'Cancelado') throw new ErrorPago('Este pedido está cancelado', 409);
+        if (venta.revisionStock === 'PENDIENTE') throw new ErrorPago('Tu pedido está en revisión de existencias: te avisaremos cuando puedas pagar', 409);
         if (venta.condicionPago !== 'Credito') throw new ErrorPago('Este pedido no es a crédito: el pago se coordina con administración', 409);
         if (venta.statusPago === 'Pagado') throw new ErrorPago('Este pedido ya está pagado', 409);
 

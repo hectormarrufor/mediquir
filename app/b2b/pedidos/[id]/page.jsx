@@ -166,9 +166,20 @@ export default function B2BPedidoDetalle() {
                                 </Card>
                             )}
 
-                            {p.retencion && p.estado !== 'Cancelado' && <RetencionCliente pedido={p} />}
+                            {p.enRevision && p.estado !== 'Cancelado' && (
+                                <Alert color="yellow" icon={<IconAlertTriangle size={18} />} title="Tu pedido está en revisión">
+                                    Estamos confirmando las existencias de algunos productos. Te avisaremos en breve; hasta entonces no tienes que pagar ni hacer la retención de IVA.
+                                </Alert>
+                            )}
+                            {p.ajustes && (
+                                <Alert color="blue" title="Ajustes en tu pedido">
+                                    {p.ajustes.split('\n').map((linea, i) => <Text key={i} size="sm">{linea}</Text>)}
+                                </Alert>
+                            )}
 
-                            {p.condicionPago === 'Credito' && p.estado !== 'Cancelado' && p.cobro.saldo > 0 && <PagarConPagoMovil pedido={p} />}
+                            {!p.enRevision && p.retencion && p.estado !== 'Cancelado' && <RetencionCliente pedido={p} />}
+
+                            {!p.enRevision && p.condicionPago === 'Credito' && p.estado !== 'Cancelado' && p.cobro.saldo > 0 && <PagarConPagoMovil pedido={p} />}
 
                             {p.cancelable && (
                                 <Button variant="light" color="red" leftSection={<IconBan size={16} />} onClick={abrirCancelar}>Cancelar pedido</Button>

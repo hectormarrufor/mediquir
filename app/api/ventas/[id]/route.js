@@ -83,7 +83,7 @@ export async function GET(request, { params }) {
                     include: [{
                         model: Producto,
                         as: 'producto',
-                        attributes: ['nombre', 'codigo', 'imagen'],
+                        attributes: ['nombre', 'codigo', 'imagen', 'stockAlmacen'],
                         include: [{ model: Marca, as: 'marca', attributes: ['nombre', 'imagen'] }, {model: GrupoEquivalencia, as: 'grupoEquivalencia', attributes: ['nombre', 'imagen']}]
                     }]
                 },
@@ -163,6 +163,9 @@ export async function PUT(request, { params }) {
         }
 
         const cerrada = ['Cancelado', 'Completado'].includes(venta.statusDespacho);
+        if (venta.revisionStock === 'PENDIENTE' && ['ASIGNAR', 'EMPACAR', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'DESPACHAR', 'ABONAR'].includes(accion)) {
+            throw new ErrorLogistica('Este pedido está en revisión de existencias: confírmalo (o ajústalo) antes de continuar', 409);
+        }
 
         // Número de control de la factura (dato fiscal para el libro de ventas)
         if (accion === 'NUMERO_CONTROL') {

@@ -1,6 +1,7 @@
 'use client';
 
 import { calcularFactura } from '@/app/constants/facturacion';
+import { presentacionDe } from '@/app/constants/presentaciones';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const CartContext = createContext();
@@ -28,13 +29,15 @@ export function CartProvider({ children }) {
                         // Fusionamos el carrito guardado con la data actualizada de la BD
                         const cartActualizado = parsedCart.map(item => {
                             const prodFresco = productosBD.find(p => p.id === item.product.id);
+                            // Carritos guardados antes de las presentaciones: todo era por unidad
+                            const base = { presentacion: 'UNIDAD', unidadesPorPres: 1, cantidadPres: item.quantity, ...item };
                             if (prodFresco) {
                                 return {
-                                    ...item,
+                                    ...base,
                                     product: prodFresco // Se actualiza stockAlmacen real
                                 };
                             }
-                            return item;
+                            return base;
                         });
                         setCart(cartActualizado);
                     } else {
@@ -57,32 +60,40 @@ export function CartProvider({ children }) {
         }
     }, [cart, isLoaded]);
 
-    const addToCart = (product, quantity, precioFinal) => {
+    // Un renglón por producto Y presentación (unidad o caja). `quantity` son SIEMPRE unidades (el precio y el stock van por unidad);
+    // `cantidadPres` es lo que pidió el cliente (2 cajas) y `unidadesPorPres` cuántas unidades trae cada una.
+    const mismo = (item, id, presentacion) => item.product.id === id && (item.presentacion || 'UNIDAD') === presentacion;
+
+    const addToCart = (product, cantidadPres, precioFinal, presentacion = 'UNIDAD') => {
+        const pres = presentacionDe(product, presentacion) || presentacionDe(product, 'UNIDAD');
         setCart((prevCart) => {
-            const existingItem = prevCart.find((item) => item.product.id === product.id);
+            const existingItem = prevCart.find((item) => mismo(item, product.id, pres.clave));
             if (existingItem) {
                 return prevCart.map((item) =>
-                    item.product.id === product.id
-                        ? { ...item, quantity: item.quantity + quantity }
+                    mismo(item, product.id, pres.clave)
+                        ? { ...item, cantidadPres: item.cantidadPres + cantidadPres, quantity: (item.cantidadPres + cantidadPres) * pres.unidades }
                         : item
                 );
             }
-            return [...prevCart, { product, quantity, precioFinal }];
+            return [...prevCart, { product, presentacion: pres.clave, presentacionEtiqueta: pres.etiqueta, unidadesPorPres: pres.unidades, cantidadPres, quantity: cantidadPres * pres.unidades, precioFinal }];
         });
     };
 
-    const removeFromCart = (productId) => {
-        setCart((prevCart) => prevCart.filter((item) => item.product.id !== productId));
+    const removeFromCart = (productId, presentacion = 'UNIDAD') => {
+        setCart((prevCart) => prevCart.filter((item) => !mismo(item, productId, presentacion)));
     };
 
-    const updateQuantity = (productId, newQuantity) => {
-        if (newQuantity < 1) return;
+    const updateQuantity = (productId, newCantidadPres, presentacion = 'UNIDAD') => {
+        if (newCantidadPres < 1) return;
         setCart((prevCart) =>
             prevCart.map((item) =>
-                item.product.id === productId ? { ...item, quantity: newQuantity } : item
+                mismo(item, productId, presentacion) ? { ...item, cantidadPres: newCantidadPres, quantity: newCantidadPres * (item.unidadesPorPres || 1) } : item
             )
         );
     };
+
+    // Unidades de un producto en el carrito, sumando todas sus presentaciones
+    const unidadesEnCarrito = (productId) => cart.filter((item) => item.product.id === productId).reduce((a, item) => a + item.quantity, 0);
 
     const clearCart = () => {
         setCart([]);
@@ -102,8 +113,8 @@ export function CartProvider({ children }) {
                 const prodBD = productosBD.find(p => p.id === item.product.id);
                 const stockDisponible = Number(prodBD?.stockAlmacen || 0);
 
-                // Si el producto no existe, se agotó o la cantidad supera el stock actual
-                if (!prodBD || stockDisponible <= 0 || item.quantity > stockDisponible) {
+                // Si el producto no existe, se agotó o las unidades (de todas sus presentaciones) superan el stock actual
+                if (!prodBD || stockDisponible <= 0 || unidadesEnCarrito(item.product.id) > stockDisponible) {
                     hayInconsistencias = true;
                 }
 
@@ -142,13 +153,13 @@ export function CartProvider({ children }) {
     const subtotal = factura.subtotal;
     const totalImpuestos = factura.montoIva;
 
-    const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
+    const totalItems = cart.reduce((acc, item) => acc + (item.cantidadPres ?? item.quantity), 0);
 
     return (
         <CartContext.Provider value={{ 
             cart, addToCart, removeFromCart, updateQuantity, 
             subtotal, totalImpuestos, totalItems, // Exportamos totalImpuestos
-            isLoaded, isVerifying, verifyStockBeforeCheckout, clearCart,
+            isLoaded, isVerifying, verifyStockBeforeCheckout, clearCart, unidadesEnCarrito,
         }}>
             {children}
         </CartContext.Provider>

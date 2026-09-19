@@ -210,7 +210,7 @@ export default function EmpacarPage() {
                             <Stack gap={4}>
                                 {niveles.map((n) => (
                                     <Badge key={n.nivel} size="xl" color={n.nivel === 'UNIDAD' ? 'blue' : 'grape'} variant="filled" radius="sm" tt="none" h="auto" py={6} styles={{ label: { whiteSpace: 'normal' } }}>
-                                        {n.cantidad} {n.nombre}{n.nivel === 'UNIDAD' && niveles.length > 1 ? ' sueltas' : ''}{n.nivel !== 'UNIDAD' ? ` cerrada${n.cantidad === 1 ? '' : 's'} (${n.unidadesCada} und c/u)` : ''}
+                                        {n.cantidad} {n.nombre}{n.nivel === 'UNIDAD' && niveles.length > 1 ? ' sueltas' : ''}{n.nivel !== 'UNIDAD' ? ` cerrada${n.cantidad === 1 ? '' : 's'} (${n.unidadesCada} ${n.unidadCorta || 'und'} c/u)` : ''}
                                     </Badge>
                                 ))}
                                 {niveles.length > 0 && actual.entrega?.length > 0 && <Text size="xs" c="dimmed">Total: {actual.cantidadPedida} unidades</Text>}

@@ -6,6 +6,7 @@ import { notificarTodos } from '@/app/handlers/notificar';
 import { Cliente, Producto, PagoSms, Venta, VentaDetalle, Correlativo, MovimientoFinanciero, sequelize } from '@/models';
 import { tasaVigente } from '../../_lib/tasaBcv';
 import { calcularFactura, precioVentaWeb, aBolivares } from '@/app/constants/facturacion';
+import { presentacionDe } from '@/app/constants/presentaciones';
 
 class ErrorNegocio extends Error {}
 
@@ -55,10 +56,23 @@ export async function POST(req) {
         // 2. EL SERVIDOR CALCULA TODO: precios, IVA, total y tasa salen de la base de datos, no del navegador
         const tasaBcv = await tasaVigente({ transaction });
         const lineas = [];
+        const productosPorId = new Map(); // una sola instancia por producto: dos renglones (unidades y caja) descuentan del mismo stock
         for (const item of cart) {
-            const productoBD = await Producto.findByPk((item.product || item).id, { transaction, lock: transaction.LOCK.UPDATE });
-            if (!productoBD) throw new ErrorNegocio('Un producto del carrito ya no existe');
-            lineas.push({ productoBD, cantidad: item.quantity });
+            const id = (item.product || item).id;
+            let productoBD = productosPorId.get(id);
+            if (!productoBD) {
+                productoBD = await Producto.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+                if (!productoBD) throw new ErrorNegocio('Un producto del carrito ya no existe');
+                productosPorId.set(id, productoBD);
+            }
+            // La presentación pedida (unidad o caja) se valida contra la ficha: solo se guarda si la cantidad cuadra con lo que trae
+            let presentacion = { presentacionPedida: null, cantidadPresentacion: null, unidadesPorPresentacion: null };
+            const pres = ['UNIDAD', 'CAJA'].includes(item.presentacion) ? presentacionDe(productoBD, item.presentacion) : null;
+            const n = Number(item.cantidadPres);
+            if (pres && Number.isInteger(n) && n >= 1 && n * pres.unidades === Number(item.quantity)) {
+                presentacion = { presentacionPedida: pres.clave, cantidadPresentacion: n, unidadesPorPresentacion: pres.unidades };
+            }
+            lineas.push({ productoBD, cantidad: item.quantity, presentacion });
         }
 
         let factura;
@@ -75,9 +89,12 @@ export async function POST(req) {
         }
 
         const detallesVentaData = [];
-        lineas.forEach(({ productoBD }, i) => {
+        const acumulado = new Map();
+        lineas.forEach(({ productoBD, presentacion }, i) => {
             const renglon = factura.renglones[i];
-            if ((Number(productoBD.stockAlmacen) || 0) < renglon.cantidad) {
+            const yaPedido = (acumulado.get(productoBD.id) || 0) + renglon.cantidad;
+            acumulado.set(productoBD.id, yaPedido);
+            if ((Number(productoBD.stockAlmacen) || 0) < yaPedido) {
                 throw new ErrorNegocio(`Inventario insuficiente para el producto: ${productoBD.nombre}`);
             }
             detallesVentaData.push({
@@ -85,6 +102,7 @@ export async function POST(req) {
                 isFicticio: false,
                 nombreFicticio: null,
                 cantidad: renglon.cantidad,
+                ...presentacion,
                 precioUnitario: renglon.precioUnitario,
                 subtotal: renglon.monto,
                 aplicaIva: renglon.aplicaIva,

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Cliente, Correlativo, CuentaPorCobrar, Producto, SalidaInventario, Venta, VentaDetalle, sequelize } from '@/models';
-import { notificarTodos } from '@/app/handlers/notificar';
+import { notificarCabezas, notificarTodos, notificarUsuario } from '@/app/handlers/notificar';
 import { calcularFactura, precioMayor } from '@/app/constants/facturacion';
 import { presentacionDe } from '@/app/constants/presentaciones';
 import { requerirCliente } from '../../_lib/acceso';
@@ -114,10 +114,10 @@ export async function POST(request) {
         // La existencia se comprueba por producto, sumando todas sus presentaciones (stock en unidades)
         const pedidoPorProducto = new Map();
         lineas.forEach((l) => pedidoPorProducto.set(l.producto.id, (pedidoPorProducto.get(l.producto.id) || 0) + l.cantidad));
+        // NO se rechaza el pedido por falta de existencias: queda "en revisión" y administración confirma si consigue las cantidades
+        // en 1 o pocos días, o ajusta los renglones. Hasta entonces no hay cuenta por cobrar ni retención (el cliente no paga nada aún).
         const faltantes = [...pedidoPorProducto].filter(([id, unidades]) => (Number(porId.get(id).stockAlmacen) || 0) < unidades).map(([id]) => porId.get(id));
-        if (faltantes.length) {
-            throw new ErrorNegocio(`Sin existencia suficiente: ${faltantes.map((p) => `${p.nombre} (disponible ${Math.max(0, Math.floor(Number(p.stockAlmacen) || 0))} unidades)`).join(', ')}`, 409);
-        }
+        const enRevision = faltantes.length > 0;
 
         const sinPrecio = lineas.filter(({ producto }) => !(precioMayor(producto) > 0));
         if (sinPrecio.length) throw new ErrorNegocio(`Sin precio asignado: ${sinPrecio.map(({ producto }) => producto.nombre).join(', ')}`, 409);
@@ -156,6 +156,7 @@ export async function POST(request) {
             condicionPago: aCredito ? 'Credito' : 'Contado',
             fechaVencimiento: aCredito ? new Date(Date.now() + credito.diasCredito * 86400000) : null,
             statusPago: 'Pendiente',
+            revisionStock: enRevision ? 'PENDIENTE' : null,
             moneda: 'USD',
             tasaCambio,
             costoFlete: 0,
@@ -166,7 +167,7 @@ export async function POST(request) {
         }, { transaction: t });
 
         // A crédito nace la cuenta por cobrar: cada Pago Móvil del cliente o abono de administración la va bajando
-        if (aCredito) {
+        if (aCredito && !enRevision) {
             await CuentaPorCobrar.create({
                 clienteId, ventaId: venta.id, montoTotal: factura.totalFinal, saldoPendiente: factura.totalFinal,
                 moneda: 'USD', tasaCambio, fechaVencimiento: venta.fechaVencimiento, estado: 'Pendiente',
@@ -204,9 +205,29 @@ export async function POST(request) {
         }
 
         // Factura a un contribuyente especial: la retención de IVA queda calculada (falta el comprobante del cliente) y se descuenta del saldo
-        const retencion = await crearRetencionPendiente({ venta, transaction: t });
+        // (en revisión de existencias se calcula al confirmar el pedido, con los renglones ya ajustados)
+        if (!enRevision) await crearRetencionPendiente({ venta, transaction: t });
 
         await t.commit();
+
+        if (enRevision) {
+            try {
+                const cliente = await Cliente.findByPk(clienteId, { attributes: ['nombre'] });
+                await notificarCabezas({
+                    title: 'Pedido B2B por revisar: faltan existencias ⚠️',
+                    body: `${cliente?.nombre || 'Un cliente'} pidió ${numeroDocumento} y no alcanza: ${faltantes.map((p) => p.nombre).slice(0, 3).join(', ')}${faltantes.length > 3 ? ` y ${faltantes.length - 3} más` : ''}. Confirma si se consigue en 1 o pocos días, o ajusta los renglones.`,
+                    url: `/superuser/ventas/${venta.id}`, tipo: 'Alerta',
+                });
+                await notificarUsuario(sesion.id, {
+                    title: '¡Felicidades! Tu pedido está en revisión 🎉',
+                    body: `Recibimos tu pedido ${numeroDocumento}. Estamos confirmando las existencias de algunos productos y te avisaremos en breve.`,
+                    url: `/b2b/pedidos/${venta.id}`, tipo: 'Info',
+                });
+            } catch (e) {
+                console.error('B2B: no se pudo avisar la revisión de existencias:', e.message);
+            }
+            return NextResponse.json({ success: true, id: venta.id, numero: numeroDocumento, total: factura.totalFinal, aCredito, enRevision: true, vence: null }, { status: 201 });
+        }
 
         try {
             const cliente = await Cliente.findByPk(clienteId, { attributes: ['nombre'] });

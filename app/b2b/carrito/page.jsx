@@ -14,15 +14,12 @@ import { presentacionDe, unidadesDe, useB2BCart } from '../_lib/B2BCartContext';
 import { fmtBs, fmtPrecio, fmtUsd, pedirJson } from '../_lib/formato';
 
 function Fila({ item, tasa }) {
-    const { fijarCantidad, quitar, cantidadDe } = useB2BCart();
+    const { fijarCantidad, quitar } = useB2BCart();
     const { producto, presentacion, cantidad } = item;
     const pres = presentacionDe(producto, presentacion);
     const unidades = unidadesDe(item);
     const montoPresentacion = pres.unidades > 1 ? montoRenglon(producto.precio, pres.unidades) : null; // lo que cuesta UNA caja / bulto
     const monto = montoRenglon(producto.precio, unidades);
-    // Cuántas de esta presentación caben todavía (la existencia está en unidades y se comparte con los demás renglones del mismo producto)
-    const enOtros = cantidadDe(producto.id) - unidades;
-    const maximo = producto.disponible > 0 ? Math.max(1, Math.floor((producto.disponible - enOtros) / pres.unidades)) : undefined;
     return (
         <Table.Tr>
             <Table.Td>
@@ -30,7 +27,7 @@ function Fila({ item, tasa }) {
                     <Image src={getMainImage(producto)} w={48} h={48} fit="contain" radius="sm" bg="gray.0" fallbackSrc={PLACEHOLDER_IMG} alt="" />
                     <Box style={{ minWidth: 0 }}>
                         <Text size="sm" fw={600} lineClamp={2}>{producto.nombre}</Text>
-                        <Text size="xs" fw={700} c="navy.9">{pres.etiqueta}{pres.unidades > 1 ? ` · ${unidades} unidades en total` : ''}</Text>
+                        <Text size="xs" fw={700} c="navy.9">{pres.etiqueta}{pres.unidades > 1 ? ` · ${unidades} ${presentacionDe(producto, 'UNIDAD').plural} en total` : ''}</Text>
                         <Text size="xs" c="dimmed">{producto.porcentajeIva > 0 ? `IVA ${producto.porcentajeIva}%` : 'Exento'}</Text>
                     </Box>
                 </Group>
@@ -40,7 +37,7 @@ function Fila({ item, tasa }) {
                 <Text size="xs" c="dimmed">{montoPresentacion !== null ? `por ${pres.singular} (${fmtPrecio(producto.precio)} c/u)` : `por ${pres.singular}`}</Text>
             </Table.Td>
             <Table.Td>
-                <NumberInput value={cantidad} onChange={(v) => fijarCantidad(producto, v, presentacion)} min={1} max={maximo} allowDecimal={false} allowNegative={false} clampBehavior="strict" w={90} size="xs" ml="auto" aria-label={`Cantidad de ${pres.plural}`} />
+                <NumberInput value={cantidad} onChange={(v) => fijarCantidad(producto, v, presentacion)} min={1} max={9999} allowDecimal={false} allowNegative={false} clampBehavior="strict" w={90} size="xs" ml="auto" aria-label={`Cantidad de ${pres.plural}`} />
                 <Text size="xs" c="dimmed" ta="right" mt={2}>{cantidad === 1 ? pres.singular : pres.plural}</Text>
             </Table.Td>
             <Table.Td ta="right">
@@ -55,7 +52,9 @@ function Fila({ item, tasa }) {
 export default function B2BCarrito() {
     const router = useRouter();
     const queryClient = useQueryClient();
-    const { items, listo, factura: facturaConIva, facturaSinIva, vaciar } = useB2BCart();
+    const { items, listo, factura: facturaConIva, facturaSinIva, vaciar, cantidadDe } = useB2BCart();
+    // ¿Se pide más de lo que hay de algún producto? Entonces el pedido pasa por revisión de existencias (no se le dice al cliente cuánto hay)
+    const pasaRevision = items.some((i) => cantidadDe(i.producto.id) > i.producto.disponible);
     const { tasa } = useTasaBcv();
     const [tipoEntrega, setTipoEntrega] = useState('pickup');
     const [transporte, setTransporte] = useState('');
@@ -83,7 +82,8 @@ export default function B2BCarrito() {
             });
             vaciar();
             queryClient.invalidateQueries({ queryKey: ['b2b'] });
-            notifications.show({ color: 'teal', icon: <IconCheck size={16} />, title: 'Pedido enviado', message: r.aCredito ? `Recibimos tu pedido ${r.numero} a crédito. Tienes ${credito?.diasCredito} días para pagarlo.` : `Recibimos tu pedido ${r.numero}. Te avisaremos cuando esté listo.` });
+            if (r.enRevision) notifications.show({ color: 'teal', icon: <IconCheck size={16} />, title: '¡Felicidades! Tu pedido está en revisión 🎉', message: `Recibimos tu pedido ${r.numero}. Estamos confirmando las existencias de algunos productos y te avisaremos en breve; por ahora no tienes que pagar ni hacer retención.`, autoClose: 9000 });
+            else notifications.show({ color: 'teal', icon: <IconCheck size={16} />, title: 'Pedido enviado', message: r.aCredito ? `Recibimos tu pedido ${r.numero} a crédito. Tienes ${credito?.diasCredito} días para pagarlo.` : `Recibimos tu pedido ${r.numero}. Te avisaremos cuando esté listo.` });
             router.push(`/b2b/pedidos/${r.id}`);
         } catch (e) {
             setError(e.message);
@@ -124,6 +124,11 @@ export default function B2BCarrito() {
                 <Paper withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
                     <Stack gap="sm">
                         <Title order={4} c="navy.9">Resumen</Title>
+                        {pasaRevision && (
+                            <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={18} />} title="Pasará por revisión de existencias">
+                                Puede que no tengamos todo en las cantidades pedidas. Lo confirmaremos y te avisaremos en breve; hasta entonces no tienes que pagar ni hacer retención.
+                            </Alert>
+                        )}
                         <Box>
                             <Text size="sm" fw={600} mb={4}>Entrega</Text>
                             <SegmentedControl fullWidth color="navy.9" value={tipoEntrega} onChange={setTipoEntrega} data={[{ value: 'pickup', label: 'Retiro en tienda' }, { value: 'flete', label: 'Envío (flete)' }]} />

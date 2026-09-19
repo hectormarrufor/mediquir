@@ -43,6 +43,7 @@ export async function POST(request, { params }) {
         const venta = await Venta.findOne({ where: { id, clienteId: acceso.clienteId } });
         if (!venta) return error('Pedido no encontrado', 404);
         if (venta.tipoDocumento !== 'FACTURA' || venta.statusDespacho === 'Cancelado') return error('Solo las facturas admiten retención de IVA', 409);
+        if (venta.revisionStock === 'PENDIENTE') return error('Tu pedido está en revisión de existencias: te avisaremos cuando puedas hacer la retención', 409);
 
         const retencion = await RetencionIva.findOne({ where: { ventaId: venta.id, tipo: 'VENTA' } });
         if (!retencion) return error('Esta factura no tiene una retención de IVA pendiente. Si crees que debería, escríbenos.', 404);

@@ -1,27 +1,29 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Badge, Box, Group, Text, ActionIcon } from '@mantine/core';
+import { Badge, Box, Button, Group, Text, ActionIcon } from '@mantine/core';
 import { IconShoppingCartPlus, IconCheck } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useCart } from './CartContext';
 import ImageCarousel from './ImageCarousel';
 import ProductDetail from './ProductDetail';
-import { getProductImages, getPricing, getPresentacionLabel, formatearPrecio, formatearBs } from './productUtils';
-import { aBolivares } from '@/app/constants/facturacion';
+import { getProductImages, getPricing, getPresentacionLabel, presentacionesTienda, formatearPrecio, formatearBs } from './productUtils';
+import { aBolivares, montoRenglon } from '@/app/constants/facturacion';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import classes from './landing.module.css';
 
 export default function ProductCard({ product, isMobile }) {
     const [detailOpened, setDetailOpened] = useState(false);
     const [detailMounted, setDetailMounted] = useState(false); // monta el detalle solo la primera vez que se abre
-    const { addToCart, cart } = useCart();
+    const { addToCart, unidadesEnCarrito } = useCart();
 
     const images = useMemo(() => getProductImages(product), [product]);
     const { stock, precioBase, porcentajeAhorro, hasDiscount, precioFinal, isOutOfStock, isLowStock } = getPricing(product);
     const { tasa } = useTasaBcv();
-    const enCarrito = cart.find((item) => item.product.id === product.id)?.quantity || 0;
+    const enCarrito = unidadesEnCarrito(product.id);
     const puedeAgregar = !isOutOfStock && enCarrito < stock;
+    const caja = presentacionesTienda(product).find((p) => p.clave === 'CAJA') || null;
+    const puedeCaja = Boolean(caja) && !isOutOfStock && enCarrito + caja.unidades <= stock;
 
     const openDetail = () => {
         setDetailMounted(true);
@@ -43,6 +45,12 @@ export default function ProductCard({ product, isMobile }) {
             icon: <IconCheck size={16} />,
             autoClose: 2000,
         });
+    };
+
+    const handleQuickAddCaja = (e) => {
+        e.stopPropagation();
+        addToCart(product, 1, precioFinal, 'CAJA');
+        notifications.show({ message: `1 ${caja.etiqueta} de ${product.nombre} añadida al carrito`, color: 'teal', icon: <IconCheck size={16} />, autoClose: 2200 });
     };
 
     return (
@@ -120,6 +128,11 @@ export default function ProductCard({ product, isMobile }) {
                             <IconShoppingCartPlus size={isMobile ? 18 : 20} />
                         </ActionIcon>
                     </Group>
+                    {caja && (
+                        <Button size="compact-xs" variant="light" color="navy.9" fullWidth mt={4} disabled={!puedeCaja} onClick={handleQuickAddCaja}>
+                            + {caja.etiqueta} · ${formatearPrecio(montoRenglon(precioFinal, caja.unidades))}
+                        </Button>
+                    )}
                 </Box>
             </Box>
 

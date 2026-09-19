@@ -26,7 +26,8 @@ export default function LandingMediquir() {
         totalItems,
         isLoaded,
         isVerifying,
-        verifyStockBeforeCheckout
+        verifyStockBeforeCheckout,
+        unidadesEnCarrito,
     } = useCart();
 
     // --- ESTADOS DE FILTRADO GLOBAL DE LA LANDING ---
@@ -84,7 +85,7 @@ export default function LandingMediquir() {
     // Verificar si hay algún item sin stock en el carrito para bloquear la orden
     const hasInvalidItems = cart.some(item => {
         const stock = Number(item.product.stockAlmacen || 0);
-        return stock <= 0 || item.quantity > stock;
+        return stock <= 0 || unidadesEnCarrito(item.product.id) > stock;
     });
 
     const handleProceedToCheckout = async () => {
@@ -188,10 +189,12 @@ export default function LandingMediquir() {
                                     {cart.map((item) => {
                                         const stockDisponible = Number(item.product.stockAlmacen || 0);
                                         const isOut = stockDisponible <= 0;
-                                        const exceedsStock = item.quantity > stockDisponible && !isOut;
+                                        const exceedsStock = unidadesEnCarrito(item.product.id) > stockDisponible && !isOut;
+                                        const presClave = item.presentacion || 'UNIDAD';
+                                        const porPres = item.unidadesPorPres || 1;
 
                                         return (
-                                            <Group key={item.product.id} wrap="nowrap" align="flex-start" opacity={isOut ? 0.6 : 1}>
+                                            <Group key={`${item.product.id}:${presClave}`} wrap="nowrap" align="flex-start" opacity={isOut ? 0.6 : 1}>
                                                 <Image
                                                     src={getMainImage(item.product)}
                                                     w={65} h={65} radius="md" fit="contain" bg="gray.1" p={4}
@@ -199,7 +202,8 @@ export default function LandingMediquir() {
                                                 />
                                                 <Box flex={1}>
                                                     <Text size="sm" fw={700} lineClamp={2} c="navy.9">{item.product.nombre}</Text>
-                                                    <Text size="xs" c="dimmed" fw={600}>Ref ${formatearPrecio(item.precioFinal)}{bcv ? ` · Bs ${formatearBs(aBolivares(item.precioFinal, bcv))}` : ''}</Text>
+                                                    {presClave !== 'UNIDAD' && <Badge size="sm" color="grape" variant="filled" tt="none" mt={2}>{item.presentacionEtiqueta} · {item.quantity} en total</Badge>}
+                                                    <Text size="xs" c="dimmed" fw={600}>Ref ${formatearPrecio(item.precioFinal)} c/u{bcv ? ` · Bs ${formatearBs(aBolivares(item.precioFinal, bcv))}` : ''}</Text>
 
                                                     {isOut && (
                                                         <Badge color="red" size="xs" variant="filled" mt={4}>
@@ -215,23 +219,23 @@ export default function LandingMediquir() {
 
                                                     {!isOut && (
                                                         <Group gap="xs" mt="xs">
-                                                            <ActionIcon variant="light" size="sm" color="gray" onClick={() => updateQuantity(item.product.id, item.quantity - 1)}>
+                                                            <ActionIcon variant="light" size="sm" color="gray" onClick={() => updateQuantity(item.product.id, item.cantidadPres - 1, presClave)}>
                                                                 <IconMinus size={14} />
                                                             </ActionIcon>
-                                                            <Text size="sm" fw={700}>{item.quantity}</Text>
+                                                            <Text size="sm" fw={700}>{item.cantidadPres}</Text>
                                                             <ActionIcon
                                                                 variant="light"
                                                                 size="sm"
                                                                 color="gray"
-                                                                disabled={item.quantity >= stockDisponible}
-                                                                onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                                                                disabled={unidadesEnCarrito(item.product.id) + porPres > stockDisponible}
+                                                                onClick={() => updateQuantity(item.product.id, item.cantidadPres + 1, presClave)}
                                                             >
                                                                 <IconPlus size={14} />
                                                             </ActionIcon>
                                                         </Group>
                                                     )}
                                                 </Box>
-                                                <ActionIcon color="red.7" variant="subtle" onClick={() => removeFromCart(item.product.id)}>
+                                                <ActionIcon color="red.7" variant="subtle" onClick={() => removeFromCart(item.product.id, presClave)}>
                                                     <IconTrash size={18} />
                                                 </ActionIcon>
                                             </Group>

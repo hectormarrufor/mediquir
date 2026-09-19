@@ -5,7 +5,7 @@ import { Alert, Badge, Box, Button, Card, Center, Group, Image, NumberInput, Pag
 import { useDebouncedValue } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { IconAlertTriangle, IconPackageOff, IconSearch, IconShoppingCartPlus } from '@tabler/icons-react';
+import { IconAlertTriangle, IconCircleCheck, IconSearch, IconShoppingCartPlus } from '@tabler/icons-react';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { aBolivares, montoRenglon } from '@/app/constants/facturacion';
 import { getMainImage, PLACEHOLDER_IMG } from '@/app/components/landing/productUtils';
@@ -19,24 +19,25 @@ function TarjetaProducto({ producto, tasa }) {
     const [cantidad, setCantidad] = useState(1);
     const pres = opciones.find((o) => o.clave === clave) || opciones[0];
 
-    // La existencia está en unidades: lo que ya hay en el carrito (en cualquier presentación) se descuenta antes de contar cajas o bultos
-    const enPedido = cantidadDe(producto.id);
-    const agotado = producto.disponible <= 0;
-    const restanteUnidades = Math.max(0, producto.disponible - enPedido);
-    const cabe = Math.floor(restanteUnidades / pres.unidades); // cuántas de esta presentación caben todavía
+    // Nunca se muestran cantidades en existencia ni se bloquea el pedido: verde = disponible, amarillo = pocas unidades o por confirmar.
+    // Si se pide más de lo que hay, el pedido pasa por revisión de existencias (administración confirma si lo consigue).
+    const unidadesPedidas = cantidadDe(producto.id) + (Math.floor(Number(cantidad)) || 1) * pres.unidades;
+    const pocas = producto.disponible <= 10;
+    const excede = unidadesPedidas > producto.disponible;
+    const baseUnidades = opciones[0].plural; // unidades, pares, paquetes x2...
     const precioPresentacion = pres.unidades > 1 ? montoRenglon(producto.precio, pres.unidades) : null; // lo que cuesta UNA caja / bulto
 
     const elegir = (nueva) => { setClave(nueva); setCantidad(1); };
     const anadir = () => {
         const n = Math.floor(Number(cantidad) || 0);
-        if (n < 1 || n > cabe) return;
+        if (n < 1) return;
         agregar(producto, n, pres.clave);
         notifications.show({ color: 'teal', message: `${n} × ${pres.etiqueta} de ${producto.nombre} añadido a tu pedido`, autoClose: 2500 });
         setCantidad(1);
     };
 
     return (
-        <Card withBorder radius="lg" p="sm" style={{ display: 'flex', flexDirection: 'column', opacity: agotado ? 0.7 : 1, boxShadow: 'var(--mm-shadow-card)' }}>
+        <Card withBorder radius="lg" p="sm" style={{ display: 'flex', flexDirection: 'column', boxShadow: 'var(--mm-shadow-card)' }}>
             <Card.Section bg="gray.0" p="xs">
                 <Image src={getMainImage(producto)} h={140} fit="contain" fallbackSrc={PLACEHOLDER_IMG} alt={producto.nombre} />
             </Card.Section>
@@ -60,25 +61,20 @@ function TarjetaProducto({ producto, tasa }) {
                     </Text>
                 </Box>
 
-                {agotado
-                    ? <Badge color="red" variant="light" leftSection={<IconPackageOff size={12} />} mt={4}>Agotado</Badge>
-                    : <Text size="xs" c={producto.disponible <= 10 ? 'orange.7' : 'dimmed'} fw={producto.disponible <= 10 ? 700 : 400}>
-                        {producto.disponible} unidades disponibles{pres.unidades > 1 ? ` (${Math.floor(producto.disponible / pres.unidades)} ${Math.floor(producto.disponible / pres.unidades) === 1 ? pres.singular : pres.plural})` : ''}{enPedido > 0 ? ` · ${enPedido} en tu pedido` : ''}
-                    </Text>}
+                <Badge color={producto.disponible > 10 ? 'teal' : 'yellow'} variant="light" mt={4} w="fit-content" leftSection={producto.disponible > 10 ? <IconCircleCheck size={12} /> : <IconAlertTriangle size={12} />}>
+                    {producto.disponible > 10 ? 'Disponible' : producto.disponible > 0 ? 'Pocas unidades' : 'Por confirmar'}
+                </Badge>
             </Stack>
 
-            {!agotado && (
-                <Stack gap={4} mt="sm">
-                    <Group gap={6} wrap="nowrap">
-                        <NumberInput value={cantidad} onChange={setCantidad} min={1} max={Math.max(1, cabe)} allowDecimal={false} allowNegative={false} clampBehavior="strict"
-                            w={84} size="sm" aria-label={`Cantidad de ${pres.plural}`} disabled={cabe < 1} />
-                        <Button flex={1} size="sm" color="navy.9" tt="none" leftSection={<IconShoppingCartPlus size={16} />} onClick={anadir} disabled={cabe < 1}>
-                            {cabe < 1 ? (restanteUnidades > 0 ? `No alcanza para ${pres.unidades > 1 ? 'una ' + pres.singular : 'más'}` : 'Todo en tu pedido') : 'Agregar'}
-                        </Button>
-                    </Group>
-                    {pres.unidades > 1 && cabe >= 1 && <Text size="xs" c="dimmed">{Number(cantidad) || 1} {(Number(cantidad) || 1) === 1 ? pres.singular : pres.plural} = <b>{(Number(cantidad) || 1) * pres.unidades} unidades</b></Text>}
-                </Stack>
-            )}
+            <Stack gap={4} mt="sm">
+                <Group gap={6} wrap="nowrap">
+                    <NumberInput value={cantidad} onChange={setCantidad} min={1} max={9999} allowDecimal={false} allowNegative={false} clampBehavior="strict"
+                        w={84} size="sm" aria-label={`Cantidad de ${pres.plural}`} />
+                    <Button flex={1} size="sm" color="navy.9" tt="none" leftSection={<IconShoppingCartPlus size={16} />} onClick={anadir}>Agregar</Button>
+                </Group>
+                {pres.unidades > 1 && <Text size="xs" c="dimmed">{Number(cantidad) || 1} {(Number(cantidad) || 1) === 1 ? pres.singular : pres.plural} = <b>{(Number(cantidad) || 1) * pres.unidades} {baseUnidades}</b></Text>}
+                {excede && <Text size="xs" c="yellow.8" fw={600}>Puede que no tengamos toda esta cantidad: tu pedido pasará por una breve revisión de existencias.</Text>}
+            </Stack>
         </Card>
     );
 }

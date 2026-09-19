@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { Op } from 'sequelize';
 import db from '@/models/index';
-import { codigoCoincide, codigosAceptados, codigosDe, entregaDe, nivelDelCodigo, nivelMayor, normalizarCodigo, presentacionDe } from '@/app/constants/presentaciones';
+import { codigoCoincide, codigosAceptados, codigosDe, entregaDe, nivelDelCodigo, nivelMayor, normalizarCodigo, presentacionDe, presentacionesDe } from '@/app/constants/presentaciones';
 
 const { Venta, VentaDetalle, Producto, Marca, GrupoEquivalencia, VentaEmpaqueItem, EmpaqueError, User, Empleado } = db;
 
@@ -49,19 +49,20 @@ export const codigosDelRenglon = (detalle) => {
 // Cómo se llama lo que el empacador tiene en la mano según el código que escaneó
 function describirNivel(producto, nivel) {
     const p = presentacionDe(producto, nivel);
-    if (nivel === 'UNIDAD') return 'una UNIDAD suelta';
-    if (nivel === 'CAJA') return `una CAJA cerrada de ${p?.unidades ?? '?'} unidades`;
+    if (nivel === 'UNIDAD') return `${presentacionesDe(producto)[0].singular.toUpperCase()} suelto(a)`;
+    const und = presentacionesDe(producto)[0].corto === 'und' ? 'unidades' : presentacionesDe(producto)[0].corto;
+    if (nivel === 'CAJA') return `una CAJA cerrada de ${p?.unidades ?? '?'} ${und}`;
     const cajas = Number(producto.cajasPorBulto) > 1 ? ` (${producto.cajasPorBulto} cajas)` : '';
-    return `un BULTO cerrado de ${p?.unidades ?? '?'} unidades${cajas}`;
+    return `un BULTO cerrado de ${p?.unidades ?? '?'} ${und}${cajas}`;
 }
 
 // Lo que piden, sin ambigüedad: "1 BULTO cerrado de 1000 unidades (10 cajas)" o "50 UNIDADES SUELTAS"
 function describirPedido(entrega, producto) {
     return entrega.map((e) => {
-        if (e.nivel === 'UNIDAD') return `${e.cantidad} UNIDADES${entrega.length > 1 ? ' SUELTAS' : ''}`;
+        if (e.nivel === 'UNIDAD') return `${e.cantidad} ${(e.cantidad === 1 ? presentacionesDe(producto)[0].singular : presentacionesDe(producto)[0].plural).toUpperCase()}${entrega.length > 1 ? ' SUELTOS' : ''}`;
         const nombre = e.nivel === 'CAJA' ? (e.cantidad === 1 ? 'CAJA cerrada' : 'CAJAS cerradas') : (e.cantidad === 1 ? 'BULTO cerrado' : 'BULTOS cerrados');
         const cajas = e.nivel === 'BULTO' && Number(producto.cajasPorBulto) > 1 ? ` (${producto.cajasPorBulto} cajas)` : '';
-        return `${e.cantidad} ${nombre} de ${e.unidadesCada} unidades${e.cantidad === 1 ? "" : " c/u"}${cajas}`;
+        return `${e.cantidad} ${nombre} de ${e.unidadesCada} ${e.unidadCorta === 'und' ? 'unidades' : e.unidadCorta}${e.cantidad === 1 ? "" : " c/u"}${cajas}`;
     }).join(' + ');
 }
 
