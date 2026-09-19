@@ -5,9 +5,9 @@ import {
     IconFirstAidKit,
     IconWheelchair,
     IconPill,
-    IconGenderFemale,
     IconBoxMultiple
 } from '@tabler/icons-react';
+import IconUtero from './icons/IconUtero'; // aparato reproductor femenino (Tabler no trae uno)
 
 // Diccionario de iconos por categoría. Las claves van en minúsculas y SIN acentos
 // (el nombre de la categoría se normaliza igual, así "Ginecología" y "Ginecologia" coinciden).
@@ -16,7 +16,7 @@ const iconMap = {
     'descartables': IconVaccine,
     'insumos medicos': IconFirstAidKit,
     'productos farmaceuticos': IconPill,
-    'ginecologia': IconGenderFemale,
+    'ginecologia': IconUtero,
     'miscelaneo': IconBoxMultiple,
 };
 
