@@ -1,0 +1,353 @@
+/* Navegación 2026: header de vidrio oscuro + menú lateral móvil + botones "pill".
+   Paleta: navy var(--mantine-color-navy-9), azul var(--mantine-color-brand-6), cian var(--mantine-color-sky-3), acento naranja var(--mantine-color-accent-6). */
+
+/* ---------- HEADER ---------- */
+.header {
+    background: linear-gradient(180deg, rgba(6, 16, 38, 0.74) 0%, rgba(10, 26, 58, 0.58) 100%);
+    -webkit-backdrop-filter: blur(18px) saturate(170%);
+    backdrop-filter: blur(18px) saturate(170%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+    transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Filo luminoso inferior */
+.header::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, alpha(var(--mantine-color-sky-3), 0.75) 28%, alpha(var(--mantine-color-accent-6), 0.6) 72%, transparent 100%);
+    opacity: 0.55;
+    transition: opacity 0.3s ease;
+}
+
+/* Al hacer scroll: más opaco y con sombra para separar del contenido */
+.header[data-scrolled] {
+    background: linear-gradient(180deg, rgba(5, 13, 31, 0.9) 0%, rgba(8, 21, 48, 0.82) 100%);
+    box-shadow: 0 12px 40px rgba(2, 8, 23, 0.38);
+}
+
+.header[data-scrolled]::after {
+    opacity: 0.9;
+}
+
+/* ---------- LINKS CENTRALES (escritorio) ---------- */
+.nav {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.navLink {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.76);
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.navLink:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.navLink[data-active] {
+    color: #fff;
+    background: linear-gradient(135deg, alpha(var(--mantine-color-brand-5), 0.55), alpha(var(--mantine-color-brand-6), 0.35));
+    box-shadow: inset 0 0 0 1px alpha(var(--mantine-color-sky-3), 0.35), 0 4px 16px alpha(var(--mantine-color-brand-6), 0.35);
+}
+
+/* ---------- BOTONES PILL ---------- */
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.pill:hover {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.32);
+}
+
+.pillUser {
+    padding: 4px 12px 4px 4px;
+}
+
+.cta {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 18px;
+    border-radius: 999px;
+    overflow: hidden;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    background: var(--mm-gradient-accent);
+    box-shadow: 0 6px 20px alpha(var(--mantine-color-accent-6), 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Destello que cruza el botón al pasar el cursor */
+.cta::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -60%;
+    width: 40%;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+    transform: skewX(-20deg);
+    transition: left 0.6s ease;
+}
+
+.cta:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 28px alpha(var(--mantine-color-accent-6), 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.cta:hover::after {
+    left: 130%;
+}
+
+.iconBtn {
+    color: rgba(255, 255, 255, 0.85);
+    border-radius: 999px;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.iconBtn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+
+/* ---------- MENÚ DE CUENTA (dropdown) ---------- */
+.menuDropdown {
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.92);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    backdrop-filter: blur(16px) saturate(160%);
+    box-shadow: 0 20px 50px alpha(var(--mantine-color-navy-9), 0.22);
+    padding: 8px;
+}
+
+.menuItem {
+    border-radius: 10px;
+    font-weight: 600;
+}
+
+/* ---------- MENÚ LATERAL MÓVIL ---------- */
+.drawer {
+    background:
+        radial-gradient(420px 260px at 0% 0%, alpha(var(--mantine-color-brand-5), 0.42), transparent 62%),
+        radial-gradient(380px 260px at 100% 100%, alpha(var(--mantine-color-accent-6), 0.16), transparent 62%),
+        linear-gradient(180deg, #071630 0%, #0a1a3a 100%);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 24px 0 60px rgba(2, 8, 23, 0.5);
+    color: #fff;
+}
+
+.drawerBody {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.userCard {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    margin-bottom: 8px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.drawerSection {
+    margin: 12px 6px 2px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.drawerLink {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 16px;
+    color: rgba(255, 255, 255, 0.86);
+    font-weight: 600;
+    font-size: 15px;
+    transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.drawerLink:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: #fff;
+}
+
+.drawerLink[data-active] {
+    color: #fff;
+    background: linear-gradient(90deg, alpha(var(--mantine-color-brand-5), 0.38), alpha(var(--mantine-color-brand-5), 0.06));
+    box-shadow: inset 0 0 0 1px alpha(var(--mantine-color-sky-3), 0.28);
+}
+
+.drawerIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.08);
+    transition: background 0.2s ease;
+}
+
+.drawerLink[data-active] .drawerIcon {
+    background: linear-gradient(135deg, var(--mantine-color-sky-6), var(--mantine-color-brand-6));
+    box-shadow: 0 6px 16px alpha(var(--mantine-color-brand-6), 0.5);
+}
+
+.drawerLink[data-danger] {
+    color: #ff8f8f;
+}
+
+.drawerLink[data-danger] .drawerIcon {
+    background: rgba(255, 90, 90, 0.14);
+}
+
+.drawerLink[data-danger]:hover {
+    background: rgba(255, 90, 90, 0.1);
+}
+
+.drawerFooter {
+    margin-top: auto;
+    padding-top: 16px;
+}
+
+/* Entrada escalonada de los elementos cada vez que se abre el menú */
+.drawerBody[data-opened] .drawerLink,
+.drawerBody[data-opened] .userCard {
+    animation: navIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+@keyframes navIn {
+    from {
+        opacity: 0;
+        transform: translateX(-14px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* ---------- NOTIFICACIONES (cajón) ---------- */
+.notifDropdown {
+    padding: 0;
+    overflow: hidden;
+    border-radius: var(--mantine-radius-lg);
+    border: 1px solid var(--mm-glass-border);
+    background: rgba(255, 255, 255, 0.94);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
+    box-shadow: 0 24px 60px alpha(var(--mantine-color-navy-9), 0.28);
+}
+
+.notifHeader {
+    padding: 14px 16px 12px;
+    background: linear-gradient(180deg, alpha(var(--mantine-color-brand-6), 0.08), transparent);
+    border-bottom: 1px solid alpha(var(--mantine-color-navy-9), 0.08);
+}
+
+.notifItem {
+    position: relative;
+    padding: 12px 16px 12px 18px;
+    cursor: pointer;
+    border-bottom: 1px solid alpha(var(--mantine-color-navy-9), 0.06);
+    transition: background 0.2s ease;
+}
+
+.notifItem:hover {
+    background: alpha(var(--mantine-color-brand-6), 0.06);
+}
+
+/* No leída: fondo teñido y barra de acento a la izquierda */
+.notifItem[data-unread] {
+    background: alpha(var(--mantine-color-brand-6), 0.07);
+}
+
+.notifItem[data-unread]::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 10px;
+    bottom: 10px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--mantine-color-accent-6);
+}
+
+.notifFooter {
+    padding: 10px 12px;
+    border-top: 1px solid alpha(var(--mantine-color-navy-9), 0.08);
+    background: alpha(var(--mantine-color-navy-9), 0.02);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .header,
+    .navLink,
+    .pill,
+    .cta,
+    .cta::after,
+    .drawerLink {
+        transition: none;
+    }
+
+    .drawerBody[data-opened] .drawerLink,
+    .drawerBody[data-opened] .userCard {
+        animation: none;
+    }
+}

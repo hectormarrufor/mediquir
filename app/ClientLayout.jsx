@@ -7,16 +7,17 @@ import './global.css';
 import 'dayjs/locale/es';
 
 import React, { Suspense, useEffect } from 'react';
-import { AppShell, Burger, createTheme, Group, Image as MantineImage, MantineProvider, UnstyledButton, Box, Center, Loader, Button, ActionIcon } from '@mantine/core';
-import { useDisclosure, useHeadroom } from '@mantine/hooks';
+import { AppShell, createTheme, MantineProvider, Center, Loader, Overlay } from '@mantine/core';
+import { useDisclosure, useHeadroom, useMediaQuery } from '@mantine/hooks';
 import { Notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
-import { theme as themeConfig } from '../theme';
+import { theme as themeConfig, cssVariablesResolver } from '../theme';
 import { AuthProvider } from '@/hooks/useAuth';
-import LayoutMenu from './LayoutMenu';
 import NavBar from './NavBar';
 import AuthGuard from '@/hooks/authGuard';
-import NotificationBell from './components/NotificationBell';
+import SiteHeader from './components/nav/SiteHeader';
+import navClasses from './components/nav/navigation.module.css';
+import AppBackground from './components/AppBackground';
 import { DatesProvider } from '@mantine/dates';
 import ReactQueryProvider from './QueryProvider';
 import Image from 'next/image';
@@ -43,6 +44,13 @@ export default function ClientLayout({ children }) {
   const [opened, { toggle }] = useDisclosure();
   const router = useRouter();
   const pinned = useHeadroom({ fixedAt: 120 });
+  const isMobile = useMediaQuery('(max-width: 48em)');
+
+  // Con el menú lateral abierto en móvil, el contenido de atrás no debe desplazarse
+  useEffect(() => {
+    document.body.style.overflow = opened && isMobile ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [opened, isMobile]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
@@ -59,7 +67,7 @@ export default function ClientLayout({ children }) {
   }, []);
 
   return (
-    <MantineProvider theme={theme} forceColorScheme='light' withGlobalStyles withNormalizeCSS locale="es">
+    <MantineProvider theme={theme} cssVariablesResolver={cssVariablesResolver} forceColorScheme='light' withGlobalStyles withNormalizeCSS locale="es">
       <DatesProvider settings={{ locale: 'es' }}>
         <ReactQueryProvider>
           <AuthProvider>
@@ -68,7 +76,7 @@ export default function ClientLayout({ children }) {
                 <Notifications />
                 <AuthProvider>
                   <AppShell
-                    header={{ height: 70, collapsed: !pinned }}
+                    header={{ height: { base: 60, sm: 70 }, collapsed: !pinned }}
                     navbar={{
                       width: 300,
                       breakpoint: 'sm',
@@ -76,73 +84,27 @@ export default function ClientLayout({ children }) {
                     }}
                     padding="md"
                   >
-                    <AppShell.Header
-                      style={{
-                        background: 'linear-gradient(135deg, rgba(7, 27, 44, 0.92) 0%, rgba(43, 115, 163, 0.67) 100%)',
-                        backdropFilter: 'blur(16px)',
-                        WebkitBackdropFilter: 'blur(16px)',
-                        borderBottom: '1px solid rgba(249, 50, 0, 0.08)', // Sutil toque del color corporativo en el borde
-                        boxShadow: '0 4px 30px rgba(0, 0, 0, 0.26)'
-                      }}
-                    >
-                      <Group h="100%" px="xl" justify="space-between" wrap="nowrap">
-                        {/* SECCIÓN LOGO */}
-                        <UnstyledButton onClick={() => router.push('/')}>
-                          <Box w={200} h={70} style={{ display: 'flex', alignItems: 'center' }}>
-                            <img
-                              src={tenant.assets.logo}
-                              alt={`Logo ${tenant.name}`}
-                              fetchPriority="high"
-                              style={{
-                                maxHeight: '70px',
-                                width: '140px',
-                                objectFit: 'fill'
-                              }}
-                            />
-                          </Box>
-                        </UnstyledButton>
+                    <SiteHeader opened={opened} toggle={toggle} />
 
-                        {/* SECCIÓN DERECHA */}
-                        <Group wrap="nowrap" gap="md">
-                          <NotificationBell />
+                    {/* Fondo atenuado detrás del menú lateral móvil; un toque lo cierra */}
+                    {opened && (
+                      <Overlay
+                        hiddenFrom="sm"
+                        fixed
+                        color="#020817"
+                        backgroundOpacity={0.6}
+                        blur={3}
+                        zIndex={99}
+                        onClick={toggle}
+                      />
+                    )}
 
-                          <Box visibleFrom="sm">
-                            <LayoutMenu router={router} />
-                          </Box>
-
-                          <Burger
-                            opened={opened}
-                            onClick={toggle}
-                            hiddenFrom="sm"
-                            size="sm"
-                            color="#0B1B3D"
-                          />
-                        </Group>
-                      </Group>
-                    </AppShell.Header>
-
-                    <AppShell.Navbar p="md"  style={{
-                        background: 'linear-gradient(135deg, rgba(243, 248, 255, 0.92) 0%, rgba(92, 155, 192, 0.82) 40%, rgba(7, 30, 61, 0.92) 100%)',
-                        backdropFilter: 'blur(16px)',
-                        WebkitBackdropFilter: 'blur(16px)',
-                        borderBottom: '1px solid rgba(249, 50, 0, 0.08)', // Sutil toque del color corporativo en el borde
-                        boxShadow: '0 4px 30px rgba(0, 0, 0, 0.03)'
-                      }}>
-                      <NavBar router={router} close={toggle} />
+                    <AppShell.Navbar p="md" withBorder={false} className={navClasses.drawer}>
+                      <NavBar router={router} close={toggle} opened={opened} />
                     </AppShell.Navbar>
 
-                    <AppShell.Main p={0} pt={70}>
-                      <Box
-                        style={{
-                          position: 'fixed',
-                          top: 0, left: 0, width: '100%', height: '100%',
-                          zIndex: -1,
-                          backgroundImage: `url(${tenant.assets.fondoGlobal})`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                          opacity: 0.85
-                        }}
-                      />
+                    <AppShell.Main p={0} pt={{ base: 60, sm: 70 }}>
+                      <AppBackground />
                       {children}
                     </AppShell.Main>
                   </AppShell>

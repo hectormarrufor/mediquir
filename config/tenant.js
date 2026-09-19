@@ -6,6 +6,8 @@ const config = {
     brandColor: 'blue',
     assets: {
       logo: '/tenants/mediquir/logo.png',
+      logoHeader: '/tenants/mediquir/logo-header.png',
+      logoHeader2x: '/tenants/mediquir/logo-header@2x.png',
       favicon: '/tenants/mediquir/favicon.png',
       fondoGlobal: '/tenants/mediquir/fondo.jpg',
       fondoClaro: '/tenants/mediquir/fondoclaro.jpg',
