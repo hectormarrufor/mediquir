@@ -10,7 +10,7 @@ const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const MES = /^\d{4}-(0[1-9]|1[0-2])$/;
 const num = (v) => Number(v) || 0;
 const r2 = (v) => Number(num(v).toFixed(2));
-const ALICUOTAS = [16, 8, 27];
+const ALICUOTAS = [16]; // solo se usa la alícuota general; una alícuota distinta que aparezca en un documento se agrega sola al resumen
 
 // Monto de un documento en bolívares con la tasa DEL DOCUMENTO (los libros se llevan en Bs)
 const aBs = (monto, moneda, tasa) => (moneda === 'BS' ? r2(monto) : aBolivares(num(monto), num(tasa) || 1));
@@ -18,12 +18,15 @@ const iso = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
 
 // Resumen del libro en el formato del libro declarativo: por tipo de operación, por alícuota y retenciones
 function resumir(filas, { anuladas } = {}) {
-    const facturas = filas.filter((f) => f.tipo === 'FAC');
+    // Facturas y notas: la nota de crédito viene en negativo y la de débito en positivo, así los totales ya quedan netos
+    const facturas = filas.filter((f) => ['FAC', 'NC', 'ND'].includes(f.tipo));
+    const notasC = filas.filter((f) => f.tipo === 'NC');
+    const notasD = filas.filter((f) => f.tipo === 'ND');
     const retenciones = filas.filter((f) => f.tipo === 'RET');
     const suma = (lista, campo) => r2(lista.reduce((a, f) => a + num(f[campo]), 0));
 
     const porAlicuota = Object.fromEntries(ALICUOTAS.map((a) => [a, { base: 0, iva: 0 }]));
-    for (const f of facturas.filter((x) => num(x.base) > 0 || num(x.iva) > 0)) {
+    for (const f of facturas.filter((x) => num(x.base) !== 0 || num(x.iva) !== 0)) {
         const a = porAlicuota[f.alicuota] || (porAlicuota[f.alicuota] = { base: 0, iva: 0 });
         a.base = r2(a.base + num(f.base)); a.iva = r2(a.iva + num(f.iva));
     }
@@ -35,19 +38,33 @@ function resumir(filas, { anuladas } = {}) {
 
     return {
         totalTransacciones: filas.length,
-        sinImpuesto: { monto: suma(facturas, 'exento'), cant: facturas.filter((f) => num(f.exento) > 0).length },
-        totalImponible: { monto: suma(facturas, 'base'), cant: facturas.filter((f) => num(f.base) > 0).length },
+        sinImpuesto: { monto: suma(facturas, 'exento'), cant: facturas.filter((f) => num(f.exento) !== 0).length },
+        totalImponible: { monto: suma(facturas, 'base'), cant: facturas.filter((f) => num(f.base) !== 0).length },
         totalImpuesto: suma(facturas, 'iva'),
         totalGeneral: suma(facturas, 'total'),
         ivaRetenido: suma(retenciones, 'ivaRetenido'),
         descuentos: 0,
-        notasCredito: { monto: 0, iva: 0, cant: 0 }, // el sistema aún no emite ni recibe notas de crédito
+        notasCredito: { monto: r2(Math.abs(suma(notasC, 'total'))), iva: r2(Math.abs(suma(notasC, 'iva'))), cant: notasC.length },
+        notasDebito: { monto: suma(notasD, 'total'), iva: suma(notasD, 'iva'), cant: notasD.length },
         anulaciones: anuladas || { monto: 0, iva: 0, cant: 0 },
         porAlicuota, retenciones: retPorAlicuota,
         exento: suma(facturas, 'exento'),
         totalRetenciones: { base: r2(Object.values(retPorAlicuota).reduce((a, x) => a + x.base, 0)), retenido: suma(retenciones, 'ivaRetenido'), cant: retenciones.length },
     };
 }
+
+// Fila de una nota de crédito (NC, en negativo) o de débito (ND) tal como sale en el libro. Los montos se convierten a Bs
+// con la tasa de la factura afectada; el signo se aplica al final para no redondear números negativos.
+const filaNota = (n) => {
+    const s = n.tipo === 'CREDITO' ? -1 : 1;
+    const total = s * aBs(n.total, n.moneda, n.tasa);
+    const iva = s * aBs(n.iva, n.moneda, n.tasa);
+    const base = s * r2(aBs(n.base, n.moneda, n.tasa));
+    return {
+        tipo: n.tipo === 'CREDITO' ? 'NC' : 'ND', fecha: iso(n.fecha), rif: n.rif || '', nombre: n.nombre || '', documento: n.numero, facturaAfectada: n.afectada || '',
+        control: n.control || '', tipoTrans: '01', total, base, alicuota: iva !== 0 ? num(n.alicuota) || REGLAS.alicuotaGeneral : 0, exento: r2(total - base - iva), iva, ivaRetenido: null,
+    };
+};
 
 // Fila de una retención tal como sale en el libro (tipo RET, transacción 03)
 const filaRetencion = (r) => ({
@@ -64,7 +81,7 @@ const detalleRetencion = (r, doc) => ({
 });
 
 async function libroCompras(q) {
-    const [facturas, retenciones] = await Promise.all([
+    const [facturas, retenciones, notas] = await Promise.all([
         q(`SELECT f."id", f."fechaFactura" AS emision, COALESCE(f."fechaRecepcion", f."fechaFactura") AS recepcion, f."numeroDocumento" AS numero, f."numeroControl" AS control,
                 f."tipoTransaccion" AS "tipoTrans", f."moneda"::text AS moneda, f."tasaCambio"::float AS tasa, f."subtotal"::float AS subtotal, f."montoIva"::float AS iva,
                 f."montoExento"::float AS exento, f."alicuotaIva"::float AS alicuota, f."totalFinal"::float AS total, p."identificacion" AS rif, p."nombre"
@@ -74,6 +91,12 @@ async function libroCompras(q) {
         q(`SELECT r.*, f."moneda"::text AS "monedaDoc", f."tasaCambio"::float AS "tasaDoc", f."totalFinal"::float AS "totalDoc"
            FROM "RetencionesIva" r LEFT JOIN "FacturasCompras" f ON f."id" = r."facturaCompraId"
            WHERE r."tipo" = 'COMPRA' AND r."fecha" BETWEEN :desde AND :hasta ORDER BY r."fecha", r."id"`),
+        // Notas de crédito y de débito que emitieron los proveedores
+        q(`SELECT n."tipo", n."numeroDocumento" AS numero, n."numeroControl" AS control, n."fecha", n."moneda"::text AS moneda, n."tasaCambio"::float AS tasa,
+                n."totalFinal"::float AS total, n."montoIva"::float AS iva, n."baseImponible"::float AS base, n."alicuotaIva"::float AS alicuota,
+                p."identificacion" AS rif, p."nombre", f."numeroDocumento" AS afectada
+           FROM "NotasFiscales" n LEFT JOIN "Proveedores" p ON p."id" = n."proveedorId" LEFT JOIN "FacturasCompras" f ON f."id" = n."facturaCompraId"
+           WHERE n."origen" = 'COMPRA' AND n."estado" = 'EMITIDA' AND n."fecha" BETWEEN :desde AND :hasta ORDER BY n."fecha", n."createdAt"`),
     ]);
 
     const filasFac = facturas.map((f) => {
@@ -85,7 +108,7 @@ async function libroCompras(q) {
             total, base, alicuota: f.iva > 0 ? num(f.alicuota) || REGLAS.alicuotaGeneral : 0, exento: r2(total - base - iva), iva, ivaRetenido: null,
         };
     });
-    const filas = [...filasFac, ...retenciones.map(filaRetencion)].map((f, i) => ({ n: i + 1, ...f }));
+    const filas = [...filasFac, ...notas.map(filaNota), ...retenciones.map(filaRetencion)].map((f, i) => ({ n: i + 1, ...f }));
 
     return {
         filas, resumen: resumir(filas), noFiscales: null,
@@ -94,7 +117,7 @@ async function libroCompras(q) {
 }
 
 async function libroVentas(q) {
-    const [facturas, retenciones, anuladas, noFiscales, pendientes] = await Promise.all([
+    const [facturas, retenciones, anuladas, noFiscales, pendientes, notas] = await Promise.all([
         q(`SELECT v."id", (v."createdAt" AT TIME ZONE 'America/Caracas')::date AS emision, v."numeroDocumento" AS numero, v."numeroControl" AS control, v."tipoTransaccion" AS "tipoTrans",
                 v."moneda"::text AS moneda, v."tasaCambio"::float AS tasa, v."montoIva"::float AS iva, v."totalFinal"::float AS total, c."identificacion" AS rif, c."nombre",
                 COALESCE((SELECT SUM(d."subtotal") FROM "VentaDetalles" d WHERE d."ventaId" = v."id" AND d."aplicaIva" = true), 0)::float AS gravada
@@ -111,6 +134,12 @@ async function libroVentas(q) {
         // Retenciones calculadas al facturar a las que aún les falta el comprobante del cliente: no entran al libro hasta tenerlo
         q(`SELECT r."facturaAfectada", r."contraparteNombre", r."estado", r."ivaRetenido"::float AS "ivaRetenido" FROM "RetencionesIva" r
            WHERE r."tipo" = 'VENTA' AND r."estado" IN ('PENDIENTE', 'POR_REVISAR') AND r."fecha" BETWEEN :desde AND :hasta ORDER BY r."fecha", r."id"`),
+        // Notas de crédito y de débito que emitió la empresa a sus clientes
+        q(`SELECT n."tipo", n."numeroDocumento" AS numero, n."numeroControl" AS control, n."fecha", n."moneda"::text AS moneda, n."tasaCambio"::float AS tasa,
+                n."totalFinal"::float AS total, n."montoIva"::float AS iva, n."baseImponible"::float AS base, n."alicuotaIva"::float AS alicuota,
+                c."identificacion" AS rif, c."nombre", v."numeroDocumento" AS afectada
+           FROM "NotasFiscales" n LEFT JOIN "Clientes" c ON c."id" = n."clienteId" LEFT JOIN "Ventas" v ON v."id" = n."ventaId"
+           WHERE n."origen" = 'VENTA' AND n."estado" = 'EMITIDA' AND n."fecha" BETWEEN :desde AND :hasta ORDER BY n."fecha", n."createdAt"`),
     ]);
 
     const filasFac = facturas.map((v) => {
@@ -123,7 +152,7 @@ async function libroVentas(q) {
             total, base, alicuota: iva > 0 ? REGLAS.alicuotaGeneral : 0, exento: r2(total - base - iva), iva, ivaRetenido: null,
         };
     });
-    const filas = [...filasFac, ...retenciones.map(filaRetencion)].map((f, i) => ({ n: i + 1, ...f }));
+    const filas = [...filasFac, ...notas.map(filaNota), ...retenciones.map(filaRetencion)].map((f, i) => ({ n: i + 1, ...f }));
     const anul = { monto: r2(anuladas.reduce((a, v) => a + aBs(v.total, v.moneda, v.tasa), 0)), iva: r2(anuladas.reduce((a, v) => a + aBs(v.iva, v.moneda, v.tasa), 0)), cant: anuladas.length };
 
     return {
@@ -158,7 +187,7 @@ export async function GET(request) {
 
         return NextResponse.json({
             desde, hasta,
-            empresa: { nombre: MEMBRETE_MEDIQUIR.nombre, rif: MEMBRETE_MEDIQUIR.rif, agencia: CONFIG_FISCAL.agencia, estacion: CONFIG_FISCAL.estacion },
+            empresa: { nombre: MEMBRETE_MEDIQUIR.nombre, rif: MEMBRETE_MEDIQUIR.rif, direccion: MEMBRETE_MEDIQUIR.direccion, agencia: CONFIG_FISCAL.agencia, estacion: CONFIG_FISCAL.estacion },
             aviso: 'Formato basado en el libro de ejemplo; no verificado contra la providencia vigente del SENIAT. Revísalo con tu contador. Montos en bolívares, convertidos con la tasa de cada documento.',
             compras, ventas,
             iva: {

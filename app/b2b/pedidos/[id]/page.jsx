@@ -144,6 +144,24 @@ export default function B2BPedidoDetalle() {
                                 </Stack>
                             </Card>
 
+                            {p.notas?.length > 0 && (
+                                <Card withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+                                    <Title order={5} c="navy.9" mb="xs">Notas de crédito y débito</Title>
+                                    <Stack gap={6}>
+                                        {p.notas.map((n) => (
+                                            <Group key={n.id} justify="space-between" wrap="nowrap" align="flex-start">
+                                                <Box style={{ minWidth: 0 }}>
+                                                    <Text size="sm" fw={700}>{n.numero} <Text span size="xs" c="dimmed">· {n.tipo === 'CREDITO' ? 'Nota de crédito' : 'Nota de débito'} · {fmtFecha(n.fecha)}</Text></Text>
+                                                    <Text size="xs" c="dimmed" lineClamp={2}>{n.motivo}</Text>
+                                                </Box>
+                                                <Text size="sm" fw={800} c={n.tipo === 'CREDITO' ? 'teal.7' : 'orange.8'} style={{ whiteSpace: 'nowrap' }}>{n.tipo === 'CREDITO' ? '−' : '+'}{n.moneda === 'BS' ? fmtBs(n.total) : fmtUsd(n.total)}</Text>
+                                            </Group>
+                                        ))}
+                                    </Stack>
+                                    <Text size="xs" c="dimmed" mt="xs">Las notas de crédito bajan lo que debes y las de débito lo suben; ya están reflejadas en "Por pagar".</Text>
+                                </Card>
+                            )}
+
                             {p.retencion && p.estado !== 'Cancelado' && <RetencionCliente pedido={p} />}
 
                             {p.condicionPago === 'Credito' && p.estado !== 'Cancelado' && p.cobro.saldo > 0 && <PagarConPagoMovil pedido={p} />}

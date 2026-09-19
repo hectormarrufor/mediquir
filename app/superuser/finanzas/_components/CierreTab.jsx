@@ -38,7 +38,7 @@ function TablaLibro({ tipo, libro }) {
                 <Table.Thead><Table.Tr>{cols.map((c) => <Table.Th key={c.k} ta={c.num ? 'right' : 'left'} style={{ whiteSpace: 'pre-line', verticalAlign: 'bottom' }}>{c.t}</Table.Th>)}</Table.Tr></Table.Thead>
                 <Table.Tbody>
                     {libro.filas.map((f) => (
-                        <Table.Tr key={f.n} bg={f.tipo === 'RET' ? 'var(--mantine-color-grape-0)' : undefined}>
+                        <Table.Tr key={f.n} bg={f.tipo === 'RET' ? 'var(--mantine-color-grape-0)' : f.tipo === 'NC' ? 'var(--mantine-color-red-0)' : f.tipo === 'ND' ? 'var(--mantine-color-blue-0)' : undefined}>
                             {cols.map((c) => <Table.Td key={c.k} ta={c.num ? 'right' : 'left'} style={{ whiteSpace: 'nowrap' }}>{valor(c, f)}</Table.Td>)}
                         </Table.Tr>
                     ))}

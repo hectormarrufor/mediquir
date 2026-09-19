@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { RetencionIva, Venta } from '@/models';
+import { NotaFiscal, RetencionIva, Venta } from '@/models';
 import { requerirCliente } from '../../../_lib/acceso';
 import { INCLUDES_COBRO, cuentaDe, INCLUDE_DETALLES, hoyCaracas, lineaDeTiempo, resumenPedido } from '../../_lib';
 
@@ -23,6 +23,7 @@ export async function GET(request, { params }) {
         if (!venta) return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
 
         const retencion = await RetencionIva.findOne({ where: { ventaId: venta.id, tipo: 'VENTA' } });
+        const notas = await NotaFiscal.findAll({ where: { ventaId: venta.id, origen: 'VENTA', estado: 'EMITIDA' }, order: [['createdAt', 'ASC']] });
         const resumen = resumenPedido(venta, hoyCaracas());
         const cancelable = venta.statusDespacho === 'Pendiente' && !cuentaDe(venta) && (venta.abonos || []).length === 0;
 
@@ -31,6 +32,8 @@ export async function GET(request, { params }) {
             quienRetira: venta.quienRetira,
             fechaRetiro: venta.fechaHoraRetiro,
             cancelable,
+            // Notas de crédito (bajan lo que debe) y de débito (lo suben) emitidas sobre esta factura
+            notas: notas.map((n) => ({ id: n.id, numero: n.numeroDocumento, tipo: n.tipo, fecha: n.fecha, motivo: n.motivo, total: Number(n.totalFinal), moneda: n.moneda })),
             // Retención de IVA que el cliente (contribuyente especial) le hace a la empresa: montos en Bs (dato fiscal)
             retencion: retencion ? {
                 estado: retencion.estado, porcentaje: Number(retencion.porcentajeRetencion), ivaBs: Number(retencion.montoIva),

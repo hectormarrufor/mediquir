@@ -17,6 +17,7 @@ import PrecioVisual from '@/app/components/ui/PrecioVisual';
 import RetencionIvaCard from '../_components/RetencionIvaCard';
 import EvidenciaEmpaque from '../_components/EvidenciaEmpaque';
 import EnvioCard from '../_components/EnvioCard';
+import NotasFacturaCard from '../_components/NotasFacturaCard';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function DetallePedidoMayorPage() {
@@ -316,6 +317,8 @@ export default function DetallePedidoMayorPage() {
                                 {!esVendedor && <EnvioCard pedido={pedido} onCambio={refetch} />}
 
                                 {!esVendedor && <RetencionIvaCard pedido={pedido} onCambio={refetch} />}
+
+                                {!esVendedor && <NotasFacturaCard pedido={pedido} onCambio={refetch} />}
 
                                 {/* 👈 BLOQUE MODIFICADO EN LA TARJETA LATERAL */}
                                 <Paper withBorder p="md" radius="md" bg="gray.0">

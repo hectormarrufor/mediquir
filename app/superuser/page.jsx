@@ -46,6 +46,7 @@ const menuOptions = [
     { title: 'Balance General', href: '/superuser/finanzas', description: 'Dashboard de ingresos y egresos.', icon: IconCurrencyDollar, color: 'grape' },
     { title: 'Cuentas por Cobrar (CxC)', href: '/superuser/cxc', description: 'Gestión de cuentas por cobrar.', icon: IconShieldCheck, color: 'green' },
     { title: 'Cuentas por Pagar (CxP)', href: '/superuser/cxp', description: 'Gestión de cuentas por pagar.', icon: IconAlertTriangle, color: 'red' },
+    { title: 'Notas de crédito y débito', href: '/superuser/notas', description: 'Notas emitidas a clientes y recibidas de proveedores.', icon: IconCurrencyDollar, color: 'indigo' },
     { title: 'Pagos Moviles recibidos', href: '/superuser/pagos-recibidos', description: 'Gestión de pagos móviles recibidos.', icon: IconCurrencyDollar, color: 'blue' },
 ];
 

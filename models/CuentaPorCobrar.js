@@ -42,7 +42,9 @@ const CuentaPorCobrar = sequelize.define('CuentaPorCobrar', {
     estado: {
         type: DataTypes.ENUM('Pendiente', 'Pagado', 'Vencido'),
         defaultValue: 'Pendiente'
-    }
+    },
+    // Solo si la cuenta nació de una nota de débito sobre una factura que no era a crédito (su deuda es solo la de la nota)
+    notaId: { type: DataTypes.UUID, allowNull: true }
 }, {
     tableName: 'CuentasPorCobrar',
     timestamps: true

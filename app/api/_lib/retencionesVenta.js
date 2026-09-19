@@ -14,14 +14,21 @@ export async function recalcularCobro(venta, t) {
     const abonos = await Abono.findAll({ where: { ventaId: venta.id }, attributes: ['montoUsd', 'montoVes'], transaction: t });
     const totalUsd = venta.moneda === 'BS' ? aDolares(Number(venta.totalFinal), Number(venta.tasaCambio)) : Number(venta.totalFinal);
     const abonadoUsd = abonos.reduce((a, x) => a + Number(x.montoUsd), 0);
-    const pagada = abonadoUsd >= totalUsd - 0.005;
+    let pagada = abonadoUsd >= totalUsd - 0.005;
 
     const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, transaction: t });
+    // La cuenta creada por una nota de débito sobre una factura ya cobrada solo tiene la deuda de la nota: sus pagos no son los de la factura
+    if (cxc?.notaId) {
+        venta.statusPago = cxc.estado === 'Pagado' ? 'Pagado' : 'Pendiente';
+        await venta.save({ transaction: t });
+        return;
+    }
     if (cxc) {
         const abonado = cxc.moneda === 'USD' ? abonadoUsd : abonos.reduce((a, x) => a + Number(x.montoVes), 0);
         cxc.saldoPendiente = Math.max(0, Number((Number(cxc.montoTotal) - abonado).toFixed(2)));
         cxc.estado = cxc.saldoPendiente <= 0.005 ? 'Pagado' : 'Pendiente';
         await cxc.save({ transaction: t });
+        pagada = cxc.estado === 'Pagado'; // con notas de débito la deuda es mayor que el total de la factura
     }
     venta.statusPago = pagada ? 'Pagado' : 'Pendiente';
     await venta.save({ transaction: t });

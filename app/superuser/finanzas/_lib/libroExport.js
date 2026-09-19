@@ -48,7 +48,7 @@ export function descargarCsvLibro(tipo, datos) {
     const cols = COLUMNAS(tipo, libro.filas);
     const r = libro.resumen;
     const lineas = [
-        [`${datos.empresa.nombre} - RIF ${datos.empresa.rif}`], [`${TIPOS[tipo].titulo} - desde ${fmtFecha(datos.desde)} hasta ${fmtFecha(datos.hasta)}`], [datos.aviso], [],
+        [`${datos.empresa.nombre} - RIF ${datos.empresa.rif}`], [`Dirección: ${datos.empresa.direccion || ''}`], [`${TIPOS[tipo].titulo} - desde ${fmtFecha(datos.desde)} hasta ${fmtFecha(datos.hasta)}`], [datos.aviso], [],
         cols.map((c) => c.t.replace('\n', ' ')),
         ...libro.filas.map((f) => cols.map((c) => valor(c, f))),
         [],
@@ -60,7 +60,7 @@ export function descargarCsvLibro(tipo, datos) {
 export function descargarCsvRetenciones(tipo, datos) {
     const filas = datos[tipo].retencionesDetalle;
     const lineas = [
-        [`${datos.empresa.nombre} - RIF ${datos.empresa.rif}`], [`Relación de IVA retenido (${tipo === 'ventas' ? 'retenciones que te hicieron tus clientes' : 'retenciones que practicaste a tus proveedores'}) - desde ${fmtFecha(datos.desde)} hasta ${fmtFecha(datos.hasta)}`], [],
+        [`${datos.empresa.nombre} - RIF ${datos.empresa.rif}`], [`Dirección: ${datos.empresa.direccion || ''}`], [`Relación de IVA retenido (${tipo === 'ventas' ? 'retenciones que te hicieron tus clientes' : 'retenciones que practicaste a tus proveedores'}) - desde ${fmtFecha(datos.desde)} hasta ${fmtFecha(datos.hasta)}`], [],
         ['Nº', 'FECHA', 'RIF', 'NOMBRE O RAZÓN SOCIAL', 'TIPO DOC', 'DOCUMENTO (COMPROBANTE)', 'Nº CONTROL', 'TOTAL', 'BASE IMPONIBLE', 'TOTAL EXENTO', 'TOTAL IVA', 'DOCUMENTO AFECTADO', 'IVA RETENIDO'],
         ...filas.map((f) => [f.n, fmtFecha(f.fecha), f.rif, f.nombre, f.tipoDoc, f.comprobante, f.control, dinero(f.totalVentas), dinero(f.base), dinero(f.exento), dinero(f.iva), f.facturaAfectada, dinero(f.ivaRetenido)]),
         [], ['', '', '', 'TOTAL', '', '', '', '', '', '', '', '', dinero(filas.reduce((a, f) => a + f.ivaRetenido, 0))],
@@ -86,10 +86,13 @@ export async function descargarPdfLibro(tipo, datos, usuario = '') {
 
     const cabecera = () => {
         doc.setTextColor(...NEGRO);
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.text(`Empresa: ${datos.empresa.nombre}`, M, 10);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.text(`Empresa: ${datos.empresa.nombre}`, M, 8.5);
         doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-        doc.text(`Agencia: ${datos.empresa.agencia}`, M, 14);
-        doc.text(`${fechaLarga.charAt(0).toUpperCase()}${fechaLarga.slice(1)}   Página: ${String(doc.getCurrentPageInfo().pageNumber).padStart(3, '0')}`, M, 18);
+        doc.text(`R.I.F.: ${datos.empresa.rif}     Agencia: ${datos.empresa.agencia}`, M, 12.5);
+        doc.setFontSize(7.5);
+        doc.text(`Dirección: ${datos.empresa.direccion || ''}`, M, 16.2, { maxWidth: 182 }); // una sola línea: termina antes de la raya del título (x = 195 mm)
+        doc.setFontSize(8);
+        doc.text(`${fechaLarga.charAt(0).toUpperCase()}${fechaLarga.slice(1)}   Página: ${String(doc.getCurrentPageInfo().pageNumber).padStart(3, '0')}`, M, 20.5);
         doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text(info.titulo, ANCHO - M, 14, { align: 'right' });
         doc.setLineWidth(0.7); doc.line(ANCHO - M - 90, 16, ANCHO - M, 16);
         doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
@@ -101,7 +104,6 @@ export async function descargarPdfLibro(tipo, datos, usuario = '') {
         const y = ALTO - 12;
         doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...NEGRO);
         doc.text(datos.empresa.nombre.toUpperCase(), M, y);
-        doc.setFont('helvetica', 'bold'); doc.text('Mediquir ERP', M, y + 4);
         doc.setFont('helvetica', 'normal');
         doc.text('Expresado en Bolívar', ANCHO - M, y, { align: 'right' });
         doc.text(`Procesado por: ${String(usuario || '').toUpperCase()} desde la estación ${datos.empresa.estacion} a las ${hora}`, ANCHO - M, y + 4, { align: 'right' });
@@ -148,15 +150,16 @@ export async function descargarPdfLibro(tipo, datos, usuario = '') {
         ['Total Imponible', dinero(r.totalImponible.monto), String(r.totalImponible.cant)],
         ['Total Impuesto', dinero(r.totalImpuesto), ''],
     ], foot: ['TOTAL GENERAL', dinero(r.totalGeneral), ''], colStyles: { 1: { halign: 'right' }, 2: { halign: 'center', cellWidth: 12 } } });
-    yIzq = tabla(M, 84, yIzq + 3, { head: ['Retenciones', 'Base Imponible', 'I.V.A. Retenido', 'Cant.'], body: [16, 8, 27].map((a) => [`Retenciones al ${a},00 %`, dinero(r.retenciones[a]?.base || 0), dinero(r.retenciones[a]?.retenido || 0), String(r.retenciones[a]?.cant || 0)]),
+    yIzq = tabla(M, 84, yIzq + 3, { head: ['Retenciones', 'Base Imponible', 'I.V.A. Retenido', 'Cant.'], body: [16, ...Object.keys(r.retenciones).map(Number).filter((a) => a !== 16 && r.retenciones[a]?.cant > 0)].map((a) => [`Retenciones al ${a},00 %`, dinero(r.retenciones[a]?.base || 0), dinero(r.retenciones[a]?.retenido || 0), String(r.retenciones[a]?.cant || 0)]),
         foot: ['Totales:', dinero(r.totalRetenciones.base), dinero(r.totalRetenciones.retenido), String(r.totalRetenciones.cant)], colStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'center', cellWidth: 10 } } });
 
     const yMed = tabla(M + 90, 62, yInicio, { head: [`Resumen de ${info.nc}`, 'Monto', 'Cant.'], body: [[info.nc + ':', dinero(r.notasCredito.monto), String(r.notasCredito.cant)], [`IVA ${info.nc}:`, dinero(r.notasCredito.iva), '']], colStyles: { 1: { halign: 'right' }, 2: { halign: 'center', cellWidth: 12 } } });
-    const yMed2 = tabla(M + 90, 62, yMed + 3, { head: ['Resumen de anulaciones', 'Monto', 'Cant.'], body: [['Monto anulado:', dinero(r.anulaciones.monto), String(r.anulaciones.cant)], ['Impuesto anulado:', dinero(r.anulaciones.iva), '']], colStyles: { 1: { halign: 'right' }, 2: { halign: 'center', cellWidth: 12 } } });
+    const yND = tabla(M + 90, 62, yMed + 3, { head: [`Resumen de ${info.nc.replace('C', 'D')}`, 'Monto', 'Cant.'], body: [[info.nc.replace('C', 'D') + ':', dinero(r.notasDebito?.monto || 0), String(r.notasDebito?.cant || 0)], [`IVA ${info.nc.replace('C', 'D')}:`, dinero(r.notasDebito?.iva || 0), '']], colStyles: { 1: { halign: 'right' }, 2: { halign: 'center', cellWidth: 12 } } });
+    const yMed2 = tabla(M + 90, 62, yND + 3, { head: ['Resumen de anulaciones', 'Monto', 'Cant.'], body: [['Monto anulado:', dinero(r.anulaciones.monto), String(r.anulaciones.cant)], ['Impuesto anulado:', dinero(r.anulaciones.iva), '']], colStyles: { 1: { halign: 'right' }, 2: { halign: 'center', cellWidth: 12 } } });
     void yMed2;
 
-    // Orden del libro de ejemplo: 16 %, 8 %, 27 % (y cualquier otra alícuota que haya tenido movimiento)
-    const lista = [16, 8, 27, ...Object.keys(r.porAlicuota).map(Number).filter((a) => ![16, 8, 27].includes(a))];
+    // Solo la alícuota general (16 %); cualquier otra aparece únicamente si algún documento tuvo movimiento con ella
+    const lista = [16, ...Object.keys(r.porAlicuota).map(Number).filter((a) => a !== 16 && (r.porAlicuota[a]?.base || r.porAlicuota[a]?.iva))];
     const totBase = lista.reduce((a, k) => a + (r.porAlicuota[k]?.base || 0), 0);
     const totIva = lista.reduce((a, k) => a + (r.porAlicuota[k]?.iva || 0), 0);
     const yDer = tabla(M + 158, ANCHO - 2 * M - 158, yInicio, { head: ['', 'Base Imponible', 'Monto por I.V.A.', 'Monto I.V.A.\nNo Causado', 'Monto Neto\nI.V.A.'],

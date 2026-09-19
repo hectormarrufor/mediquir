@@ -17,6 +17,8 @@ const db = {
     MovimientoFinanciero: require('./finanzas/MovimientoFinanciero'),
     Abono: require('./facturacion/Abono'),
     RetencionIva: require('./facturacion/RetencionIva'),
+    NotaFiscal: require('./facturacion/NotaFiscal'),
+    NotaFiscalDetalle: require('./facturacion/NotaFiscalDetalle'),
     Cliente: require('./Cliente'),
     Tag: require('./inventario/Tag'),
     Categoria: require('./inventario/Categoria'),

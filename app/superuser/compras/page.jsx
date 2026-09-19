@@ -10,6 +10,7 @@ import { IconSearch, IconReceipt2, IconArrowRight, IconCalendarEvent, IconBuildi
 import { useRouter } from 'next/navigation';
 import PrecioVisual from '@/app/components/ui/PrecioVisual';
 import dayjs from 'dayjs';
+import NotaCompraModal from './NotaCompraModal';
 
 export default function ComprasDashboardPage() {
     const router = useRouter();
@@ -18,6 +19,7 @@ export default function ComprasDashboardPage() {
     const [fechaInicio, setFechaInicio] = useState(getTodayYMD());
     const [fechaFin, setFechaFin] = useState(getTodayYMD());
     const [search, setSearch] = useState('');
+    const [notaDe, setNotaDe] = useState(null); // factura de compra a la que se le registra una nota del proveedor
 
     const { data: compras, isLoading } = useQuery({
         queryKey: ['historial-compras', fechaInicio, fechaFin],
@@ -132,13 +134,18 @@ export default function ComprasDashboardPage() {
                                                 <PrecioVisual valor={compra.totalFinal} simbolo={compra.moneda === 'BS' ? 'Bs' : '$'} size="sm" fw={700} />
                                             </Table.Td>
                                             <Table.Td ta="center">
-                                                <Button 
-                                                    size="xs" variant="light" color="blue" 
-                                                    rightSection={<IconArrowRight size={14} />}
-                                                    onClick={() => router.push(`/superuser/compras/${compra.id}`)}
-                                                >
-                                                    Ver Detalle
-                                                </Button>
+                                                <Group gap={6} justify="center" wrap="nowrap">
+                                                    <Button 
+                                                        size="xs" variant="light" color="blue" 
+                                                        rightSection={<IconArrowRight size={14} />}
+                                                        onClick={() => router.push(`/superuser/compras/${compra.id}`)}
+                                                    >
+                                                        Ver Detalle
+                                                    </Button>
+                                                    {compra.tipoDocumento === 'FACTURA' && (
+                                                        <Button size="xs" variant="subtle" color="grape" onClick={() => setNotaDe(compra)}>Nota del proveedor</Button>
+                                                    )}
+                                                </Group>
                                             </Table.Td>
                                         </Table.Tr>
                                     );
@@ -148,6 +155,8 @@ export default function ComprasDashboardPage() {
                     </Table>
                 </ScrollArea>
             </Paper>
+
+            {notaDe && <NotaCompraModal opened onClose={() => setNotaDe(null)} compra={notaDe} />}
         </Box>
     );
 }

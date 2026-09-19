@@ -4,7 +4,7 @@
 import db from '../../../models/index.js';
 import { aBolivares, aDolares } from '../../constants/facturacion.js';
 
-const { Abono, CuentaPorCobrar, MovimientoFinanciero, CategoriaFinanciera, RetencionIva } = db;
+const { Abono, CuentaPorCobrar, MovimientoFinanciero, CategoriaFinanciera, RetencionIva, NotaFiscal } = db;
 
 export class ErrorAbono extends Error {
     constructor(mensaje, status = 400, codigo = null) { super(mensaje); this.status = status; this.codigo = codigo; }
@@ -90,8 +90,17 @@ export async function registrarAbono({ venta, monto, moneda, tasa, metodoPago, r
     const retenciones = await RetencionIva.findAll({ where: { ventaId: venta.id }, attributes: ['ivaRetenido'], transaction: t });
     const retenidoBs = retenciones.reduce((a, r) => a + Number(r.ivaRetenido), 0);
     const retenido = venta.moneda === 'BS' ? retenidoBs : (retenidoBs > 0 ? aDolares(retenidoBs, Number(venta.tasaCambio) || 1) : 0);
-    const total = Number(venta.totalFinal) - retenido;
-    const proporcionIva = total > 0 ? Math.max(0, (Number(venta.montoIva) || 0) - retenido) / total : 0;
+    // Las notas de crédito restan (total e IVA) y las de débito suman; si la cuenta es solo de notas de débito (factura ya cobrada),
+    // lo que se debe es únicamente lo de esas notas.
+    const notas = await NotaFiscal.findAll({ where: { ventaId: venta.id, origen: 'VENTA', estado: 'EMITIDA' }, attributes: ['tipo', 'montoIva', 'totalFinal'], transaction: t });
+    const suma = (tipoNota, campo) => notas.filter((n) => n.tipo === tipoNota).reduce((a, n) => a + Number(n[campo]), 0);
+    const total = cxc.notaId
+        ? suma('DEBITO', 'totalFinal')
+        : Number(venta.totalFinal) + suma('DEBITO', 'totalFinal') - suma('CREDITO', 'totalFinal') - retenido;
+    const ivaPorCobrar = cxc.notaId
+        ? suma('DEBITO', 'montoIva')
+        : (Number(venta.montoIva) || 0) + suma('DEBITO', 'montoIva') - suma('CREDITO', 'montoIva') - retenido;
+    const proporcionIva = total > 0 ? Math.max(0, ivaPorCobrar) / total : 0;
     const ivaUsd = r2(abonoUsd * proporcionIva);
     const ivaBs = r2(abonoBs * proporcionIva);
     const comun = {

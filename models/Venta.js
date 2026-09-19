@@ -122,6 +122,7 @@ Venta.associate = (models) => {
     Venta.hasMany(models.MovimientoFinanciero, { foreignKey: 'ventaId', as: 'movimientos' });
     Venta.hasMany(models.SalidaInventario, { foreignKey: 'ventaId', as: 'salidasInventario' });
     Venta.hasMany(models.CuentaPorCobrar, { foreignKey: 'ventaId', as: 'cuentaPorCobrar' });
+    Venta.hasMany(models.NotaFiscal, { foreignKey: 'ventaId', as: 'notas' });
     Venta.hasMany(models.VentaEmpaqueItem, { foreignKey: 'ventaId', as: 'empaqueItems', onDelete: 'CASCADE' });
     Venta.hasOne(models.PagoSms, { foreignKey: 'ventaId', as: 'pagoSms' })
 };

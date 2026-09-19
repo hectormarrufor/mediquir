@@ -24,7 +24,9 @@ const nf = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFra
 const fmt = (v) => nf.format(Number(v) || 0);
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-VE', { timeZone: 'America/Caracas' }) : '');
 
-export default function FacturaFormaLibre({ venta, guia = false }) {
+// titulo: 'Factura' (por defecto) o 'Nota de Crédito' / 'Nota de Débito'. Para una nota, `referencia` (en lugar de "ORDEN DE COMPRA") indica la factura
+// que afecta y `condicionTexto` reemplaza las condiciones de pago; `sinVence` oculta la fecha de vencimiento.
+export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factura', referencia = null, etiquetaCondicion = 'Condiciones de la Transacción', condicionTexto = null, sinVence = false }) {
     const tasa = Number(venta.tasaCambio) || 1;
     const esBs = venta.moneda === 'BS';
     const aBs = (v) => (esBs ? Number(Number(v).toFixed(2)) : aBolivares(Number(v), tasa));
@@ -41,13 +43,13 @@ export default function FacturaFormaLibre({ venta, guia = false }) {
     const exentoUsd = Math.max(0, Number((totalUsd - baseUsd - ivaUsd).toFixed(2)));
 
     const dias = venta.fechaVencimiento ? Math.max(0, Math.round((new Date(venta.fechaVencimiento) - new Date(venta.createdAt)) / 86400000)) : 0;
-    const condicion = venta.condicionPago === 'Credito' ? `CREDITO a ${dias} Días` : 'CONTADO';
+    const condicion = condicionTexto || (venta.condicionPago === 'Credito' ? `CREDITO a ${dias} Días` : 'CONTADO');
     const demasiados = detalles.length > CONFIG_FISCAL.maxRenglonesFactura;
 
     return (
         <div className="fl-envoltura">
             <div className="fl-barra">
-                <span>Factura {venta.numeroDocumento} · media carta 8 × 5.5 in{guia ? ' · GUÍA de la forma preimpresa (no se imprime)' : ''}</span>
+                <span>{titulo} {venta.numeroDocumento} · media carta 8 × 5.5 in{guia ? ' · GUÍA de la forma preimpresa (no se imprime)' : ''}</span>
                 <span>
                     <button type="button" onClick={() => window.print()}>Imprimir</button>{' '}
                     <a href={guia ? '?' : '?guia=1'}>{guia ? 'Ocultar guía' : 'Ver guía sobre la forma'}</a>
@@ -67,11 +69,11 @@ export default function FacturaFormaLibre({ venta, guia = false }) {
 
                 {/* Datos del documento */}
                 <div className="fl-doc">
-                    <div className="fl-titulo"><span className="fl-azul">Factura</span><span className="fl-numero">{venta.numeroDocumento}</span></div>
-                    <div className="fl-oc">ORDEN DE COMPRA</div>
-                    <div className="fl-fechas"><span>Emisión: <b>{fecha(venta.createdAt)}</b></span><span>Vence: <b>{fecha(venta.fechaVencimiento || venta.createdAt)}</b></span></div>
+                    <div className="fl-titulo"><span className="fl-azul" style={titulo.length > 8 ? { fontSize: '11px' } : undefined}>{titulo}</span><span className="fl-numero">{venta.numeroDocumento}</span></div>
+                    <div className="fl-oc">{referencia || 'ORDEN DE COMPRA'}</div>
+                    <div className="fl-fechas"><span>Emisión: <b>{fecha(venta.createdAt)}</b></span>{!sinVence && <span>Vence: <b>{fecha(venta.fechaVencimiento || venta.createdAt)}</b></span>}</div>
                     <div className="fl-cond">
-                        <div><div className="fl-cond-t">Condiciones de la Transacción</div><div className="fl-cond-v">{condicion}</div></div>
+                        <div><div className="fl-cond-t">{etiquetaCondicion}</div><div className="fl-cond-v">{condicion}</div></div>
                         <div className="fl-control"><div className="fl-cond-t">Control</div><div className="fl-cond-v">{venta.numeroControl || ''}</div></div>
                     </div>
                 </div>

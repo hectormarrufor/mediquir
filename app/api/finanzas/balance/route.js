@@ -9,6 +9,10 @@ const VENTA_USD = `(CASE WHEN v."moneda" = 'BS' THEN v."totalFinal" / NULLIF(v."
 const IVA_VENTA_USD = `(CASE WHEN v."moneda" = 'BS' THEN v."montoIva" / NULLIF(v."tasaCambio", 0) ELSE v."montoIva" END)`;
 const IVA_COMPRA_USD = `(CASE WHEN f."moneda" = 'BS' THEN f."montoIva" / NULLIF(f."tasaCambio", 0) ELSE f."montoIva" END)`;
 
+// Notas de crédito (restan) y de débito (suman) vigentes de un origen en el rango: IVA y total en USD
+const NOTAS_USD = (campo, origen) => `(SELECT COALESCE(SUM((CASE WHEN n."tipo" = 'DEBITO' THEN 1 ELSE -1 END) * (CASE WHEN n."moneda" = 'BS' THEN n."${campo}" / NULLIF(n."tasaCambio", 0) ELSE n."${campo}" END)), 0)::float
+    FROM "NotasFiscales" n WHERE n."origen" = '${origen}' AND n."estado" = 'EMITIDA' AND n."fecha" BETWEEN :desde AND :hasta)`;
+
 // El IVA que se cobra al vender no es ingreso de la empresa: el sistema lo asienta aparte con esta categoría
 const CAT_IVA = 'IVA Recaudado';
 
@@ -60,9 +64,9 @@ export async function GET(request) {
                 (SELECT COALESCE(SUM(CASE WHEN m."tipo" = 'INGRESO' THEN m."montoUsd" ELSE -m."montoUsd" END), 0)::float
                     FROM "MovimientosFinancieros" m LEFT JOIN "CategoriasFinancieras" c ON c."id" = m."categoriaId" WHERE COALESCE(c."nombre", '') <> :catIva) AS "flujoAcumulado"`),
             q(`SELECT
-                (SELECT COALESCE(SUM(${IVA_VENTA_USD}), 0)::float FROM "Ventas" v WHERE (v."createdAt" AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta AND v."statusDespacho" <> 'Cancelado') AS debito,
-                (SELECT COALESCE(SUM(${IVA_COMPRA_USD}), 0)::float FROM "FacturasCompras" f WHERE f."fechaFactura" BETWEEN :desde AND :hasta) AS credito,
-                (SELECT COALESCE(SUM(${VENTA_USD}), 0)::float FROM "Ventas" v WHERE (v."createdAt" AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta AND v."statusDespacho" <> 'Cancelado') AS facturado`),
+                (SELECT COALESCE(SUM(${IVA_VENTA_USD}), 0)::float FROM "Ventas" v WHERE (v."createdAt" AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta AND v."statusDespacho" <> 'Cancelado') + ${NOTAS_USD('montoIva', 'VENTA')} AS debito,
+                (SELECT COALESCE(SUM(${IVA_COMPRA_USD}), 0)::float FROM "FacturasCompras" f WHERE f."fechaFactura" BETWEEN :desde AND :hasta) + ${NOTAS_USD('montoIva', 'COMPRA')} AS credito,
+                (SELECT COALESCE(SUM(${VENTA_USD}), 0)::float FROM "Ventas" v WHERE (v."createdAt" AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta AND v."statusDespacho" <> 'Cancelado') + ${NOTAS_USD('totalFinal', 'VENTA')} AS facturado`),
         ]);
 
         const utilidad = Number((kpi.ingresos - kpi.gastos).toFixed(2));
