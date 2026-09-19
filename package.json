@@ -43,6 +43,8 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vercel/blob": "^1.1.1",
+    "@zxing/browser": "^0.2.1",
+    "@zxing/library": "^0.23.0",
     "axios": "^1.10.0",
     "bcryptjs": "^3.0.2",
     "browser-image-compression": "^2.0.2",

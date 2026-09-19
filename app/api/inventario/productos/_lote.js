@@ -1,3 +1,4 @@
+import { Op } from 'sequelize';
 import { Producto, Tag, sequelize } from '@/models';
 import { validarCampo, resolverEmpaque } from '@/app/constants/inventarioCampos';
 import { INCLUDES, filaProducto, tagsPorProducto } from '../_lib';
@@ -15,6 +16,7 @@ async function validar(items) {
         (await Producto.findAll({ where: { id: ids }, attributes: ['id', 'presentacion', 'unidadesPorCaja', 'cajasPorBulto', 'unidadesPorBulto', 'grupoEquivalenciaId'] })).map((p) => [p.id, p.toJSON()])
     );
 
+    const vistosEnLote = new Set(); // códigos de barras ya vistos en este mismo lote (pegado masivo)
     for (const item of items) {
         const id = Number(item?.id);
         const actual = actuales.get(id);
@@ -30,6 +32,17 @@ async function validar(items) {
             else cambios[campo] = r.valor;
         }
         if (!mensaje && Object.keys(cambios).length === 0 && tags === undefined) mensaje = 'No hay cambios';
+
+        // Código de barras: sin espacios, y no puede ser el de otro producto (el empaque lo usa para reconocer el producto)
+        if (!mensaje && typeof cambios.codigoBarras === 'string') {
+            cambios.codigoBarras = cambios.codigoBarras.replace(/\s+/g, '');
+            if (vistosEnLote.has(cambios.codigoBarras)) mensaje = 'Ese código de barras se repite en los productos que estás editando';
+            else {
+                vistosEnLote.add(cambios.codigoBarras);
+                const otro = await Producto.findOne({ where: { codigoBarras: cambios.codigoBarras, id: { [Op.ne]: id } }, attributes: ['nombre'] });
+                if (otro) mensaje = `Ese código de barras ya está registrado en "${otro.nombre}"`;
+            }
+        }
 
         // Con grupo de equivalencia, el mínimo que vale es el del grupo
         const grupoFinal = 'grupoEquivalenciaId' in cambios ? cambios.grupoEquivalenciaId : actual.grupoEquivalenciaId;

@@ -6,7 +6,7 @@ import { useLocalStorage, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { IconAlertCircle, IconEye, IconPencil } from '@tabler/icons-react';
+import { IconAlertCircle, IconBarcode, IconEye, IconPencil } from '@tabler/icons-react';
 import { COLUMNAS, VISIBLES_POR_DEFECTO, aplanarEntradas } from './_lib/columnas';
 import { useInventarioParams } from './_hooks/useInventarioParams';
 import { useEdicionInventario, useListaInventario, useOpcionesInventario, useResumenInventario } from './_hooks/useInventario';
@@ -116,6 +116,12 @@ export default function InventarioProductosPage() {
                         : <Tooltip label="Pide al administrador el permiso de edición de inventario"><Badge size="lg" variant="light" color="gray" leftSection={<IconEye size={14} />}>Solo lectura</Badge></Tooltip>
                 )}
             </Group>
+
+            {tienePermiso && (
+                <Button fullWidth={isMobile} mb="sm" variant="white" leftSection={<IconBarcode size={18} />} onClick={() => router.push('/superuser/inventario/codigos')}>
+                    Cargar códigos de barras
+                </Button>
+            )}
 
             <ResumenKpis resumen={resumen} params={params} setParams={setParams} cargando={cargandoResumen} />
 
