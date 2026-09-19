@@ -47,9 +47,9 @@ export function renderCelda(item, col, ctx) {
         case 'valor': return valorInventario(fila).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         case 'unidadesPorCaja':
         case 'cajasPorBulto':
-            return fila.presentacion === 'caja' ? formatearNumero(fila[col.campo], col) : <span className={classes.noAplica}>—</span>;
+            return fila[col.campo] > 0 ? formatearNumero(fila[col.campo], col) : <span className={classes.noAplica}>—</span>;
         case 'unidadesPorBulto':
-            return <span title={fila.presentacion === 'caja' ? `${fila.cajasPorBulto ?? 1} cajas × ${fila.unidadesPorCaja ?? '?'} und` : 'Unidades del bulto, sin cajas'}>{formatearNumero(fila.unidadesPorBulto, col)}</span>;
+            return <span title={fila.unidadesPorCaja > 0 ? `${fila.cajasPorBulto ?? 1} cajas × ${fila.unidadesPorCaja} und` : 'Unidades del bulto, sin cajas'}>{formatearNumero(fila.unidadesPorBulto, col)}</span>;
         case 'tags':
             return fila.tags?.length
                 ? <Group gap={4} wrap="nowrap">{fila.tags.slice(0, 2).map((t) => <Badge key={t.id} size="xs" color="gray" variant="light" tt="lowercase">{t.nombre}</Badge>)}{fila.tags.length > 2 && <Text span size="xs" c="dimmed">+{fila.tags.length - 2}</Text>}</Group>

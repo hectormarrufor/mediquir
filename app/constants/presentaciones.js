@@ -2,7 +2,7 @@
 // Módulo PURO (sin base de datos): lo usan el portal B2B, la API y el wizard de empaque, para que todos hablen igual.
 //
 // Regla de fondo: el stock, el costo y el precio son SIEMPRE por unidad base y `VentaDetalle.cantidad` está SIEMPRE en unidades base.
-//   · Unidad base: la unidad, el par o el paquete (campo `presentacion` del producto). Un producto "por caja" tiene como base la pieza.
+//   · Unidad base: la unidad, el par o el paquete (campo `presentacion` del producto). La caja NO es una presentación: es un dato aparte.
 //   · Caja  = `unidadesPorCaja` unidades base.
 //   · Bulto = `unidadesPorBulto` unidades base (que ya incluye las cajas: cajas por bulto × unidades por caja).
 // Cuando el cliente pide "2 cajas", el pedido guarda cantidad = 2 × unidades por caja, y además la presentación pedida (2 cajas),
@@ -13,7 +13,7 @@ const ORDEN = { BULTO: 3, CAJA: 2, UNIDAD: 1 };
 
 const BASE = {
     unidad: { etiqueta: 'Unidad', singular: 'unidad', plural: 'unidades' },
-    caja: { etiqueta: 'Unidad', singular: 'unidad', plural: 'unidades' }, // producto por caja: la base es la pieza
+    caja: { etiqueta: 'Unidad', singular: 'unidad', plural: 'unidades' }, // valor antiguo: ya no se usa
     par: { etiqueta: 'Par', singular: 'par', plural: 'pares' },
     paqx2: { etiqueta: 'Paquete x2', singular: 'paquete x2', plural: 'paquetes x2' },
     paqx4: { etiqueta: 'Paquete x4', singular: 'paquete x4', plural: 'paquetes x4' },

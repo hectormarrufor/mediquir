@@ -5,7 +5,7 @@ import { notificarCabezas } from '@/app/handlers/notificar';
 import db from '@/models/index';
 import { nivelMayor, textoEntrega } from '@/app/constants/presentaciones';
 import {
-    buscarVentaParaEmpaque, codigosDelRenglon, entregaDeDetalle, evaluarCodigo, imagenDe, nombreDe, modoVerificacion, opcionesDeMarca,
+    buscarVentaParaEmpaque, codigosDelRenglon, entregaDeDetalle, evaluarCodigo, imagenDe, nombreDe, modoVerificacion, opcionesDeMarca, registrarError,
 } from '../../_empaque';
 
 const { sequelize, Venta, VentaEmpaqueItem } = db;
@@ -124,9 +124,12 @@ export async function POST(request, { params }) {
         if (!['VERIFICAR_ITEM', 'COMPROBAR_CODIGO'].includes(accion)) throw new ErrorEmpaque('Acción no válida');
         if (Number(venta.empacadorId) !== yo) throw new ErrorEmpaque('Este empaque no está asignado a ti', 403);
 
-        // Solo evalúa el código (no guarda nada): el wizard lo usa al escanear para avisar de inmediato qué se tiene en la mano
+        // Evalúa el código (no cambia el renglón): el wizard lo usa al escanear para avisar de inmediato qué se tiene en la mano.
+        // Si el producto o la presentación son equivocados queda constancia a nombre del empacador (reporte de errores).
         if (accion === 'COMPROBAR_CODIGO') {
             const ev = evaluarCodigo(detalle, codigo, Boolean(escaneado));
+            if (!ev.productoOk) await registrarError({ venta, detalle, empacadorId: yo, tipo: 'PRODUCTO', codigo }, t);
+            else if (ev.alerta?.tipo === 'error') await registrarError({ venta, detalle, empacadorId: yo, tipo: 'PRESENTACION', codigo }, t);
             await t.commit();
             return NextResponse.json({ aceptado: ev.aceptado, productoOk: ev.productoOk, alerta: ev.alerta });
         }
@@ -149,12 +152,16 @@ export async function POST(request, { params }) {
         if (modo === 'codigo') {
             const ev = evaluarCodigo(detalle, codigo, Boolean(escaneado));
             alerta = ev.alerta;
+            // Aunque se acepte (el nivel exigido no tiene código), tomar otra presentación es un error del empacador
+            if (!ev.productoOk) await registrarError({ venta, detalle, empacadorId: yo, tipo: 'PRODUCTO', codigo }, t);
+            else if (ev.alerta?.tipo === 'error') await registrarError({ venta, detalle, empacadorId: yo, tipo: 'PRESENTACION', codigo }, t);
             coincide = ev.aceptado;
             nivelVerificado = ev.aceptado ? ev.nivelEscaneado : null;
             metodo = escaneado && coincide ? 'escaneo' : 'codigo';
         } else if (modo === 'marca') {
             coincide = String(marcaElegida || '') === detalle.producto.marca.nombre;
             metodo = 'marca';
+            if (!coincide) await registrarError({ venta, detalle, empacadorId: yo, tipo: 'MARCA' }, t);
         }
         if (!coincide) {
             // Se guarda el intento fallido (es un error que el sistema evitó) y se responde sin revertirlo

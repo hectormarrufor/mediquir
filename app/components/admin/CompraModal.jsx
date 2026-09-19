@@ -106,7 +106,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                 codigo: prod.codigo,
                 nombre: prod.nombre,
                 costoAnterior: costoUnidad,
-                undPorCaja: prod.presentacion === 'caja' ? Number(prod.unidadesPorCaja) || 0 : 0,
+                undPorCaja: Number(prod.unidadesPorCaja) || 0,
                 undPorBulto: Number(prod.unidadesPorBulto) || 0,
                 unidadCompra: 'unidad',
                 cantidadCompra: 1,

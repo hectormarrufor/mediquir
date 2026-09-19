@@ -1,8 +1,9 @@
 import crypto from 'crypto';
+import { Op } from 'sequelize';
 import db from '@/models/index';
 import { codigoCoincide, codigosAceptados, codigosDe, entregaDe, nivelDelCodigo, nivelMayor, normalizarCodigo, presentacionDe } from '@/app/constants/presentaciones';
 
-const { Venta, VentaDetalle, Producto, Marca, GrupoEquivalencia, VentaEmpaqueItem, User, Empleado } = db;
+const { Venta, VentaDetalle, Producto, Marca, GrupoEquivalencia, VentaEmpaqueItem, EmpaqueError, User, Empleado } = db;
 
 export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -107,6 +108,26 @@ export function evaluarCodigo(detalle, codigo, escaneado = false) {
                 : `${detalleBase} Es el producto correcto, pero este nivel no tiene código de barras registrado: el sistema no puede comprobarlo, así que asegúrate de tomar exactamente ${pedido}.`,
         },
     };
+}
+
+// Deja constancia de un error del empacador (producto o presentación equivocados) para el reporte por empleado.
+// El mismo error (mismo renglón, tipo y código) dentro de 2 minutos cuenta una sola vez: escanear y luego confirmar no lo duplica.
+export async function registrarError({ venta, detalle, empacadorId, tipo, codigo }, transaction) {
+    const cod = String(codigo || '').replace(/\s+/g, '').slice(0, 64) || null;
+    const repetido = await EmpaqueError.findOne({
+        where: { ventaDetalleId: detalle.id, empacadorId, tipo, codigo: cod, createdAt: { [Op.gte]: new Date(Date.now() - 2 * 60 * 1000) } }, transaction,
+    });
+    if (repetido) return;
+    const entrega = entregaDeDetalle(detalle);
+    let nivelEscaneado = null;
+    if (cod && detalle.producto) {
+        const todos = Object.entries(codigosDe(detalle.producto)).map(([nivel, c]) => ({ nivel, codigo: c }));
+        nivelEscaneado = nivelDelCodigo(todos, cod, true);
+    }
+    await EmpaqueError.create({
+        ventaId: venta.id, ventaDetalleId: detalle.id, empacadorId, productoId: detalle.productoId || null, tipo,
+        nivelPedido: entrega.length ? nivelMayor(entrega) : null, nivelEscaneado, codigo: cod,
+    }, { transaction });
 }
 
 // ¿Cómo se comprueba este renglón?

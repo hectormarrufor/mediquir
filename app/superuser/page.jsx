@@ -42,6 +42,7 @@ const menuOptions = [
     { title: 'Inventario', href: '/superuser/inventario', description: 'Control almacén.', icon: IconArchive, color: 'indigo' },
     { title: 'Personal', href: '/superuser/rrhh', description: 'RRHH y empleados.', icon: IconUser, color: 'cyan' },
     { title: 'Ventas / Pedidos', href: '/superuser/ventas', description: 'Gestión de ventas de diario y pedidos.', icon: IconShoppingCart, color: 'grape' },
+    { title: 'Errores de empaque', href: '/superuser/empaque/errores', description: 'Quién se equivoca más al empacar (solo administración).', icon: IconAlertTriangle, color: 'red' },
     { title: 'Compras', href: '/superuser/compras', description: 'Gestión de compras y proveedores.', icon: IconPackage, color: 'orange' },
     { title: 'Balance General', href: '/superuser/finanzas', description: 'Dashboard de ingresos y egresos.', icon: IconCurrencyDollar, color: 'grape' },
     { title: 'Cuentas por Cobrar (CxC)', href: '/superuser/cxc', description: 'Gestión de cuentas por cobrar.', icon: IconShieldCheck, color: 'green' },

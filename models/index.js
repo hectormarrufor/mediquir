@@ -11,6 +11,7 @@ const db = {
     Correlativo: require('./Correlativo'),
     VentaDetalle: require('./VentaDetalle'),
     VentaEmpaqueItem: require('./VentaEmpaqueItem'),
+    EmpaqueError: require('./EmpaqueError'),
     Marca: require('./inventario/Marca'),
     GrupoEquivalencia: require('./inventario/GrupoEquivalencia'),
     CategoriaFinanciera: require('./finanzas/CategoriaFinanciera'),

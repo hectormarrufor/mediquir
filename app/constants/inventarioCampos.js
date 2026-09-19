@@ -7,8 +7,7 @@ export const PRESENTACIONES = [
     { value: 'par', label: 'Par' },
     { value: 'paqx2', label: 'Paquete x2' },
     { value: 'paqx4', label: 'Paquete x4' },
-    { value: 'caja', label: 'Caja' },
-];
+]; // la CAJA no es una presentación: es un dato aparte (unidadesPorCaja) que cualquier producto puede tener
 
 export const CAMPOS = {
     codigo: { tipo: 'texto', max: 60, requerido: true },
@@ -114,16 +113,16 @@ export function validarCampo(campo, crudo, specs = CAMPOS) {
 // EMPAQUE: bulto -> (cajas) -> unidades
 //
 // Cómo se vende el insumo médico:
-//   · Por CAJA:   1 bulto trae N cajas y cada caja trae M unidades  -> unidadesPorBulto = N x M
+//   · Con CAJA:   la caja trae M unidades y el bulto N cajas        -> unidadesPorBulto = N x M
 //   · Sin cajas:  el bulto trae directamente K unidades             -> unidadesPorBulto = K
-// `presentacion` es la unidad en la que se cuenta el stock y en la que están el costo y los precios.
+// `presentacion` es lo que es UNA unidad (unidad, par, paquete x2, paquete x4): en ella se cuenta el stock y están el costo y los precios.
+// La caja es independiente: una jeringa se vende por unidad al detal y a la vez viene en cajas de 100 y bultos de 30 cajas.
 // `unidadesPorBulto` es SIEMPRE el total de unidades del bulto; `cajasPorBulto` solo existe si hay cajas.
 // ---------------------------------------------------------------------------------------------
 const UNIDADES_FIJAS = { unidad: 1, par: 2, paqx2: 2, paqx4: 4 };
 
 // Unidades individuales que trae UNA presentación de venta (null si no se puede saber)
 export function unidadesPorPresentacion(f) {
-    if (f.presentacion === 'caja') return f.unidadesPorCaja > 0 ? f.unidadesPorCaja : null;
     return UNIDADES_FIJAS[f.presentacion] ?? 1;
 }
 
@@ -143,18 +142,18 @@ export function resolverEmpaque(actual, cambios) {
     const m = { ...actual, ...cambios };
     const salida = { ...cambios };
 
-    if (m.presentacion === 'caja') {
-        if (!m.unidadesPorCaja) return { error: 'Una caja necesita "Und/caja" (unidades por caja)' };
-        const soloTotal = 'unidadesPorBulto' in cambios
-            && !['presentacion', 'unidadesPorCaja', 'cajasPorBulto'].some((k) => k in cambios);
-        if (soloTotal) return { error: 'En productos por caja el total del bulto se calcula: edita "Cajas/bulto" o "Und/caja"' };
-        const cajas = m.cajasPorBulto || 1;
+    if (m.unidadesPorCaja) {
+        // Con caja, el total del bulto se calcula (cajas x unidades por caja)
+        const soloTotal = 'unidadesPorBulto' in cambios && !['unidadesPorCaja', 'cajasPorBulto'].some((k) => k in cambios);
+        if (soloTotal) return { error: 'Con unidades por caja el total del bulto se calcula: edita "Cajas/bulto" o "Und/caja"' };
+        // Al agregar la caja a un producto que ya traía bulto (sin cajas), las cajas salen de dividir: 5000 und / 100 por caja = 50 cajas
+        const yaTraiaBulto = !actual.unidadesPorCaja && !('cajasPorBulto' in cambios) && actual.unidadesPorBulto > 1 && actual.unidadesPorBulto % m.unidadesPorCaja === 0;
+        const cajas = m.cajasPorBulto || (yaTraiaBulto ? actual.unidadesPorBulto / m.unidadesPorCaja : 1);
         salida.cajasPorBulto = cajas;
         salida.unidadesPorBulto = cajas * m.unidadesPorCaja;
     } else {
-        if (cambios.unidadesPorCaja) return { error: 'Solo los productos por caja tienen "Und/caja". Cambia la presentación a Caja' };
-        if (cambios.cajasPorBulto) return { error: 'Solo los productos por caja tienen "Cajas/bulto". Cambia la presentación a Caja' };
-        if ('presentacion' in cambios) { salida.unidadesPorCaja = null; salida.cajasPorBulto = null; }
+        if (cambios.cajasPorBulto) return { error: '"Cajas/bulto" necesita "Und/caja": llena primero cuántas unidades trae la caja' };
+        if ('unidadesPorCaja' in cambios) salida.cajasPorBulto = null; // se quitó la caja: el bulto conserva su total de unidades
     }
     return { cambios: salida };
 }

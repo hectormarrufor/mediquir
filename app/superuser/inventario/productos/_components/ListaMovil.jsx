@@ -97,7 +97,7 @@ function EditorMinimoGrupo({ grupo, onCerrar, onGuardar }) {
 function TarjetaProducto({ f, puedeEditar, onEditar, onFicha, hijo }) {
     // Un hermano de grupo solo puede estar agotado o no: el mínimo se evalúa en el grupo
     const propio = hijo ? (f.stockAlmacen > 0 ? 'ok' : 'agotado') : estadoDe(f.stockAlmacen, f.stockMinimo);
-    const esCaja = f.presentacion === 'caja';
+    const esCaja = f.unidadesPorCaja > 0;
     const datos = [
         ['Stock', f.stockAlmacen, [0, 2]],
         ['Costo/und', f.costoUsd, [2, 4]],

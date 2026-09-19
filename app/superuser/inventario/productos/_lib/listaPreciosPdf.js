@@ -18,7 +18,7 @@ const FORMATO = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maxim
 const NOTA_IVA = `Precios en USD, sin IVA. A los productos gravados se les añade IVA (${REGLAS.alicuotaGeneral}%) al facturar; los marcados (E) son exentos. Monto de cada renglón = precio unitario x cantidad, redondeado a 2 decimales.`;
 export const dinero = (v) => `$${FORMATO.format(Number(v) || 0)}`;
 
-const presentacionDe = (f) => (f.presentacion === 'caja' ? (f.unidadesPorCaja ? `Caja x${f.unidadesPorCaja}` : 'Caja') : PRESENTACION[f.presentacion] || 'Unidad');
+const presentacionDe = (f) => PRESENTACION[f.presentacion] || 'Unidad';
 
 const fechaLarga = (iso) => new Date(iso).toLocaleDateString('es-VE', { day: '2-digit', month: 'long', year: 'numeric' });
 
@@ -68,7 +68,7 @@ export function construirPdf({ jsPDF, autoTable, datos, imagenes, logo, incluirP
             { content: dinero(f.precio), styles: { halign: 'right', fontStyle: 'bold', textColor: AZUL_OSCURO, fontSize: 9.5 } },
         ];
         if (mostrarCaja) {
-            fila.push(f.presentacion === 'caja' && f.unidadesPorCaja > 0 && f.precio > 0
+            fila.push(f.unidadesPorCaja > 0 && f.precio > 0
                 ? { content: dinero(montoRenglon(f.precio, f.unidadesPorCaja)), styles: { halign: 'right', textColor: GRIS } }
                 : { content: '', styles: { halign: 'right' } });
         }

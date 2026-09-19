@@ -23,7 +23,7 @@ export const COLUMNAS = [
     { key: 'costoUsd', label: 'Costo/und $', ancho: 108, tipo: 'numero', campo: 'costoUsd', orden: 'costoUsd', decimales: [2, 5], derecha: true, ayuda: 'Costo de UNA unidad' },
     {
         key: 'costoCaja', label: 'Costo/caja $', ancho: 110, tipo: 'numero', derecha: true, decimales: [2, 3],
-        ayuda: 'Costo por unidad × unidades por caja (solo productos en caja)',
+        ayuda: 'Costo por unidad × unidades por caja (solo productos con caja)',
         virtual: { campo: 'costoUsd', ver: costoPorCaja, aReal: (v, f) => por(v, f.unidadesPorCaja, true) },
     },
     {
@@ -119,9 +119,11 @@ export function editableEn(item, col) {
     const f = item.fila;
     // Con grupo, el mínimo vale el del grupo
     if (col.key === 'stockMinimo' && item.k === 'hijo') return null;
-    if (col.key === 'unidadesPorCaja' || col.key === 'cajasPorBulto') return f.presentacion === 'caja' ? { tabla: 'producto', campo: col.campo } : null;
+    if (col.key === 'unidadesPorCaja') return { tabla: 'producto', campo: col.campo };
+    // Las cajas por bulto solo tienen sentido si el producto trae unidades por caja
+    if (col.key === 'cajasPorBulto') return f.unidadesPorCaja > 0 ? { tabla: 'producto', campo: col.campo } : null;
     // Con cajas, las unidades del bulto se calculan (cajas x und/caja)
-    if (col.key === 'unidadesPorBulto') return f.presentacion === 'caja' ? null : { tabla: 'producto', campo: 'unidadesPorBulto' };
+    if (col.key === 'unidadesPorBulto') return f.unidadesPorCaja > 0 ? null : { tabla: 'producto', campo: 'unidadesPorBulto' };
     if (col.virtual) return col.virtual.aReal(1, f) === null ? null : { tabla: 'producto', campo: col.virtual.campo, virtual: col.virtual };
     return col.campo ? { tabla: 'producto', campo: col.campo } : null;
 }

@@ -86,11 +86,10 @@ export async function POST(req) {
         }
 
         // Empaque: bulto -> (cajas) -> unidades. unidadesPorBulto es SIEMPRE el total de unidades del bulto.
-        const esCaja = productData.presentacion === 'caja';
         const resuelto = resolverEmpaque({}, {
             presentacion: productData.presentacion || 'unidad',
-            unidadesPorCaja: esCaja ? parseInt(productData.unidadesPorCaja) || null : null,
-            cajasPorBulto: esCaja ? parseInt(productData.cajasPorBulto) || null : null,
+            unidadesPorCaja: parseInt(productData.unidadesPorCaja) || null,
+            cajasPorBulto: parseInt(productData.cajasPorBulto) || null,
             unidadesPorBulto: parseInt(productData.unidadesPorBulto) || 1,
         });
         if (resuelto.error) throw new Error(resuelto.error);

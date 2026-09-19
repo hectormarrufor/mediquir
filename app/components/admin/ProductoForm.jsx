@@ -74,9 +74,9 @@ export default function ProductoForm({ productId = null }) {
             precio6: (value) => (value !== '' && Number(value) < -1 ? 'No puede ser negativo' : null),
             precio7: (value) => (value !== '' && Number(value) < -1 ? 'No puede ser negativo' : null),
             stockAlmacen: (value) => (value === '' || Number(value) < 0 ? 'No puede ser negativo' : null),
-            unidadesPorCaja: (value, values) => (values.presentacion === 'caja' && (!value || Number(value) <= 0) ? 'Debe ser mayor a 0' : null),
-            cajasPorBulto: (value, values) => (values.presentacion === 'caja' && value !== '' && Number(value) < 1 ? 'Mínimo 1 caja por bulto' : null),
-            unidadesPorBulto: (value, values) => (values.presentacion !== 'caja' && value !== '' && Number(value) < 1 ? 'Mínimo 1 unidad por bulto' : null),
+            unidadesPorCaja: (value) => (value !== '' && value !== null && Number(value) < 1 ? 'Debe ser mayor a 0' : null),
+            cajasPorBulto: (value) => (value !== '' && value !== null && Number(value) < 1 ? 'Mínimo 1 caja por bulto' : null),
+            unidadesPorBulto: (value) => (value !== '' && value !== null && Number(value) < 1 ? 'Mínimo 1 unidad por bulto' : null),
         }
     });
 
@@ -109,7 +109,7 @@ export default function ProductoForm({ productId = null }) {
                 presentacion: productoDB.presentacion,
                 unidadesPorCaja: productoDB.unidadesPorCaja || '',
                 cajasPorBulto: productoDB.cajasPorBulto || '',
-                unidadesPorBulto: productoDB.presentacion === 'caja' ? '' : (productoDB.unidadesPorBulto || ''),
+                unidadesPorBulto: productoDB.unidadesPorCaja ? '' : (productoDB.unidadesPorBulto || ''),
                 stockAlmacen: Number(productoDB.stockAlmacen),
                 stockMinimo: Number(productoDB.stockMinimo),
                 imagen: productoDB.imagen || null
@@ -163,10 +163,10 @@ export default function ProductoForm({ productId = null }) {
                 codigoBarras: String(values.codigoBarras || '').trim() || null,
                 codigoBarrasCaja: String(values.codigoBarrasCaja || '').trim() || null,
                 codigoBarrasBulto: String(values.codigoBarrasBulto || '').trim() || null,
-                unidadesPorCaja: values.presentacion === 'caja' ? Number(values.unidadesPorCaja) : null,
-                cajasPorBulto: values.presentacion === 'caja' ? (Number(values.cajasPorBulto) || 1) : null,
+                unidadesPorCaja: Number(values.unidadesPorCaja) > 0 ? Number(values.unidadesPorCaja) : null,
+                cajasPorBulto: Number(values.unidadesPorCaja) > 0 ? (Number(values.cajasPorBulto) || 1) : null,
                 // Con cajas: cajas x unidades por caja. Sin cajas: las unidades que trae el bulto directamente.
-                unidadesPorBulto: values.presentacion === 'caja'
+                unidadesPorBulto: Number(values.unidadesPorCaja) > 0
                     ? (Number(values.cajasPorBulto) || 1) * Number(values.unidadesPorCaja)
                     : (Number(values.unidadesPorBulto) || 1),
             };
@@ -414,27 +414,25 @@ export default function ProductoForm({ productId = null }) {
                         <Title order={4} mb="md" c="gray.7">3. Logística e Inventario</Title>
                         <Grid>
                             <Grid.Col span={{ base: 12, md: 4 }}>
-                                <Select label="Presentación (unidad de stock, costo y precios)" data={[{ value: 'unidad', label: 'Unidad' }, { value: 'par', label: 'Par' }, { value: 'paqx2', label: 'Paquete x2' }, { value: 'paqx4', label: 'Paquete x4' }, { value: 'caja', label: 'Caja' }]} withAsterisk {...form.getInputProps('presentacion')} />
+                                <Select label="Presentación (qué es UNA unidad: stock, costo y precios)" description="Unidad, par o paquete. La caja se define abajo" data={[{ value: 'unidad', label: 'Unidad' }, { value: 'par', label: 'Par' }, { value: 'paqx2', label: 'Paquete x2' }, { value: 'paqx4', label: 'Paquete x4' }]} withAsterisk {...form.getInputProps('presentacion')} />
                             </Grid.Col>
-                            {form.values.presentacion === 'caja' ? (
-                                <>
-                                    <Grid.Col span={{ base: 12, md: 4 }}>
-                                        <NumberInput withAsterisk label="Unidades por caja" description="Unidades que trae cada caja" placeholder="Ej. 50" min={1} {...form.getInputProps('unidadesPorCaja')} />
-                                    </Grid.Col>
-                                    <Grid.Col span={{ base: 12, md: 4 }}>
-                                        <NumberInput label="Cajas por bulto" description="Cajas que trae el bulto con el que compras" placeholder="Ej. 10" min={1} {...form.getInputProps('cajasPorBulto')} />
-                                    </Grid.Col>
-                                </>
+                            <Grid.Col span={{ base: 12, md: 4 }}>
+                                <NumberInput label="Unidades por caja (opcional)" description="Cuántas unidades (o pares) trae cada caja; vacío si no se vende en cajas" placeholder="Ej. 100" min={1} {...form.getInputProps('unidadesPorCaja')} />
+                            </Grid.Col>
+                            {Number(form.values.unidadesPorCaja) > 0 ? (
+                                <Grid.Col span={{ base: 12, md: 4 }}>
+                                    <NumberInput label="Cajas por bulto" description="Cajas que trae el bulto con el que compras" placeholder="Ej. 10" min={1} {...form.getInputProps('cajasPorBulto')} />
+                                </Grid.Col>
                             ) : (
                                 <Grid.Col span={{ base: 12, md: 4 }}>
-                                    <NumberInput label="Unidades por bulto" description="El bulto trae las unidades directamente, sin cajas" placeholder="Ej. 3000" min={1} {...form.getInputProps('unidadesPorBulto')} />
+                                    <NumberInput label="Unidades por bulto" description="Sin cajas: el bulto trae las unidades directamente" placeholder="Ej. 3000" min={1} {...form.getInputProps('unidadesPorBulto')} />
                                 </Grid.Col>
                             )}
 
                             {/* Del costo por unidad al costo de la caja y del bulto */}
                             {(() => {
                                 const v = form.values;
-                                const esCaja = v.presentacion === 'caja';
+                                const esCaja = Number(v.unidadesPorCaja) > 0;
                                 const undCaja = Number(v.unidadesPorCaja) || 0;
                                 const cajas = Number(v.cajasPorBulto) || 1;
                                 const undBulto = esCaja ? cajas * undCaja : (Number(v.unidadesPorBulto) || 0);
