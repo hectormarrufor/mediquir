@@ -41,6 +41,7 @@ const db = {
     
     // NOTIFICACIONES
     Notificacion: require('./Notificacion'),
+    NotificacionLeida: require('./NotificacionLeida'),
     
 };
 

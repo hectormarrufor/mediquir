@@ -1,158 +1,191 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { 
-  Popover, ActionIcon, Indicator, Text, Stack, Group, 
-  ThemeIcon, Button, ScrollArea, Divider, Loader, Center 
+
+import { useState } from 'react';
+import {
+  Popover, ActionIcon, Indicator, Text, Group, ThemeIcon, Button, ScrollArea,
+  Center, Loader, SegmentedControl, Box, Badge, Tooltip
 } from '@mantine/core';
-import { IconBell, IconInfoCircle, IconAlertTriangle, IconAlertOctagon } from '@tabler/icons-react';
+import { IconBell, IconChecks, IconMailOpened, IconBellOff } from '@tabler/icons-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  useUnreadCount, useNotificacionesLista, useMarcarLeidas, aplanar
+} from '@/hooks/useNotificaciones';
+import { getTipoMeta, tiempoRelativo } from './nav/notificacionesUi';
+import navClasses from './nav/navigation.module.css';
 
 export default function NotificationBell() {
   const [opened, setOpened] = useState(false);
-  const {isAuthenticated} = useAuth();
-  const [notificaciones, setNotificaciones] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [filtro, setFiltro] = useState('todas');
+  const { isAuthenticated, clienteId } = useAuth();
   const router = useRouter();
 
-  // Función para obtener notificaciones
-  const fetchNotificaciones = async () => {
-    try {
-      const res = await fetch('/api/notificaciones');
-      const data = await res.json();
-      if (data.success) {
-        setNotificaciones(data.data);
-      }
-    } catch (error) {
-      console.error("Error cargando notificaciones:", error);
-    } finally {
-      setLoading(false);
-    }
+  // Contador liviano siempre activo; la lista (paginada) solo se pide al abrir el cajón
+  const { data: noLeidas = 0 } = useUnreadCount();
+  const {
+    data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage
+  } = useNotificacionesLista({ filtro, enabled: Boolean(isAuthenticated) && opened });
+  const marcar = useMarcarLeidas();
+
+  if (!isAuthenticated) return null;
+
+  const notificaciones = aplanar(data);
+
+  const abrir = (notif) => {
+    if (!notif.leida) marcar.mutate({ ids: [notif.id] });
+    setOpened(false);
+    if (notif.url) router.push(notif.url);
   };
 
-  // Cargar al montar el componente
-  useEffect(() => {
-    fetchNotificaciones();
-    // Opcional: Podrías poner un setInterval aquí para polling cada 60seg
-  }, []);
-
-  // Icono según el tipo
-  const getIcon = (tipo) => {
-    if (tipo === 'Critico') return <IconAlertOctagon size={16} />;
-    if (tipo === 'Alerta') return <IconAlertTriangle size={16} />;
-    return <IconInfoCircle size={16} />;
+  const cargarMas = () => {
+    if (hasNextPage && !isFetchingNextPage) fetchNextPage();
   };
 
-  const getColor = (tipo) => {
-    if (tipo === 'Critico') return 'red';
-    if (tipo === 'Alerta') return 'orange';
-    return 'blue';
-  };
-
-  // Solo mostramos las últimas 5 en el popup
-  const ultimas5 = notificaciones.slice(0, 5);
- if (isAuthenticated)
   return (
-    <Popover 
-      width={320} 
-      position="bottom-end" 
-      withArrow 
-      shadow="md"
-      opened={opened} 
+    <Popover
+      width="min(390px, calc(100vw - 24px))"
+      position="bottom-end"
+      offset={10}
+      radius="lg"
+      shadow="xl"
+      opened={opened}
       onChange={setOpened}
+      classNames={{ dropdown: navClasses.notifDropdown }}
     >
       <Popover.Target>
-        <Indicator 
-          color="red" 
-          size={10} 
-          offset={4} 
-          disabled={notificaciones.length === 0} 
-          processing // Animación de pulso
+        <Indicator
+          color="accent.6"
+          size={noLeidas > 0 ? 18 : 0}
+          label={noLeidas > 99 ? '99+' : noLeidas}
+          offset={6}
+          disabled={noLeidas === 0}
+          processing
         >
-          <ActionIcon 
-            variant="subtle" 
-            color="gray" 
-            size="lg" 
+          <ActionIcon
+            variant="transparent"
+            className={navClasses.iconBtn}
+            size={40}
+            radius="xl"
+            aria-label={noLeidas > 0 ? `Notificaciones, ${noLeidas} sin leer` : 'Notificaciones'}
             onClick={() => setOpened((o) => !o)}
           >
-            <IconBell size={22} stroke={1.5} />
+            <IconBell size={22} stroke={1.6} />
           </ActionIcon>
         </Indicator>
       </Popover.Target>
 
       <Popover.Dropdown p={0}>
         {/* CABECERA */}
-        <Group justify="space-between" p="xs" bg="gray.0">
-          <Text size="sm" fw={700}>Notificaciones</Text>
-          <Text size="xs" c="dimmed">{notificaciones.length} nuevas</Text>
-        </Group>
-        
-        <Divider />
-
-        {/* LISTA (Scrollable por si acaso) */}
-        <ScrollArea.Autosize mah={300} type="scroll">
-          {loading ? (
-            <Center p="md"><Loader size="sm" /></Center>
-          ) : ultimas5.length === 0 ? (
-            <Text c="dimmed" size="sm" ta="center" p="md">No hay novedades</Text>
-          ) : (
-            ultimas5.map((notif) => (
-              <div 
-                key={notif.id} 
-                style={{ 
-                  padding: '10px', 
-                  cursor: 'pointer', 
-                  borderBottom: '1px solid #eee',
-                  transition: 'background 0.2s'
-                }}
-                className="hover:bg-gray-50" // Tailwind utility si usas, o style manual
-                onClick={() => {
-                   setOpened(false);
-                   if (notif.url) router.push(notif.url);
-                }}
+        <Box className={navClasses.notifHeader}>
+          <Group justify="space-between" wrap="nowrap">
+            <Group gap={8} wrap="nowrap">
+              <Text fw={800} size="md" c="navy.9">Notificaciones</Text>
+              {noLeidas > 0 && <Badge color="accent.6" size="sm" radius="xl">{noLeidas} sin leer</Badge>}
+            </Group>
+            <Tooltip label="Marcar todas como leídas" withArrow>
+              <ActionIcon
+                variant="light"
+                color="brand.6"
+                radius="xl"
+                aria-label="Marcar todas como leídas"
+                disabled={noLeidas === 0 || marcar.isPending}
+                onClick={() => marcar.mutate({ todas: true })}
               >
-                <Group align="flex-start" wrap="nowrap" gap="xs">
-                  <ThemeIcon 
-                    variant="light" 
-                    color={getColor(notif.tipo)} 
-                    size="md" 
-                    radius="xl"
+                <IconChecks size={18} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+
+          <SegmentedControl
+            fullWidth
+            size="xs"
+            radius="xl"
+            mt="sm"
+            value={filtro}
+            onChange={setFiltro}
+            color="navy.9"
+            data={[{ value: 'todas', label: 'Todas' }, { value: 'no-leidas', label: 'Sin leer' }]}
+          />
+        </Box>
+
+        {/* LISTA (paginada: se cargan más al llegar al final) */}
+        <ScrollArea.Autosize mah={400} type="scroll" onBottomReached={cargarMas}>
+          {isLoading ? (
+            <Center p="xl"><Loader size="sm" /></Center>
+          ) : isError ? (
+            <Text c="red.7" size="sm" ta="center" p="lg">No se pudieron cargar las notificaciones.</Text>
+          ) : notificaciones.length === 0 ? (
+            <Center p="xl" style={{ flexDirection: 'column', gap: 8 }}>
+              <ThemeIcon variant="light" color="gray" size={44} radius="xl"><IconBellOff size={22} /></ThemeIcon>
+              <Text c="dimmed" size="sm">{filtro === 'no-leidas' ? 'Estás al día' : 'No hay novedades'}</Text>
+            </Center>
+          ) : (
+            <>
+              {notificaciones.map((notif) => {
+                const { color, icon } = getTipoMeta(notif.tipo);
+                return (
+                  <Box
+                    key={notif.id}
+                    className={navClasses.notifItem}
+                    data-unread={!notif.leida || undefined}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => abrir(notif)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') abrir(notif); }}
                   >
-                    {getIcon(notif.tipo)}
-                  </ThemeIcon>
-                  
-                  <div style={{ flex: 1 }}>
-                    <Text size="sm" fw={500} lineClamp={1}>{notif.titulo}</Text>
-                    <Text size="xs" c="dimmed" lineClamp={2}>
-                      {notif.mensaje}
-                    </Text>
-                    <Text size="xs" c="dimmed" mt={4} ta="right">
-                      {/* Aquí usas la hora de Caracas que guardaste o createdAt */}
-                      {notif.fechaHoraCaracas || new Date(notif.createdAt).toLocaleTimeString()}
-                    </Text>
-                  </div>
-                </Group>
-              </div>
-            ))
+                    <Group align="flex-start" wrap="nowrap" gap="sm">
+                      <ThemeIcon variant="light" color={color} size="lg" radius="xl">{icon}</ThemeIcon>
+
+                      <Box style={{ flex: 1, minWidth: 0 }}>
+                        <Text size="sm" fw={notif.leida ? 500 : 800} c="navy.9" lineClamp={1}>{notif.titulo}</Text>
+                        <Text size="xs" c="dimmed" lineClamp={2}>{notif.mensaje}</Text>
+                        <Text size="xs" c="dimmed" mt={4} fw={500}>{tiempoRelativo(notif)}</Text>
+                      </Box>
+
+                      {!notif.leida && (
+                        <Tooltip label="Marcar como leída" withArrow>
+                          <ActionIcon
+                            variant="subtle"
+                            color="brand.6"
+                            size="sm"
+                            radius="xl"
+                            aria-label="Marcar como leída"
+                            onClick={(e) => { e.stopPropagation(); marcar.mutate({ ids: [notif.id] }); }}
+                          >
+                            <IconMailOpened size={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                      )}
+                    </Group>
+                  </Box>
+                );
+              })}
+
+              {hasNextPage && (
+                <Center p="sm">
+                  <Button
+                    variant="subtle" color="brand.6" size="compact-sm" tt="none" loading={isFetchingNextPage} onClick={cargarMas}
+                  >
+                    Cargar más
+                  </Button>
+                </Center>
+              )}
+            </>
           )}
         </ScrollArea.Autosize>
 
-        <Divider />
-
-        {/* FOOTER - BOTÓN VER TODAS */}
-        <div style={{ padding: '8px' }}>
-          <Button 
-            fullWidth 
-            variant="light" 
-            size="xs" 
-            component={Link} 
-            href="/superuser/notificaciones"
-            onClick={() => setOpened(false)}
-          >
-            Ver todas las notificaciones
-          </Button>
-        </div>
+        {/* PIE */}
+        {!clienteId && (
+          <Box className={navClasses.notifFooter}>
+            <Button
+              fullWidth variant="light" color="brand.6" size="xs" tt="none" component={Link}
+              href="/superuser/notificaciones" onClick={() => setOpened(false)}
+            >
+              Ver todo el historial
+            </Button>
+          </Box>
+        )}
       </Popover.Dropdown>
     </Popover>
   );

@@ -32,6 +32,7 @@ const Notificacion = sequelize.define('Notificacion', {
 
 Notificacion.associate = (models) => {
   Notificacion.belongsTo(models.User, { foreignKey: 'usuarioId', as: 'usuario' });
+  Notificacion.hasMany(models.NotificacionLeida, { foreignKey: 'notificacionId', as: 'lecturas', onDelete: 'CASCADE' });
 };
 
 module.exports = Notificacion;

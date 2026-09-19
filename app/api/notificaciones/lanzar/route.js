@@ -6,9 +6,15 @@ import {
     notificarPresidente, 
     notificarTodos 
 } from '@/app/handlers/notificar'; // Ajusta la ruta a donde esté tu archivo de notificador
+import { getSesion } from '../_lib';
 
 export async function POST(req) {
     try {
+        // Antes esta ruta no validaba sesión: cualquiera podía enviar notificaciones push a todo el personal.
+        const sesion = await getSesion();
+        if (!sesion) return NextResponse.json({ success: false, error: 'No autorizado' }, { status: 401 });
+        if (!sesion.isAdmin) return NextResponse.json({ success: false, error: 'Solo administradores' }, { status: 403 });
+
         const body = await req.json();
         const { accion, payload } = body;
 
