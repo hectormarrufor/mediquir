@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GrupoEquivalencia, Categoria } from '@/models'; 
+import { requerirStaff } from '@/app/api/inventario/_lib';
 
 // GET: Listar todos los grupos con su categoría
 export async function GET() {
@@ -17,6 +18,10 @@ export async function GET() {
 
 // POST: Crear un nuevo grupo con imagen y categoría
 export async function POST(req) {
+    // Antes esta ruta no validaba sesión: cualquiera podía modificar datos.
+    const { error: sinAcceso } = await requerirStaff();
+    if (sinAcceso) return sinAcceso;
+
     try {
         const { nombre, stockMinimoGlobal, categoriaId, imagen } = await req.json();
         

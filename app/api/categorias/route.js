@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Categoria } from '@/models';
+import { requerirStaff } from '@/app/api/inventario/_lib';
 
 // GET: Obtener todas las categorías
 export async function GET() {
@@ -13,6 +14,10 @@ export async function GET() {
 
 // POST: Crear una nueva categoría
 export async function POST(req) {
+    // Antes esta ruta no validaba sesión: cualquiera podía modificar datos.
+    const { error: sinAcceso } = await requerirStaff();
+    if (sinAcceso) return sinAcceso;
+
     try {
         const body = await req.json();
         

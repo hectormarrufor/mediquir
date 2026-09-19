@@ -1,8 +1,13 @@
 import { put, del } from '@vercel/blob';
 import { NextResponse } from 'next/server';
+import { requerirStaff } from '@/app/api/inventario/_lib';
 
 
 export async function POST(request) {
+    // Antes esta ruta no validaba sesión: cualquiera podía modificar datos.
+    const { error: sinAcceso } = await requerirStaff();
+    if (sinAcceso) return sinAcceso;
+
   const { searchParams } = new URL(request.url);
   const filename = searchParams.get('filename');
 
@@ -31,6 +36,10 @@ export async function POST(request) {
 }
 
 export async function DELETE(request, { params }) {
+    // Antes esta ruta no validaba sesión: cualquiera podía modificar datos.
+    const { error: sinAcceso } = await requerirStaff();
+    if (sinAcceso) return sinAcceso;
+
     const { id } = params;
     const transaction = await db.sequelize.transaction();
     try {

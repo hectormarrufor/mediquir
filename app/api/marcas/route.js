@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Marca } from '@/models'; // Ajusta la ruta de importación si es necesario
+import { requerirStaff } from '@/app/api/inventario/_lib';
 
 // GET: Listar todas las marcas para el Select
 export async function GET() {
@@ -16,6 +17,10 @@ export async function GET() {
 
 // POST: Crear una marca al vuelo si no existe
 export async function POST(req) {
+    // Antes esta ruta no validaba sesión: cualquiera podía modificar datos.
+    const { error: sinAcceso } = await requerirStaff();
+    if (sinAcceso) return sinAcceso;
+
     try {
         const { nombre, imagen } = await req.json();
 

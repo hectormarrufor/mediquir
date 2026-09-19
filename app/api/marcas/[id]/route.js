@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { Marca } from '@/models';
+import { requerirStaff } from '@/app/api/inventario/_lib';
 
 export async function PUT(req, { params }) {
+    // Antes esta ruta no validaba sesión: cualquiera podía modificar datos.
+    const { error: sinAcceso } = await requerirStaff();
+    if (sinAcceso) return sinAcceso;
+
     try {
         const { id } = await params; // Next.js 15+ requiere await en params
         const { nombre, imagen } = await req.json();
@@ -23,6 +28,10 @@ export async function PUT(req, { params }) {
 }
 
 export async function DELETE(req, { params }) {
+    // Antes esta ruta no validaba sesión: cualquiera podía modificar datos.
+    const { error: sinAcceso } = await requerirStaff();
+    if (sinAcceso) return sinAcceso;
+
     try {
         const { id } = await params;
         const marca = await Marca.findByPk(id);
