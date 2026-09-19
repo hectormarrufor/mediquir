@@ -14,6 +14,7 @@ import {
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import PrecioVisual from '@/app/components/ui/PrecioVisual';
+import RetencionIvaCard from '../_components/RetencionIvaCard';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function DetallePedidoMayorPage() {
@@ -307,6 +308,8 @@ export default function DetallePedidoMayorPage() {
                                     <Text size="xs" c="dimmed">Etiquetador:</Text>
                                     <Text size="sm" fw={600}>{pedido.etiquetador?.empleado ? `${pedido.etiquetador.empleado.nombre} ${pedido.etiquetador.empleado.apellido}` : 'Pendiente'}</Text>
                                 </Paper>
+
+                                {!esVendedor && <RetencionIvaCard pedido={pedido} onCambio={refetch} />}
 
                                 {/* 👈 BLOQUE MODIFICADO EN LA TARJETA LATERAL */}
                                 <Paper withBorder p="md" radius="md" bg="gray.0">

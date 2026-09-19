@@ -1,15 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Alert, Badge, Box, Button, Card, Center, Group, Paper, SimpleGrid, Skeleton, Stack, Table, Tabs, Text, ThemeIcon, Title } from '@mantine/core';
-import { MonthPickerInput } from '@mantine/dates';
+import { Alert, Badge, Box, Button, Card, Center, Group, Paper, SegmentedControl, SimpleGrid, Skeleton, Stack, Table, Tabs, Text, Title } from '@mantine/core';
+import { DatePickerInput, MonthPickerInput } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import { IconAlertTriangle, IconBook2, IconDownload, IconFileTypePdf, IconInfoCircle } from '@tabler/icons-react';
-import { LIBROS, descargarCsv, descargarPdfCierre, nombreMes } from '../_lib/libroExport';
-
-const bs = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
+import { IconAlertTriangle, IconBook2, IconDownload, IconFileTypePdf, IconInfoCircle, IconReceiptTax } from '@tabler/icons-react';
+import { useAuth } from '@/hooks/useAuth';
+import { COLUMNAS, TIPOS, descargarCsvLibro, descargarCsvRetenciones, descargarPdfLibro, dinero, fmtFecha } from '../_lib/libroExport';
 
 async function pedirJson(url) {
     const res = await fetch(url);
@@ -22,92 +21,141 @@ function Dato({ titulo, valor, color, detalle }) {
     return (
         <Card withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
             <Text size="xs" c="dimmed" fw={700} tt="uppercase">{titulo}</Text>
-            <Text fz={22} fw={800} c={color || 'navy.9'} lh={1.3}>Bs {valor}</Text>
+            <Text fz={21} fw={800} c={color || 'navy.9'} lh={1.3}>Bs {dinero(valor)}</Text>
             {detalle && <Text size="xs" c="dimmed">{detalle}</Text>}
         </Card>
     );
 }
 
-// Vista previa de un libro (los datos exactos que salen en el CSV y el PDF)
-function TablaLibro({ clave, filas }) {
-    const libro = LIBROS[clave];
-    if (!filas.length) return <Center py={40}><Text c="dimmed">Sin operaciones en este mes.</Text></Center>;
-    const valor = (c, f) => {
-        if (c.vacia) return '';
-        const v = f[c.clave];
-        if (v === null || v === undefined) return '';
-        if (c.f) return c.f(v);
-        if (c.num) return bs(v);
-        if (c.clave === 'alicuota') return v ? `${v}%` : '';
-        return String(v);
-    };
+function TablaLibro({ tipo, libro }) {
+    const cols = COLUMNAS(tipo, libro.filas);
+    const r = libro.resumen;
+    const valor = (c, f) => { const v = f[c.k]; if (v === null || v === undefined) return ''; if (c.f) return c.f(v); return c.num ? dinero(v) : String(v); };
+    if (!libro.filas.length) return <Center py={40}><Text c="dimmed">Sin operaciones en este periodo.</Text></Center>;
     return (
-        <Table.ScrollContainer minWidth={1000} h={420}>
-            <Table verticalSpacing={4} horizontalSpacing="xs" fz="xs" stickyHeader striped>
-                <Table.Thead><Table.Tr>{libro.columnas.map((c) => <Table.Th key={c.clave} ta={c.num ? 'right' : 'left'} style={{ whiteSpace: 'nowrap' }}>{c.titulo}</Table.Th>)}</Table.Tr></Table.Thead>
+        <Table.ScrollContainer minWidth={1100} h={430}>
+            <Table verticalSpacing={3} horizontalSpacing="xs" fz="xs" stickyHeader>
+                <Table.Thead><Table.Tr>{cols.map((c) => <Table.Th key={c.k} ta={c.num ? 'right' : 'left'} style={{ whiteSpace: 'pre-line', verticalAlign: 'bottom' }}>{c.t}</Table.Th>)}</Table.Tr></Table.Thead>
                 <Table.Tbody>
-                    {filas.map((f, i) => <Table.Tr key={i}>{libro.columnas.map((c) => <Table.Td key={c.clave} ta={c.num ? 'right' : 'left'} c={c.vacia ? 'dimmed' : undefined}>{c.vacia ? '—' : valor(c, f)}</Table.Td>)}</Table.Tr>)}
+                    {libro.filas.map((f) => (
+                        <Table.Tr key={f.n} bg={f.tipo === 'RET' ? 'var(--mantine-color-grape-0)' : undefined}>
+                            {cols.map((c) => <Table.Td key={c.k} ta={c.num ? 'right' : 'left'} style={{ whiteSpace: 'nowrap' }}>{valor(c, f)}</Table.Td>)}
+                        </Table.Tr>
+                    ))}
                 </Table.Tbody>
+                <Table.Tfoot>
+                    <Table.Tr fw={800}>{cols.map((c) => <Table.Td key={c.k} ta={c.num ? 'right' : 'left'} fw={800}>
+                        {c.k === 'nombre' ? `TOTAL TRANSACCIONES: ${r.totalTransacciones}` : c.k === 'total' ? dinero(r.totalGeneral) : c.k === 'base' ? dinero(r.totalImponible.monto) : c.k === 'ivaRetenido' ? dinero(r.ivaRetenido) : c.k === 'exento' ? dinero(r.exento) : c.k === 'iva' ? dinero(r.totalImpuesto) : ''}
+                    </Table.Td>)}</Table.Tr>
+                </Table.Tfoot>
             </Table>
         </Table.ScrollContainer>
     );
 }
 
-// Cierre de mes: libros de ventas y compras, caja y resumen de IVA, para el contador
+function TablaRetenciones({ filas }) {
+    if (!filas.length) return <Center py={40}><Text c="dimmed">No hay retenciones en este periodo.</Text></Center>;
+    return (
+        <Table.ScrollContainer minWidth={1000} h={380}>
+            <Table verticalSpacing={3} horizontalSpacing="xs" fz="xs" stickyHeader>
+                <Table.Thead><Table.Tr>
+                    <Table.Th>Nº</Table.Th><Table.Th>Fecha</Table.Th><Table.Th>RIF</Table.Th><Table.Th>Nombre o razón social</Table.Th><Table.Th>Comprobante</Table.Th><Table.Th>Nº control</Table.Th>
+                    <Table.Th ta="right">Total</Table.Th><Table.Th ta="right">Base imponible</Table.Th><Table.Th ta="right">Exento</Table.Th><Table.Th ta="right">IVA</Table.Th><Table.Th>Doc. afectado</Table.Th><Table.Th ta="right">IVA retenido</Table.Th>
+                </Table.Tr></Table.Thead>
+                <Table.Tbody>
+                    {filas.map((f) => (
+                        <Table.Tr key={f.n}>
+                            <Table.Td>{f.n}</Table.Td><Table.Td>{fmtFecha(f.fecha)}</Table.Td><Table.Td>{f.rif}</Table.Td><Table.Td>{f.nombre}</Table.Td><Table.Td>{f.comprobante}</Table.Td><Table.Td>{f.control}</Table.Td>
+                            <Table.Td ta="right">{dinero(f.totalVentas)}</Table.Td><Table.Td ta="right">{dinero(f.base)}</Table.Td><Table.Td ta="right">{dinero(f.exento)}</Table.Td><Table.Td ta="right">{dinero(f.iva)}</Table.Td>
+                            <Table.Td>{f.facturaAfectada}</Table.Td><Table.Td ta="right" fw={700}>{dinero(f.ivaRetenido)}</Table.Td>
+                        </Table.Tr>
+                    ))}
+                </Table.Tbody>
+                <Table.Tfoot><Table.Tr><Table.Td colSpan={11} ta="right" fw={800}>TOTAL IVA RETENIDO</Table.Td><Table.Td ta="right" fw={800}>{dinero(filas.reduce((a, f) => a + f.ivaRetenido, 0))}</Table.Td></Table.Tr></Table.Tfoot>
+            </Table>
+        </Table.ScrollContainer>
+    );
+}
+
+// Cierre de periodo: libros de compras y ventas en formato declarativo, retenciones de IVA y resumen del IVA
 export default function CierreTab() {
+    const { nombre } = useAuth();
+    const [modo, setModo] = useState('mes');
     const [mes, setMes] = useState(dayjs().subtract(1, 'month').startOf('month').toDate()); // por defecto, el mes que se acaba de cerrar
-    const clave = mes ? dayjs(mes).format('YYYY-MM') : null;
-    const { data, isLoading, error } = useQuery({ queryKey: ['libro', clave], enabled: Boolean(clave), queryFn: () => pedirJson(`/api/finanzas/libro?mes=${clave}`) });
+    const [rango, setRango] = useState([dayjs().startOf('month').toDate(), new Date()]);
     const [generando, setGenerando] = useState(false);
 
-    const pdf = async () => {
+    const consulta = modo === 'mes' ? (mes ? `mes=${dayjs(mes).format('YYYY-MM')}` : null) : (rango[0] && rango[1] ? `desde=${dayjs(rango[0]).format('YYYY-MM-DD')}&hasta=${dayjs(rango[1]).format('YYYY-MM-DD')}` : null);
+    const { data, isLoading, error } = useQuery({ queryKey: ['libros', consulta], enabled: Boolean(consulta), queryFn: () => pedirJson(`/api/finanzas/libro?${consulta}`) });
+
+    const pdf = async (tipo) => {
         setGenerando(true);
-        try { await descargarPdfCierre(data); } catch (e) { notifications.show({ color: 'red', title: 'No se pudo generar el PDF', message: e.message }); } finally { setGenerando(false); }
+        try { await descargarPdfLibro(tipo, data, nombre); } catch (e) { notifications.show({ color: 'red', title: 'No se pudo generar el PDF', message: e.message }); } finally { setGenerando(false); }
     };
 
+    const iva = data?.iva;
     return (
         <Stack gap="lg">
             <Group justify="space-between" align="flex-end" wrap="wrap">
                 <Box>
-                    <Title order={4} c="white">Cierre mensual</Title>
-                    <Text size="sm" c="gray.4">Libros del mes para entregar al contador. Descárgalos en CSV (Excel) o en un PDF con todo el cierre.</Text>
+                    <Title order={4} c="white">Libros de compras y ventas</Title>
+                    <Text size="sm" c="gray.4">Libros declarativos con retenciones de IVA, para el cierre del periodo y tu contador.</Text>
                 </Box>
                 <Group gap="sm">
-                    <MonthPickerInput value={mes} onChange={setMes} valueFormat="MMMM YYYY" maxDate={new Date()} w={190} aria-label="Mes del cierre" />
-                    <Button color="accent.6" leftSection={<IconFileTypePdf size={18} />} onClick={pdf} loading={generando} disabled={!data}>Cierre en PDF</Button>
+                    <SegmentedControl color="navy.9" value={modo} onChange={setModo} data={[{ value: 'mes', label: 'Mes' }, { value: 'rango', label: 'Rango' }]} />
+                    {modo === 'mes'
+                        ? <MonthPickerInput value={mes} onChange={setMes} valueFormat="MMMM YYYY" maxDate={new Date()} w={190} aria-label="Mes del cierre" />
+                        : <DatePickerInput type="range" value={rango} onChange={setRango} valueFormat="DD/MM/YYYY" maxDate={new Date()} w={260} aria-label="Rango de fechas" />}
                 </Group>
             </Group>
 
-            <Alert color="orange" variant="light" icon={<IconInfoCircle size={18} />} title="Borrador para revisión del contador">
-                {data?.aviso || 'Este cierre no se verificó contra la providencia vigente del SENIAT; el sistema no guarda número de control, factura afectada ni IVA retenido por el comprador.'}
+            <Alert color="orange" variant="white" icon={<IconInfoCircle size={18} />} title="Revisa el formato con tu contador">
+                {data?.aviso || 'Este formato no está verificado contra la providencia vigente del SENIAT.'}
             </Alert>
             {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}
 
-            <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
-                {isLoading || !data ? [0, 1, 2, 3].map((i) => <Skeleton key={i} h={86} radius="lg" />) : <>
-                    <Dato titulo="Débito fiscal (ventas)" valor={bs(data.iva.debitoFiscal)} detalle={`${data.ventas.length} documento(s)`} />
-                    <Dato titulo="Crédito fiscal (compras)" valor={bs(data.iva.creditoFiscal)} detalle={`${data.compras.length} factura(s)`} />
-                    <Dato titulo="IVA retenido en compras" valor={bs(data.iva.ivaRetenido)} />
-                    <Dato titulo={data.iva.resultado >= 0 ? 'IVA por pagar del mes' : 'Crédito fiscal a favor'} valor={bs(Math.abs(data.iva.resultado))} color={data.iva.resultado >= 0 ? 'red.7' : 'teal.7'} detalle={`Ventas ${nombreMes(data.mes)}`} />
+            <SimpleGrid cols={{ base: 1, xs: 2, lg: 5 }} spacing="md">
+                {isLoading || !data ? [0, 1, 2, 3, 4].map((i) => <Skeleton key={i} h={86} radius="lg" />) : <>
+                    <Dato titulo="Débito fiscal (ventas)" valor={iva.debitoFiscal} detalle={`${data.ventas.resumen.totalTransacciones - data.ventas.resumen.totalRetenciones.cant} factura(s)`} />
+                    <Dato titulo="Crédito fiscal (compras)" valor={iva.creditoFiscal} detalle={`${data.compras.resumen.totalTransacciones - data.compras.resumen.totalRetenciones.cant} factura(s)`} />
+                    <Dato titulo="IVA que te retuvieron" valor={iva.ivaRetenidoPorClientes} color="teal.7" detalle="Clientes (a tu favor)" />
+                    <Dato titulo="IVA que retuviste" valor={iva.ivaRetenidoAProveedores} color="orange.7" detalle="A proveedores (por enterar al SENIAT)" />
+                    <Dato titulo={iva.resultado >= 0 ? 'IVA por pagar' : 'Crédito a favor'} valor={Math.abs(iva.resultado)} color={iva.resultado >= 0 ? 'red.7' : 'teal.7'} detalle="Débito - crédito - retenciones recibidas" />
                 </>}
             </SimpleGrid>
 
             <Paper withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
-                {isLoading || !data ? <Skeleton h={300} /> : (
-                    <Tabs defaultValue="ventas" keepMounted={false}>
-                        <Group justify="space-between" mb="sm" wrap="wrap">
-                            <Tabs.List>
-                                {Object.entries(LIBROS).map(([k, l]) => <Tabs.Tab key={k} value={k} leftSection={<IconBook2 size={16} />}>{l.titulo.replace('Libro de ', '')} <Badge ml={6} size="sm" variant="light">{data[k].length}</Badge></Tabs.Tab>)}
-                            </Tabs.List>
-                            {data.anuladas > 0 && <Badge color="gray" variant="light">{data.anuladas} documento(s) anulado(s) no incluidos</Badge>}
-                        </Group>
-                        {Object.keys(LIBROS).map((k) => (
-                            <Tabs.Panel key={k} value={k}>
-                                <Group justify="space-between" mb="xs">
-                                    <Text size="sm" fw={700}>{LIBROS[k].titulo} · {nombreMes(data.mes)}</Text>
-                                    <Button size="xs" variant="light" leftSection={<IconDownload size={14} />} onClick={() => descargarCsv(k, data)} disabled={!data[k].length}>Descargar CSV</Button>
+                {isLoading || !data ? <Skeleton h={320} /> : (
+                    <Tabs defaultValue="compras" keepMounted={false}>
+                        <Tabs.List mb="sm" style={{ flexWrap: 'wrap' }}>
+                            <Tabs.Tab value="compras" leftSection={<IconBook2 size={16} />}>Compras <Badge ml={6} size="sm" variant="light">{data.compras.filas.length}</Badge></Tabs.Tab>
+                            <Tabs.Tab value="ventas" leftSection={<IconBook2 size={16} />}>Ventas <Badge ml={6} size="sm" variant="light">{data.ventas.filas.length}</Badge></Tabs.Tab>
+                            <Tabs.Tab value="ret-clientes" leftSection={<IconReceiptTax size={16} />}>Retenciones de clientes <Badge ml={6} size="sm" variant="light" color="teal">{data.ventas.retencionesDetalle.length}</Badge></Tabs.Tab>
+                            <Tabs.Tab value="ret-proveedores" leftSection={<IconReceiptTax size={16} />}>Retenciones a proveedores <Badge ml={6} size="sm" variant="light" color="orange">{data.compras.retencionesDetalle.length}</Badge></Tabs.Tab>
+                        </Tabs.List>
+
+                        {['compras', 'ventas'].map((tipo) => (
+                            <Tabs.Panel key={tipo} value={tipo}>
+                                <Group justify="space-between" mb="xs" wrap="wrap">
+                                    <Text size="sm" fw={700}>{TIPOS[tipo].titulo} · {fmtFecha(data.desde)} al {fmtFecha(data.hasta)}</Text>
+                                    <Group gap="xs">
+                                        <Button size="xs" color="accent.6" leftSection={<IconFileTypePdf size={14} />} loading={generando} onClick={() => pdf(tipo)}>Descargar PDF</Button>
+                                        <Button size="xs" variant="light" leftSection={<IconDownload size={14} />} onClick={() => descargarCsvLibro(tipo, data)} disabled={!data[tipo].filas.length}>CSV (Excel)</Button>
+                                    </Group>
                                 </Group>
-                                <TablaLibro clave={k} filas={data[k]} />
+                                {tipo === 'ventas' && data.ventas.noFiscales?.cant > 0 && (
+                                    <Alert color="gray" variant="light" mb="xs" p="xs">{data.ventas.noFiscales.cant} documento(s) que no son factura (notas de entrega o ventas rápidas, Bs {dinero(data.ventas.noFiscales.total)}) no van en el libro de ventas.</Alert>
+                                )}
+                                <TablaLibro tipo={tipo} libro={data[tipo]} />
+                            </Tabs.Panel>
+                        ))}
+                        {[['ret-clientes', 'ventas', 'Retenciones de IVA que te hicieron tus clientes'], ['ret-proveedores', 'compras', 'Retenciones de IVA que practicaste a tus proveedores']].map(([valor, tipo, titulo]) => (
+                            <Tabs.Panel key={valor} value={valor}>
+                                <Group justify="space-between" mb="xs" wrap="wrap">
+                                    <Text size="sm" fw={700}>{titulo}</Text>
+                                    <Button size="xs" variant="light" leftSection={<IconDownload size={14} />} onClick={() => descargarCsvRetenciones(tipo, data)} disabled={!data[tipo].retencionesDetalle.length}>CSV (Excel)</Button>
+                                </Group>
+                                <TablaRetenciones filas={data[tipo].retencionesDetalle} />
                             </Tabs.Panel>
                         ))}
                     </Tabs>

@@ -117,6 +117,8 @@ export default function VentasDashboard() {
     const [eliminando, setEliminando] = useState(false);
 
     useEffect(() => { if (periodo !== 'RANGO') setRango(rangoDe(periodo)); }, [periodo]);
+    // Enlaces antiguos a "nuevo pedido" llegan con ?nueva=1: se abre el POS
+    useEffect(() => { if (new URLSearchParams(window.location.search).get('nueva')) setPosAbierto(true); }, []);
     useEffect(() => { setPagina(1); }, [rango, q, tipo, estado, pago, orden]);
 
     const [d1, d2] = rango;

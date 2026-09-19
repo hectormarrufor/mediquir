@@ -4,7 +4,9 @@ import sequelize from '@/sequelize';
 import db from '@/models';
 import { requerirStaff } from '../inventario/_lib';
 import { rolDe } from '@/app/constants/roles';
-const { Proveedor, Producto, EntradaInventario, FacturaCompra, CategoriaFinanciera, MovimientoFinanciero, CuentaPorPagar, User, Empleado } = db;
+import { aBolivares } from '@/app/constants/facturacion';
+import { siguienteComprobante, periodoDe } from '../_lib/retenciones';
+const { RetencionIva, Proveedor, Producto, EntradaInventario, FacturaCompra, CategoriaFinanciera, MovimientoFinanciero, CuentaPorPagar, User, Empleado } = db;
 
 // GET: Listar historial de compras
 export async function GET(request) {
@@ -71,7 +73,11 @@ export async function POST(request) {
             tasaCambio,
             metodoPago,
             referencia,
-            registradoPorId
+            registradoPorId,
+            numeroControl,
+            fechaRecepcion,
+            montoExento,
+            porcentajeRetencion
         } = body;
 
         // Un vendedor registra la compra (stock y costo) pero NO cambia precios de venta
@@ -85,6 +91,11 @@ export async function POST(request) {
         const cantidadInvalida = detalles.find((item) => !Number.isInteger(Number(item.cantidad)) || Number(item.cantidad) < 1);
         if (cantidadInvalida) {
             return NextResponse.json({ error: 'Las cantidades deben ser números enteros mayores a 0' }, { status: 400 });
+        }
+
+        // Datos fiscales coherentes: no se puede retener más IVA del que tiene la factura
+        if (Number(montoRetencion) > Number(montoIva) + 0.005) {
+            return NextResponse.json({ error: 'La retención no puede ser mayor que el IVA de la factura' }, { status: 400 });
         }
 
         const simulacionResultados = [];
@@ -191,8 +202,29 @@ export async function POST(request) {
                 montoIva: Number(montoIva) || 0,
                 montoRetencion: Number(montoRetencion) || 0,
                 totalFinal: Number(totalFinal) || 0,
-                registradoPorId: registradoPorId || null
+                registradoPorId: registradoPorId || null,
+                numeroControl: String(numeroControl || '').trim().slice(0, 30) || null,
+                fechaRecepcion: fechaRecepcion || fechaFactura || new Date().toISOString().slice(0, 10),
+                montoExento: Number(montoExento) || 0,
+                alicuotaIva: 16
             }, { transaction: t });
+
+            // Comprobante de retención de IVA (la empresa le retiene al proveedor). Quedan guardados en bolívares para el libro de compras.
+            let comprobanteRetencion = null;
+            if (Number(montoRetencion) > 0 && tipoDocumento === 'FACTURA') {
+                const prov = await Proveedor.findByPk(idProveedorFinal, { attributes: ['identificacion', 'nombre'], transaction: t });
+                const aBs = (v) => (moneda === 'BS' ? Number(Number(v).toFixed(2)) : aBolivares(Number(v), Number(tasaCambio) || 1));
+                const fechaRet = fechaRecepcion || fechaFactura || new Date().toISOString().slice(0, 10);
+                comprobanteRetencion = await siguienteComprobante(fechaRet, t);
+                await RetencionIva.create({
+                    tipo: 'COMPRA', fecha: fechaRet, periodo: periodoDe(fechaRet), comprobante: comprobanteRetencion,
+                    facturaAfectada: numeroDocumento, numeroControlFactura: String(numeroControl || '').trim().slice(0, 30) || null,
+                    contraparteRif: prov?.identificacion || null, contraparteNombre: prov?.nombre || null,
+                    baseImponible: aBs(Number(subtotal) - Number(montoExento || 0)), alicuota: 16, montoIva: aBs(montoIva),
+                    porcentajeRetencion: Number(porcentajeRetencion) || 75, ivaRetenido: aBs(montoRetencion),
+                    tasaCambio: Number(tasaCambio) || 1, facturaCompraId: nuevaFacturaCompra.id, registradoPorId: registradoPorId || null,
+                }, { transaction: t });
+            }
 
             // Recorremos los detalles y cruzamos con los resultados de la simulación mediante el ID
             for (const item of detalles) {
@@ -261,7 +293,7 @@ export async function POST(request) {
             }
 
             await t.commit();
-            return NextResponse.json({ success: true, message: 'Compra registrada con éxito.' });
+            return NextResponse.json({ success: true, message: 'Compra registrada con éxito.', comprobanteRetencion });
 
         } catch (innerError) {
             if (!t.finished) await t.rollback();

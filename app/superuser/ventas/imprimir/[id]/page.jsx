@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 import { numeroALetras } from '@/app/utils/numeroALetras';
+import FacturaFormaLibre from './FacturaFormaLibre';
 
 export default function ImprimirRecibo() {
     const params = useParams();
@@ -26,7 +27,8 @@ export default function ImprimirRecibo() {
     }, [params.id]);
 
     useEffect(() => {
-        if (venta && !cargando) {
+        // Con ?guia=1 no se imprime solo: sirve para revisar cómo cae la factura sobre la forma preimpresa
+        if (venta && !cargando && !new URLSearchParams(window.location.search).get('guia')) {
             setTimeout(() => window.print(), 800); 
         }
     }, [venta, cargando]);
@@ -35,6 +37,8 @@ export default function ImprimirRecibo() {
     if (!venta || venta.error) return <div style={{ padding: '2rem', textAlign: 'center' }}>Venta no encontrada.</div>;
 
     const esFactura = venta.tipoDocumento === 'FACTURA';
+    // Las facturas se imprimen sobre la forma libre preimpresa (media carta): sin membrete, logo ni franja legal
+    if (esFactura) return <FacturaFormaLibre venta={venta} guia={new URLSearchParams(window.location.search).get('guia') === '1'} />;
     const esNotaEntrega = venta.tipoDocumento === 'NOTA_ENTREGA';
     
     const tituloDocumento = esFactura ? 'Factura' : (esNotaEntrega ? 'Nota de Entrega' : 'Recibo de Venta');

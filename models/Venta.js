@@ -84,6 +84,9 @@ const Venta = sequelize.define('Venta', {
         allowNull: true
     },
     // Firmas de logística: cuándo el empacador / etiquetador asignado confirmó que terminó su parte
+    // Datos fiscales de la factura
+    numeroControl: { type: DataTypes.STRING(30), allowNull: true },
+    tipoTransaccion: { type: DataTypes.STRING(2), allowNull: false, defaultValue: '01' }, // 01 = registro
     asignadoAt: { type: DataTypes.DATE, allowNull: true },
     empacadoAt: { type: DataTypes.DATE, allowNull: true },
     etiquetadoAt: { type: DataTypes.DATE, allowNull: true },
@@ -107,6 +110,7 @@ Venta.associate = (models) => {
     Venta.belongsTo(models.User, { foreignKey: 'empacadorId', as: 'empacador' });
     Venta.belongsTo(models.User, { foreignKey: 'etiquetadorId', as: 'etiquetador' });
     Venta.hasMany(models.VentaDetalle, { foreignKey: 'ventaId', as: 'detalles', onDelete: 'CASCADE' });
+    Venta.hasMany(models.RetencionIva, { foreignKey: 'ventaId', as: 'retenciones' });
     Venta.hasMany(models.Abono, { foreignKey: 'ventaId', as: 'abonos', onDelete: 'CASCADE' });
     Venta.hasMany(models.MovimientoFinanciero, { foreignKey: 'ventaId', as: 'movimientos' });
     Venta.hasMany(models.SalidaInventario, { foreignKey: 'ventaId', as: 'salidasInventario' });

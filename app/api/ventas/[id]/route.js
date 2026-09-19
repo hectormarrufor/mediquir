@@ -10,6 +10,7 @@ import { aBolivares, aDolares } from '@/app/constants/facturacion';
 import { rolDe } from '@/app/constants/roles';
 import { requerirStaff } from '../../inventario/_lib';
 import { crearYNotificar, notificarCabezas } from '@/app/handlers/notificar';
+import { RetencionIva } from '@/models';
 
 // Error de reglas de logística (permisos, estados) con su código HTTP
 class ErrorLogistica extends Error {
@@ -81,7 +82,8 @@ export async function GET(request, { params }) {
                         include: [{ model: Marca, as: 'marca', attributes: ['nombre', 'imagen'] }, {model: GrupoEquivalencia, as: 'grupoEquivalencia', attributes: ['nombre', 'imagen']}]
                     }]
                 },
-                { model: Cliente, as: 'cliente', attributes: ['nombre', 'identificacion', 'direccion'] },
+                { model: Cliente, as: 'cliente', attributes: ['id', 'nombre', 'identificacion', 'direccion', 'esContribuyenteEspecial', 'retencionIvaPorDefecto'] },
+                { model: RetencionIva, as: 'retenciones' },
                 { model: MovimientoFinanciero, as: 'movimientos',
                     include: [{ model: PagoSms, as: 'pagoSms' }]
                  },
@@ -156,6 +158,15 @@ export async function PUT(request, { params }) {
         }
 
         const cerrada = ['Cancelado', 'Completado'].includes(venta.statusDespacho);
+
+        // Número de control de la factura (dato fiscal para el libro de ventas)
+        if (accion === 'NUMERO_CONTROL') {
+            if (venta.tipoDocumento !== 'FACTURA') throw new ErrorLogistica('Solo las facturas llevan número de control');
+            venta.numeroControl = String(body.numeroControl || '').trim().slice(0, 30) || null;
+            await venta.save({ transaction: t });
+            await t.commit();
+            return NextResponse.json({ success: true });
+        }
 
         // ==========================================================
         // 📋 ASIGNAR: la administración indica quién empaca y quién etiqueta (no toca el stock)

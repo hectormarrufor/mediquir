@@ -39,7 +39,7 @@ const Proveedor = sequelize.define('Proveedor', {
     type: DataTypes.STRING,
     allowNull: true,
     set(value) {
-      this.setDataValue('email', value === "" ? null : value.trim());
+      this.setDataValue('email', value === undefined || value === null || value === "" ? null : String(value).trim());
     },
     validate: {
       isEmail: {

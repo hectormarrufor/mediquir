@@ -12,6 +12,7 @@ import {
     IconTrash, IconPlus, IconMinus, IconCheck, IconShieldCheck, IconAlertTriangle 
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
+import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import PrecioVisual from '../ui/PrecioVisual';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -50,8 +51,9 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
             moneda: 'USD',
             metodoPago: 'Efectivo',
             referencia: '',
-            aplicarRetencion: false,
-            porcentajeRetencion: 75
+            aplicarRetencion: CONFIG_FISCAL.agenteRetencionIva,
+            porcentajeRetencion: CONFIG_FISCAL.porcentajeRetencionCompras,
+            numeroControl: ''
         }
     });
 
@@ -70,18 +72,13 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
 
     const [modalCrearProv, setModalCrearProv] = useState(false);
 
-    // Autoconfigurar retención si el proveedor es contribuyente especial
+    // La retención de IVA la practica la EMPRESA (agente de retención) sobre toda factura con IVA, sea cual sea el proveedor;
+    // el porcentaje sale de la ficha del proveedor (75 % por defecto). Se puede desmarcar para una compra puntual.
     useEffect(() => {
-        if (!formCompra.values.proveedorId || !proveedores) return;
-        const provSeleccionado = proveedores.find(p => String(p.id) === String(formCompra.values.proveedorId));
-        if (provSeleccionado) {
-            if (provSeleccionado.esContribuyenteEspecial) {
-                formCompra.setFieldValue('aplicarRetencion', true);
-                formCompra.setFieldValue('porcentajeRetencion', provSeleccionado.retencionIvaPorDefecto || 75);
-            } else {
-                formCompra.setFieldValue('aplicarRetencion', false);
-            }
-        }
+        formCompra.setFieldValue('aplicarRetencion', CONFIG_FISCAL.agenteRetencionIva);
+        const prov = proveedores?.find(p => String(p.id) === String(formCompra.values.proveedorId));
+        formCompra.setFieldValue('porcentajeRetencion', Number(prov?.retencionIvaPorDefecto) || CONFIG_FISCAL.porcentajeRetencionCompras);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formCompra.values.proveedorId, proveedores]);
 
     // ---- Compra por BULTO, por CAJAS o por UNIDADES ----
@@ -155,12 +152,15 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
     const esFactura = formCompra.values.tipoDocumento === 'FACTURA';
     let subtotal = 0;
     let montoIva = 0;
+    let montoExento = 0; // lo que no lleva IVA: va como exento en el libro de compras
 
     carritoCompra.forEach(item => {
         const itemSub = item.precioCompraUnitario * item.cantidad;
         subtotal += itemSub;
         if (esFactura && item.porcentajeIva > 0) {
             montoIva += itemSub * (item.porcentajeIva / 100);
+        } else {
+            montoExento += itemSub;
         }
     });
 
@@ -190,6 +190,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                 moneda: formCompra.values.moneda,
                 tasaCambio: tasaBcv,
                 subtotal, montoIva, montoRetencion, totalFinal,
+                numeroControl: formCompra.values.numeroControl, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion,
                 detalles: carritoCompra
             };
 
@@ -230,6 +231,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                 metodoPago: formCompra.values.metodoPago,
                 referencia: formCompra.values.referencia,
                 subtotal, montoIva, montoRetencion, totalFinal,
+                numeroControl: formCompra.values.numeroControl, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion,
                 registradoPorId: userId,
                 detalles: carritoCompra
             };
@@ -243,7 +245,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Error al registrar la compra');
 
-            notifications.show({ title: 'Éxito', message: 'Factura registrada, inventario y costos actualizados.', color: 'green' });
+            notifications.show({ title: 'Éxito', message: `Factura registrada, inventario y costos actualizados.${data.comprobanteRetencion ? ` Comprobante de retención de IVA: ${data.comprobanteRetencion}` : ''}`, color: 'green', autoClose: 9000 });
             queryClient.invalidateQueries(['productos-compra']);
             setCarritoCompra([]);
             setModalSimulacionAbierto(false);
@@ -315,6 +317,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                         {...formCompra.getInputProps('tipoDocumento')}
                                     />
                                     <TextInput size="md" label="Nro. de Factura / Recibo" placeholder="Ej: F-98765" withAsterisk {...formCompra.getInputProps('numeroDocumento')} />
+                                    {esFactura && <TextInput size="md" mt="xs" label="Nro. de control" placeholder="Ej: 00-009497" description="Para el libro de compras" {...formCompra.getInputProps('numeroControl')} />}
                                 </Group>
 
                                 <Group grow mb="md">

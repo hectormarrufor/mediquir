@@ -31,13 +31,9 @@ export default function ClienteDashboard({ params }) {
     const pedidos = cliente.pedidos || [];
     const ultimoPedido = pedidos[0]; // Como vienen ordenados DESC, el índice 0 es el último
 
-    const totalGastado = pedidos
-        .filter(p => p.statusDespacho !== 'Cancelado')
-        .reduce((sum, p) => sum + Number(p.total), 0);
-
-    const deudaPendiente = pedidos
-        .filter(p => p.statusPago !== 'Pagado' && p.statusDespacho !== 'Cancelado' && p.condicionPago === 'Credito')
-        .reduce((sum, p) => sum + Number(p.total), 0);
+    // Totales de TODAS sus compras (los calcula el servidor; la lista de abajo solo trae las últimas)
+    const totalGastado = Number(cliente.resumen?.totalGastado) || 0;
+    const deudaPendiente = Number(cliente.resumen?.deudaPendiente) || 0;
 
     return (
         <Box p="md" maw={1200} mx="auto">
@@ -129,12 +125,12 @@ export default function ClienteDashboard({ params }) {
                                         {ultimoPedido ? (
                                             <Group justify="space-between">
                                                 <Box>
-                                                    <Text fw={700}>Pedido #{String(ultimoPedido.id).padStart(5, '0')}</Text>
+                                                    <Text fw={700}>Pedido {ultimoPedido.numero}</Text>
                                                     <Text size="sm" c="dimmed">{dayjs(ultimoPedido.createdAt).format('DD MMM YYYY')}</Text>
                                                 </Box>
                                                 <Badge color="blue">{ultimoPedido.statusDespacho}</Badge>
                                                 <Text fw={800} size="lg">${Number(ultimoPedido.total).toFixed(2)}</Text>
-                                                <ActionIcon variant="light" onClick={() => router.push(`/superuser/pedidos/${ultimoPedido.id}`)}>
+                                                <ActionIcon variant="light" onClick={() => router.push(`/superuser/ventas/${ultimoPedido.id}`)}>
                                                     <IconArrowLeft size={16} style={{ transform: 'rotate(180deg)' }} />
                                                 </ActionIcon>
                                             </Group>
@@ -199,9 +195,9 @@ export default function ClienteDashboard({ params }) {
                                             <Table.Tr 
                                                 key={p.id} 
                                                 style={{ cursor: 'pointer' }}
-                                                onClick={() => router.push(`/superuser/pedidos/${p.id}`)}
+                                                onClick={() => router.push(`/superuser/ventas/${p.id}`)}
                                             >
-                                                <Table.Td fw={700}>#{String(p.id).padStart(5, '0')}</Table.Td>
+                                                <Table.Td fw={700}>{p.numero}</Table.Td>
                                                 <Table.Td>{dayjs(p.createdAt).format('DD/MM/YYYY')}</Table.Td>
                                                 <Table.Td>
                                                     <Badge color={p.condicionPago === 'Credito' ? 'violet' : 'gray'} variant="light">

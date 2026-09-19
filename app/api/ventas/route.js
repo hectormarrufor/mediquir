@@ -7,6 +7,7 @@ import { requerirStaff } from '../inventario/_lib';
 import { tasaVigente } from '../_lib/tasaBcv';
 import { calcularFactura, aBolivares, aDolares, REGLAS, precioPorTarifa, TARIFAS_VENDEDOR } from '@/app/constants/facturacion';
 import { rolDe } from '@/app/constants/roles';
+import { CONFIG_FISCAL } from '@/app/constants/empresa';
 
 class ErrorNegocio extends Error {
     constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
@@ -94,7 +95,7 @@ export async function POST(request) {
         const body = await request.json();
         const {
             tipoVenta, tipoDocumento, clienteId, moneda, condicionPago, quienRetira, costoFlete,
-            detalles, metodoPago, referencia, numeroDocumentoManual, vendedorId,
+            detalles, metodoPago, referencia, numeroDocumentoManual, vendedorId, numeroControl,
         } = body;
 
         if (!Array.isArray(detalles) || detalles.length === 0) {
@@ -102,6 +103,9 @@ export async function POST(request) {
             return NextResponse.json({ error: 'El carrito está vacío' }, { status: 400 });
         }
         if (!['MAYOR', 'DETAL'].includes(tipoVenta)) throw new ErrorNegocio('Tipo de venta inválido');
+        if (tipoDocumento === 'FACTURA' && detalles.length > CONFIG_FISCAL.maxRenglonesFactura) {
+            throw new ErrorNegocio(`Una factura admite hasta ${CONFIG_FISCAL.maxRenglonesFactura} renglones (la forma libre no da para más). Divide la venta en dos facturas.`);
+        }
 
         // Un vendedor no fija precios: cobra por tarifa, con el precio que calcula el servidor, y sin productos genéricos de precio libre
         const esVend = rolDe(acceso.sesion) === 'vendedor';
@@ -176,6 +180,7 @@ export async function POST(request) {
             clienteId: clienteId || null,
             vendedorId: esVend ? Number(acceso.sesion.id) : (vendedorId || null),
             tipoVenta, tipoDocumento, numeroDocumento,
+            numeroControl: tipoDocumento === 'FACTURA' ? (String(numeroControl || '').trim().slice(0, 30) || null) : null,
             statusDespacho: tipoVenta === 'DETAL' ? 'Completado' : 'Pendiente',
             moneda, tasaCambio,
             condicionPago, statusPago: condicionPago === 'Contado' ? 'Pagado' : 'Pendiente',

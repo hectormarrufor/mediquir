@@ -7,3 +7,15 @@ export const MEMBRETE_MEDIQUIR = {
     email: "mediquirca@gmail.com",
     logo: "/tenants/mediquir/logo.png" // Asegúrate de tener tu logo real en la carpeta /public de Next.js
 };
+
+// Datos fiscales de la empresa para los libros de compras y ventas.
+// SUPUESTO (confírmalo con tu contador): la empresa es AGENTE DE RETENCIÓN de IVA y retiene el 75 % del IVA de toda factura de compra
+// con IVA, como se ve en el libro de compras de ejemplo. Si dejara de serlo, pon agenteRetencionIva en false.
+export const CONFIG_FISCAL = {
+    agenteRetencionIva: true,
+    porcentajeRetencionCompras: 75,
+    alicuotaGeneral: 16,
+    agencia: 'Oficina Principal',
+    maxRenglonesFactura: 13, // renglones que caben en la forma libre preimpresa (media carta)
+    estacion: '001',
+};

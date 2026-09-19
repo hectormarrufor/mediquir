@@ -62,12 +62,19 @@ const FacturaCompra = sequelize.define('FacturaCompra', {
     diasCredito: { type: DataTypes.INTEGER, defaultValue: 0 },
     fechaVencimiento: { type: DataTypes.DATE, allowNull: true },
     statusPago: { type: DataTypes.ENUM('Pendiente', 'Pagado', 'Vencido'), defaultValue: 'Pendiente' },
+    // Datos fiscales
+    numeroControl: { type: DataTypes.STRING(30), allowNull: true },
+    fechaRecepcion: { type: DataTypes.DATEONLY, allowNull: true }, // el libro de compras se ordena por fecha de recepción
+    montoExento: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
+    alicuotaIva: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 16 },
+    tipoTransaccion: { type: DataTypes.STRING(2), allowNull: false, defaultValue: '01' },
 }, {
     tableName: 'FacturasCompras',
     timestamps: true
 });
 
 FacturaCompra.associate = (models) => {
+    FacturaCompra.hasMany(models.RetencionIva, { foreignKey: 'facturaCompraId', as: 'retenciones' });
     FacturaCompra.belongsTo(models.Proveedor, { foreignKey: 'proveedorId', as: 'proveedor' });
     FacturaCompra.belongsTo(models.User, { foreignKey: 'registradoPorId', as: 'registrador' });
 

@@ -20,6 +20,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 import { numeroALetras } from '@/app/utils/numeroALetras';
 import { calcularFactura, aBolivares, aDolares, precioPorTarifa } from '@/app/constants/facturacion';
+import { CONFIG_FISCAL } from '@/app/constants/empresa';
 
 export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
     const queryClient = useQueryClient(); // 🔥 INSTANCIADO PARA INVALIDAR QUERIES
@@ -83,7 +84,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
             referencia: '',
             quienRetira: '',
             costoFlete: '',
-            numeroDocumento: ''
+            numeroDocumento: '',
+            numeroControl: ''
         }
     });
 
@@ -253,6 +255,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
         if (carrito.length === 0) return notifications.show({ message: 'El carrito está vacío', color: 'orange' });
         if (tipoVenta === 'MAYOR' && !formVenta.values.clienteId) return notifications.show({ message: 'Debe seleccionar un cliente mayorista', color: 'red' });
         if (!formVenta.values.numeroDocumento) return notifications.show({ message: 'El número de documento es obligatorio', color: 'red' });
+        if (tipoDocumentoActual === 'FACTURA' && carrito.length > CONFIG_FISCAL.maxRenglonesFactura) {
+            return notifications.show({ title: 'Demasiados renglones', message: `Una factura admite hasta ${CONFIG_FISCAL.maxRenglonesFactura} renglones (es lo que cabe en la forma libre). Divide la venta en dos facturas.`, color: 'orange' });
+        }
         
         setZoomPreview(true);
         setPreviewAbierto(true);
@@ -266,7 +271,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                 tipoPrecio: formVenta.values.tipoPrecio, // el servidor recalcula el precio de un vendedor con esta tarifa
                 tipoVenta,
                 tipoDocumento: tipoDocumentoActual === 'VENTA RAPIDA' ? 'VENTA_RAPIDA' : (tipoDocumentoActual === 'NOTA DE ENTREGA' ? 'NOTA_ENTREGA' : 'FACTURA'),
-                numeroDocumentoManual: formVenta.values.numeroDocumento, 
+                numeroDocumentoManual: formVenta.values.numeroDocumento,
+                numeroControl: tipoDocumentoActual === 'FACTURA' ? formVenta.values.numeroControl : null,
                 clienteId: formVenta.values.clienteId ? Number(formVenta.values.clienteId) : null,
                 moneda: simboloMoneda === 'Bs' ? 'BS' : 'USD',
                 tasaCambio: tasaBcv,
@@ -437,6 +443,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                         {...formVenta.getInputProps('numeroDocumento')}
                                     />
                                 </Group>
+                                {tipoDocumentoActual === 'FACTURA' && (
+                                    <TextInput mt="xs" label="N° de control" placeholder="00-000000" size={isMobile ? 'xs' : 'sm'} {...formVenta.getInputProps('numeroControl')} />
+                                )}
                             </Paper>
 
                             <Group grow mb="sm" align="flex-end">

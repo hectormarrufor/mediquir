@@ -25,7 +25,7 @@ function Contenido() {
                 <Paper radius="xl" p={4} mb="lg" w="fit-content" maw="100%" style={{ overflowX: 'auto' }}>
                 <Tabs.List style={{ flexWrap: 'nowrap' }}>
                     <Tabs.Tab value="balance" leftSection={<IconScale size={16} />}>Balance</Tabs.Tab>
-                    <Tabs.Tab value="cierre" leftSection={<IconBook2 size={16} />}>Cierre mensual</Tabs.Tab>
+                    <Tabs.Tab value="cierre" leftSection={<IconBook2 size={16} />}>Libros y retenciones</Tabs.Tab>
                     <Tabs.Tab value="movimientos" leftSection={<IconListDetails size={16} />}>Movimientos de caja</Tabs.Tab>
                 </Tabs.List>
                 </Paper>

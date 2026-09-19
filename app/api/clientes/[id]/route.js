@@ -1,26 +1,46 @@
 import { NextResponse } from 'next/server';
-import { Cliente , Pedido} from '@/models';
+import sequelize from '@/sequelize';
+import { Cliente, Venta } from '@/models';
+import { rolDe } from '@/app/constants/roles';
+import { requerirStaff } from '../../inventario/_lib';
 
-// GET: Obtener un cliente específico
+const USD = `(CASE WHEN "moneda" = 'BS' THEN "totalFinal" / NULLIF("tasaCambio", 0) ELSE "totalFinal" END)`;
+
+// GET: ficha de un cliente con sus últimas ventas/pedidos y los totales de TODAS sus compras.
+// (Antes usaba un modelo "Pedido" que ya no existe, por eso la ficha daba "error al cargar el cliente".)
 export async function GET(req, { params }) {
+    const acceso = await requerirStaff();
+    if (acceso.error) return acceso.error;
     try {
         const { id } = await params;
-        const cliente = await Cliente.findByPk(id, {
-            include: [
-                { 
-                    model: Pedido, 
-                    as: 'pedidos', 
-                    order: [['createdAt', 'DESC']], // Los más recientes primero
-                    limit: 5 // Limitar a los últimos 5 pedidos
-                }
-            ]
-        });
-
+        const cliente = await Cliente.findByPk(id);
         if (!cliente) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
 
-        return NextResponse.json(cliente, { status: 200 });
+        const json = cliente.toJSON();
+        // Un vendedor ve la ficha del cliente pero no su historial ni sus montos
+        if (rolDe(acceso.sesion) === 'vendedor') return NextResponse.json({ ...json, pedidos: [], resumen: null }, { status: 200 });
+
+        const [ventas, [totales]] = await Promise.all([
+            Venta.findAll({ where: { clienteId: cliente.id }, order: [['createdAt', 'DESC']], limit: 10,
+                attributes: ['id', 'numeroDocumento', 'createdAt', 'statusDespacho', 'statusPago', 'condicionPago', 'fechaVencimiento', 'moneda', 'tasaCambio', 'totalFinal'] }),
+            sequelize.query(
+                `SELECT COALESCE(SUM(${USD}) FILTER (WHERE "statusDespacho" <> 'Cancelado'), 0)::float AS "totalGastado",
+                    COALESCE(SUM(GREATEST(${USD} - COALESCE((SELECT SUM(a."montoUsd") FROM "Abonos" a WHERE a."ventaId" = "Ventas"."id"), 0), 0))
+                        FILTER (WHERE "statusDespacho" <> 'Cancelado' AND "statusPago" <> 'Pagado'), 0)::float AS "deudaPendiente",
+                    COUNT(*) FILTER (WHERE "statusDespacho" <> 'Cancelado')::int AS cantidad
+                 FROM "Ventas" WHERE "clienteId" = :id`,
+                { replacements: { id: cliente.id }, type: sequelize.QueryTypes.SELECT }
+            ),
+        ]);
+
+        const pedidos = ventas.map((v) => ({
+            id: v.id, numero: v.numeroDocumento, createdAt: v.createdAt, statusDespacho: v.statusDespacho, statusPago: v.statusPago,
+            condicionPago: v.condicionPago, fechaVencimiento: v.fechaVencimiento,
+            total: v.moneda === 'BS' ? Number(v.totalFinal) / (Number(v.tasaCambio) || 1) : Number(v.totalFinal),
+        }));
+        return NextResponse.json({ ...json, pedidos, resumen: totales }, { status: 200 });
     } catch (error) {
-        console.log("Error al obtener cliente:", error.message);
+        console.error('Error al obtener cliente:', error.message);
         return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
     }
 }
