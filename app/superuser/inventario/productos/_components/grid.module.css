@@ -3,7 +3,7 @@
 .contenedor {
     position: relative;
     overflow: auto;
-    max-height: calc(100vh - 410px);
+    max-height: calc(100vh - 380px);
     min-height: 320px;
     border: 1px solid var(--mantine-color-gray-3);
     border-radius: var(--mantine-radius-md);

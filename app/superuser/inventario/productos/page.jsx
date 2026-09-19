@@ -103,8 +103,9 @@ export default function InventarioProductosPage() {
         }
     };
 
+    // La hoja usa TODO el ancho de la pantalla (sin tope ni márgenes laterales): cuanto más ancha, más columnas a la vista
     return (
-        <Box p={isMobile ? 'xs' : 'md'} maw={1700} mx="auto">
+        <Box px={isMobile ? 'xs' : 6} py={isMobile ? 'xs' : 'sm'} w="100%">
             <Group justify="space-between" align="center" mb="sm">
                 <Box>
                     <Title order={2} c="white" fz={isMobile ? 22 : 28} tt="none" display="block" pb={0}>Inventario</Title>

@@ -25,7 +25,7 @@ export async function getVisibilidadSql(usuarioId) {
     if (!Number.isInteger(uid)) throw new Error('Usuario inválido');
 
     const usuario = await User.findByPk(uid, {
-        attributes: ['id'],
+        attributes: ['id', 'clienteId'],
         include: [{
             model: Empleado,
             as: 'empleado',
@@ -39,6 +39,10 @@ export async function getVisibilidadSql(usuarioId) {
         }],
     });
     if (!usuario) return null;
+
+    // Un cliente del portal (o cualquier usuario sin ficha de empleado) SOLO ve lo dirigido a él. Las notificaciones globales y las de
+    // departamentos o puestos son internas del personal (pedidos, cobros, novedades...): nunca deben llegarle.
+    if (usuario.clienteId || !usuario.empleado) return `("Notificacion"."usuarioId" = ${uid})`;
 
     const puestos = [...new Set(usuario.empleado?.puestos?.map((p) => p.nombre) || [])];
     const deptos = [...new Set(usuario.empleado?.puestos?.map((p) => p.departamento?.nombre).filter(Boolean) || [])];

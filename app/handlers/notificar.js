@@ -102,6 +102,12 @@ export async function crearYNotificar(data) {
         let whereSubscriptions = { activo: true };
         const tieneFiltros = usuariosMap.size > 0 || data.usuarioId;
 
+        // Un aviso general (sin destinatarios) es para el PERSONAL: los clientes del portal no deben recibir avisos internos por push
+        if (!tieneFiltros && !data.roles?.length && !targetDeptos && !targetPuestos) {
+            const personal = await User.findAll({ where: { clienteId: null }, attributes: ['id'] });
+            whereSubscriptions.usuarioId = { [Op.in]: personal.map((u) => u.id) };
+        }
+
         if (tieneFiltros) {
             if (usuariosMap.size === 0) {
                 console.log('[NOTIFICADOR] Filtros aplicados pero no se encontró ningún usuario.');
