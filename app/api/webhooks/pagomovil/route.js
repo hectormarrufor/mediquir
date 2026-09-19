@@ -14,6 +14,15 @@ function parsearFechaMercantil(fechaStr, horaStr) {
     return new Date(ano, mes - 1, dia, hora, min, 0);
 }
 
+// "16.000,00" -> "16000.00" (miles con punto, decimales con coma; tolera punto final de frase)
+function limpiarMonto(texto) {
+    const n = texto.replace(/[.,]+$/, '').replace(/\./g, '').replace(',', '.');
+    return /^\d+(\.\d+)?$/.test(n) ? n : null;
+}
+
+// Avisos que nunca son pagos (p. ej. las notificaciones del propio sistema reenviadas por el teléfono)
+const AVISO_PROPIO = /actualizaci[oó]n del sistema|\(v[0-9a-f]{7}\)/i;
+
 function parsearFechaBDV(fechaStr, horaStr) {
     const [dia, mes, anoCorto] = fechaStr.split('-').map(Number);
     const [hora, min] = horaStr.split(':').map(Number);
@@ -67,6 +76,10 @@ export async function POST(request) {
 
         const mensajeCompleto = `${title} - ${text}`;
 
+        if (AVISO_PROPIO.test(mensajeCompleto)) {
+            return NextResponse.json({ success: true, message: 'Notificación ignorada de forma segura' });
+        }
+
         let bancoIdentificado = null;
         let referenciaLarga = null;
         let montoLimpio = null;
@@ -85,7 +98,7 @@ export async function POST(request) {
 
                 const montoMercantil = mensajeCompleto.match(/Bs\.\s*([\d.,]+)/i);
                 if (montoMercantil) {
-                    montoLimpio = montoMercantil[1].replace(/\./g, '').replace(',', '.');
+                    montoLimpio = limpiarMonto(montoMercantil[1]);
                 }
 
                 const emisorMercantil = mensajeCompleto.match(/del\s+(\d+)/i);
@@ -101,16 +114,21 @@ export async function POST(request) {
             case mensajeCompleto.toLowerCase().includes('pagomovilbdv'):
                 bancoIdentificado = 'VENEZUELA';
 
-                const refBDV = mensajeCompleto.match(/Ref\s*:\s*(\d+)/i);
+                // Formatos vistos: "Ref: 1234" y "bajo el numero de operacion 007182665916" (con o sin acento/espacios)
+                const refBDV = mensajeCompleto.match(/Ref\s*:\s*(\d+)/i)
+                    || mensajeCompleto.match(/operaci[oó]n\s*:?\s*(\d+)/i);
                 referenciaLarga = refBDV ? refBDV[1] : null;
 
                 const montoBDV = mensajeCompleto.match(/Bs\.?\s*([\d.,]+)/i);
                 if (montoBDV && montoBDV[1]) {
-                    montoLimpio = montoBDV[1].replace(/\./g, '').replace(',', '.');
+                    montoLimpio = limpiarMonto(montoBDV[1]);
                 }
 
                 const emisorBDV = mensajeCompleto.match(/del\s+([\d-]+)/i);
-                emisor = (emisorBDV && emisorBDV[1]) ? emisorBDV[1].replace(/-/g, '') : 'Desconocido';
+                // Puede venir el teléfono ("del 0414-1234567") o el nombre ("de JOSEFINA ... por Bs.")
+                const emisorNombre = mensajeCompleto.match(/PagomovilBDV\s+de\s+(.+?)\s+por\s+Bs/i);
+                emisor = (emisorBDV && emisorBDV[1]) ? emisorBDV[1].replace(/-/g, '')
+                    : (emisorNombre ? emisorNombre[1].trim().slice(0, 250) : 'Desconocido');
 
                 // 🔥 CORRECCIÓN CRÍTICA: El signo ? hace que los dos puntos (:) sean opcionales, atrapando "fecha 29-08-26" o "fecha: 29-08-26"
                 const fechaBDV = mensajeCompleto.match(/fecha\s*:?\s*([\d-]+)/i);
@@ -119,6 +137,8 @@ export async function POST(request) {
                 if (fechaBDV && fechaBDV[1] && horaBDV && horaBDV[1]) {
                     fechaHoraFinal = parsearFechaBDV(fechaBDV[1], horaBDV[1]);
                 }
+                // Algunos avisos de BDV no traen fecha ni hora: se usa el momento de recepción
+                if (!fechaHoraFinal || isNaN(fechaHoraFinal.getTime())) fechaHoraFinal = new Date();
                 break;
 
             default:
@@ -175,8 +195,9 @@ export async function POST(request) {
 
             return NextResponse.json({ success: true, message: `Pago registrado con éxito por ${dispositivoOrigen}` });
         } else {
-            console.error(`[Mediquir] Error al extraer data en ${bancoIdentificado || 'Desconocido'}. Mensaje:`, mensajeCompleto);
-            return NextResponse.json({ error: 'Estructura de variables ilegible' }, { status: 400 });
+            console.warn(`[Mediquir] No se pudo leer el pago (${bancoIdentificado || 'Desconocido'}): ${mensajeCompleto.slice(0, 200)}`);
+            // 200 a propósito: con un 400 el teléfono reenvía el mismo aviso una y otra vez
+            return NextResponse.json({ success: false, message: 'Mensaje no reconocido como pago, ignorado' });
         }
 
     } catch (error) {
