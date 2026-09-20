@@ -8,6 +8,7 @@ import HeroSection from './components/landing/HeroSection';
 import CategorySection from './components/landing/CategorySection';
 import BestSellersSection from './components/landing/BestSellersSection';
 import FooterSection from './components/landing/FooterSection';
+import InfoEnvios from './components/landing/InfoEnvios';
 import { useCart } from './components/landing/CartContext';
 import CheckoutProcess from './CheckoutProcess';
 import { getMainImage, PLACEHOLDER_IMG, formatearPrecio, formatearBs } from './components/landing/productUtils';
@@ -119,6 +120,8 @@ export default function LandingMediquir({ seo = null }) {
                 searchQuery={searchQuery}
                 onSearch={handleSearch}
             />
+
+            <InfoEnvios />
 
             <CategorySection
                 selectedCategory={selectedCategory}

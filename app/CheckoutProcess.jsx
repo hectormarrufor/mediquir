@@ -323,6 +323,21 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
         }
     };
 
+    // Totales de la compra: se ven al elegir la entrega y al pagar
+    const resumenTotales = (
+        <Paper withBorder p="md" radius="md" bg="gray.0">
+            <Group justify="space-between"><Text size="sm">Subtotal:</Text><Text size="sm">${subtotal.toFixed(2)}</Text></Group>
+            {ivaDetalle.length > 0
+                ? ivaDetalle.map((d) => <Group key={d.alicuota} justify="space-between"><Text size="sm">IVA ({d.alicuota}%) sobre ${d.base.toFixed(2)}:</Text><Text size="sm">${d.iva.toFixed(2)}</Text></Group>)
+                : <Group justify="space-between"><Text size="sm">IVA:</Text><Text size="sm">Exento</Text></Group>}
+            {esNacional && <Group justify="space-between"><Text size="sm">Envío nacional por Zoom:</Text><Text size="sm">Cobro a destino</Text></Group>}
+            {metodoEntrega === 'delivery' && !esNacional && <Group justify="space-between"><Text size="sm">Delivery (sin IVA):</Text><Text size="sm">${costoDelivery.toFixed(2)}</Text></Group>}
+            <Divider my="sm" />
+            <Group justify="space-between"><Text fw={900} size="lg">Total USD:</Text><Text fw={900} size="xl" c="#0B1B3D">${totalPagarUSD.toFixed(2)}</Text></Group>
+            <Group justify="space-between" mt={5}><Text fw={700} size="sm" c="dimmed">Total BS (Tasa: {tasaBcv}):</Text><Text fw={900} size="lg" c="blue.7">Bs {totalPagarBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text></Group>
+        </Paper>
+    );
+
     return (
         <Box py="md">
             <Stepper active={activeStep} onStepClick={setActiveStep} color="#005AAA" size="sm" allowNextStepsSelect={false}>
@@ -502,23 +517,14 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                                 </Stack>
                             </Paper>
                         )}
+                        {resumenTotales}
                     </Stack>
                 </Stepper.Step>
 
                 {/* PASO 3: CONFIRMACIÓN Y PAGO */}
                 <Stepper.Step label="Pago" description="Confirmación">
                     <Stack mt="xl" gap="md">
-                        <Paper withBorder p="md" radius="md" bg="gray.0">
-                            <Group justify="space-between"><Text size="sm">Subtotal:</Text><Text size="sm">${subtotal.toFixed(2)}</Text></Group>
-                            {ivaDetalle.length > 0
-                                ? ivaDetalle.map((d) => <Group key={d.alicuota} justify="space-between"><Text size="sm">IVA ({d.alicuota}%) sobre ${d.base.toFixed(2)}:</Text><Text size="sm">${d.iva.toFixed(2)}</Text></Group>)
-                                : <Group justify="space-between"><Text size="sm">IVA:</Text><Text size="sm">Exento</Text></Group>}
-                            {esNacional && <Group justify="space-between"><Text size="sm">Envío nacional por Zoom:</Text><Text size="sm">Cobro a destino</Text></Group>}
-                            {metodoEntrega === 'delivery' && !esNacional && <Group justify="space-between"><Text size="sm">Delivery (sin IVA):</Text><Text size="sm">${costoDelivery.toFixed(2)}</Text></Group>}
-                            <Divider my="sm" />
-                            <Group justify="space-between"><Text fw={900} size="lg">Total USD:</Text><Text fw={900} size="xl" c="#0B1B3D">${totalPagarUSD.toFixed(2)}</Text></Group>
-                            <Group justify="space-between" mt={5}><Text fw={700} size="sm" c="dimmed">Total BS (Tasa: {tasaBcv}):</Text><Text fw={900} size="lg" c="blue.7">Bs {totalPagarBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text></Group>
-                        </Paper>
+                        {resumenTotales}
 
                         {avisoHorario && (
                             <Alert color="orange" variant="light" icon={<IconAlertCircle size={18} />} title={`Tu pedido saldrá ${avisoHorario.cuando}`}>

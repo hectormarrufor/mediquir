@@ -10,7 +10,7 @@ import ErroresEmpaqueCard from './ErroresEmpaqueCard';
 import DeliveryDiferenciasCard from './DeliveryDiferenciasCard';
 import {
     IconAlertTriangle, IconArrowDownRight, IconArrowRight, IconArrowUpRight, IconBuildingStore, IconCash, IconCheck, IconClockExclamation, IconPackage,
-    IconReceipt, IconSettings, IconTruckDelivery, IconWallet,
+    IconReceipt, IconReceiptTax, IconSettings, IconShoppingCart, IconTruckDelivery, IconWallet,
 } from '@tabler/icons-react';
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -59,6 +59,9 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
     if (d?.porPagar.vencidas > 0) atencion.push({ color: 'red', icono: IconClockExclamation, texto: `${d.porPagar.vencidas} cuenta(s) por pagar vencida(s)`, detalle: 'Revisa tus proveedores', href: '/superuser/cxp' });
     if (d?.porPagar.porVencer > 0) atencion.push({ color: 'orange', icono: IconWallet, texto: `${d.porPagar.porVencer} pago(s) a proveedor vencen esta semana`, detalle: 'Próximos 7 días', href: '/superuser/cxp' });
     if (d?.pedidos.sinAsignar > 0) atencion.push({ color: 'blue', icono: IconPackage, texto: `${d.pedidos.sinAsignar} pedido(s) sin empacador asignado`, detalle: 'Asigna quién empaca y etiqueta', href: '/superuser/ventas' });
+    if (d?.alertas?.enRevision > 0) atencion.push({ color: 'violet', icono: IconPackage, texto: `${d.alertas.enRevision} pedido(s) B2B en revisión de existencias`, detalle: 'Confirma o ajusta las cantidades', href: '/superuser/ventas' });
+    if (d?.alertas?.retencionesPorRevisar > 0) atencion.push({ color: 'orange', icono: IconReceiptTax, texto: `${d.alertas.retencionesPorRevisar} comprobante(s) de retención por confirmar`, detalle: 'El cliente ya lo subió', href: '/superuser/ventas' });
+    if (d?.alertas?.retencionesPendientes > 0) atencion.push({ color: 'yellow', icono: IconReceiptTax, texto: `${d.alertas.retencionesPendientes} retención(es) de IVA esperan el comprobante del cliente`, detalle: 'Aún no entran al libro de ventas', href: '/superuser/ventas' });
     if (d?.stockBajo.total > 0) atencion.push({ color: 'orange', icono: IconAlertTriangle, texto: `${d.stockBajo.total} producto(s) por debajo del stock mínimo`, detalle: d.stockBajo.top.slice(0, 2).map((p) => p.nombre).join(' · '), href: '/superuser/inventario/productos' });
 
     return (
@@ -86,12 +89,14 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
                 </Paper>
 
                 {/* Pulso del negocio */}
-                <SimpleGrid cols={{ base: 1, xs: 2, lg: 3, xl: 6 }} spacing="md">
+                <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
                     <Pulso icono={IconCash} color="teal" titulo="Ventas de hoy" cargando={isLoading} valor={fmtUsd(d?.ventas.hoyTotal)} cambio={d?.ventas.cambioVsAyer} detalle={`${d?.ventas.hoyVentas ?? 0} venta(s) · vs ayer`} href="/superuser/ventas" />
                     <Pulso icono={IconReceipt} color="blue" titulo="Ventas del mes" cargando={isLoading} valor={fmtUsd(d?.ventas.mesTotal)} detalle={`${d?.ventas.mesVentas ?? 0} venta(s)`} href="/superuser/ventas" />
                     <Pulso icono={IconWallet} color="orange" titulo="Por cobrar" cargando={isLoading} valor={fmtUsd(d?.porCobrar.total)} detalle={d?.porCobrar.vencidas ? `${d.porCobrar.vencidas} vencida(s)` : 'Sin vencidas'} href="/superuser/cxc" />
                     <Pulso icono={IconWallet} color="red" titulo="Por pagar" cargando={isLoading} valor={fmtUsd(d?.porPagar.total)} detalle={d?.porPagar.vencidas ? `${d.porPagar.vencidas} vencida(s)` : 'Sin vencidas'} href="/superuser/cxp" />
                     <Pulso icono={IconTruckDelivery} color="violet" titulo="Por despachar" cargando={isLoading} valor={d?.pedidos.porDespachar ?? 0} detalle={`${d?.pedidos.sinAsignar ?? 0} sin asignar`} href="/superuser/ventas" />
+                    <Pulso icono={IconShoppingCart} color="cyan" titulo="Tienda online hoy" cargando={isLoading} valor={fmtUsd(d?.tienda?.hoyTotal)} detalle={`${d?.tienda?.hoyCompras ?? 0} compra(s) · ${d?.tienda?.recibosMes ?? 0} recibo(s) sin factura en el mes`} href="/superuser/ventas" />
+                    <Pulso icono={IconReceiptTax} color="grape" titulo="IVA facturado del mes" cargando={isLoading} valor={fmtUsd(d?.ivaMes)} detalle="Solo facturas, por fecha de emisión" href="/superuser/finanzas" />
                     <Pulso icono={IconAlertTriangle} color="yellow" titulo="Stock bajo" cargando={isLoading} valor={d?.stockBajo.total ?? 0} detalle={`${d?.stockBajo.agotados ?? 0} agotado(s)`} href="/superuser/inventario/productos" />
                 </SimpleGrid>
 

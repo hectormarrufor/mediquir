@@ -8,6 +8,7 @@ const USD = `(CASE WHEN v."moneda" = 'BS' THEN v."totalFinal" / NULLIF(v."tasaCa
 const SALDO_USD = (t) => `(CASE WHEN ${t}."moneda" = 'BS' THEN ${t}."saldoPendiente" / NULLIF(${t}."tasaCambio", 0) ELSE ${t}."saldoPendiente" END)`;
 const DIA = `(v."createdAt" AT TIME ZONE 'America/Caracas')::date`;
 const HOY = `(now() AT TIME ZONE 'America/Caracas')::date`;
+const IVA_USD = `(CASE WHEN v."moneda" = 'BS' THEN v."montoIva" / NULLIF(v."tasaCambio", 0) ELSE v."montoIva" END)`;
 
 // Pulso del negocio para el panel de inicio: ventas de hoy y de la semana, deudas, pedidos pendientes y stock bajo
 export async function GET() {
@@ -18,7 +19,7 @@ export async function GET() {
         const q = (sql) => sequelize.query(sql, { type: sequelize.QueryTypes.SELECT });
         const activas = `v."statusDespacho" <> 'Cancelado'`;
 
-        const [[ventas], serie, [cobrar], [pagar], [pedidos], stockBajo] = await Promise.all([
+        const [[ventas], serie, [cobrar], [pagar], [pedidos], stockBajo, [tienda], [iva], [alertas]] = await Promise.all([
             q(`SELECT
                 COALESCE(SUM(${USD}) FILTER (WHERE ${DIA} = ${HOY}), 0)::float AS "hoyTotal",
                 COUNT(*) FILTER (WHERE ${DIA} = ${HOY})::int AS "hoyVentas",
@@ -44,13 +45,27 @@ export async function GET() {
             q(`SELECT p."id", p."nombre", p."stockAlmacen"::float AS stock, p."stockMinimo"::float AS minimo FROM "Productos" p
                WHERE p."stockMinimo" > 0 AND p."stockAlmacen" <= p."stockMinimo" AND p."grupoEquivalenciaId" IS NULL
                ORDER BY (p."stockAlmacen" / NULLIF(p."stockMinimo", 0)) ASC LIMIT 200`),
+            // Tienda online: compras de hoy y recibos (V-) del mes que todavía no son factura
+            q(`SELECT COALESCE(SUM(${USD}) FILTER (WHERE ${DIA} = ${HOY}), 0)::float AS "hoyTotal",
+                COUNT(*) FILTER (WHERE ${DIA} = ${HOY})::int AS "hoyCompras",
+                COUNT(*) FILTER (WHERE v."tipoDocumento" = 'VENTA_RAPIDA' AND date_trunc('month', ${DIA}) = date_trunc('month', ${HOY}))::int AS "recibosMes"
+               FROM "Ventas" v WHERE v."tipoVenta" = 'ONLINE' AND ${activas}`),
+            // IVA de las facturas emitidas este mes (la fecha de emisión manda: una factura convertida cuenta en el mes en que se emite)
+            q(`SELECT COALESCE(SUM(${IVA_USD}), 0)::float AS "mes" FROM "Ventas" v
+               WHERE v."tipoDocumento" = 'FACTURA' AND ${activas}
+                 AND date_trunc('month', (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date) = date_trunc('month', ${HOY})`),
+            // Pedidos B2B en revisión de existencias y retenciones de IVA que esperan al cliente o a administración
+            q(`SELECT
+                (SELECT COUNT(*) FROM "Ventas" v WHERE v."revisionStock" = 'PENDIENTE' AND ${activas})::int AS "enRevision",
+                (SELECT COUNT(*) FROM "RetencionesIva" r WHERE r."tipo" = 'VENTA' AND r."estado" = 'PENDIENTE')::int AS "retencionesPendientes",
+                (SELECT COUNT(*) FROM "RetencionesIva" r WHERE r."tipo" = 'VENTA' AND r."estado" = 'POR_REVISAR')::int AS "retencionesPorRevisar"`),
         ]);
 
         const cambio = ventas.ayerTotal > 0 ? ((ventas.hoyTotal - ventas.ayerTotal) / ventas.ayerTotal) * 100 : null;
         return NextResponse.json({
             ventas: { ...ventas, cambioVsAyer: cambio },
             serie,
-            porCobrar: cobrar, porPagar: pagar, pedidos,
+            porCobrar: cobrar, porPagar: pagar, pedidos, tienda, ivaMes: iva.mes, alertas,
             stockBajo: { total: stockBajo.length, agotados: stockBajo.filter((p) => p.stock <= 0).length, top: stockBajo.slice(0, 5) },
         });
     } catch (error) {

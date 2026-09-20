@@ -1,8 +1,7 @@
 import Link from 'next/link';
 import { Badge, Box, Button, Container, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon, Title } from '@mantine/core';
 import { IconArrowRight, IconBrandWhatsapp, IconBuildingStore, IconMapPin, IconTruckDelivery } from '@tabler/icons-react';
-import { Categoria, Producto } from '@/models';
-import { SITIO, rutaCategoria } from '@/app/lib/seo';
+import { SITIO } from '@/app/lib/seo';
 import classes from './landing.module.css';
 
 const VENTAJAS = [
@@ -12,17 +11,9 @@ const VENTAJAS = [
     { icono: IconMapPin, color: 'navy', titulo: 'Ciudad Ojeda, Zulia', texto: 'Casco Central, Calle Venezuela entre Av. Bolívar y Av. Alonso. Ven a conocernos.' },
 ];
 
-// Texto de la portada para buscadores y para las personas: quiénes somos, a dónde enviamos y las categorías.
-// Se arma en el servidor, así Google lo lee completo sin ejecutar JavaScript.
-export default async function SeccionSeo() {
-    let categorias = [];
-    try {
-        const filas = await Categoria.findAll({ attributes: ['id', 'nombre'], order: [['nombre', 'ASC']] });
-        categorias = await Promise.all(filas.map(async (c) => ({ id: c.id, nombre: c.nombre, total: await Producto.count({ where: { categoriaId: c.id } }) })));
-    } catch (e) {
-        console.error('SeccionSeo:', e.message);
-    }
-
+// Texto de la portada para buscadores y para las personas: quiénes somos y a dónde enviamos.
+// Se arma en el servidor, así Google lo lee completo sin ejecutar JavaScript. Las categorías las lista la sección de categorías y el sitemap.
+export default function SeccionSeo() {
     return (
         <Box component="section" aria-labelledby="quienes-somos" py={{ base: 36, md: 64 }} style={{ background: 'linear-gradient(180deg, #F4F7FB 0%, #EAF0F7 100%)' }}>
             <Container fluid px={{ base: 'sm', sm: 'xl' }}>
@@ -47,17 +38,6 @@ export default async function SeccionSeo() {
                         </Paper>
                     ))}
                 </SimpleGrid>
-
-                {categorias.length > 0 && (
-                    <Group gap={8} justify="center" mb={{ base: 28, md: 40 }} aria-label="Categorías">
-                        <Text size="sm" c="dimmed" fw={600}>Ver por categoría:</Text>
-                        {categorias.map((c) => (
-                            <Badge key={c.id} component={Link} href={rutaCategoria(c)} variant="light" color="brand" size="lg" radius="xl" tt="none" style={{ cursor: 'pointer' }}>
-                                {c.nombre} · {c.total}
-                            </Badge>
-                        ))}
-                    </Group>
-                )}
 
                 <Paper className={classes.seoBanda} p={{ base: 'lg', md: 'xl' }}>
                     <Group justify="space-between" align="center" gap="lg" wrap="wrap">

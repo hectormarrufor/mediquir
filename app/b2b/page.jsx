@@ -4,7 +4,7 @@ import React from 'react';
 import { Alert, Badge, Box, Button, Card, Group, Paper, SimpleGrid, Skeleton, Stack, Table, Text, ThemeIcon, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { IconAlertTriangle, IconArrowRight, IconBuildingStore, IconCalendarDue, IconReceipt2, IconTruckDelivery, IconWallet } from '@tabler/icons-react';
+import { IconAlertTriangle, IconArrowRight, IconBuildingStore, IconCalendarDue, IconClockHour4, IconCreditCard, IconReceipt2, IconReceiptTax, IconTruckDelivery, IconWallet } from '@tabler/icons-react';
 import { aBolivares } from '@/app/constants/facturacion';
 import { BadgesPedido } from './_components/Estados';
 import { fmtBs, fmtFecha, fmtUsd, pedirJson } from './_lib/formato';
@@ -52,13 +52,34 @@ export default function B2BInicio() {
                 </Alert>
             )}
 
-            <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
+            {data?.enRevision > 0 && (
+                <Alert color="violet" variant="light" icon={<IconClockHour4 size={20} />} title="Pedidos en revisión">
+                    <Group justify="space-between" wrap="wrap">
+                        <Text size="sm">{data.enRevision === 1 ? 'Tienes 1 pedido' : `Tienes ${data.enRevision} pedidos`} en revisión: estamos confirmando las existencias y te avisaremos cuando puedas pagar.</Text>
+                        <Button size="xs" variant="light" color="violet" onClick={() => router.push('/b2b/pedidos?estado=activos')}>Ver mis pedidos</Button>
+                    </Group>
+                </Alert>
+            )}
+
+            {data?.retencionesPendientes > 0 && (
+                <Alert color="yellow" variant="light" icon={<IconReceiptTax size={20} />} title="Retención de IVA pendiente">
+                    <Group justify="space-between" wrap="wrap">
+                        <Text size="sm">{data.retencionesPendientes === 1 ? 'Tienes 1 factura' : `Tienes ${data.retencionesPendientes} facturas`} con retención de IVA por respaldar: sube tu comprobante desde el detalle del pedido.</Text>
+                        <Button size="xs" variant="light" color="yellow" onClick={() => router.push('/b2b/pedidos')}>Ir a mis pedidos</Button>
+                    </Group>
+                </Alert>
+            )}
+
+            <SimpleGrid cols={{ base: 1, xs: 2, lg: 3, xl: 5 }} spacing="md">
                 <Indicador icono={IconTruckDelivery} color="blue" titulo="Pedidos en curso" cargando={isLoading}
                     valor={data?.pedidosActivos ?? 0} detalle={`${data?.totalPedidos ?? 0} pedidos en total`} onClick={() => router.push('/b2b/pedidos?estado=activos')} />
                 <Indicador icono={IconWallet} color="orange" titulo="Saldo por pagar" cargando={isLoading}
                     valor={fmtUsd(data?.saldoPendiente)} detalle={saldoBs !== null ? `${fmtBs(saldoBs)} a tasa BCV ${tasa}` : undefined} onClick={() => router.push('/b2b/cuentas')} />
                 <Indicador icono={IconReceipt2} color="grape" titulo="Facturas pendientes" cargando={isLoading}
                     valor={data?.facturasPendientes ?? 0} detalle={data?.facturasVencidas ? `${data.facturasVencidas} vencida(s)` : 'Ninguna vencida'} onClick={() => router.push('/b2b/cuentas')} />
+                <Indicador icono={IconCreditCard} color={data?.credito?.habilitado ? 'indigo' : 'gray'} titulo="Tu crédito" cargando={isLoading}
+                    valor={data?.credito?.habilitado ? `${data.credito.disponibles} de ${data.credito.maxPedidos}` : 'No habilitado'}
+                    detalle={data?.credito?.habilitado ? `pedidos a crédito disponibles · ${data.credito.diasCredito} días para pagar` : 'Pide crédito a administración'} onClick={() => router.push('/b2b/carrito')} />
                 <Indicador icono={IconCalendarDue} color={data?.proximoVencimiento ? 'teal' : 'gray'} titulo="Próximo vencimiento" cargando={isLoading}
                     valor={data?.proximoVencimiento ? fmtFecha(data.proximoVencimiento.vence) : '—'}
                     detalle={data?.proximoVencimiento ? `${data.proximoVencimiento.numero} · ${fmtUsd(data.proximoVencimiento.saldo)}` : 'Sin vencimientos próximos'}
