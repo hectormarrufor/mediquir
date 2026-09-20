@@ -8,6 +8,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconDeviceMobileMessage, IconCheck, IconClock, IconRefresh, IconLink } from '@tabler/icons-react';
+import { formatearFechaHora } from '@/app/constants/hora';
 
 function VincularModal({ pago, onClose }) {
     const queryClient = useQueryClient();
@@ -75,6 +76,7 @@ function VincularModal({ pago, onClose }) {
                                             <Table.Td>
                                                 <Text size="sm" fw={600}>{v.numeroDocumento}</Text>
                                                 <Text size="xs" c="dimmed">{v.cliente}</Text>
+                                                {v.porVerificar && <Badge size="xs" color="orange" variant="light" tt="none">Pago por verificar · ref {v.referenciaDeclarada}</Badge>}
                                                 {v.esCredito && <Badge size="xs" color="grape" variant="light">A crédito: se registra como abono</Badge>}
                                             </Table.Td>
                                             <Table.Td style={{ textAlign: 'right' }}>
@@ -115,13 +117,20 @@ export default function PagosRecibidosPage() {
         style: 'currency', currency: 'VES' 
     }).format(monto);
 
-    const formatoFecha = (fechaString) => {
-        const fecha = new Date(fechaString);
-        return fecha.toLocaleString('es-VE', { 
-            day: '2-digit', month: '2-digit', year: 'numeric', 
-            hour: '2-digit', minute: '2-digit', hour12: true 
-        });
-    };
+    // Siempre en hora de Caracas, aunque quien mire esté en otra zona
+    const formatoFecha = (fechaString) => formatearFechaHora(fechaString);
+
+    // Intentos de pago del checkout que no terminaron bien (referencias que no existen, montos distintos, bloqueos)
+    const { data: intentos } = useQuery({
+        queryKey: ['pagos-intentos'],
+        queryFn: async () => {
+            const res = await fetch('/api/pagos-recibidos/intentos');
+            if (!res.ok) throw new Error('Error al cargar');
+            return res.json();
+        },
+        refetchInterval: 30000
+    });
+    const ETIQUETA_INTENTO = { NO_ENCONTRADO: ['orange', 'Referencia sin SMS'], MONTO: ['red', 'Monto distinto'], BLOQUEADO: ['red', 'Bloqueado'], REGISTRADO_MANUAL: ['blue', 'Por verificar'] };
 
     return (
         <Container size="xl" py="lg">
@@ -209,6 +218,33 @@ export default function PagosRecibidosPage() {
                     )}
                 </ScrollArea>
             </Paper>
+            <Paper withBorder radius="md" shadow="sm" p="md" mt="xl">
+                <Title order={4} c="blue.9" mb={4}>Intentos de pago sin coincidencia (últimas 48 h)</Title>
+                <Text size="xs" c="dimmed" mb="sm">Clientes de la tienda que escribieron una referencia que no apareció o un monto distinto. Varios intentos seguidos desde la misma conexión pueden ser una referencia inventada.</Text>
+                <ScrollArea>
+                    <Table verticalSpacing="xs" fz="sm">
+                        <Table.Thead><Table.Tr><Table.Th>Hora (Caracas)</Table.Th><Table.Th>Cédula / RIF</Table.Th><Table.Th>Referencia</Table.Th><Table.Th style={{ textAlign: 'right' }}>Monto Bs</Table.Th><Table.Th>Resultado</Table.Th><Table.Th>Conexión</Table.Th></Table.Tr></Table.Thead>
+                        <Table.Tbody>
+                            {intentos?.length > 0 ? intentos.map((i) => {
+                                const [color, texto] = ETIQUETA_INTENTO[i.resultado] || ['gray', i.resultado];
+                                return (
+                                    <Table.Tr key={i.id}>
+                                        <Table.Td>{formatoFecha(i.createdAt)}</Table.Td>
+                                        <Table.Td>{i.identificacion || '—'}</Table.Td>
+                                        <Table.Td>{i.referencia || '—'}</Table.Td>
+                                        <Table.Td style={{ textAlign: 'right' }}>{i.montoBs != null ? formatoMoneda(i.montoBs) : '—'}</Table.Td>
+                                        <Table.Td><Badge color={color} variant="light" tt="none">{texto}</Badge>{i.detalle && <Text size="xs" c="dimmed">{i.detalle}{i.numeroDocumento ? ` · ${i.numeroDocumento}` : ''}</Text>}</Table.Td>
+                                        <Table.Td><Text size="xs" c="dimmed">{i.ip || '—'}</Text></Table.Td>
+                                    </Table.Tr>
+                                );
+                            }) : (
+                                <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" ta="center" py="sm">Sin intentos fallidos. Todo en orden.</Text></Table.Td></Table.Tr>
+                            )}
+                        </Table.Tbody>
+                    </Table>
+                </ScrollArea>
+            </Paper>
+
             <VincularModal pago={pagoAVincular} onClose={() => setPagoAVincular(null)} />
         </Container>
     );

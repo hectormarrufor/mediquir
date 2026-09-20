@@ -24,6 +24,13 @@ const sequelize = require('../../sequelize');
       type: DataTypes.DATEONLY, // O DATE si necesitas hora exacta
       allowNull: true,
     },
+    // Pasos de la tarea: [{ id, texto, hecha }]
+    subtareas: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
+    completadaAt: { type: DataTypes.DATE, allowNull: true },
+    completadaPorId: { type: DataTypes.INTEGER, allowNull: true },
+    iniciadaAt: { type: DataTypes.DATE, allowNull: true },
+    // Último día (Caracas) en que el cron le recordó el vencimiento al responsable
+    recordadaEl: { type: DataTypes.DATEONLY, allowNull: true },
     // Claves foráneas (se definen mejor en las asociaciones, pero las declaramos aquí para claridad)
 
   }, {
@@ -34,6 +41,7 @@ const sequelize = require('../../sequelize');
   Tarea.associate = (models) => {
     Tarea.belongsTo(models.User, { foreignKey: 'creadoPorId', as: 'creador' });
     Tarea.belongsTo(models.User, { foreignKey: 'asignadoAId', as: 'responsable' });
+    Tarea.hasMany(models.TareaComentario, { foreignKey: 'tareaId', as: 'comentarios', onDelete: 'CASCADE' });
   }
 
 module.exports = Tarea;

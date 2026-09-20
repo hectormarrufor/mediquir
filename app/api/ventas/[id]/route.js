@@ -17,6 +17,9 @@ import { registrarAbono, ErrorAbono } from '../../_lib/abonos';
 import { recalcularCobro } from '../../_lib/retencionesVenta';
 import { eliminarVenta, borrarArchivosDeVenta } from '../_eliminar';
 import { convertirAFactura, ErrorConversion } from '../../_lib/convertirFactura';
+import { avisarCliente } from '../../_lib/avisosCliente';
+import { confirmarPagoManual, cancelarPedidoTienda, ErrorPagoTienda } from '../../_lib/pagoTienda';
+import { fechaCaracas, desdeInputFechaHora } from '@/app/constants/hora';
 
 // Error de reglas de logística (permisos, estados) con su código HTTP
 class ErrorLogistica extends Error {
@@ -57,6 +60,21 @@ async function validarPersonal(ids, t) {
     for (const id of ids.filter(Boolean)) {
         const u = await User.findByPk(Number(id), { attributes: ['id', 'empleadoId', 'clienteId'], transaction: t });
         if (!u || !u.empleadoId || u.clienteId) throw new ErrorLogistica('El empacador y el etiquetador deben ser personal de la empresa');
+    }
+}
+
+// Al quedar empacado un pedido: el cliente del portal se entera y el etiquetador sabe que ya puede empezar (no puede etiquetar lo que no está empacado)
+async function avisosDeEmpaque(venta) {
+    try {
+        if (venta.tipoVenta === 'MAYOR') await avisarCliente(venta, 'EMPACADO');
+        if (venta.etiquetadorId) {
+            await notificarUsuario(Number(venta.etiquetadorId), {
+                title: 'Ya puedes etiquetar 🏷️', body: `El pedido ${venta.numeroDocumento} ya está empacado: etiqueta las cajas y firma.`,
+                url: `/superuser/ventas/${venta.id}`, tipo: 'Info',
+            });
+        }
+    } catch (e) {
+        console.error('No se pudieron enviar los avisos del empaque:', e.message);
     }
 }
 
@@ -171,6 +189,11 @@ export async function PUT(request, { params }) {
             throw new ErrorLogistica('Este pedido está en revisión de existencias: confírmalo (o ajústalo) antes de continuar', 409);
         }
 
+        // Compra de la tienda con pago por verificar: no se prepara ni se despacha hasta confirmar que el dinero existe
+        if (venta.verificacionPago === 'POR_VERIFICAR' && ['ASIGNAR', 'EMPACAR', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'DESPACHAR', 'ABONAR'].includes(accion)) {
+            throw new ErrorLogistica('El pago de este pedido está por verificar: confírmalo en el banco (o recházalo) antes de continuar', 409);
+        }
+
         // Número de control de la factura (dato fiscal para el libro de ventas)
         if (accion === 'NUMERO_CONTROL') {
             if (venta.tipoDocumento !== 'FACTURA') throw new ErrorLogistica('Solo las facturas llevan número de control');
@@ -178,6 +201,20 @@ export async function PUT(request, { params }) {
             await venta.save({ transaction: t });
             await t.commit();
             return NextResponse.json({ success: true });
+        }
+
+        // Pago por verificar: administración lo confirmó en el banco (sin SMS) o comprobó que el pago no existe. Solo administradores.
+        if (accion === 'CONFIRMAR_PAGO' || accion === 'RECHAZAR_PAGO') {
+            if (rol !== 'admin') throw new ErrorLogistica('Solo un administrador puede resolver un pago por verificar', 403);
+            if (venta.verificacionPago !== 'POR_VERIFICAR') throw new ErrorLogistica('Este pedido no tiene un pago por verificar', 409);
+            if (accion === 'CONFIRMAR_PAGO') {
+                await confirmarPagoManual({ venta, referencia: body.referencia, transaction: t });
+                await t.commit();
+                return NextResponse.json({ success: true, message: 'Pago confirmado: el pedido quedó pagado y el ingreso asentado' });
+            }
+            await cancelarPedidoTienda({ venta, estado: 'RECHAZADO', nota: String(body.nota || 'Pago no encontrado en el banco: pedido cancelado').slice(0, 300), transaction: t });
+            await t.commit();
+            return NextResponse.json({ success: true, message: 'Pedido cancelado: el pago no existía y el stock volvió al inventario' });
         }
 
         // Recibo V- -> factura F- (el cliente la pidió después de comprar). Solo administración; la fecha de emisión es hoy
@@ -242,6 +279,7 @@ export async function PUT(request, { params }) {
             } catch (e) {
                 console.error('No se pudieron borrar las fotos repetidas:', e.message);
             }
+            await avisosDeEmpaque(venta);
             return NextResponse.json({ success: true, message: 'Empaque firmado' });
         }
 
@@ -284,6 +322,7 @@ export async function PUT(request, { params }) {
             await venta.save({ transaction: t });
 
             await t.commit();
+            await avisosDeEmpaque(venta);
             return NextResponse.json({ success: true, message: 'Caja armada, personal asignado y stock descontado' });
         }
 
@@ -309,9 +348,12 @@ export async function PUT(request, { params }) {
                 await venta.save({ transaction: t });
                 await recalcularCobro(venta, t); // el saldo vuelve a ser total - abonos (retención incluida)
             }
+            const transporteAntes = venta.quienRetira;
             venta.quienRetira = String(body.quienRetira ?? '').trim().slice(0, 120) || null;
             await venta.save({ transaction: t });
             await t.commit();
+            // El cliente se entera cuando ya hay empresa de transporte (o cambia)
+            if (venta.quienRetira && venta.quienRetira !== transporteAntes && venta.tipoVenta === 'MAYOR') await avisarCliente(venta, 'TRANSPORTE');
             return NextResponse.json({ success: true, totalFinal: venta.totalFinal });
         }
 
@@ -323,7 +365,7 @@ export async function PUT(request, { params }) {
             if (venta.statusDespacho === 'Cancelado') throw new ErrorLogistica('Este pedido está cancelado', 409);
             venta.statusDespacho = 'Completado';
             venta.quienRetira = quienRetira;
-            venta.fechaHoraRetiro = fechaHoraRetiro ? new Date(fechaHoraRetiro) : new Date();
+            venta.fechaHoraRetiro = fechaHoraRetiro ? desdeInputFechaHora(fechaHoraRetiro) : new Date(); // lo escrito en el formulario es hora de Caracas
             // El flete que se le cobra al cliente (venta.costoFlete) se fija en DATOS_ENVIO; aquí solo se asienta lo que pagó la empresa
             // Compra de la tienda: el delivery que pagó el cliente es dinero de la empresa de transporte (no fue ingreso), así que no hay gasto:
             // solo se anota lo que cobró de verdad (costoFleteReal) para compararlo con lo que se le cobró al cliente
@@ -360,7 +402,7 @@ export async function PUT(request, { params }) {
 
                 await MovimientoFinanciero.create({
                     tipo: 'GASTO',
-                    fecha: new Date(),
+                    fecha: fechaCaracas(),
                     metodoPago: 'Efectivo / Transferencia',
                     referencia: `Flete Despacho ${venta.numeroDocumento}`,
                     montoUsd: Number(montoUsd.toFixed(2)),
@@ -387,7 +429,7 @@ export async function PUT(request, { params }) {
                     const montoVes = venta.moneda === 'USD' ? aBolivares(monto, tasa) : monto;
                     await MovimientoFinanciero.create({
                         tipo: sobrante ? 'INGRESO' : 'GASTO',
-                        fecha: new Date(),
+                        fecha: fechaCaracas(),
                         metodoPago: 'Ajuste de delivery',
                         referencia: `Delivery ${venta.numeroDocumento}`,
                         montoUsd: Number(montoUsd.toFixed(2)),
@@ -401,6 +443,7 @@ export async function PUT(request, { params }) {
             }
 
             await t.commit();
+            if (venta.tipoVenta === 'MAYOR') await avisarCliente(venta, 'DESPACHADO');
             return NextResponse.json({ success: true, message: esTienda ? 'Despacho registrado' : 'Despacho registrado y gasto de flete asentado' });
         }
 
@@ -412,8 +455,9 @@ export async function PUT(request, { params }) {
 
             // Mismo registro que usan el vínculo de pagos móviles y el pago del cliente B2B: baja el saldo y asienta el ingreso
             // repartido entre "Ingreso por Cobranza" e "IVA Recaudado"
+            let abonoRegistrado;
             try {
-                await registrarAbono({
+                abonoRegistrado = await registrarAbono({
                     venta, monto: montoAbono, moneda: monedaAbono,
                     tasa: Number(tasaCambioAbono) > 0 ? Number(tasaCambioAbono) : Number(venta.tasaCambio),
                     metodoPago, referencia, transaction: t,
@@ -424,6 +468,9 @@ export async function PUT(request, { params }) {
             }
 
             await t.commit();
+            if (venta.tipoVenta === 'MAYOR') {
+                await avisarCliente(venta, 'PAGO_RECIBIDO', { abonoUsd: abonoRegistrado.abonoUsd, liquidada: abonoRegistrado.liquidada, saldoRestante: abonoRegistrado.saldoRestante, monedaCuenta: abonoRegistrado.monedaCuenta, tasa: Number(venta.tasaCambio) });
+            }
             return NextResponse.json({ success: true, message: 'Abono registrado y saldo actualizado exitosamente.' });
         }
 
@@ -432,7 +479,7 @@ export async function PUT(request, { params }) {
 
     } catch (error) {
         if (!t.finished) await t.rollback();
-        if (error instanceof ErrorLogistica || error instanceof ErrorConversion) return NextResponse.json({ error: error.message }, { status: error.status });
+        if (error instanceof ErrorLogistica || error instanceof ErrorConversion || error instanceof ErrorPagoTienda) return NextResponse.json({ error: error.message }, { status: error.status });
         console.error('Error procesando PUT de venta:', error);
         return NextResponse.json({ error: 'Error interno', detalle: error.message }, { status: 500 });
     }

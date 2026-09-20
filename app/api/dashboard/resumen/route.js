@@ -57,6 +57,8 @@ export async function GET() {
             // Pedidos B2B en revisión de existencias y retenciones de IVA que esperan al cliente o a administración
             q(`SELECT
                 (SELECT COUNT(*) FROM "Ventas" v WHERE v."revisionStock" = 'PENDIENTE' AND ${activas})::int AS "enRevision",
+                (SELECT COUNT(*) FROM "Ventas" v WHERE v."verificacionPago" = 'POR_VERIFICAR' AND ${activas})::int AS "porVerificar",
+                (SELECT COUNT(*) FROM "IntentosPago" i WHERE i."resultado" IN ('NO_ENCONTRADO', 'MONTO', 'BLOQUEADO') AND i."createdAt" >= now() - interval '24 hours')::int AS "intentosFallidos",
                 (SELECT COUNT(*) FROM "RetencionesIva" r WHERE r."tipo" = 'VENTA' AND r."estado" = 'PENDIENTE')::int AS "retencionesPendientes",
                 (SELECT COUNT(*) FROM "RetencionesIva" r WHERE r."tipo" = 'VENTA' AND r."estado" = 'POR_REVISAR')::int AS "retencionesPorRevisar"`),
         ]);

@@ -4,6 +4,9 @@ import { PagoSms, Venta, Cliente, CuentaPorCobrar, MovimientoFinanciero, Categor
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
 import { tasaVigente } from '@/app/api/_lib/tasaBcv';
 import { registrarAbono, ErrorAbono } from '@/app/api/_lib/abonos';
+import { conciliarPagoTienda } from '@/app/api/_lib/pagoTienda';
+import { avisarCliente } from '@/app/api/_lib/avisosCliente';
+import { fechaCaracas } from '@/app/constants/hora';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,7 +56,7 @@ export async function GET(request, { params }) {
                 // A crédito el pago suele ser un abono parcial: solo "coincide" si liquida el saldo (con margen por la tasa)
                 const margen = cxc ? Math.max(TOLERANCIA_BS, esperadoBs * 0.01) : TOLERANCIA_BS;
                 return {
-                    id: v.id, numeroDocumento: v.numeroDocumento, cliente: v.cliente?.nombre || 'Cliente contado',
+                    id: v.id, numeroDocumento: v.numeroDocumento, cliente: v.cliente?.nombre || 'Cliente contado', porVerificar: v.verificacionPago === 'POR_VERIFICAR', referenciaDeclarada: v.referenciaDeclarada,
                     fecha: v.createdAt, totalUsd: Number(v.totalFinal), esperadoBs, esCredito: Boolean(cxc),
                     coincide: Math.abs(esperadoBs - montoPago) <= margen,
                 };
@@ -98,6 +101,7 @@ export async function POST(request, { params }) {
                 pagoSms: pago, toleranciaUsd: TOLERANCIA_SALDO_USD, transaction: t,
             });
             await t.commit();
+            if (venta.tipoVenta === 'MAYOR') await avisarCliente(venta, 'PAGO_RECIBIDO', { abonoUsd: r.abonoUsd, liquidada: r.liquidada, saldoRestante: r.saldoRestante, monedaCuenta: r.monedaCuenta, tasa: Number(venta.tasaCambio) });
             return NextResponse.json({ success: true, numeroDocumento: venta.numeroDocumento, abono: true, saldoRestante: r.saldoRestante, liquidada: r.liquidada });
         }
 
@@ -112,6 +116,13 @@ export async function POST(request, { params }) {
             }, { status: 409 });
         }
 
+        // Compra de la tienda: se concilia igual que en el checkout (subtotal + IVA como ingreso; el delivery no es ingreso)
+        if (venta.tipoVenta === 'ONLINE') {
+            await conciliarPagoTienda({ venta, pago, origen: 'MANUAL', transaction: t });
+            await t.commit();
+            return NextResponse.json({ success: true, numeroDocumento: venta.numeroDocumento });
+        }
+
         pago.procesado = true;
         pago.ventaId = venta.id;
         await pago.save({ transaction: t });
@@ -123,13 +134,14 @@ export async function POST(request, { params }) {
         if (!cat) cat = await CategoriaFinanciera.create({ nombre: 'Ingresos por Ventas', tipo: 'INGRESO' }, { transaction: t });
 
         await MovimientoFinanciero.create({
-            tipo: 'INGRESO', fecha: new Date(), metodoPago: 'Pago Móvil', referencia: pago.referencia,
+            tipo: 'INGRESO', fecha: fechaCaracas(), metodoPago: 'Pago Móvil', referencia: pago.referencia,
             montoUsd: aDolares(montoPago, Number(venta.tasaCambio)), tasaBcvAplicada: venta.tasaCambio, montoVes: montoPago,
             descripcion: `Ingreso por Venta ${venta.numeroDocumento} - Pago Móvil vinculado a mano (Banco: ${pago.banco || 'N/A'}, Ref: ${pago.referencia})`,
             categoriaId: cat.id, ventaId: venta.id, pagoSmsId: pago.id,
         }, { transaction: t });
 
         await t.commit();
+        if (venta.tipoVenta === 'MAYOR') await avisarCliente(venta, 'PAGO_RECIBIDO', { abonoUsd: aDolares(montoPago, Number(venta.tasaCambio)), liquidada: true, saldoRestante: 0 });
         return NextResponse.json({ success: true, numeroDocumento: venta.numeroDocumento });
     } catch (error) {
         await t.rollback().catch(() => {});

@@ -12,6 +12,7 @@ import {
     IconPackage, IconReceipt2, IconShoppingCart, IconTag, IconTruckDelivery,
 } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
+import TareasPanel from '@/app/components/tareas/TareasPanel';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 
 const PosModal = dynamic(() => import('../../components/admin/PosModal'), { ssr: false });
@@ -235,6 +236,8 @@ export default function DashboardVendedor() {
                         )}
                     </Paper>
                 </SimpleGrid>
+                {/* Tareas del día (las suyas; un vendedor no asigna a otros) */}
+                <Paper radius="lg" bg="white" style={{ boxShadow: 'var(--mm-shadow-card)' }}><TareasPanel /></Paper>
             </Stack>
 
             <Modal opened={Boolean(porFirmar)} onClose={() => setPorFirmar(null)} centered title={<Text fw={800}>Confirmar firma</Text>}>

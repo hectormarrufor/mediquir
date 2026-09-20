@@ -17,7 +17,7 @@ const empacoTexto = (i) => {
     ].filter(Boolean);
     return partes.length ? partes.join(' + ') : null;
 };
-const hora = (d) => (d ? new Date(d).toLocaleString('es-VE') : '—');
+const hora = (d) => (d ? new Date(d).toLocaleString('es-VE', { timeZone: 'America/Caracas' }) : '—');
 
 function duracion(desde, hasta) {
     if (!desde || !hasta) return null;
@@ -88,7 +88,7 @@ export default function EvidenciaEmpaque({ ventaId, puedeLiberar }) {
                                 <Table.Td ta="right">{i.entregaTexto || i.cantidadPedida}{i.entrega?.some((e) => e.nivel !== 'UNIDAD') && <Text size="xs" c="dimmed">{i.cantidadPedida} und</Text>}</Table.Td>
                                 <Table.Td ta="right">{empacoTexto(i) || (i.cantidadEmpacada ?? '—')}{i.cantidadEmpacada != null && empacoTexto(i) && <Text size="xs" c="dimmed">{i.cantidadEmpacada} und</Text>}</Table.Td>
                                 <Table.Td>{i.estado === 'NOVEDAD' ? <Badge color="orange" size="sm">Novedad</Badge> : (METODOS[i.metodo] || '—')}{i.nivelVerificado && i.metodo !== 'marca' && ` (${NIVELES_TXT[i.nivelVerificado] || i.nivelVerificado})`}{i.intentosFallidos > 0 && ` · ${i.intentosFallidos} error(es)`}</Table.Td>
-                                <Table.Td>{i.verificadoAt ? new Date(i.verificadoAt).toLocaleTimeString('es-VE') : '—'}</Table.Td>
+                                <Table.Td>{i.verificadoAt ? new Date(i.verificadoAt).toLocaleTimeString('es-VE', { timeZone: 'America/Caracas' }) : '—'}</Table.Td>
                             </Table.Tr>
                         ))}
                     </Table.Tbody>

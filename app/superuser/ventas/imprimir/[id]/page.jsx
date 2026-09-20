@@ -8,6 +8,7 @@ import FacturaFormaLibre from './FacturaFormaLibre';
 import ControlFiscalPaso from '../../_components/ControlFiscalPaso';
 import { useControlFiscal } from '../../_lib/useControlFiscal';
 import { useAuth } from '@/hooks/useAuth';
+import { formatearFecha } from '@/app/constants/hora';
 
 export default function ImprimirRecibo() {
     const params = useParams();
@@ -73,8 +74,8 @@ export default function ImprimirRecibo() {
     const noFiscal = venta.tipoDocumento === 'VENTA_RAPIDA';
 
     const formatoNumero = (num) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
-    const fechaEmision = new Date(venta.fechaEmision || venta.createdAt).toLocaleDateString('es-VE');
-    const fechaVence = venta.fechaVencimiento ? new Date(venta.fechaVencimiento).toLocaleDateString('es-VE') : fechaEmision;
+    const fechaEmision = formatearFecha(venta.fechaEmision || venta.createdAt);
+    const fechaVence = venta.fechaVencimiento ? formatearFecha(venta.fechaVencimiento) : fechaEmision;
 
     // 🔥 MAGIA DINÁMICA: EVALUAMOS LA CANTIDAD DE ARTÍCULOS 🔥
     const limiteMediaCarta = 8; // Hasta 8 artículos caben perfecto en Media Carta

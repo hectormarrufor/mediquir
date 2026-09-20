@@ -18,6 +18,8 @@ import RetencionIvaCard from '../_components/RetencionIvaCard';
 import EvidenciaEmpaque from '../_components/EvidenciaEmpaque';
 import RevisionExistencias from '../_components/RevisionExistencias';
 import EnvioCard from '../_components/EnvioCard';
+import PagoPorVerificarCard from '../_components/PagoPorVerificarCard';
+import { aInputFechaHora, formatearFecha, formatearFechaHora } from '@/app/constants/hora';
 import NotasFacturaCard from '../_components/NotasFacturaCard';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -63,7 +65,7 @@ export default function DetallePedidoMayorPage() {
 
     // --- FORMULARIOS ---
     const formEmpacar = useForm({ initialValues: { empacadorId: '', etiquetadorId: '' } });
-    const formDespacho = useForm({ initialValues: { quienRetira: '', fechaHoraRetiro: new Date().toISOString().slice(0, 16), costoFlete: 0 } });
+    const formDespacho = useForm({ initialValues: { quienRetira: '', fechaHoraRetiro: aInputFechaHora(), costoFlete: 0 } });
     const formAbono = useForm({ initialValues: { montoAbono: 0, metodoPago: 'Transferencia', referencia: '', monedaAbono: 'USD' } });
 
     if (isLoading) return <Box p="md"><Text>Cargando panel 360° del pedido...</Text></Box>;
@@ -192,10 +194,10 @@ export default function DetallePedidoMayorPage() {
                                 {pedido.empacadorId && (
                                     <Group mt="lg" gap="sm" justify="center">
                                         <Badge size="lg" variant={pedido.empacadoAt ? 'filled' : 'light'} color={pedido.empacadoAt ? 'teal' : 'gray'}>
-                                            {pedido.empacadoAt ? `Empaque firmado · ${new Date(pedido.empacadoAt).toLocaleString('es-VE')}` : 'Empaque pendiente de firma'}
+                                            {pedido.empacadoAt ? `Empaque firmado · ${formatearFechaHora(pedido.empacadoAt)}` : 'Empaque pendiente de firma'}
                                         </Badge>
                                         <Badge size="lg" variant={pedido.etiquetadoAt ? 'filled' : 'light'} color={pedido.etiquetadoAt ? 'teal' : 'gray'}>
-                                            {pedido.etiquetadoAt ? `Etiquetado firmado · ${new Date(pedido.etiquetadoAt).toLocaleString('es-VE')}` : 'Etiquetado pendiente de firma'}
+                                            {pedido.etiquetadoAt ? `Etiquetado firmado · ${formatearFechaHora(pedido.etiquetadoAt)}` : 'Etiquetado pendiente de firma'}
                                         </Badge>
                                     </Group>
                                 )}
@@ -321,6 +323,7 @@ export default function DetallePedidoMayorPage() {
                                     <Text size="sm" fw={600}>{pedido.etiquetador?.empleado ? `${pedido.etiquetador.empleado.nombre} ${pedido.etiquetador.empleado.apellido}` : 'Pendiente'}</Text>
                                 </Paper>
 
+                                {!esVendedor && <PagoPorVerificarCard pedido={pedido} esAdmin={rolUsuario === 'admin'} onCambio={refetch} />}
                                 {!esVendedor && !esNacional && <EnvioCard pedido={pedido} onCambio={refetch} />}
 
                                 {!esVendedor && <RetencionIvaCard pedido={pedido} onCambio={refetch} />}
@@ -430,7 +433,7 @@ export default function DetallePedidoMayorPage() {
                                             ) : (
                                                 pedido.abonos?.map(abono => (
                                                     <Table.Tr key={abono.id}>
-                                                        <Table.Td>{new Date(abono.fecha).toLocaleDateString()}</Table.Td>
+                                                        <Table.Td>{formatearFecha(abono.fecha)}</Table.Td>
                                                         <Table.Td>{abono.metodoPago}</Table.Td>
                                                         <Table.Td>{abono.referencia || 'S/N'}</Table.Td>
                                                         <Table.Td ta="right"><PrecioVisual valor={abono.monto} simbolo={abono.moneda} size="sm" fw={700} c="green.7" /></Table.Td>
@@ -468,7 +471,7 @@ export default function DetallePedidoMayorPage() {
                                 ) : (
                                     pedido.movimientos?.map(mov => (
                                         <Table.Tr key={mov.id}>
-                                            <Table.Td>{new Date(mov.fecha).toLocaleDateString()}</Table.Td>
+                                            <Table.Td>{formatearFecha(mov.fecha)}</Table.Td>
                                             <Table.Td>
                                                 <Badge color={mov.tipo === 'INGRESO' ? 'green' : 'red'} variant="light">{mov.tipo}</Badge>
                                             </Table.Td>

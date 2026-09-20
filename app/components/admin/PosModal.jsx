@@ -23,6 +23,7 @@ import { calcularFactura, aBolivares, aDolares, precioPorTarifa } from '@/app/co
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
 import { presentacionesDe, presentacionDe } from '@/app/constants/presentaciones';
+import { formatearFecha } from '@/app/constants/hora';
 
 // Precio unitario editable de un renglón (solo administración). Se confirma al salir del campo o con Enter; no cambia el precio del producto,
 // solo el de esta venta. Resaltado en naranja cuando difiere del precio del sistema.
@@ -382,7 +383,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
     
     const clienteSeleccionado = clientes?.find(c => c.id.toString() === formVenta.values.clienteId?.toString());
     const formatoNumero = (num) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
-    const fechaEmision = new Date().toLocaleDateString('es-VE');
+    const fechaEmision = formatearFecha(new Date());
 
     const limiteMediaCarta = 8;
     const cantidadArticulos = carrito.length || 0;

@@ -5,7 +5,10 @@ import {
     checkCxP, 
     checkCxC,
     liberarOrdenesExpiradas,
-    limpiarFotosEmpaque
+    limpiarFotosEmpaque,
+    recordarTareas,
+    avisarClientesCobro,
+    avisarOperacion
 } from './services';
 import { notificarCabezas } from '@/app/handlers/notificar'; 
 
@@ -22,13 +25,16 @@ export async function GET(request) {
         console.log('--- CRON 6AM START ---');
 
         // Ejecución en paralelo mapeada exactamente 6 a 6
-        const [ finanzas, rrhh, cxp, cxc, limpiezaInventario, limpiezaFotos ] = await Promise.allSettled([
+        const [ finanzas, rrhh, cxp, cxc, limpiezaInventario, limpiezaFotos, tareasRecordadas, clientesCobro, operacion ] = await Promise.allSettled([
             syncExchangeRates(),
             checkHREvents(),
             checkCxP(),
             checkCxC(),
             liberarOrdenesExpiradas(),
-            limpiarFotosEmpaque()
+            limpiarFotosEmpaque(),
+            recordarTareas(),
+            avisarClientesCobro(),
+            avisarOperacion()
         ]);
 
         const report = [];
@@ -84,11 +90,21 @@ export async function GET(request) {
 
         // 5. Limpieza de Inventario (Ventas abandonadas)
         if (limpiezaInventario.status === 'fulfilled') {
-            const canceladas = limpiezaInventario.value.canceladas;
+            const { canceladas, vencidosPorVerificar, esperando } = limpiezaInventario.value;
+            if (esperando?.length > 0) {
+                await notificarCabezas({
+                    title: '🕵️ Pagos por verificar',
+                    body: `${esperando.length} pedido(s) de la tienda esperan que confirmes el pago en el banco: ${esperando.slice(0, 5).join(', ')}. A las 72 horas se cancelan solos.`,
+                    url: '/superuser/ventas',
+                    tag: `pagos-por-verificar-${Date.now()}`
+                });
+                report.push(`⚠️ ${esperando.length} pedido(s) con pago por verificar (recordatorio enviado).`);
+            }
+            if (vencidosPorVerificar > 0) report.push(`⚠️ ${vencidosPorVerificar} pedido(s) por verificar se cancelaron por pasar 72 horas sin confirmar el pago.`);
             if (canceladas > 0) {
                 await notificarCabezas({
                     title: `🛒 Limpieza Automática de Inventario`,
-                    body: `Se anularon ${canceladas} pedidos de 'Retiro en Tienda' vencidos (>24h). El stock ha sido devuelto a los anaqueles.`,
+                    body: `Se anularon ${canceladas} pedido(s) de la tienda vencidos (retiro sin pagar >24h o pago sin verificar >72h). El stock volvió a los anaqueles.`,
                     url: `/superuser/ventas`,
                     tag: `limpieza-inv-${Date.now()}`
                 });
@@ -107,6 +123,14 @@ export async function GET(request) {
         } else {
             report.push(`❌ Error en limpieza de fotos de empaque: ${limpiezaFotos.reason}`);
         }
+
+        // 7-9. Tareas del personal, recordatorios de cobro a clientes del portal y resumen de operación (los avisos los envía cada servicio)
+        if (tareasRecordadas.status === 'fulfilled') report.push(`✅ Tareas: ${tareasRecordadas.value.tareas} recordada(s) a ${tareasRecordadas.value.personas} persona(s), ${tareasRecordadas.value.vencidas} vencida(s).`);
+        else report.push(`❌ Error recordando tareas: ${tareasRecordadas.reason}`);
+        if (clientesCobro.status === 'fulfilled') report.push(`✅ Clientes del portal avisados de vencimientos: ${clientesCobro.value.avisados}.`);
+        else report.push(`❌ Error avisando cobros a clientes: ${clientesCobro.reason}`);
+        if (operacion.status === 'fulfilled') report.push(`✅ Operación: ${operacion.value.stockBajo} producto(s) bajo mínimo, ${operacion.value.sinAsignar} pedido(s) sin asignar.`);
+        else report.push(`❌ Error en resumen de operación: ${operacion.reason}`);
 
         console.log('--- CRON 6AM END ---');
         return NextResponse.json({ success: true, report });

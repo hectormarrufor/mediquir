@@ -5,8 +5,16 @@ import db from '@/models';
 import { requerirStaff } from '../inventario/_lib';
 import { rolDe } from '@/app/constants/roles';
 import { aBolivares } from '@/app/constants/facturacion';
+import { fechaCaracas } from '@/app/constants/hora';
+import { notificarCabezas } from '@/app/handlers/notificar';
 import { siguienteComprobante, periodoDe } from '../_lib/retenciones';
+import { ErrorNumeracion } from '../_lib/numeracion';
+import { CONFIG_FISCAL } from '@/app/constants/empresa';
 const { RetencionIva, Proveedor, Producto, EntradaInventario, FacturaCompra, CategoriaFinanciera, MovimientoFinanciero, CuentaPorPagar, User, Empleado } = db;
+
+class ErrorCompra extends Error {
+    constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
+}
 
 // GET: Listar historial de compras
 export async function GET(request) {
@@ -66,18 +74,19 @@ export async function POST(request) {
             diasCredito,   
             detalles, 
             subtotal,
-            montoIva,
-            montoRetencion,
-            totalFinal,
+            montoIva: montoIvaCliente,
+            montoRetencion: montoRetencionCliente,
+            totalFinal: totalFinalCliente,
             moneda,
             tasaCambio,
             metodoPago,
             referencia,
             registradoPorId,
-            numeroControl,
+            numeroControl: numeroControlCliente,
             fechaRecepcion,
-            montoExento,
-            porcentajeRetencion
+            montoExento: montoExentoCliente,
+            porcentajeRetencion: porcentajeRetencionCliente,
+            aplicarRetencion
         } = body;
 
         // Un vendedor registra la compra (stock y costo) pero NO cambia precios de venta
@@ -92,6 +101,22 @@ export async function POST(request) {
         if (cantidadInvalida) {
             return NextResponse.json({ error: 'Las cantidades deben ser números enteros mayores a 0' }, { status: 400 });
         }
+
+        // Tipo de documento y montos fiscales: los decide el servidor.
+        //  · NOTA DE ENTREGA: no es un documento fiscal. Sin IVA, sin retención, sin número de control y no entra al libro de compras.
+        //  · FACTURA: lleva IVA, número de control y la empresa (agente de retención) le retiene al proveedor el 75 % o el 100 % del IVA.
+        //    La retención se calcula aquí (el navegador solo puede pedir NO retener con aplicarRetencion = false) y genera su comprobante con el correlativo.
+        if (!['FACTURA', 'NOTA_ENTREGA'].includes(tipoDocumento)) {
+            return NextResponse.json({ error: 'Tipo de documento inválido: una compra es una factura o una nota de entrega' }, { status: 400 });
+        }
+        const esFactura = tipoDocumento === 'FACTURA';
+        const montoIva = esFactura ? Math.max(0, Number(montoIvaCliente) || 0) : 0;
+        const montoExento = esFactura ? Math.max(0, Number(montoExentoCliente) || 0) : 0;
+        const numeroControl = esFactura ? numeroControlCliente : null;
+        const totalFinal = Math.round((Number(subtotal || 0) + montoIva) * 100) / 100;
+        const porcentajeRetencion = [75, 100].includes(Number(porcentajeRetencionCliente)) ? Number(porcentajeRetencionCliente) : CONFIG_FISCAL.porcentajeRetencionCompras;
+        const retiene = CONFIG_FISCAL.agenteRetencionIva && esFactura && montoIva > 0 && aplicarRetencion !== false;
+        const montoRetencion = retiene ? Math.round(montoIva * porcentajeRetencion) / 100 : 0;
 
         // Datos fiscales coherentes: no se puede retener más IVA del que tiene la factura
         if (Number(montoRetencion) > Number(montoIva) + 0.005) {
@@ -180,6 +205,10 @@ export async function POST(request) {
                 idProveedorFinal = provCreado.id;
             }
 
+            // El mismo documento del mismo proveedor no se registra dos veces (duplicaría el inventario y la retención)
+            const repetida = await FacturaCompra.findOne({ where: { proveedorId: idProveedorFinal, tipoDocumento, numeroDocumento }, attributes: ['id'], transaction: t });
+            if (repetida) throw new ErrorCompra(`Ya registraste ${esFactura ? 'la factura' : 'la nota de entrega'} ${numeroDocumento} de este proveedor`, 409);
+
             let fechaVencimiento = null;
             if (condicionPago === 'Credito' && Number(diasCredito) > 0) {
                 const baseDate = fechaFactura ? new Date(fechaFactura) : new Date();
@@ -204,17 +233,18 @@ export async function POST(request) {
                 totalFinal: Number(totalFinal) || 0,
                 registradoPorId: registradoPorId || null,
                 numeroControl: String(numeroControl || '').trim().slice(0, 30) || null,
-                fechaRecepcion: fechaRecepcion || fechaFactura || new Date().toISOString().slice(0, 10),
+                fechaRecepcion: fechaRecepcion || fechaFactura || fechaCaracas(),
                 montoExento: Number(montoExento) || 0,
                 alicuotaIva: 16
             }, { transaction: t });
 
             // Comprobante de retención de IVA (la empresa le retiene al proveedor). Quedan guardados en bolívares para el libro de compras.
             let comprobanteRetencion = null;
-            if (Number(montoRetencion) > 0 && tipoDocumento === 'FACTURA') {
+            if (montoRetencion > 0) {
                 const prov = await Proveedor.findByPk(idProveedorFinal, { attributes: ['identificacion', 'nombre'], transaction: t });
+                if (!String(prov?.identificacion || '').trim()) throw new ErrorCompra('El proveedor no tiene RIF: complétalo para poder emitir el comprobante de retención de IVA', 400);
                 const aBs = (v) => (moneda === 'BS' ? Number(Number(v).toFixed(2)) : aBolivares(Number(v), Number(tasaCambio) || 1));
-                const fechaRet = fechaRecepcion || fechaFactura || new Date().toISOString().slice(0, 10);
+                const fechaRet = fechaRecepcion || fechaFactura || fechaCaracas();
                 comprobanteRetencion = await siguienteComprobante(fechaRet, t);
                 await RetencionIva.create({
                     tipo: 'COMPRA', fecha: fechaRet, periodo: periodoDe(fechaRet), comprobante: comprobanteRetencion,
@@ -269,7 +299,7 @@ export async function POST(request) {
 
                 await MovimientoFinanciero.create({
                     tipo: 'GASTO',
-                    fecha: new Date(),
+                    fecha: fechaCaracas(),
                     metodoPago: metodoPago || 'Efectivo',
                     referencia: referencia || numeroDocumento,
                     montoUsd: Number(mUsdGasto.toFixed(2)),
@@ -293,6 +323,19 @@ export async function POST(request) {
             }
 
             await t.commit();
+
+            // Si la compra la registró alguien que no es administrador, las cabezas se enteran
+            if (rolDe(acceso.sesion) !== 'admin') {
+                try {
+                    await notificarCabezas({
+                        title: 'Compra registrada 🧾',
+                        body: `${[acceso.sesion.nombre, acceso.sesion.apellido].filter(Boolean).join(' ') || 'Un empleado'} registró la compra ${numeroDocumento} por ${moneda === 'BS' ? 'Bs ' : '$'}${Number(totalFinal || 0).toFixed(2)}${condicionPago === 'Credito' ? ' a crédito' : ''}.`,
+                        url: '/superuser/compras', tipo: 'Info',
+                    });
+                } catch (e) {
+                    console.error('No se pudo avisar de la compra:', e.message);
+                }
+            }
             return NextResponse.json({ success: true, message: 'Compra registrada con éxito.', comprobanteRetencion });
 
         } catch (innerError) {
@@ -301,6 +344,9 @@ export async function POST(request) {
         }
 
     } catch (error) {
+        if (error instanceof ErrorCompra) return NextResponse.json({ error: error.message }, { status: error.status });
+        // Falta indicar con qué número empieza la numeración de comprobantes de retención (código RETENCION_PENDIENTE)
+        if (error instanceof ErrorNumeracion) return NextResponse.json({ error: error.message, codigo: error.codigo }, { status: error.status });
         console.error('Error procesando compra:', error);
         return NextResponse.json({ error: 'Error interno', detalle: error.message }, { status: 500 });
     }

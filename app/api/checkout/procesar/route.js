@@ -2,17 +2,41 @@
 
 import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
-import { notificarTodos } from '@/app/handlers/notificar';
-import { Cliente, Producto, PagoSms, Venta, VentaDetalle, Correlativo, MovimientoFinanciero, CategoriaFinanciera, sequelize } from '@/models';
+import { notificarTodos, notificarCabezas } from '@/app/handlers/notificar';
+import { Cliente, Producto, PagoSms, Venta, VentaDetalle, Correlativo, IntentoPago, sequelize } from '@/models';
 import { tasaVigente } from '../../_lib/tasaBcv';
 import { calcularFactura, precioVentaWeb, aBolivares } from '@/app/constants/facturacion';
 import { presentacionDe } from '@/app/constants/presentaciones';
+import { inicioDiaCaracas } from '@/app/constants/hora';
+import { conciliarPagoTienda, TOLERANCIA_BS } from '../../_lib/pagoTienda';
 
 class ErrorNegocio extends Error {}
 
 // Rango aceptado para el delivery: el navegador lo calcula con Google Maps (el servidor no puede recalcular la ruta)
 const DELIVERY_MIN = 1.5;
 const DELIVERY_MAX = 200;
+
+// Límites contra referencias falsas (el navegador reintenta con el mismo idIntento mientras espera el SMS: cuenta como UN intento)
+const MAX_FALLOS = 5;            // intentos distintos sin coincidencia por IP o cédula en la ventana
+const VENTANA_FALLOS_MIN = 30;
+const MAX_REGISTROS_MANUALES_DIA = 3; // pedidos "por verificar" que una misma IP puede dejar en 24 horas
+
+const ipDe = (req) => (req.headers.get('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64) || req.headers.get('x-real-ip') || null;
+
+// El intento se anota FUERA de la transacción de la compra: si la compra se deshace, el rastro del intento tiene que quedar
+async function registrarIntento(datos) {
+    try { await IntentoPago.create(datos); } catch (e) { console.error('No se pudo registrar el intento de pago:', e.message); }
+}
+
+async function fallosRecientes({ ip, identificacion, idIntento }) {
+    const [fila] = await sequelize.query(
+        `SELECT COUNT(DISTINCT COALESCE("idIntento", "id"::text))::int AS n FROM "IntentosPago"
+         WHERE "resultado" IN ('NO_ENCONTRADO', 'MONTO') AND "createdAt" >= now() - (:min || ' minutes')::interval
+           AND ("ip" = :ip OR "identificacion" = :identificacion) AND COALESCE("idIntento", '') <> :idIntento`,
+        { replacements: { min: String(VENTANA_FALLOS_MIN), ip: ip || '-', identificacion: identificacion || '-', idIntento: idIntento || '' }, type: sequelize.QueryTypes.SELECT }
+    );
+    return fila?.n || 0;
+}
 
 export async function POST(req) {
     const transaction = await sequelize.transaction();
@@ -27,11 +51,13 @@ export async function POST(req) {
             coordenadasGPS,
             direccionMapa,
             costoDelivery,
-            pagoMovil
+            pagoMovil,
+            verificacionManual, // el cliente dice haber pagado pero su pago no aparece: se registra el pedido para que administración lo verifique
         } = body;
 
-        let pagoValidadoId = null;
-        let pagoEncontrado = null; // Variable para almacenar el objeto del pago validado
+        const ip = ipDe(req);
+        const idIntento = String(body.idIntento || '').slice(0, 64) || null;
+        let pagoEncontrado = null; // pago móvil (SMS) que coincide con la compra
 
         if (!Array.isArray(cart) || cart.length === 0) throw new ErrorNegocio('El carrito está vacío');
         if (!cliente?.identificacion || !cliente?.nombre) throw new ErrorNegocio('Faltan los datos del cliente');
@@ -40,6 +66,21 @@ export async function POST(req) {
 
         // Bandera central: ¿La compra requiere pago online previo?
         const requierePagoOnline = metodoEntrega !== 'pickup' || Boolean(pagoOnlinePickup);
+
+        // Referencia: solo dígitos; se comparan los últimos 4 (así se guardan los SMS)
+        const referencia4 = requierePagoOnline ? String(pagoMovil?.referencia || '').replace(/\D/g, '').slice(-4) : '';
+        if (requierePagoOnline && referencia4.length < 4) {
+            await transaction.rollback();
+            return NextResponse.json({ message: 'Debe ingresar los últimos 4 dígitos de la referencia de pago.' }, { status: 400 });
+        }
+        if (requierePagoOnline) {
+            const fallos = await fallosRecientes({ ip, identificacion: cliente.identificacion, idIntento });
+            if (fallos >= MAX_FALLOS) {
+                await transaction.rollback();
+                await registrarIntento({ ip, identificacion: cliente.identificacion, idIntento, referencia: referencia4, resultado: 'BLOQUEADO', detalle: `${fallos} intentos sin coincidencia en ${VENTANA_FALLOS_MIN} minutos` });
+                return NextResponse.json({ message: 'Hiciste varios intentos de pago que no coinciden con ningún pago recibido. Por seguridad esperamos un rato: escríbenos por WhatsApp con tu comprobante y lo verificamos manualmente.' }, { status: 429 });
+            }
+        }
 
         // Destino de la entrega (delivery o envío nacional): lo que entendió Google + coordenadas, para el repartidor
         const lat = Number(coordenadasGPS?.lat);
@@ -128,6 +169,50 @@ export async function POST(req) {
         const totalFinalCalculado = factura.totalFinal;
         const totalPagarBS = aBolivares(totalFinalCalculado, tasaBcv);
 
+        // Pago móvil: se busca el SMS (de ayer o de hoy, hora de Caracas) que termine en esa referencia y traiga EXACTAMENTE el total.
+        // Entre varios con la misma terminación gana el del monto exacto. Sin SMS: el cliente puede reintentar (el banco a veces tarda) o,
+        // si asegura haber pagado, dejar el pedido "por verificar" (verificacionManual).
+        let porVerificar = false;
+        if (requierePagoOnline) {
+            const candidatos = await PagoSms.findAll({
+                where: { referencia: { [Op.endsWith]: referencia4 }, procesado: false, createdAt: { [Op.gte]: inicioDiaCaracas(-1) } },
+                order: [['createdAt', 'ASC']],
+                transaction, lock: transaction.LOCK.UPDATE,
+            });
+            pagoEncontrado = candidatos.find((p) => Math.abs(Number(p.monto) - totalPagarBS) <= TOLERANCIA_BS) || null;
+
+            if (!pagoEncontrado && candidatos.length > 0) {
+                const montoSms = Number(candidatos[0].monto);
+                await transaction.rollback();
+                await registrarIntento({ ip, identificacion: cliente.identificacion, idIntento, referencia: referencia4, montoBs: totalPagarBS, resultado: 'MONTO', detalle: `SMS por Bs ${montoSms.toFixed(2)}, la compra era por Bs ${totalPagarBS.toFixed(2)}` });
+                return NextResponse.json({ message: `El monto del pago registrado (Bs ${montoSms.toFixed(2)}) no coincide exactamente con el total de la orden (Bs ${totalPagarBS.toFixed(2)}).` }, { status: 400 });
+            }
+
+            if (!pagoEncontrado) {
+                if (!verificacionManual) {
+                    await transaction.rollback();
+                    await registrarIntento({ ip, identificacion: cliente.identificacion, idIntento, referencia: referencia4, montoBs: totalPagarBS, resultado: 'NO_ENCONTRADO', detalle: 'Sin SMS con esa referencia' });
+                    return NextResponse.json({ errorType: 'PAGO_NO_ENCONTRADO', message: 'No se encontró un pago reciente con esa referencia. Verifica los datos.' }, { status: 400 });
+                }
+                // Registro para verificación: con límites para que nadie reserve inventario con pagos inventados
+                const abiertos = await Venta.count({ where: { clienteId: registroCliente.id, verificacionPago: 'POR_VERIFICAR', statusDespacho: { [Op.ne]: 'Cancelado' } }, transaction });
+                if (abiertos > 0) {
+                    await transaction.rollback();
+                    return NextResponse.json({ message: 'Ya tienes un pedido con pago por verificar. Cuando lo confirmemos podrás hacer otro; si es urgente, escríbenos por WhatsApp.' }, { status: 409 });
+                }
+                const [{ n: manualesIp }] = await sequelize.query(
+                    `SELECT COUNT(*)::int AS n FROM "IntentosPago" WHERE "resultado" = 'REGISTRADO_MANUAL' AND "ip" = :ip AND "createdAt" >= now() - interval '24 hours'`,
+                    { replacements: { ip: ip || '-' }, type: sequelize.QueryTypes.SELECT }
+                );
+                if (manualesIp >= MAX_REGISTROS_MANUALES_DIA) {
+                    await transaction.rollback();
+                    await registrarIntento({ ip, identificacion: cliente.identificacion, idIntento, referencia: referencia4, resultado: 'BLOQUEADO', detalle: 'Demasiados pedidos por verificar desde la misma conexión' });
+                    return NextResponse.json({ message: 'Demasiados pedidos pendientes de verificación desde esta conexión. Escríbenos por WhatsApp para ayudarte.' }, { status: 429 });
+                }
+                porVerificar = true;
+            }
+        }
+
         // 3. GENERACIÓN DE CORRELATIVO PARA LA VENTA (Necesario antes de crear la venta)
         const tipoDoc = 'VENTA_RAPIDA';
         const prefijoCorr = 'V';
@@ -162,7 +247,12 @@ export async function POST(req) {
             costoFlete: factura.flete,
             statusDespacho: 'Pendiente',
             condicionPago: 'Contado',
-            statusPago: requierePagoOnline ? 'Pagado' : 'Pendiente',
+            // Pagado se marca al conciliar el SMS (más abajo); "por verificar" y retiro sin pago online quedan Pendiente
+            statusPago: 'Pendiente',
+            verificacionPago: porVerificar ? 'POR_VERIFICAR' : null,
+            referenciaDeclarada: porVerificar ? referencia4 : null,
+            verificacionAt: porVerificar ? new Date() : null,
+            verificacionNota: porVerificar ? 'El cliente asegura haber pagado por Pago Móvil pero no llegó el SMS. Confirma en el banco (referencia y monto) o rechaza el pedido.' : null,
             moneda: 'USD',
             tasaCambio: tasaBcv,
             subtotal: subtotalCalculado,
@@ -174,92 +264,9 @@ export async function POST(req) {
             totalFinal: totalFinalCalculado
         }, { transaction });
 
-        // 5. VALIDACIÓN Y ENLACE ATÓMICO DE PAGO MÓVIL
-        if (requierePagoOnline) {
-            const { referencia } = pagoMovil || {};
-
-            if (!referencia || referencia.length < 4) {
-                await transaction.rollback();
-                return NextResponse.json(
-                    { message: 'Debe ingresar los últimos 4 dígitos de la referencia de pago.' },
-                    { status: 400 }
-                );
-            }
-
-            const inicioHoy = new Date();
-            inicioHoy.setHours(0, 0, 0, 0);
-
-            pagoEncontrado = await PagoSms.findOne({
-                where: {
-                    referencia: { [Op.endsWith]: referencia },
-                    procesado: false,
-                    createdAt: { [Op.gte]: inicioHoy }
-                },
-                transaction
-            });
-
-            if (!pagoEncontrado) {
-                await transaction.rollback();
-                return NextResponse.json(
-                    {
-                        errorType: 'PAGO_NO_ENCONTRADO',
-                        message: 'No se encontró un pago pendiente de HOY con esa referencia. Verifica los datos.'
-                    },
-                    { status: 400 }
-                );
-            }
-
-            // 🔥 VALIDACIÓN ESTRICTA DE MONTO EXACTO
-            const montoPagoRegistrado = Number(pagoEncontrado.monto || pagoEncontrado.montoBs || 0);
-            const diferenciaMonto = Math.abs(montoPagoRegistrado - totalPagarBS);
-
-            // Tolerancia de 1 céntimo: el total ya viene calculado con aritmética exacta
-            if (diferenciaMonto > 0.01) {
-                await transaction.rollback();
-                return NextResponse.json(
-                    { message: `El monto del pago registrado (Bs ${montoPagoRegistrado.toFixed(2)}) no coincide exactamente con el total de la orden (Bs ${totalPagarBS.toFixed(2)}).` },
-                    { status: 400 }
-                );
-            }
-
-            // Marcamos el pago como procesado y le asociamos la venta recién creada
-            pagoEncontrado.procesado = true;
-            pagoEncontrado.ventaId = nuevaVenta.id;
-            await pagoEncontrado.save({ transaction });
-            pagoValidadoId = pagoEncontrado.id;
-
-            // Actualizamos la venta para asignarle el pagoSmsId
-            nuevaVenta.pagoSmsId = pagoValidadoId;
-            await nuevaVenta.save({ transaction });
-
-            // 6. CREACIÓN DEL MOVIMIENTO FINANCIERO ASOCIADO AL PAGO SMS
-            // El cobro se reparte: el subtotal y el IVA quedan en la tienda (mientras la venta sea un recibo V-; si luego piden factura, el IVA
-            // pasa a "IVA Recaudado" y queda reservado para el SENIAT). El delivery NO es ingreso: es dinero de la empresa de transporte,
-            // por eso no genera movimiento; el monto cobrado queda en Venta.costoFlete para compararlo con lo que cobre el delivery.
-            let catVentas = await CategoriaFinanciera.findOne({ where: { nombre: 'Ingresos por Ventas' }, transaction });
-            if (!catVentas) catVentas = await CategoriaFinanciera.create({ nombre: 'Ingresos por Ventas', tipo: 'INGRESO' }, { transaction });
-
-            const partes = [
-                { monto: factura.subtotal, descripcion: `Venta Online ${nuevaVenta.numeroDocumento} (subtotal) - Pago Móvil (Banco: ${pagoEncontrado.banco || 'N/A'}, Ref: ${pagoEncontrado.referencia})` },
-                { monto: factura.montoIva, descripcion: `IVA de Venta Online ${nuevaVenta.numeroDocumento} (recibo sin factura)` },
-            ];
-            for (const { monto, descripcion } of partes) {
-                if (!(monto > 0)) continue;
-                await MovimientoFinanciero.create({
-                    tipo: 'INGRESO',
-                    fecha: new Date().toISOString().split('T')[0],
-                    metodoPago: 'Pago Móvil',
-                    referencia: pagoEncontrado.referencia,
-                    montoUsd: monto,
-                    tasaBcvAplicada: tasaBcv,
-                    montoVes: aBolivares(monto, tasaBcv),
-                    descripcion,
-                    categoriaId: catVentas.id,
-                    ventaId: nuevaVenta.id,
-                    pagoSmsId: pagoEncontrado.id
-                }, { transaction });
-            }
-        }
+        // 5. El SMS encontrado se une a la compra: pago usado, compra pagada y dinero asentado (subtotal + IVA; el delivery no es ingreso)
+        //    Los movimientos usan la fecha de Caracas, no la del servidor.
+        // (se hace después de insertar los renglones, ver más abajo)
 
         // 7. INSERCIÓN DE LOS DETALLES VINCULADOS A LA VENTA
         for (const detalle of detallesVentaData) {
@@ -269,7 +276,34 @@ export async function POST(req) {
             }, { transaction });
         }
 
+        if (pagoEncontrado) await conciliarPagoTienda({ venta: nuevaVenta, pago: pagoEncontrado, origen: 'CHECKOUT', transaction });
+
         await transaction.commit();
+
+        if (requierePagoOnline) {
+            await registrarIntento({
+                ip, identificacion: cliente.identificacion, idIntento, referencia: referencia4, montoBs: totalPagarBS, ventaId: nuevaVenta.id,
+                resultado: porVerificar ? 'REGISTRADO_MANUAL' : 'OK', detalle: porVerificar ? 'Pedido registrado para verificación de pago' : `Conciliado con el SMS #${pagoEncontrado.id}`,
+            });
+        }
+
+        if (porVerificar) {
+            try {
+                await notificarCabezas({
+                    tag: `PAGO_POR_VERIFICAR_${nuevaVenta.id}`,
+                    title: `🕵️ Pago por verificar (${numeroDocGenerado})`,
+                    body: `${cliente.nombre} dice haber pagado Bs ${totalPagarBS.toFixed(2)} (ref ${referencia4}) pero el SMS no llegó. Confírmalo en el banco o recházalo.`,
+                    url: `/superuser/ventas/${nuevaVenta.id}`,
+                });
+            } catch (notifError) {
+                console.error('No se pudo avisar del pago por verificar:', notifError);
+            }
+            return NextResponse.json({
+                success: true, pendienteVerificacion: true,
+                message: 'Pedido registrado. Estamos verificando tu pago; te confirmaremos apenas lo veamos en el banco.',
+                numeroDocumento: numeroDocGenerado, ventaId: nuevaVenta.id, totalUsd: totalFinalCalculado, totalBs: totalPagarBS,
+            }, { status: 200 });
+        }
 
         try {
             await notificarTodos({

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { Abono, Cliente, RetencionIva, Venta, VentaDetalle, sequelize } from '@/models';
 import { requerirAdmin, requerirNoVendedor } from '../../../_lib/acceso';
 import { calcularRetencion, hoyCaracas, recalcularCobro } from '../../../_lib/retencionesVenta';
+import { avisarCliente } from '../../../_lib/avisosCliente';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,6 +86,7 @@ export async function POST(request, { params }) {
 
         await recalcularCobro(venta, t);
         await t.commit();
+        if (venta.tipoVenta === 'MAYOR') await avisarCliente(venta, 'RETENCION_CONFIRMADA', { comprobante: numeroComprobante });
         return NextResponse.json({ success: true, retencion }, { status: 201 });
     } catch (error) {
         if (!t.finished) await t.rollback();

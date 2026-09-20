@@ -1,7 +1,9 @@
 // Webhook seguro multiteléfono para registrar pagos en Mediquir.
 import { NextResponse } from 'next/server';
 import db from '@/models/index';
-import { notificarTodos } from '@/app/handlers/notificar';
+import { notificarTodos, notificarCabezas } from '@/app/handlers/notificar';
+import { fechaHoraCaracas } from '@/app/constants/hora';
+import { conciliarPendientesConPago } from '@/app/api/_lib/pagoTienda';
 import { Op } from 'sequelize';
 
 // Helpers de conversión de fecha bancaria (Permanecen idénticos)
@@ -11,7 +13,8 @@ function parsearFechaMercantil(fechaStr, horaStr) {
     let [hora, min] = horaMin.split(':').map(Number);
     if (periodo?.toUpperCase() === 'PM' && hora < 12) hora += 12;
     if (periodo?.toUpperCase() === 'AM' && hora === 12) hora = 0;
-    return new Date(ano, mes - 1, dia, hora, min, 0);
+    // El SMS trae la hora de Caracas: se guarda con su zona (-04:00). Antes se armaba con la zona del servidor (UTC) y quedaba 4 horas corrida.
+    return fechaHoraCaracas({ ano, mes, dia, hora, min });
 }
 
 // "16.000,00" -> "16000.00" (miles con punto, decimales con coma; tolera punto final de frase)
@@ -26,8 +29,7 @@ const AVISO_PROPIO = /actualizaci[oó]n del sistema|\(v[0-9a-f]{7}\)/i;
 function parsearFechaBDV(fechaStr, horaStr) {
     const [dia, mes, anoCorto] = fechaStr.split('-').map(Number);
     const [hora, min] = horaStr.split(':').map(Number);
-    const anoCompleto = 2000 + anoCorto;
-    return new Date(anoCompleto, mes - 1, dia, hora, min, 0);
+    return fechaHoraCaracas({ ano: 2000 + anoCorto, mes, dia, hora, min });
 }
 
 export async function POST(request) {
@@ -174,7 +176,7 @@ export async function POST(request) {
             }
 
             // 4. GUARDADO FINAL EN SEQUELIZE
-            await db.PagoSms.create({
+            const pagoNuevo = await db.PagoSms.create({
                 banco: bancoConDispositivo, // Guardará exactamente: "MERCANTIL (Héctor - S26 Ultra)"
                 referencia: referencia4Digitos,
                 monto: Number(montoLimpio),
@@ -192,6 +194,19 @@ export async function POST(request) {
                 url: "/superuser/pagos-recibidos",
                 tag: `pago-${bancoIdentificado.toLowerCase()}-${referencia4Digitos}`
             });
+
+            // ¿Hay una compra de la tienda "por verificar" esperando este SMS? Se empareja sola por referencia y monto exactos.
+            try {
+                const emparejados = await conciliarPendientesConPago(pagoNuevo);
+                for (const { venta, resultado } of emparejados) {
+                    await notificarCabezas(resultado === 'CONCILIADO'
+                        ? { title: 'Pago confirmado solo ✅', body: `Llegó el SMS de la compra ${venta.numeroDocumento}: ya quedó pagada.`, url: `/superuser/ventas/${venta.id}`, tag: `pago-auto-${venta.id}` }
+                        : { title: 'Pago con monto distinto ⚠️', body: `Llegó un SMS con la referencia de ${venta.numeroDocumento} pero por otro monto. Revísalo en el banco.`, url: `/superuser/ventas/${venta.id}`, tag: `pago-monto-${venta.id}` });
+                }
+            } catch (errorConciliacion) {
+                // El pago ya quedó guardado: si falla el emparejamiento automático, administración lo vincula a mano
+                console.error('[Mediquir] No se pudo emparejar el pago con compras por verificar:', errorConciliacion.message);
+            }
 
             return NextResponse.json({ success: true, message: `Pago registrado con éxito por ${dispositivoOrigen}` });
         } else {

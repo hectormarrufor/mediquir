@@ -7,6 +7,7 @@
 //                  notas de crédito y notas de débito. Se asigna al imprimir el documento (así coincide con la forma que se gasta),
 //                  una sola vez por documento; si la forma se daña se puede pedir el siguiente.
 import db from '../../../models/index.js';
+import { fechaCaracas } from '../../constants/hora.js';
 
 const { sequelize, Correlativo, Venta, NotaFiscal, RetencionIva } = db;
 
@@ -19,10 +20,13 @@ export const CLAVES = {
     F: { etiqueta: 'Facturas', prefijo: 'F', ceros: 5, ejemplo: '00001', pregunta: 'Número de tu próxima factura' },
     NC: { etiqueta: 'Notas de crédito', prefijo: 'NC', ceros: 5, ejemplo: '02325', pregunta: 'Número de tu primera nota de crédito' },
     ND: { etiqueta: 'Notas de débito', prefijo: 'ND', ceros: 5, ejemplo: '00410', pregunta: 'Número de tu primera nota de débito' },
+    // Comprobante de retención de IVA que EMITE la empresa a sus proveedores: año + mes + secuencia de 8 dígitos (20260900000734). Aquí solo se lleva la
+    // secuencia; el año y el mes salen de la fecha de la compra. Hay que decir con cuál empieza porque ya se emitieron comprobantes antes del sistema.
+    'RET-COMPRA': { etiqueta: 'Comprobantes de retención de IVA (compras)', prefijo: 'RET', ceros: 8, ejemplo: '00000735', pregunta: 'Número de tu próximo comprobante de retención (escribe el número completo o solo los 8 últimos dígitos)' },
     CONTROL: { etiqueta: 'Número de control (forma libre)', prefijo: '00', ceros: 6, ejemplo: '00-005432', pregunta: 'Número de control de la próxima forma libre que vas a imprimir' },
 };
 
-const formatear = (clave, n, ceros) => `${CLAVES[clave].prefijo}-${String(n).padStart(ceros, '0')}`;
+const formatear = (clave, n, ceros) => (clave === 'RET-COMPRA' ? String(n).padStart(ceros, '0') : `${CLAVES[clave].prefijo}-${String(n).padStart(ceros, '0')}`);
 
 // Mayor número ya usado de cada serie (null si no hay ninguno)
 export async function ultimoUsado(clave, transaction) {
@@ -31,6 +35,9 @@ export async function ultimoUsado(clave, transaction) {
     let fila;
     if (clave === 'F') {
         [fila] = await consulta(`SELECT MAX(${numerico('"numeroDocumento"')}) AS n FROM "Ventas" WHERE "numeroDocumento" LIKE 'F-%'`);
+    } else if (clave === 'RET-COMPRA') {
+        // Los 8 últimos dígitos del comprobante (los 6 primeros son año y mes)
+        [fila] = await consulta(`SELECT MAX(CAST(RIGHT("comprobante", 8) AS bigint)) AS n FROM "RetencionesIva" WHERE "tipo" = 'COMPRA' AND "comprobante" ~ '^[0-9]{14}$'`);
     } else if (clave === 'NC' || clave === 'ND') {
         [fila] = await consulta(`SELECT MAX(${numerico('"numeroDocumento"')}) AS n FROM "NotasFiscales" WHERE "origen" = 'VENTA' AND "numeroDocumento" LIKE :patron`, { patron: `${clave}-%` });
     } else {
@@ -57,6 +64,7 @@ export async function estadoNumeracion(transaction) {
         resultado.push({
             clave, etiqueta: meta.etiqueta, pregunta: meta.pregunta, ejemplo: meta.ejemplo, prefijo: meta.prefijo,
             configurado: c ? Boolean(c.configurado) : false, siguienteNumero: siguiente, ceros,
+            periodo: clave === 'RET-COMPRA' ? fechaCaracas().slice(0, 7).replace('-', '') : undefined, // año y mes con los que saldría hoy
             siguiente: formatear(clave, siguiente, ceros), ultimoUsado: ultimo === null ? null : formatear(clave, ultimo, ceros),
         });
     }
@@ -66,6 +74,14 @@ export async function estadoNumeracion(transaction) {
 // Lo que escribió la persona -> número entero. Acepta "2325", "02325", "NC-02325" o (control) "00-005432".
 export function interpretarNumero(clave, crudo) {
     const texto = String(crudo ?? '').trim();
+    if (clave === 'RET-COMPRA') {
+        // Acepta el comprobante completo (14 dígitos: AAAAMM + 8) o solo la secuencia (hasta 8 dígitos)
+        const digitos = texto.replace(/\D/g, '');
+        const secuencia = digitos.length === 14 ? digitos.slice(-8) : digitos;
+        const n = Number(secuencia);
+        if (!secuencia || secuencia.length > 8 || !Number.isSafeInteger(n) || n < 1) throw new ErrorNumeracion(`Escribe el número completo (${CLAVES[clave].ejemplo.padStart(8, '0')} o 14 dígitos con año y mes)`);
+        return { n, digitos: 8 };
+    }
     const m = /^(?:[A-Za-z0-9]{1,3}\s*-\s*)?(\d{1,10})$/.exec(texto);
     if (!m) throw new ErrorNumeracion(`Escribe solo el número, por ejemplo ${CLAVES[clave].ejemplo}`);
     const n = Number(m[1]);

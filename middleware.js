@@ -22,7 +22,7 @@ const PUBLICAS = [
     ['POST', /^\/api\/users\/logout$/],
     ['GET', /^\/api\/users\/session$/],
     ['GET', /^\/api\/auth\/check-status$/],
-    ['POST', /^\/api\/suscribir$/],                // suscripción a notificaciones push
+    ['DELETE', /^\/api\/suscribir$/],              // desuscribirse (al cerrar sesión la cookie ya se está borrando); suscribirse SÍ exige sesión
     ['POST', /^\/api\/webhooks\/pagomovil$/],      // valida su propio Bearer token
     ['POST', /^\/api\/github$/],                   // webhook de GitHub (notifica cada push al personal): valida su firma HMAC secreta
     ['GET', /^\/api\/cron-jobs\/[^/]+$/],          // valida CRON_SECRET
@@ -49,6 +49,11 @@ const VENDEDOR_API = [
     ['POST', /^\/api\/compras$/],
     ['GET', /^\/api\/vendedor\/[^/]+$/],
     ['GET', /^\/api\/inventario\/lista-precios$/],
+    // Tareas: cada quien ve y gestiona las suyas (la ruta valida por sesión quién puede qué)
+    ['GET', /^\/api\/tareas(\/asignables|\/[^/]+(\/comentarios)?)?$/],
+    ['POST', /^\/api\/tareas(\/[^/]+\/comentarios)?$/],
+    ['PATCH', /^\/api\/tareas\/[^/]+$/],
+    ['DELETE', /^\/api\/tareas\/[^/]+$/],
 ];
 const VENDEDOR_PAGINAS = [
     /^\/superuser$/, /^\/superuser\/ventas(\/.*)?$/, /^\/superuser\/compras$/,

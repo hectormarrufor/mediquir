@@ -65,7 +65,7 @@ export async function GET(request) {
                     FROM "MovimientosFinancieros" m LEFT JOIN "CategoriasFinancieras" c ON c."id" = m."categoriaId" WHERE COALESCE(c."nombre", '') <> :catIva) AS "flujoAcumulado"`),
             q(`SELECT
                 (SELECT COALESCE(SUM(${IVA_VENTA_USD}), 0)::float FROM "Ventas" v WHERE v."tipoDocumento" = 'FACTURA' AND (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta AND v."statusDespacho" <> 'Cancelado') + ${NOTAS_USD('montoIva', 'VENTA')} AS debito,
-                (SELECT COALESCE(SUM(${IVA_COMPRA_USD}), 0)::float FROM "FacturasCompras" f WHERE f."fechaFactura" BETWEEN :desde AND :hasta) + ${NOTAS_USD('montoIva', 'COMPRA')} AS credito,
+                (SELECT COALESCE(SUM(${IVA_COMPRA_USD}), 0)::float FROM "FacturasCompras" f WHERE f."tipoDocumento" = 'FACTURA' AND f."fechaFactura" BETWEEN :desde AND :hasta) + ${NOTAS_USD('montoIva', 'COMPRA')} AS credito,
                 (SELECT COALESCE(SUM(${VENTA_USD}), 0)::float FROM "Ventas" v WHERE v."tipoDocumento" = 'FACTURA' AND (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta AND v."statusDespacho" <> 'Cancelado') + ${NOTAS_USD('totalFinal', 'VENTA')} AS facturado`),
         ]);
 

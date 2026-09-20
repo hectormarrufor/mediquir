@@ -1,4 +1,5 @@
 import { Correlativo } from '@/models';
+import { ErrorNumeracion, ultimoUsado } from './numeracion.js';
 
 const PREFIJO_COMPRAS = 'RET-COMPRA';
 
@@ -7,9 +8,14 @@ const PREFIJO_COMPRAS = 'RET-COMPRA';
 // en la tabla `correlativos` (prefijo RET-COMPRA) para empatar con el último comprobante que ya emitiste.
 // OJO: el formato se copió de tu libro de ejemplo; confírmalo con tu contador.
 export async function siguienteComprobante(fecha, transaction) {
-    let corr = await Correlativo.findOne({ where: { prefijo: PREFIJO_COMPRAS }, transaction, lock: transaction.LOCK.UPDATE });
-    if (!corr) corr = await Correlativo.create({ prefijo: PREFIJO_COMPRAS, siguienteNumero: 1, cerosRelleno: 8 }, { transaction });
-    const numero = corr.siguienteNumero;
+    const corr = await Correlativo.findOne({ where: { prefijo: PREFIJO_COMPRAS }, transaction, lock: transaction.LOCK.UPDATE });
+    // Ya se emitieron comprobantes antes del sistema: no se puede empezar en 1 sin preguntar (repetiría un número que existe)
+    if (!corr || !corr.configurado) {
+        throw new ErrorNumeracion('Antes de emitir retenciones indica con qué número empieza tu numeración de comprobantes de retención de IVA', 409, 'RETENCION_PENDIENTE');
+    }
+    // Nunca por debajo del mayor ya emitido
+    const ultimo = await ultimoUsado(PREFIJO_COMPRAS, transaction);
+    const numero = Math.max(corr.siguienteNumero, (ultimo || 0) + 1);
     corr.siguienteNumero = numero + 1;
     await corr.save({ transaction });
     const [anio, mes] = String(fecha).slice(0, 7).split('-');

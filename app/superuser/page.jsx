@@ -19,7 +19,7 @@ import {
     IconShieldCheck, IconTargetArrow } from '@tabler/icons-react';
 import './superuser.css';
 import { useAuth } from '@/hooks/useAuth';
-import DashboardTareas from '../components/DashboardTareas';
+import TareasPanel from '../components/tareas/TareasPanel';
 import { notifications } from '@mantine/notifications';
 import dynamic from 'next/dynamic';
 
@@ -300,7 +300,7 @@ function PanelAdministrativo() {
                     onCompra={() => setModalCompraAbierto(true)}
                     onAjustes={userId === 1 ? () => setModalAbierto(true) : null}
                     modulos={opcionesVisibles}
-                    tareas={<DashboardTareas glassStyle={{ border: 'none', background: 'transparent', boxShadow: 'none' }} />}
+                    tareas={<TareasPanel />}
                 />
             </Box>
         </Box>

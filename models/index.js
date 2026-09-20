@@ -2,6 +2,7 @@
 const sequelize = require('../sequelize');
 
 const db = {
+    IntentoPago: require('./IntentoPago'),
     PagoSms: require('./PagoSms'),
     CuentaPorPagar: require('./CuentaPorPagar'),
     CuentaPorCobrar: require('./CuentaPorCobrar'),
@@ -25,6 +26,7 @@ const db = {
     Categoria: require('./inventario/Categoria'),
     MenuPermission: require('./MenuPermission'),
     Tarea: require('./recursosHumanos/Tarea'),
+    TareaComentario: require('./recursosHumanos/TareaComentario'),
     BcvPrecioHistorico: require('./BcvPrecioHistorico'),
     
     // RECURSOS HUMANOS

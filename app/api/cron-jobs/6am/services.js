@@ -7,9 +7,14 @@ import sequelize from '@/sequelize';
 import db, {
     Empleado, DocumentoEmpleado, BcvPrecioHistorico, 
     CuentaPorPagar, CuentaPorCobrar, Proveedor, Cliente, 
-    Venta, FacturaCompra, Producto, VentaDetalle
+    Venta, FacturaCompra, Producto, VentaDetalle, Tarea
 } from '@/models'; 
 import { getCaracasDate, addDays, getYearsDiff } from "../../../helpers/dateUtils"; 
+import { cancelarPedidoTienda } from '../../_lib/pagoTienda';
+import { avisarCliente } from '../../_lib/avisosCliente';
+import { notificarUsuario, notificarCabezas } from '@/app/handlers/notificar';
+import { fechaCaracas } from '@/app/constants/hora';
+import { diasHasta } from '@/app/constants/tareas';
 import { borrarTodasLasFotos, DIAS_RETENCION_FOTOS, DIAS_CANCELADAS, DIAS_SIN_FIRMAR } from '../../ventas/_fotosEmpaque';
 
 const URL_BINANCE = 'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search';
@@ -231,40 +236,43 @@ export async function checkCxC() {
 export async function liberarOrdenesExpiradas() {
     const transaction = await sequelize.transaction();
     try {
-        const limiteTiempo = new Date();
-        limiteTiempo.setHours(limiteTiempo.getHours() - 24);
+        const hace = (horas) => new Date(Date.now() - horas * 60 * 60 * 1000);
 
+        // SOLO compras de la tienda (el stock se descuenta al vender): retiro sin pago online tras 24 h, y pedidos con pago
+        // "por verificar" que nadie resolvió en 72 h. Antes esto cancelaba también pedidos B2B, ventas a crédito y pedidos al mayor
+        // (y les sumaba stock que nunca se había descontado).
         const ventasExpiradas = await Venta.findAll({
             where: {
-                statusPago: 'Pendiente',
-                statusDespacho: 'Pendiente',
-                createdAt: { [Op.lt]: limiteTiempo }
+                tipoVenta: 'ONLINE', statusPago: 'Pendiente', statusDespacho: 'Pendiente',
+                [Op.or]: [
+                    { verificacionPago: null, createdAt: { [Op.lt]: hace(24) } },
+                    { verificacionPago: 'POR_VERIFICAR', createdAt: { [Op.lt]: hace(72) } },
+                ],
             },
-            include: [{ model: VentaDetalle, as: 'detalles' }],
-            transaction
+            transaction, lock: transaction.LOCK.UPDATE,
         });
 
         let canceladas = 0;
-
+        let vencidosPorVerificar = 0;
         for (const venta of ventasExpiradas) {
-            for (const detalle of venta.detalles) {
-                if (!detalle.isFicticio && detalle.productoId && detalle.afectaInventario) {
-                    const producto = await Producto.findByPk(detalle.productoId, { transaction });
-                    if (producto) {
-                        producto.stockAlmacen += detalle.cantidad;
-                        await producto.save({ transaction });
-                    }
-                }
-            }
-            venta.statusDespacho = 'Cancelado';
-            venta.statusPago = 'Vencido';
-            await venta.save({ transaction });
+            const eraPorVerificar = venta.verificacionPago === 'POR_VERIFICAR';
+            await cancelarPedidoTienda({
+                venta, estado: eraPorVerificar ? 'VENCIDO' : null, transaction,
+                nota: eraPorVerificar ? 'Nadie confirmó el pago en 72 horas: pedido cancelado automáticamente' : '',
+            });
             canceladas++;
+            if (eraPorVerificar) vencidosPorVerificar++;
         }
 
+        // Pedidos por verificar que llevan más de 12 h esperando (para recordárselo a administración)
+        const esperando = await Venta.findAll({
+            where: { tipoVenta: 'ONLINE', verificacionPago: 'POR_VERIFICAR', statusDespacho: { [Op.ne]: 'Cancelado' }, createdAt: { [Op.lt]: hace(12) } },
+            attributes: ['id', 'numeroDocumento'], transaction,
+        });
+
         await transaction.commit();
-        return { status: 'OK', canceladas };
-        
+        return { status: 'OK', canceladas, vencidosPorVerificar, esperando: esperando.map((v) => v.numeroDocumento) };
+
     } catch (error) {
         if (!transaction.finished) await transaction.rollback();
         throw error;
@@ -315,4 +323,117 @@ export async function limpiarFotosEmpaque() {
         }
     }
     return { status: 'OK', borradasVencidas, borradasAbandonadas, errores };
+}
+
+// ==========================================
+// 7. TAREAS DEL PERSONAL: recordatorio diario de lo que vence hoy o ya venció
+// ==========================================
+// Un solo aviso por persona y por día (Tarea.recordadaEl evita repetirlo). A administración le llega un resumen de lo vencido.
+export async function recordarTareas() {
+    const hoy = fechaCaracas();
+    const tareas = await Tarea.findAll({
+        where: {
+            estado: { [Op.in]: ['Pendiente', 'En Progreso'] },
+            asignadoAId: { [Op.ne]: null },
+            fechaVencimiento: { [Op.lte]: hoy },
+            [Op.or]: [{ recordadaEl: null }, { recordadaEl: { [Op.lt]: hoy } }],
+        },
+        order: [['fechaVencimiento', 'ASC']],
+    });
+    if (!tareas.length) return { personas: 0, tareas: 0, vencidas: 0 };
+
+    const porPersona = new Map();
+    for (const t of tareas) {
+        if (!porPersona.has(t.asignadoAId)) porPersona.set(t.asignadoAId, []);
+        porPersona.get(t.asignadoAId).push(t);
+    }
+    for (const [usuarioId, lista] of porPersona) {
+        const vencidas = lista.filter((t) => String(t.fechaVencimiento).slice(0, 10) < hoy);
+        const deHoy = lista.length - vencidas.length;
+        const partes = [];
+        if (vencidas.length) partes.push(`${vencidas.length} vencida${vencidas.length === 1 ? '' : 's'}`);
+        if (deHoy) partes.push(`${deHoy} para hoy`);
+        try {
+            await notificarUsuario(usuarioId, {
+                title: vencidas.length ? 'Tienes tareas vencidas ⏰' : 'Tareas para hoy 📋',
+                body: `${partes.join(' y ')}: ${lista.slice(0, 3).map((t) => `"${t.titulo}"`).join(', ')}${lista.length > 3 ? ` y ${lista.length - 3} más` : ''}.`,
+                url: '/superuser', tipo: vencidas.length ? 'Alerta' : 'Info',
+            });
+        } catch (e) {
+            console.error('No se pudo recordar tareas al usuario', usuarioId, e.message);
+        }
+    }
+    await Tarea.update({ recordadaEl: hoy }, { where: { id: { [Op.in]: tareas.map((t) => t.id) } } });
+
+    const todasVencidas = tareas.filter((t) => String(t.fechaVencimiento).slice(0, 10) < hoy);
+    if (todasVencidas.length) {
+        try {
+            await notificarCabezas({
+                title: `⏰ ${todasVencidas.length} tarea${todasVencidas.length === 1 ? '' : 's'} vencida${todasVencidas.length === 1 ? '' : 's'} en el equipo`,
+                body: todasVencidas.slice(0, 4).map((t) => `"${t.titulo}"`).join(', ') + (todasVencidas.length > 4 ? ` y ${todasVencidas.length - 4} más` : ''),
+                url: '/superuser', tipo: 'Alerta', tag: `tareas-vencidas-${hoy}`,
+            });
+        } catch (e) {
+            console.error('No se pudo avisar de las tareas vencidas:', e.message);
+        }
+    }
+    return { personas: porPersona.size, tareas: tareas.length, vencidas: todasVencidas.length };
+}
+
+// ==========================================
+// 8. CLIENTES DEL PORTAL: recordatorio de facturas por vencer y vencidas
+// ==========================================
+// Solo a clientes con usuario. Por vencer: a los 3 días y el mismo día. Vencidas: a 1, 7, 15 y 30 días (sin repetir a diario).
+export async function avisarClientesCobro() {
+    const hoy = fechaCaracas();
+    const cuentas = await CuentaPorCobrar.findAll({
+        where: { estado: { [Op.ne]: 'Pagado' }, saldoPendiente: { [Op.gt]: 0 } },
+        include: [{ model: Venta, as: 'venta', attributes: ['id', 'clienteId', 'numeroDocumento', 'tipoVenta', 'statusDespacho'] }],
+    });
+    let avisados = 0;
+    for (const c of cuentas) {
+        const venta = c.venta;
+        if (!venta || venta.tipoVenta !== 'MAYOR' || venta.statusDespacho === 'Cancelado' || !c.fechaVencimiento) continue;
+        const dias = diasHasta(String(c.fechaVencimiento).slice(0, 10), hoy);
+        const saldo = c.moneda === 'BS' ? Number(c.saldoPendiente) / (Number(c.tasaCambio) || 1) : Number(c.saldoPendiente);
+        const ref = { id: venta.id, clienteId: venta.clienteId, numeroDocumento: venta.numeroDocumento };
+        if (dias === 3 || dias === 0) await avisarCliente(ref, 'POR_VENCER', { dias, saldo });
+        else if ([-1, -7, -15, -30].includes(dias)) await avisarCliente(ref, 'VENCIDA', { dias: -dias, saldo });
+        else continue;
+        avisados++;
+    }
+    return { avisados };
+}
+
+// ==========================================
+// 9. OPERACIÓN: stock bajo y pedidos sin asignar (resumen diario para las cabezas)
+// ==========================================
+export async function avisarOperacion() {
+    const hoy = fechaCaracas();
+    const [bajos] = await sequelize.query(
+        `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE p."stockAlmacen" <= 0)::int AS agotados,
+                (SELECT string_agg(x."nombre", ', ') FROM (SELECT p2."nombre" FROM "Productos" p2 WHERE p2."stockMinimo" > 0 AND p2."stockAlmacen" <= p2."stockMinimo" AND p2."grupoEquivalenciaId" IS NULL ORDER BY (p2."stockAlmacen" / NULLIF(p2."stockMinimo", 0)) ASC LIMIT 3) x) AS "primeros"
+         FROM "Productos" p WHERE p."stockMinimo" > 0 AND p."stockAlmacen" <= p."stockMinimo" AND p."grupoEquivalenciaId" IS NULL`,
+        { type: sequelize.QueryTypes.SELECT }
+    );
+    const [pedidos] = await sequelize.query(
+        `SELECT COUNT(*)::int AS "sinAsignar" FROM "Ventas" v
+         WHERE v."statusDespacho" = 'Pendiente' AND v."tipoVenta" <> 'DETAL' AND v."empacadorId" IS NULL AND COALESCE(v."revisionStock", '') <> 'PENDIENTE' AND COALESCE(v."verificacionPago", '') <> 'POR_VERIFICAR'`,
+        { type: sequelize.QueryTypes.SELECT }
+    );
+    if (bajos.total > 0) {
+        await notificarCabezas({
+            title: `📉 ${bajos.total} producto${bajos.total === 1 ? '' : 's'} bajo el stock mínimo`,
+            body: `${bajos.agotados ? `${bajos.agotados} agotado${bajos.agotados === 1 ? '' : 's'}. ` : ''}Los más críticos: ${bajos.primeros}.`,
+            url: '/superuser/inventario/productos', tipo: 'Alerta', tag: `stock-bajo-${hoy}`,
+        });
+    }
+    if (pedidos.sinAsignar > 0) {
+        await notificarCabezas({
+            title: `📦 ${pedidos.sinAsignar} pedido${pedidos.sinAsignar === 1 ? '' : 's'} sin empacador asignado`,
+            body: 'Asigna quién empaca y quién etiqueta para que salgan hoy.',
+            url: '/superuser/ventas', tipo: 'Info', tag: `sin-asignar-${hoy}`,
+        });
+    }
+    return { stockBajo: bajos.total, sinAsignar: pedidos.sinAsignar };
 }

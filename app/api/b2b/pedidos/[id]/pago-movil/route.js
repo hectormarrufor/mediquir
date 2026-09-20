@@ -5,6 +5,7 @@ import { requerirCliente } from '@/app/api/_lib/acceso';
 import { tasaVigente } from '@/app/api/_lib/tasaBcv';
 import { registrarAbono, ErrorAbono } from '@/app/api/_lib/abonos';
 import { notificarCabezas } from '@/app/handlers/notificar';
+import { avisarCliente } from '../../../../_lib/avisosCliente';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,6 +124,7 @@ export async function POST(request, { params }) {
     }
 
     await avisarCabezas(aviso);
+    await avisarCliente(venta, 'PAGO_RECIBIDO', { abonoUsd: resultado.abonoUsd, liquidada: resultado.liquidada, saldoRestante: resultado.saldoRestante, monedaCuenta: resultado.monedaCuenta, tasa: Number(venta.tasaCambio) });
     return NextResponse.json({
         success: true, abonoUsd: resultado.abonoUsd, abonoBs: resultado.abonoBs,
         saldoRestante: resultado.saldoRestante, monedaCuenta: resultado.monedaCuenta, liquidada: resultado.liquidada,

@@ -57,7 +57,7 @@ export async function crearYNotificar(data) {
 
         if (data.roles && data.roles.length > 0) {
             const usuariosPorRol = await User.findAll({
-                where: { rol: { [Op.in]: data.roles } },
+                where: { rol: { [Op.in]: data.roles }, clienteId: null }, // los clientes del portal no reciben avisos por rol
                 attributes: ['id', 'user'],
                 include: [{
                     model: Empleado,
@@ -240,6 +240,24 @@ export async function notificarPresidente(payload) {
 
 export async function notificarUsuario(usuarioId, payload) {
     return crearYNotificar({ ...payload, usuarioId });
+}
+
+// Avisa a los usuarios del portal de UN cliente (cliente con usuario): sus pedidos, pagos y retenciones. Si el cliente no tiene usuario no hace nada.
+// El aviso queda dirigido a cada usuario (usuarioId): un cliente solo ve lo suyo. Nunca incluir datos internos en `payload`.
+export async function notificarCliente(clienteId, payload) {
+    if (!clienteId) return [];
+    const usuarios = await User.findAll({ where: { clienteId }, attributes: ['id'] });
+    const enviados = [];
+    for (const u of usuarios) enviados.push(await crearYNotificar({ ...payload, usuarioId: u.id }));
+    return enviados;
+}
+
+// Avisa a varios usuarios internos por su id (p. ej. el creador y el responsable de una tarea)
+export async function notificarUsuarios(ids, payload) {
+    const unicos = [...new Set((ids || []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+    const enviados = [];
+    for (const id of unicos) enviados.push(await crearYNotificar({ ...payload, usuarioId: id }));
+    return enviados;
 }
 
 export async function notificarTodos(payload) {

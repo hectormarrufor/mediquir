@@ -1,6 +1,7 @@
 import { Op } from 'sequelize';
 import { Abono, CuentaPorCobrar, Venta, VentaDetalle, Producto, Marca } from '@/models';
 import { aDolares } from '@/app/constants/facturacion';
+import { fechaCaracas } from '@/app/constants/hora';
 
 // Crédito del cliente: días aprobados, máximo de pedidos a crédito activos y cuántos le quedan.
 // "Activo" = a crédito, no cancelado y todavía con saldo por pagar.
@@ -17,10 +18,10 @@ export async function creditoDeCliente(cliente, { transaction } = {}) {
 export const ESTADOS_ACTIVOS = ['Pendiente', 'Empacado', 'Parcial'];
 
 // Fecha de hoy en Caracas (YYYY-MM-DD) para comparar vencimientos sin depender de la zona del servidor
-export const hoyCaracas = () =>
-    new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+export const hoyCaracas = () => fechaCaracas();
 
-const aFechaISO = (d) => (d ? (typeof d === 'string' ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10)) : null);
+// Un instante (DATE) se lee en hora de Caracas: con UTC, un vencimiento creado después de las 8 p. m. saldría un día adelantado
+const aFechaISO = (d) => (d ? (typeof d === 'string' ? d.slice(0, 10) : fechaCaracas(new Date(d))) : null);
 
 const diasEntre = (desde, hasta) => Math.round((new Date(`${hasta}T00:00:00Z`) - new Date(`${desde}T00:00:00Z`)) / 86400000);
 

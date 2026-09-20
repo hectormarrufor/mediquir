@@ -47,6 +47,9 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
     const [referencia, setReferencia] = useState('');
     const [procesandoPago, setProcesandoPago] = useState(false);
     const [errorPago, setErrorPago] = useState('');
+    const [sinPagoEncontrado, setSinPagoEncontrado] = useState(false); // tras varios intentos no apareció el SMS del pago
+    const [pendienteVerificacion, setPendienteVerificacion] = useState(false); // el pedido quedó registrado con el pago por verificar
+    const idIntentoRef = useRef(null); // los reintentos automáticos comparten id: el servidor los cuenta como UN intento
 
     // Formulario de Cliente con Tipo de Documento y Contribuyente Especial
     const formCliente = useForm({
@@ -250,11 +253,14 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
         }
     };
 
-    const procesarCompra = async (intentoActual = 1) => {
+    // manual = true: el cliente asegura haber pagado y pide dejar el pedido registrado para que administración verifique su pago
+    const procesarCompra = async (intentoActual = 1, manual = false) => {
         setProcesandoPago(true);
         if (intentoActual === 1) {
+            if (!manual || !idIntentoRef.current) idIntentoRef.current = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
             setErrorPago('');
-            setMensajeCarga('Verificando tu pago en el banco...');
+            setSinPagoEncontrado(false);
+            setMensajeCarga(manual ? 'Registrando tu pedido...' : 'Verificando tu pago en el banco...');
         } else {
             setMensajeCarga(`Esperando confirmación del banco... (Intento ${intentoActual}/6)`);
         }
@@ -281,7 +287,9 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                 body: JSON.stringify({
                     cart, cliente: clientePayload, metodoEntrega: esNacional ? 'nacional' : metodoEntrega, pagoOnlinePickup,
                     coordenadasGPS, direccionMapa, costoDelivery: costoDeliveryFinal,
-                    pagoMovil: requierePagoOnline ? { referencia } : null
+                    pagoMovil: requierePagoOnline ? { referencia } : null,
+                    idIntento: idIntentoRef.current,
+                    verificacionManual: manual,
                 })
             });
 
@@ -292,13 +300,17 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                     setTimeout(() => procesarCompra(intentoActual + 1), 5000);
                     return;
                 }
-                
-                throw new Error(
-                    data.errorType === 'PAGO_NO_ENCONTRADO' 
-                    ? 'Tranquilo, tu dinero está seguro pero la red bancaria está tardando en enviarnos el mensaje. Por favor, asegúrate de que la referencia es correcta, espera 1 minuto y vuelve a intentarlo.'
-                    : data.message || 'Error al procesar la orden'
-                );
+                // Tras ~30 segundos sin ver el pago: se le explica y puede corregir la referencia o dejar el pedido para verificación
+                if (data.errorType === 'PAGO_NO_ENCONTRADO') {
+                    setSinPagoEncontrado(true);
+                    setProcesandoPago(false);
+                    return;
+                }
+
+                throw new Error(data.message || 'Error al procesar la orden');
             }
+
+            if (data.pendienteVerificacion) setPendienteVerificacion(true);
 
             const nuevoPedidoLocal = {
                 ventaId: data.ventaId,
@@ -551,6 +563,17 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                                 />
 
                                 {errorPago && <Alert icon={<IconAlertCircle size={16} />} color="red" mt="md">{errorPago}</Alert>}
+
+                                {sinPagoEncontrado && (
+                                    <Alert icon={<IconAlertCircle size={18} />} color="orange" variant="light" mt="md" title="Todavía no vemos tu pago">
+                                        <Text size="sm">Los bancos a veces tardan en avisarnos. Revisa que los <b>últimos 4 dígitos de la referencia</b> y el <b>monto exacto</b> (Bs {totalPagarBS.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) sean los de tu pago.</Text>
+                                        <Group mt="sm" gap="xs">
+                                            <Button size="xs" variant="default" onClick={() => { setSinPagoEncontrado(false); idIntentoRef.current = null; }}>Corregir la referencia y reintentar</Button>
+                                            <Button size="xs" color="orange" loading={procesandoPago} onClick={() => procesarCompra(1, true)}>Ya pagué: registrar mi pedido para que lo verifiquen</Button>
+                                        </Group>
+                                        <Text size="xs" c="dimmed" mt="xs">Si registras el pedido, confirmaremos tu pago directamente en el banco y te avisaremos. Si el pago no existe, el pedido se cancela.</Text>
+                                    </Alert>
+                                )}
                             </Paper>
                         ) : (
                             <Alert color="blue" title="Pago en Tienda">Reservaremos tu inventario. Realiza el pago en nuestras instalaciones al momento de retirar.</Alert>
@@ -561,8 +584,8 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                 <Stepper.Completed>
                     <Stack align="center" ta="center" mt={50} mb={30}>
                         <Box bg="teal.1" p={20} style={{ borderRadius: '50%' }}><IconCheck size={50} color="teal" /></Box>
-                        <Text fw={900} size="xl" mt="md">¡Orden Confirmada!</Text>
-                        <Text c="dimmed" maw={300}>{requierePagoOnline ? `Pago validado con éxito. Tu pedido está en preparación${avisoHorario ? ` y se despachará ${avisoHorario.cuando}` : ''}.` : 'Tus insumos están reservados para pago en tienda.'}</Text>
+                        <Text fw={900} size="xl" mt="md">{pendienteVerificacion ? '¡Pedido registrado!' : '¡Orden Confirmada!'}</Text>
+                        <Text c="dimmed" maw={320}>{pendienteVerificacion ? 'Estamos verificando tu pago directamente en el banco. Apenas lo confirmemos, tu pedido pasa a preparación. Guarda tu número de pedido y la referencia por si necesitas escribirnos.' : requierePagoOnline ? `Pago validado con éxito. Tu pedido está en preparación${avisoHorario ? ` y se despachará ${avisoHorario.cuando}` : ''}.` : 'Tus insumos están reservados para pago en tienda.'}</Text>
                     </Stack>
                 </Stepper.Completed>
             </Stepper>
@@ -584,6 +607,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                         <Button
                             color="green"
                             onClick={() => procesarCompra(1)}
+                            style={sinPagoEncontrado ? { display: 'none' } : undefined}
                             loading={procesandoPago}
                             loaderProps={{ type: 'dots' }}
                             disabled={(requierePagoOnline && referencia.length < 4) || (Boolean(avisoHorario) && !aceptaHorario)}

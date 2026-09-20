@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { Venta, sequelize } from '@/models';
 import { requerirNoVendedor } from '@/app/api/_lib/acceso';
 import { ErrorNota, emitirNotaVenta, notasDeVenta } from '@/app/api/_lib/notasFiscales';
+import { avisarCliente } from '@/app/api/_lib/avisosCliente';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +40,7 @@ export async function POST(request, { params }) {
 
         const nota = await emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario: Boolean(devuelveInventario), usuarioId: Number(acceso.sesion.id) || null, transaction: t });
         await t.commit();
+        if (venta.tipoVenta === 'MAYOR') await avisarCliente(venta, 'NOTA_EMITIDA', { tipo: nota.tipo, numero: nota.numeroDocumento });
         return NextResponse.json({ success: true, nota }, { status: 201 });
     } catch (error) {
         if (!t.finished) await t.rollback();

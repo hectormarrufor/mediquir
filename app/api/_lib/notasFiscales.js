@@ -12,6 +12,7 @@
 import db from '../../../models/index.js';
 import { calcularFactura, aBolivares, aDolares, REGLAS } from '../../constants/facturacion.js';
 import { hoyCaracas, recalcularCobro } from './retencionesVenta.js';
+import { fechaCaracas } from '../../constants/hora.js';
 
 const {
     sequelize, NotaFiscal, NotaFiscalDetalle, VentaDetalle, Producto, Abono, CuentaPorCobrar, CuentaPorPagar, Correlativo,
@@ -260,7 +261,7 @@ export async function registrarNotaCompra({ factura, tipo, numeroDocumento, nume
     } else {
         await CuentaPorPagar.create({
             proveedorId: factura.proveedorId, facturaCompraId: factura.id, montoTotal: total, saldoPendiente: total, moneda, tasaCambio: tasa,
-            fechaVencimiento: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10), estado: 'Pendiente',
+            fechaVencimiento: fechaCaracas(new Date(Date.now() + 7 * 86400000)), estado: 'Pendiente',
         }, { transaction: t });
     }
     return nota;

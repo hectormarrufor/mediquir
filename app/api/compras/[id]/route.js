@@ -1,8 +1,36 @@
 import { NextResponse } from 'next/server';
 import db from '@/models/index'; 
-const { sequelize, FacturaCompra, EntradaInventario, Producto, MovimientoFinanciero, CuentaPorPagar } = db;
+import { requerirStaff } from '../../inventario/_lib';
+import { rolDe } from '@/app/constants/roles';
+const { sequelize, FacturaCompra, EntradaInventario, Producto, MovimientoFinanciero, CuentaPorPagar, Proveedor, RetencionIva, User, Empleado } = db;
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// Detalle de una compra: documento, proveedor, productos que entraron y su retención de IVA (si la tiene)
+export async function GET(request, { params }) {
+    const acceso = await requerirStaff();
+    if (acceso.error) return acceso.error;
+    try {
+        const { id } = await params;
+        const factura = await FacturaCompra.findOne({
+            where: UUID_REGEX.test(id) ? { id } : { numeroDocumento: id },
+            include: [
+                { model: Proveedor, as: 'proveedor', attributes: ['id', 'nombre', 'identificacion', 'telefono'] },
+                { model: EntradaInventario, as: 'entradas', include: [{ model: Producto, as: 'producto', attributes: ['id', 'nombre', 'codigo'] }] },
+                { model: RetencionIva, as: 'retenciones', attributes: ['id', 'tipo', 'comprobante', 'fecha', 'ivaRetenido', 'porcentajeRetencion'] },
+                { model: User, as: 'registrador', attributes: ['id', 'user'], include: [{ model: Empleado, as: 'empleado', attributes: ['nombre', 'apellido'] }] },
+            ],
+        });
+        // Un vendedor solo ve las compras que él registró
+        if (!factura || (rolDe(acceso.sesion) === 'vendedor' && Number(factura.registradoPorId) !== Number(acceso.sesion.id))) {
+            return NextResponse.json({ error: 'Compra no encontrada' }, { status: 404 });
+        }
+        return NextResponse.json(factura);
+    } catch (error) {
+        console.error('Detalle de compra:', error);
+        return NextResponse.json({ error: 'No se pudo cargar la compra' }, { status: 500 });
+    }
+}
 
 export async function DELETE(request, { params }) {
     const t = await sequelize.transaction();

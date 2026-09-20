@@ -1,64 +1,71 @@
 import db from '@/models';
-import { Op } from 'sequelize';
+import { getSesion } from '../notificaciones/_lib';
+import { rolDe } from '@/app/constants/roles';
 
-export async function GET(req) {
+// Suscripciones de notificaciones push. El dueño de una suscripción es SIEMPRE el usuario de la sesión: antes el navegador mandaba
+// su "usuarioId" y cualquiera (incluso sin sesión, o un cliente del portal) podía suscribirse como un empleado y recibir sus avisos internos.
+const json = (cuerpo, status = 200) => new Response(JSON.stringify(cuerpo), { status, headers: { 'Content-Type': 'application/json' } });
+
+// Lista de suscripciones: solo administradores, y sin las llaves de cifrado
+export async function GET() {
+  const sesion = await getSesion();
+  if (!sesion) return json({ error: 'No autorizado' }, 401);
+  if (sesion.clienteId || rolDe(sesion) !== 'admin') return json({ error: 'Solo administradores' }, 403);
   try {
-    const subscripciones = await db.PushSubscription.findAll();
-    return new Response(JSON.stringify(subscripciones), { status: 200 });
+    const subscripciones = await db.PushSubscription.findAll({ attributes: { exclude: ['keys', 'endpoint'] } });
+    return json(subscripciones);
   } catch (error) {
     console.error('Error fetching subscriptions:', error);
-    return new Response(JSON.stringify({ error: 'Error fetching subscriptions' }), { status: 500 });
+    return json({ error: 'Error fetching subscriptions' }, 500);
   }
 }
 
 export async function POST(req) {
+  const sesion = await getSesion();
+  if (!sesion?.id) return json({ error: 'No autorizado' }, 401);
   try {
-    const body = await req.json();
-    const { suscripcion, usuarioId, rol, navegador, environment } = body;
+    const { suscripcion, rol, navegador, environment } = await req.json();
+    if (!suscripcion || !suscripcion.endpoint) return json({ error: 'Falta la suscripción' }, 400);
+    const usuarioId = Number(sesion.id);
 
-    if (!suscripcion || !suscripcion.endpoint || !usuarioId) {
-      return new Response(JSON.stringify({ error: 'Faltan datos obligatorios (endpoint o usuarioId)' }), { status: 400 });
-    }
-
-    // Buscamos si ya existe este endpoint exacto en el navegador
-    let pushSub = await db.PushSubscription.findOne({ where: { endpoint: suscripcion.endpoint } });
-
+    const pushSub = await db.PushSubscription.findOne({ where: { endpoint: suscripcion.endpoint } });
     if (pushSub) {
-      // Si ya existe, actualizamos el usuario al que pertenece ahora mismo (ej: cambiamos del usuario 6 al usuario 1)
-      pushSub.usuarioId = parseInt(usuarioId);
+      // El mismo navegador pasa a ser de quien inició sesión ahora
+      pushSub.usuarioId = usuarioId;
       pushSub.rol = rol || (pushSub.rol || 'usuario');
       pushSub.activo = true;
+      if (suscripcion.keys) pushSub.keys = suscripcion.keys;
       if (navegador) pushSub.navegador = navegador;
       if (environment) pushSub.environment = environment;
       await pushSub.save();
     } else {
-      // Si no existe, lo creamos de cero
       await db.PushSubscription.create({
         endpoint: suscripcion.endpoint,
         keys: suscripcion.keys,
-        usuarioId: parseInt(usuarioId),
+        usuarioId,
         rol: rol || 'usuario',
         activo: true,
         navegador: navegador || 'Desconocido',
-        environment: environment || 'development'
+        environment: environment || 'development',
       });
     }
-
-    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    return json({ ok: true });
   } catch (error) {
     console.error('Error en POST /api/suscribir:', error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return json({ error: 'No se pudo guardar la suscripción' }, 500);
   }
 }
 
+// Quitar una suscripción: se identifica por su endpoint, una URL secreta que solo conoce ese navegador. No exige sesión porque al cerrar sesión
+// el navegador se desuscribe justo cuando la cookie se está borrando.
 export async function DELETE(req) {
   try {
-    const body = await req.json();
-    const { endpoint } = body;
+    const { endpoint } = await req.json();
+    if (!endpoint) return json({ error: 'Falta el endpoint' }, 400);
     await db.PushSubscription.destroy({ where: { endpoint } });
-    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    return json({ ok: true });
   } catch (error) {
     console.error('Error deleting subscriptions:', error);
-    return new Response(JSON.stringify({ error: 'Error deleting subscriptions' }), { status: 500 });
+    return json({ error: 'Error deleting subscriptions' }, 500);
   }
 }

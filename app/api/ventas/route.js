@@ -9,6 +9,7 @@ import { crearRetencionPendiente } from '../_lib/retencionesVenta';
 import { calcularFactura, aBolivares, aDolares, REGLAS, precioPorTarifa, TARIFAS_VENDEDOR } from '@/app/constants/facturacion';
 import { rolDe } from '@/app/constants/roles';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
+import { fechaCaracas } from '@/app/constants/hora';
 import { presentacionDe } from '@/app/constants/presentaciones';
 
 // Presentación que se pidió ("2 cajas") validada contra la ficha del producto y contra la cantidad en unidades;
@@ -272,7 +273,7 @@ export async function POST(request) {
             // El flete también lo cobra la empresa: forma parte del ingreso
             const ingreso = Number((factura.subtotal + factura.flete).toFixed(2));
             await MovimientoFinanciero.create({
-                tipo: 'INGRESO', fecha: new Date(), metodoPago, referencia,
+                tipo: 'INGRESO', fecha: fechaCaracas(), metodoPago, referencia,
                 montoUsd: aUsd(ingreso), tasaBcvAplicada: tasaCambio, montoVes: aBs(ingreso),
                 descripcion: `Venta ${numeroDocumento} (Subtotal${factura.flete > 0 ? ' + flete' : ''})`, categoriaId: catVentas.id, ventaId: nuevaVenta.id,
             }, { transaction: t });
@@ -282,7 +283,7 @@ export async function POST(request) {
                 if (!catIva) catIva = await CategoriaFinanciera.create({ nombre: 'IVA Recaudado', tipo: 'INGRESO' }, { transaction: t });
 
                 await MovimientoFinanciero.create({
-                    tipo: 'INGRESO', fecha: new Date(), metodoPago, referencia,
+                    tipo: 'INGRESO', fecha: fechaCaracas(), metodoPago, referencia,
                     montoUsd: aUsd(factura.montoIva), tasaBcvAplicada: tasaCambio, montoVes: aBs(factura.montoIva),
                     descripcion: `IVA de Venta ${numeroDocumento} (Impuesto SENIAT)`, categoriaId: catIva.id, ventaId: nuevaVenta.id,
                 }, { transaction: t });

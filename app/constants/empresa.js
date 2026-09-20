@@ -8,6 +8,16 @@ export const MEMBRETE_MEDIQUIR = {
     logo: "/tenants/mediquir/logo.png" // Asegúrate de tener tu logo real en la carpeta /public de Next.js
 };
 
+// Datos del AGENTE DE RETENCIÓN tal como salen en el comprobante de retención de IVA que se entrega a los proveedores.
+export const AGENTE_RETENCION = {
+    nombre: "MATERIALES Y EQUIPOS QUIRURGICOS MEDIQUIR, C.A.",
+    rif: "J-30487649-1",
+    direccion: "CALLE VENEZUELA, ENTRE AV. BOLIVAR Y ALONSO DE OJEDA, CIUDAD OJEDA. ESTADO ZULIA",
+    zonaPostal: "4019",
+    telefonos: "0265-8086095",
+    sello: "/tenants/mediquir/sello-firma.png", // sello y firma autorizada (imagen con fondo transparente)
+};
+
 // Datos fiscales de la empresa para los libros de compras y ventas.
 // SUPUESTO (confírmalo con tu contador): la empresa es AGENTE DE RETENCIÓN de IVA y retiene el 75 % del IVA de toda factura de compra
 // con IVA, como se ve en el libro de compras de ejemplo. Si dejara de serlo, pon agenteRetencionIva en false.

@@ -20,6 +20,13 @@ export function useNumeracion(activo = true) {
 
 // Vista previa de cómo saldría lo que se está escribiendo ("NC-02325")
 function vistaPrevia(serie, texto) {
+    if (serie.clave === 'RET-COMPRA') {
+        // Comprobante de retención: año y mes + 8 dígitos (se acepta el número completo de 14 dígitos o solo la secuencia)
+        const digitos = String(texto).replace(/\D/g, '');
+        const secuencia = digitos.length === 14 ? digitos.slice(-8) : digitos;
+        if (!secuencia || secuencia.length > 8) return null;
+        return `${serie.periodo || ''}${secuencia.padStart(8, '0')}`;
+    }
     const m = /^(?:[A-Za-z0-9]{1,3}\s*-\s*)?(\d{1,10})$/.exec(String(texto).trim());
     if (!m) return null;
     return `${serie.prefijo}-${m[1].padStart(Math.max(serie.ceros, m[1].length), '0')}`;
@@ -76,7 +83,7 @@ export function PreguntarNumero({ serie, puedeEditar, onListo, compacto = false 
     );
 }
 
-// Panel con las cuatro series: cuál es el próximo número de cada una y, si eres administrador, cambiarlo
+// Panel con las series: cuál es el próximo número de cada una y, si eres administrador, cambiarlo
 export default function NumeracionFiscalModal({ opened, onClose }) {
     const { data, isLoading } = useNumeracion(opened);
     const [editando, setEditando] = useState(null);

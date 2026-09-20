@@ -11,10 +11,11 @@ import { useRouter } from 'next/navigation';
 import PrecioVisual from '@/app/components/ui/PrecioVisual';
 import dayjs from 'dayjs';
 import NotaCompraModal from './NotaCompraModal';
+import { fechaCaracas } from '@/app/constants/hora';
 
 export default function ComprasDashboardPage() {
     const router = useRouter();
-    const getTodayYMD = () => new Date().toISOString().split('T')[0];
+    const getTodayYMD = () => fechaCaracas();
 
     const [fechaInicio, setFechaInicio] = useState(getTodayYMD());
     const [fechaFin, setFechaFin] = useState(getTodayYMD());
@@ -142,6 +143,9 @@ export default function ComprasDashboardPage() {
                                                     >
                                                         Ver Detalle
                                                     </Button>
+                                                    {Number(compra.montoRetencion) > 0 && (
+                                                        <Button size="xs" variant="light" color="green" onClick={() => router.push(`/superuser/compras/${compra.id}/retencion`)}>Retención</Button>
+                                                    )}
                                                     {compra.tipoDocumento === 'FACTURA' && (
                                                         <Button size="xs" variant="subtle" color="grape" onClick={() => setNotaDe(compra)}>Nota del proveedor</Button>
                                                     )}

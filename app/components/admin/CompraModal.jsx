@@ -16,6 +16,8 @@ import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import PrecioVisual from '../ui/PrecioVisual';
 import { useAuth } from '@/hooks/useAuth';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
+import { fechaCaracas } from '@/app/constants/hora';
+import { PreguntarNumero, useNumeracion } from '@/app/superuser/_components/NumeracionFiscal';
 
 export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
     const { userId } = useAuth();
@@ -40,13 +42,14 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
 
     const { data: productos } = useQuery({ queryKey: ['productos-compra'], queryFn: () => fetchSelect('/api/productos') });
     const { data: proveedores } = useQuery({ queryKey: ['proveedores-compra'], queryFn: () => fetchSelect('/api/proveedores') });
+    const { data: numeracion } = useNumeracion(opened); // el comprobante de retención sigue su propio correlativo
 
     const formCompra = useForm({
         initialValues: {
             proveedorId: null,
             tipoDocumento: 'FACTURA',
             numeroDocumento: '',
-            fechaFactura: new Date().toISOString().split('T')[0],
+            fechaFactura: fechaCaracas(),
             condicionPago: 'Contado',
             diasCredito: 0,
             moneda: 'USD',
@@ -172,6 +175,11 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
 
     const totalFinal = subtotal + montoIva;
 
+    // Comprobante de retención: si todavía no se dijo con qué número empieza la numeración, se pregunta antes de registrar
+    const serieRet = numeracion?.series?.find((s) => s.clave === 'RET-COMPRA');
+    const faltaNumeracionRet = montoRetencion > 0 && Boolean(serieRet) && !serieRet.configurado;
+    const periodoRet = String(formCompra.values.fechaFactura || fechaCaracas()).slice(0, 7).replace('-', '');
+
     const handleLanzarSimulacion = async () => {
         if (carritoCompra.length === 0) return notifications.show({ message: 'El carrito de compra está vacío', color: 'orange' });
         if (!formCompra.values.numeroDocumento) return notifications.show({ message: 'Indica el número de factura o recibo', color: 'red' });
@@ -191,7 +199,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                 moneda: formCompra.values.moneda,
                 tasaCambio: tasaBcv,
                 subtotal, montoIva, montoRetencion, totalFinal,
-                numeroControl: formCompra.values.numeroControl, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion,
+                numeroControl: esFactura ? formCompra.values.numeroControl : null, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion, aplicarRetencion: Boolean(formCompra.values.aplicarRetencion),
                 detalles: carritoCompra
             };
 
@@ -232,7 +240,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                 metodoPago: formCompra.values.metodoPago,
                 referencia: formCompra.values.referencia,
                 subtotal, montoIva, montoRetencion, totalFinal,
-                numeroControl: formCompra.values.numeroControl, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion,
+                numeroControl: esFactura ? formCompra.values.numeroControl : null, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion, aplicarRetencion: Boolean(formCompra.values.aplicarRetencion),
                 registradoPorId: userId,
                 detalles: carritoCompra
             };
@@ -244,7 +252,10 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
             });
 
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Error al registrar la compra');
+            if (!res.ok) {
+                if (data.codigo) queryClient.invalidateQueries({ queryKey: ['numeracion'] }); // falta configurar la numeración de retenciones
+                throw new Error(data.error || 'Error al registrar la compra');
+            }
 
             notifications.show({ title: 'Éxito', message: `Factura registrada, inventario y costos actualizados.${data.comprobanteRetencion ? ` Comprobante de retención de IVA: ${data.comprobanteRetencion}` : ''}`, color: 'green', autoClose: 9000 });
             queryClient.invalidateQueries(['productos-compra']);
@@ -321,6 +332,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                     {esFactura && <TextInput size="md" mt="xs" label="Nro. de control" placeholder="Ej: 00-009497" description="Para el libro de compras" {...formCompra.getInputProps('numeroControl')} />}
                                 </Group>
 
+                                {!esFactura && <Alert color="gray" variant="light" mb="md" p="xs"><Text size="xs">La nota de entrega no es un documento fiscal: se registra sin IVA, sin retención y sin número de control, y no entra al libro de compras. El inventario y el costo se actualizan igual.</Text></Alert>}
+
                                 <Group grow mb="md">
                                     <TextInput size="md" type="date" label="Fecha de Factura" withAsterisk {...formCompra.getInputProps('fechaFactura')} />
                                     <Select size="md" label="Condición de Pago" data={[{ value: 'Contado', label: 'Contado' }, { value: 'Credito', label: 'Crédito' }]} {...formCompra.getInputProps('condicionPago')} />
@@ -333,7 +346,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                     <Select size="md" label="Moneda" data={['USD', 'BS']} w={150} {...formCompra.getInputProps('moneda')} />
                                     {esFactura && (
                                         <Group>
-                                            <Checkbox label={<Text fw={600} size="md">Aplicar Retención IVA</Text>} {...formCompra.getInputProps('aplicarRetencion', { type: 'checkbox' })} />
+                                            <Checkbox label={<Text fw={600} size="md">Retener IVA (agente de retención)</Text>} description="Se emite el comprobante con su correlativo" {...formCompra.getInputProps('aplicarRetencion', { type: 'checkbox' })} />
                                             {formCompra.values.aplicarRetencion && (
                                                 <Select size="md" data={[{value: '75', label: '75%'}, {value: '100', label: '100%'}]} w={110} {...formCompra.getInputProps('porcentajeRetencion')} />
                                             )}
@@ -405,15 +418,23 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
 
                                 <Divider mb="md" />
 
+                                {faltaNumeracionRet && (
+                                    <Alert color="orange" variant="light" mb="md" title="Antes de retener: ¿con qué número empiezan tus comprobantes?">
+                                        <Text size="xs" mb="xs">Esta factura lleva retención de IVA y el comprobante sigue su propia numeración. Como ya emitiste comprobantes antes del sistema, indica con cuál empieza el próximo (una sola vez).</Text>
+                                        <PreguntarNumero serie={serieRet} puedeEditar={numeracion.puedeEditar} compacto />
+                                    </Alert>
+                                )}
+
                                 <Group justify="space-between" align="flex-end">
                                     <Stack gap={4}>
                                         <Text size="sm" c="dimmed">Subtotal: <PrecioVisual valor={subtotal} simbolo={formCompra.values.moneda === 'BS' ? 'Bs' : '$'} size="sm" /></Text>
                                         {esFactura && <Text size="sm" c="dimmed">IVA (16%): <PrecioVisual valor={montoIva} simbolo={formCompra.values.moneda === 'BS' ? 'Bs' : '$'} size="sm" /></Text>}
                                         {montoRetencion > 0 && <Text size="sm" c="red" fw={700}>Retención (-): <PrecioVisual valor={montoRetencion} simbolo={formCompra.values.moneda === 'BS' ? 'Bs' : '$'} size="sm" /></Text>}
+                                        {montoRetencion > 0 && serieRet?.configurado && <Text size="xs" c="dimmed">Comprobante de retención N° {periodoRet}{serieRet.siguiente}</Text>}
                                         <Text fw={900} size="xl" c="blue.9">Total: <PrecioVisual valor={totalFinal} simbolo={formCompra.values.moneda === 'BS' ? 'Bs' : '$'} size="xl" fw={900} c="blue.9" /></Text>
                                     </Stack>
 
-                                    <Button size="lg" color="green.8" leftSection={<IconCheck size={22} />} onClick={handleLanzarSimulacion} loading={isSubmitting} disabled={carritoCompra.length === 0}>
+                                    <Button size="lg" color="green.8" leftSection={<IconCheck size={22} />} onClick={handleLanzarSimulacion} loading={isSubmitting} disabled={carritoCompra.length === 0 || faltaNumeracionRet}>
                                         Analizar Compra y Costos
                                     </Button>
                                 </Group>

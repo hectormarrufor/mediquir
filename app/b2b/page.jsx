@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { IconAlertTriangle, IconArrowRight, IconBuildingStore, IconCalendarDue, IconClockHour4, IconCreditCard, IconReceipt2, IconReceiptTax, IconTruckDelivery, IconWallet } from '@tabler/icons-react';
 import { aBolivares } from '@/app/constants/facturacion';
 import { BadgesPedido } from './_components/Estados';
+import ActivarAvisos from './_components/ActivarAvisos';
 import { fmtBs, fmtFecha, fmtUsd, pedirJson } from './_lib/formato';
 
 function Indicador({ icono: Icono, color, titulo, valor, detalle, onClick, cargando }) {
@@ -40,6 +41,8 @@ export default function B2BInicio() {
                 </Box>
                 <Button size="md" radius="xl" color="accent.6" leftSection={<IconBuildingStore size={18} />} onClick={() => router.push('/b2b/catalogo')}>Hacer un pedido</Button>
             </Group>
+
+            <ActivarAvisos />
 
             {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}
 
