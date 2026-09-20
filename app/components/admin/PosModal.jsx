@@ -12,7 +12,7 @@ import { useMediaQuery } from '@mantine/hooks';
 import { 
     IconTrash, IconPlus, IconMinus, IconExchange, 
     IconPackage, IconReceiptTax, IconCheck, IconTag,
-    IconZoomIn, IconZoomOut, IconEdit
+    IconZoomIn, IconZoomOut, IconEdit, IconArrowBackUp
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import PrecioVisual from '../ui/PrecioVisual'; 
@@ -23,6 +23,32 @@ import { calcularFactura, aBolivares, aDolares, precioPorTarifa } from '@/app/co
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
 import { presentacionesDe, presentacionDe } from '@/app/constants/presentaciones';
+
+// Precio unitario editable de un renglón (solo administración). Se confirma al salir del campo o con Enter; no cambia el precio del producto,
+// solo el de esta venta. Resaltado en naranja cuando difiere del precio del sistema.
+function PrecioEditable({ valor, simbolo, editado, onCommit, onRestablecer }) {
+    const [txt, setTxt] = useState(String(valor));
+    useEffect(() => { setTxt(String(valor)); }, [valor]);
+    const confirmar = () => {
+        const n = Number(txt);
+        if (n > 0) { if (n !== Number(valor)) onCommit(n); } else setTxt(String(valor));
+    };
+    return (
+        <Group gap={2} wrap="nowrap" justify="flex-end">
+            <NumberInput
+                size="xs" w={100} hideControls decimalScale={3} min={0} value={txt} onChange={setTxt}
+                prefix={simbolo === 'Bs' ? 'Bs ' : '$'} onBlur={confirmar}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                styles={{ input: { textAlign: 'right', fontWeight: 600, ...(editado ? { borderColor: '#f08c00', backgroundColor: '#fff9db' } : {}) } }}
+            />
+            {editado && (
+                <ActionIcon size="sm" variant="subtle" color="orange" title="Volver al precio del sistema" onClick={onRestablecer}>
+                    <IconArrowBackUp size={14} />
+                </ActionIcon>
+            )}
+        </Group>
+    );
+}
 
 export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
     const queryClient = useQueryClient(); // 🔥 INSTANCIADO PARA INVALIDAR QUERIES
@@ -54,7 +80,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
 
     const [zoomPreview, setZoomPreview] = useState(true);
 
-    const { userId, esVendedor } = useAuth();
+    const { userId, esVendedor, rolUsuario } = useAuth();
+    const puedeEditarPrecio = rolUsuario === 'admin'; // el servidor ya obliga a un vendedor a cobrar por tarifa
     const isMobile = useMediaQuery('(max-width: 768px)');
 
     const getImageUrl = (path) => {
@@ -154,9 +181,11 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
             const productoOriginal = productos.find(p => p.id === item.id);
             if (!productoOriginal) return item;
             const info = calcularPrecioInfo(productoOriginal, formVenta.values.tipoPrecio);
+            const conservar = item.precioManual && item.simbolo === info.simbolo;
             return { 
                 ...item, 
-                precio: info.precio, 
+                precio: conservar ? item.precio : info.precio, 
+                precioManual: Boolean(conservar),
                 simbolo: info.simbolo, 
                 tieneDescuento: info.tieneDescuento,
                 porcentajeDescuento: info.porcentajeDescuento,
@@ -182,7 +211,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
 
         if (existe) {
             setCarrito(carrito.map(item => item.clave === clave ? { 
-                ...item, cantidadPres: item.cantidadPres + n, cantidad: (item.cantidadPres + n) * pres.unidades, precio: info.precio, simbolo: info.simbolo,
+                ...item, cantidadPres: item.cantidadPres + n, cantidad: (item.cantidadPres + n) * pres.unidades, precio: item.precioManual ? item.precio : info.precio, simbolo: info.simbolo,
                 tieneDescuento: info.tieneDescuento, porcentajeDescuento: info.porcentajeDescuento,
                 porcentajeIva: Number(producto.porcentajeIva) || 0,
                 imagen: imgProducto, marcaImagen: imgMarca, marcaNombre: producto.marca?.nombre
@@ -245,6 +274,15 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
         setCarrito(carrito.map(item => item.clave === clave ? { ...item, afectaInventario: value } : item));
     };
 
+    // Precio solo de esta venta: el del producto no cambia
+    const fijarPrecio = (clave, valor) => setCarrito((prev) => prev.map((i) => (i.clave === clave ? { ...i, precio: valor, precioManual: true } : i)));
+    const restablecerPrecio = (clave) => setCarrito((prev) => prev.map((i) => {
+        if (i.clave !== clave || i.isFicticio) return i;
+        const p = productos?.find((x) => x.id === i.id);
+        if (!p) return i;
+        const info = calcularPrecioInfo(p, formVenta.values.tipoPrecio);
+        return { ...i, precio: info.precio, simbolo: info.simbolo, precioManual: false };
+    }));
     const eliminarItem = (clave) => setCarrito(carrito.filter(item => item.clave !== clave));
 
     const llevaIva = (item) => Boolean(formVenta.values.conIva) && (item.isFicticio ? Boolean(item.aplicaIva) : item.porcentajeIva > 0);
@@ -518,9 +556,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                 <Table striped highlightOnHover verticalSpacing="xs" style={{ minWidth: isMobile ? 550 : '100%' }}>
                                     <Table.Thead>
                                         <Table.Tr>
-                                            <Table.Th style={{ width: '40%' }}>Producto</Table.Th>
-                                            <Table.Th style={{ width: '30%', textAlign: 'center' }}>Cantidad</Table.Th>
-                                            <Table.Th style={{ width: '12%', textAlign: 'right' }}>Unit.</Table.Th>
+                                            <Table.Th style={{ width: '36%' }}>Producto</Table.Th>
+                                            <Table.Th style={{ width: '28%', textAlign: 'center' }}>Cantidad</Table.Th>
+                                            <Table.Th style={{ width: puedeEditarPrecio ? '18%' : '12%', textAlign: 'right' }}>Unit.</Table.Th>
                                             <Table.Th style={{ width: '13%', textAlign: 'right' }}>Total</Table.Th>
                                             <Table.Th style={{ width: '5%' }}></Table.Th>
                                         </Table.Tr>
@@ -585,7 +623,14 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                                 </Table.Td>
 
                                                 <Table.Td style={{ textAlign: 'right' }}>
-                                                    <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="sm" fw={500} />
+                                                    {puedeEditarPrecio ? (
+                                                        <PrecioEditable
+                                                            valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)}
+                                                            onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)}
+                                                        />
+                                                    ) : (
+                                                        <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="sm" fw={500} />
+                                                    )}
                                                 </Table.Td>
                                                 <Table.Td style={{ textAlign: 'right' }}>
                                                     <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="sm" fw={800} />

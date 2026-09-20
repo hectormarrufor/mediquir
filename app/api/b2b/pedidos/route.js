@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Cliente, Correlativo, CuentaPorCobrar, Producto, SalidaInventario, Venta, VentaDetalle, sequelize } from '@/models';
 import { notificarCabezas, notificarTodos, notificarUsuario } from '@/app/handlers/notificar';
-import { calcularFactura, precioMayor } from '@/app/constants/facturacion';
+import { calcularFactura, precioParaCliente } from '@/app/constants/facturacion';
 import { presentacionDe } from '@/app/constants/presentaciones';
 import { requerirCliente } from '../../_lib/acceso';
 import { crearRetencionPendiente } from '../../_lib/retencionesVenta';
@@ -119,13 +119,16 @@ export async function POST(request) {
         const faltantes = [...pedidoPorProducto].filter(([id, unidades]) => (Number(porId.get(id).stockAlmacen) || 0) < unidades).map(([id]) => porId.get(id));
         const enRevision = faltantes.length > 0;
 
-        const sinPrecio = lineas.filter(({ producto }) => !(precioMayor(producto) > 0));
+        // La tarifa (Precio 6 o 7) la fija administración en el perfil del cliente; el servidor cobra con ella, no con lo que mande el navegador
+        const clienteTarifa = await Cliente.findByPk(clienteId, { attributes: ['tarifaPrecio'], transaction: t });
+        const tarifa = clienteTarifa?.tarifaPrecio || 'precio6';
+        const sinPrecio = lineas.filter(({ producto }) => !(precioParaCliente(producto, tarifa) > 0));
         if (sinPrecio.length) throw new ErrorNegocio(`Sin precio asignado: ${sinPrecio.map(({ producto }) => producto.nombre).join(', ')}`, 409);
 
         const factura = calcularFactura({
             renglones: lineas.map(({ producto, cantidad }) => {
                 const porcentajeIva = Number(producto.porcentajeIva) || 0;
-                return { precioUnitario: precioMayor(producto), cantidad, aplicaIva: tipoDocumento === 'FACTURA' && porcentajeIva > 0, porcentajeIva };
+                return { precioUnitario: precioParaCliente(producto, tarifa), cantidad, aplicaIva: tipoDocumento === 'FACTURA' && porcentajeIva > 0, porcentajeIva };
             }),
         });
         const tasaCambio = await tasaVigente({ transaction: t });

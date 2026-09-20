@@ -73,6 +73,13 @@ const Cliente = sequelize.define('Cliente', {
     defaultValue: 5,
     validate: { min: 0, max: 100 },
   },
+  // Tarifa de precios que ve y paga en el portal B2B: 'precio6' (mayor) o 'precio7' (detal). Solo la cambia un administrador
+  tarifaPrecio: {
+    type: DataTypes.STRING(10),
+    allowNull: false,
+    defaultValue: 'precio6',
+    validate: { isIn: [['precio6', 'precio7']] },
+  },
 }, {
   tableName: 'Clientes',
   timestamps: true,

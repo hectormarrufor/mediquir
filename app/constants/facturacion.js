@@ -147,6 +147,13 @@ export function precioMayor(producto) {
     return Number(producto?.precio6) > 0 ? precioUnitario(producto.precio6) : precioVentaWeb({ ...producto, porcentajeDescuento: 0 });
 }
 
+// Tarifa de precios de un cliente con usuario (portal B2B), configurada por administración en su perfil:
+//   precio6 = mayor (por defecto) · precio7 = detal, sin el descuento de la landing
+export const TARIFAS_CLIENTE = ['precio6', 'precio7'];
+export function precioParaCliente(producto, tarifa = 'precio6') {
+    return tarifa === 'precio7' ? precioVentaWeb({ ...producto, porcentajeDescuento: 0 }) : precioMayor(producto);
+}
+
 // ------------------------------------------------------------------------------------------------
 // Tarifas del POS. Las usan el POS (para mostrar) y el servidor (para cobrar a un vendedor), así el
 // precio que ve el vendedor es siempre el que el servidor acepta.

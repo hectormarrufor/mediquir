@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
-import { Categoria, GrupoEquivalencia, Marca, Producto } from '@/models';
+import { Categoria, Cliente, GrupoEquivalencia, Marca, Producto } from '@/models';
 import { requerirCliente } from '../../_lib/acceso';
-import { precioMayor } from '@/app/constants/facturacion';
+import { precioParaCliente } from '@/app/constants/facturacion';
 import { presentacionesDe } from '@/app/constants/presentaciones';
 
 export const dynamic = 'force-dynamic';
@@ -10,12 +10,14 @@ export const dynamic = 'force-dynamic';
 const TAMANO_PAGINA = 24;
 const entero = (v, def) => (Number.isInteger(Number(v)) && Number(v) > 0 ? Number(v) : def);
 
-// Catálogo con precio MAYOR (Precio 6). Nunca devuelve costos ni el precio de detal.
+// Catálogo con la tarifa que administración le configuró al cliente (Precio 6 por defecto, o Precio 7). Nunca devuelve costos ni la otra tarifa.
 export async function GET(request) {
     const acceso = await requerirCliente();
     if (acceso.error) return acceso.error;
 
     try {
+        const cliente = await Cliente.findByPk(acceso.clienteId, { attributes: ['tarifaPrecio'] });
+        const tarifa = cliente?.tarifaPrecio || 'precio6';
         const { searchParams } = new URL(request.url);
         const q = (searchParams.get('q') || '').trim().slice(0, 80);
         const categoriaId = entero(searchParams.get('categoriaId'), null);
@@ -45,7 +47,7 @@ export async function GET(request) {
 
         const productos = rows.map((p) => {
             const j = p.toJSON();
-            const precio = precioMayor(j);
+            const precio = precioParaCliente(j, tarifa);
             return {
                 id: j.id,
                 codigo: j.codigo,

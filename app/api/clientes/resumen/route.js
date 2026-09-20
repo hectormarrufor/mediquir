@@ -19,7 +19,7 @@ export async function GET() {
 
     try {
         const filas = await sequelize.query(
-            `SELECT c."id", c."identificacion", c."nombre", c."telefono", c."email", c."direccion", c."imagen", c."esContribuyenteEspecial", c."retencionIvaPorDefecto", c."notas", c."diasCredito", c."maxPedidosCredito", c."createdAt",
+            `SELECT c."id", c."identificacion", c."nombre", c."telefono", c."email", c."direccion", c."imagen", c."esContribuyenteEspecial", c."retencionIvaPorDefecto", c."notas", c."diasCredito", c."maxPedidosCredito", c."tarifaPrecio", c."createdAt",
                 (SELECT COUNT(*) FROM "Ventas" x WHERE x."clienteId" = c."id" AND x."condicionPago" = 'Credito' AND x."statusDespacho" <> 'Cancelado' AND x."statusPago" <> 'Pagado')::int AS "creditosActivos",
                 (SELECT u."user" FROM "Usuarios" u WHERE u."clienteId" = c."id" LIMIT 1) AS usuario,
                 COALESCE(m."compras", 0)::float AS compras, COALESCE(m."pedidos", 0)::int AS pedidos, m."ultima" AS "ultimaCompra",

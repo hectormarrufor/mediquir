@@ -45,6 +45,7 @@ export default function EditarCliente({ params }) {
             retencionIvaPorDefecto: '75',
             diasCredito: 7,
             maxPedidosCredito: 5,
+            tarifaPrecio: 'precio6',
             imagen: null
         },
         validate: {
@@ -67,6 +68,7 @@ export default function EditarCliente({ params }) {
                 retencionIvaPorDefecto: String(cliente.retencionIvaPorDefecto || 75),
                 diasCredito: cliente.diasCredito ?? 7,
                 maxPedidosCredito: cliente.maxPedidosCredito ?? 5,
+                tarifaPrecio: cliente.tarifaPrecio || 'precio6',
                 imagen: cliente.imagen || null
             });
         }
@@ -182,6 +184,18 @@ export default function EditarCliente({ params }) {
                                     <NumberInput label="Máximo de pedidos a crédito activos" min={0} max={100} allowDecimal={false} allowNegative={false} disabled={!esAdmin} {...form.getInputProps('maxPedidosCredito')} />
                                 </Grid.Col>
                             </Grid>
+                        </Paper>
+
+                        <Paper withBorder p="md" radius="md" bg="gray.0">
+                            <Title order={5} mb={4} c="gray.7">Precios en el portal B2B</Title>
+                            <Text size="xs" c="dimmed" mb="md">
+                                Qué precio ve y paga este cliente cuando compra desde su usuario. {!esAdmin && 'Solo un administrador puede cambiarlo.'}
+                            </Text>
+                            <Select
+                                label="Tarifa de precios" allowDeselect={false} disabled={!esAdmin}
+                                data={[{ value: 'precio6', label: 'Precio 6 (mayor)' }, { value: 'precio7', label: 'Precio 7 (detal)' }]}
+                                {...form.getInputProps('tarifaPrecio')}
+                            />
                         </Paper>
 
                         <ImageDropzone label="Logo o Foto del Cliente" form={form} fieldPath="imagen" />

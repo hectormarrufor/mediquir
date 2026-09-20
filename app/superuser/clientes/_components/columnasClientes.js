@@ -14,6 +14,7 @@ export const COLUMNAS = [
     { key: 'retencionIvaPorDefecto', label: 'Retención IVA', ancho: 112, tipo: 'select', campo: 'retencionIvaPorDefecto', ayuda: 'Porcentaje de IVA que retiene (solo contribuyentes especiales)' },
     { key: 'diasCredito', label: 'Días crédito', ancho: 100, tipo: 'numero', campo: 'diasCredito', derecha: true, soloAdmin: true, ayuda: 'Días que tiene para pagar un pedido a crédito' },
     { key: 'maxPedidosCredito', label: 'Máx. pedidos créd.', ancho: 124, tipo: 'numero', campo: 'maxPedidosCredito', derecha: true, soloAdmin: true, ayuda: 'Pedidos a crédito activos a la vez (0 = sin crédito)' },
+    { key: 'tarifaPrecio', label: 'Tarifa B2B', ancho: 104, tipo: 'select', campo: 'tarifaPrecio', soloAdmin: true, ayuda: 'Precio que ve y paga en el portal: Precio 6 (mayor) o Precio 7 (detal)' },
     { key: 'creditosActivos', label: 'Créd. activos', ancho: 104, tipo: 'derivada', orden: 'creditosActivos', derecha: true, ayuda: 'Pedidos a crédito activos / máximo' },
     { key: 'compras', label: 'Compras $', ancho: 110, tipo: 'derivada', orden: 'compras', derecha: true, dinero: true },
     { key: 'saldo', label: 'Saldo $', ancho: 104, tipo: 'derivada', orden: 'saldo', derecha: true, dinero: true },
@@ -33,6 +34,7 @@ COLUMNAS.find((c) => c.key === 'maxPedidosCredito').orden = 'maxPedidosCredito';
 export const OPCIONES = {
     esContribuyenteEspecial: [{ value: 'true', label: 'Sí' }, { value: 'false', label: 'No' }],
     retencionIvaPorDefecto: [{ value: '75', label: '75%' }, { value: '100', label: '100%' }],
+    tarifaPrecio: [{ value: 'precio6', label: 'Precio 6' }, { value: 'precio7', label: 'Precio 7' }],
 };
 
 // Texto con el que arranca el editor de una celda
