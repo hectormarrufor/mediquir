@@ -344,6 +344,7 @@ export default function DetallePedidoMayorPage() {
                                         <Box>
                                             <Badge color="indigo" variant="light" mb="xs">Envío nacional por Zoom</Badge>
                                             <Text size="xs" c="dimmed">Cobro a destino: el cliente paga el flete a Zoom al recibir. No hay flete en esta venta ni movimiento de tesorería.</Text>
+                                            {pedido.direccionEntrega && <Text size="sm" fw={600} mt={6}>{pedido.direccionEntrega}</Text>}
                                             {pedido.quienRetira && <Text size="sm" fw={600} mt={6}>{pedido.quienRetira}</Text>}
                                         </Box>
                                     ) : (
@@ -352,6 +353,16 @@ export default function DetallePedidoMayorPage() {
                                             <Text size="xs" c="dimmed">Quién retira / Agencia:</Text>
                                             <Text size="sm" fw={600} mb={6}>{pedido.quienRetira || 'Pendiente de asignar agencia'}</Text>
 
+                                            {pedido.direccionEntrega && (() => {
+                                                const g = /GPS: (-?[0-9.]+), (-?[0-9.]+)/.exec(pedido.direccionEntrega);
+                                                return (
+                                                    <Box mb={6}>
+                                                        <Text size="xs" c="dimmed">Dirección de entrega (marcada por el cliente):</Text>
+                                                        <Text size="sm" fw={600}>{pedido.direccionEntrega}</Text>
+                                                        {g && <Button component="a" href={`https://www.google.com/maps?q=${g[1]},${g[2]}`} target="_blank" rel="noreferrer" size="compact-xs" variant="light" mt={4}>Ver en Google Maps</Button>}
+                                                    </Box>
+                                                );
+                                            })()}
                                             <Text size="xs" c="dimmed">{pedido.tipoVenta === 'ONLINE' ? 'Delivery cobrado al cliente (va a la empresa de transporte):' : 'Costo de Flete (Gasto):'}</Text>
                                             <PrecioVisual valor={pedido.costoFlete || 0} simbolo={pedido.moneda} size="sm" fw={700} />
                                             {pedido.tipoVenta === 'ONLINE' && pedido.costoFleteReal !== null && pedido.costoFleteReal !== undefined && (() => {

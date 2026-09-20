@@ -25,6 +25,7 @@ export async function POST(req) {
             metodoEntrega,
             pagoOnlinePickup,
             coordenadasGPS,
+            direccionMapa,
             costoDelivery,
             pagoMovil
         } = body;
@@ -39,6 +40,14 @@ export async function POST(req) {
 
         // Bandera central: ¿La compra requiere pago online previo?
         const requierePagoOnline = metodoEntrega !== 'pickup' || Boolean(pagoOnlinePickup);
+
+        // Destino de la entrega (delivery o envío nacional): lo que entendió Google + coordenadas, para el repartidor
+        const lat = Number(coordenadasGPS?.lat);
+        const lng = Number(coordenadasGPS?.lng);
+        const textoDireccion = String(direccionMapa || '').trim().slice(0, 300);
+        const direccionEntrega = metodoEntrega !== 'pickup' && Number.isFinite(lat) && Number.isFinite(lng)
+            ? `${textoDireccion ? textoDireccion + ' ' : ''}(GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)})`
+            : null;
 
         // 1. GESTIÓN DEL CLIENTE (Búsqueda o creación automática)
         const [registroCliente] = await Cliente.findOrCreate({
@@ -159,6 +168,7 @@ export async function POST(req) {
             subtotal: subtotalCalculado,
             montoIva: factura.montoIva,
             tipoEntrega: metodoEntrega === 'nacional' ? 'flete' : metodoEntrega,
+            direccionEntrega,
             quienRetira: metodoEntrega === 'nacional' ? 'Zoom (envío nacional, cobro a destino)' : null,
             totalDescuento: 0.00,
             totalFinal: totalFinalCalculado

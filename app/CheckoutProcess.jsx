@@ -35,6 +35,8 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
     const [costoDelivery, setCostoDelivery] = useState(0);
     const [tipoUbicacion, setTipoUbicacion] = useState(UBICACION.ZONA); // ZONA (delivery) | NACIONAL (Zoom, cobro a destino) | FUERA_PAIS
     const [calculandoDistancia, setCalculandoDistancia] = useState(false);
+    const [direccionMapa, setDireccionMapa] = useState(''); // dirección que entendió Google para el pin
+    const [avisoMapa, setAvisoMapa] = useState('');
 
     // Referencias para Google Maps Interactivo
     const mapContainerRef = useRef(null);
@@ -80,63 +82,66 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
         return `${tipoDoc}${digits}`;
     };
 
-    // Renderizar o actualizar el mapa interactivo cuando hay coordenadas GPS
-    useEffect(() => {
-        if (metodoEntrega === 'delivery' && coordenadasGPS && window.google && mapContainerRef.current) {
-            if (!mapInstanceRef.current) {
-                mapInstanceRef.current = new window.google.maps.Map(mapContainerRef.current, {
-                    center: coordenadasGPS,
-                    zoom: 17,
-                    mapTypeControl: false,
-                    streetViewControl: false,
-                });
+    // ---- MAPA DE ENTREGA ----
+    // El mapa se ve desde el principio, centrado en la zona de delivery. El cliente toca el mapa, arrastra el pin o usa su ubicación actual.
+    const peticionRef = useRef(0); // ignora respuestas viejas si el cliente mueve el pin rápido
 
-                markerInstanceRef.current = new window.google.maps.Marker({
-                    position: coordenadasGPS,
-                    map: mapInstanceRef.current,
-                    draggable: true,
-                    title: "Arrastra el pin a tu ubicación exacta"
-                });
-
-                markerInstanceRef.current.addListener('dragend', (event) => {
-                    const nuevasCoords = { lat: event.latLng.lat(), lng: event.latLng.lng() };
-                    setCoordenadasGPS(nuevasCoords);
-                    calcularDistanciaConGoogle(nuevasCoords);
-                });
-            } else {
-                mapInstanceRef.current.setCenter(coordenadasGPS);
-                markerInstanceRef.current.setPosition(coordenadasGPS);
-            }
+    // Pone (o mueve) el pin sin recalcular nada
+    const ponerMarcador = (coords) => {
+        const mapa = mapInstanceRef.current;
+        if (!mapa || !window.google?.maps) return;
+        if (!markerInstanceRef.current) {
+            markerInstanceRef.current = new window.google.maps.Marker({ position: coords, map: mapa, draggable: true, title: 'Arrastra el pin hasta tu domicilio' });
+            markerInstanceRef.current.addListener('dragend', (e) => colocarPin({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
+        } else {
+            markerInstanceRef.current.setPosition(coords);
         }
-    }, [coordenadasGPS, metodoEntrega]);
+        mapa.panTo(coords);
+        if ((mapa.getZoom() || 0) < 16) mapa.setZoom(17);
+    };
 
-    // GEOLOCALIZACIÓN FLEXIBLE (Permite arrastrar el pin aunque la precisión sea baja)
+    // El cliente marcó un punto (toque en el mapa, pin arrastrado o GPS): se pone el pin y se verifica la zona y la tarifa
+    const colocarPin = (coords, precision = null) => {
+        setCoordenadasGPS(coords);
+        setPrecisionGPS(precision);
+        ponerMarcador(coords);
+        calcularDistanciaConGoogle(coords);
+    };
+
+    // El contenedor del mapa se vuelve a crear al cambiar de paso o de modalidad: si el mapa no está armado en el contenedor actual, se arma de nuevo
+    useEffect(() => {
+        if (activeStep !== 1 || metodoEntrega !== 'delivery') return;
+        const el = mapContainerRef.current;
+        if (!el || !window.google?.maps) return;
+        if (mapInstanceRef.current?.getDiv() === el) return;
+        mapInstanceRef.current = new window.google.maps.Map(el, {
+            center: coordenadasGPS || MEDIQUIR_LOCATION,
+            zoom: coordenadasGPS ? 17 : 13,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false,
+            gestureHandling: 'greedy', // un dedo mueve el mapa (sin el mensaje de "usa dos dedos")
+        });
+        markerInstanceRef.current = null;
+        mapInstanceRef.current.addListener('click', (e) => colocarPin({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
+        if (coordenadasGPS) ponerMarcador(coordenadasGPS);
+    }, [activeStep, metodoEntrega]);
+
     const obtenerUbicacionGPS = () => {
         if (!navigator.geolocation) {
-            alert("Tu navegador no soporta geolocalización.");
+            setAvisoMapa('Tu navegador no permite usar la ubicación. Toca el mapa para marcar tu domicilio.');
             return;
         }
-
+        setAvisoMapa('');
         setObteniendoGPS(true);
         navigator.geolocation.getCurrentPosition(
             (position) => {
-                const { latitude, longitude, accuracy } = position.coords;
                 setObteniendoGPS(false);
-                setPrecisionGPS(accuracy);
-
-                if (accuracy > 22) {
-                    alert(`Nota: La señal GPS tiene una precisión de ${accuracy.toFixed(1)} metros. No te preocupes, puedes arrastrar el marcador rojo en el mapa hasta tu domicilio exacto.`);
-                }
-
-                const coords = { lat: latitude, lng: longitude };
-                setCoordenadasGPS(coords);
-                calcularDistanciaConGoogle(coords);
+                colocarPin({ lat: position.coords.latitude, lng: position.coords.longitude }, position.coords.accuracy);
             },
-            (error) => {
+            () => {
                 setObteniendoGPS(false);
-                alert("No se pudo obtener la ubicación exacta automáticamente. Hemos centrado el mapa; por favor, arrastra el marcador rojo hasta tu domicilio.");
-                setCoordenadasGPS(MEDIQUIR_LOCATION);
-                calcularDistanciaConGoogle(MEDIQUIR_LOCATION);
+                setAvisoMapa('No pudimos usar tu ubicación (revisa el permiso del navegador). Toca el mapa para marcar tu domicilio.');
             },
             { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
         );
@@ -146,21 +151,30 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
     const clasificarDestino = (latLng) => new Promise((resolve) => {
         try {
             new window.google.maps.Geocoder().geocode({ location: latLng }, (resultados, estado) => {
-                resolve(estado === 'OK' && resultados?.length ? clasificarUbicacion(resultados) : UBICACION.ZONA);
+                if (estado === 'OK' && resultados?.length) {
+                    const legible = resultados.find((r) => !r.types?.includes('plus_code')) || resultados[0]; // evita los códigos tipo "F3W9+2X"
+                    resolve({ tipo: clasificarUbicacion(resultados), direccion: legible.formatted_address || '' });
+                } else {
+                    resolve({ tipo: UBICACION.ZONA, direccion: '' });
+                }
             });
         } catch {
-            resolve(UBICACION.ZONA);
+            resolve({ tipo: UBICACION.ZONA, direccion: '' });
         }
     });
 
     const calcularDistanciaConGoogle = async (destinoLatLng) => {
         if (!window.google?.maps) {
-            alert('El mapa no está disponible en este momento. Recarga la página o elige retirar en tienda.');
+            setAvisoMapa('El mapa no está disponible en este momento. Recarga la página o elige retirar en tienda.');
             return;
         }
+        const id = ++peticionRef.current;
+        setAvisoMapa('');
         setCalculandoDistancia(true);
-        const tipo = await clasificarDestino(destinoLatLng);
+        const { tipo, direccion } = await clasificarDestino(destinoLatLng);
+        if (id !== peticionRef.current) return;
         setTipoUbicacion(tipo);
+        setDireccionMapa(direccion);
         if (tipo !== UBICACION.ZONA) {
             setDistanciaKm(0);
             setCostoDelivery(0);
@@ -174,13 +188,16 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
             destinations: [destinoLatLng],
             travelMode: window.google.maps.TravelMode.DRIVING,
         }, (response, status) => {
+            if (id !== peticionRef.current) return;
             setCalculandoDistancia(false);
             if (status === 'OK' && response.rows[0].elements[0].status === 'OK') {
                 const kilometros = response.rows[0].elements[0].distance.value / 1000;
                 setDistanciaKm(kilometros);
                 setCostoDelivery(Number((TARIFA_BASE_DELIVERY + (kilometros * TARIFA_POR_KM)).toFixed(2)));
             } else {
-                alert("No pudimos calcular la ruta desde esta ubicación.");
+                setDistanciaKm(0);
+                setCostoDelivery(0);
+                setAvisoMapa('No pudimos calcular la ruta hasta ese punto. Prueba moviendo el pin a una calle cercana.');
             }
         });
     };
@@ -188,6 +205,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
     // Envío nacional: el pedido se paga sin delivery y el flete lo paga el cliente a Zoom al recibir (no pasa por la tienda)
     const esNacional = metodoEntrega === 'delivery' && tipoUbicacion === UBICACION.NACIONAL;
     const sinCobertura = metodoEntrega === 'delivery' && tipoUbicacion === UBICACION.FUERA_PAIS;
+    const sinTarifa = metodoEntrega === 'delivery' && tipoUbicacion === UBICACION.ZONA && !(costoDelivery > 0); // ruta sin calcular
     const costoDeliveryFinal = metodoEntrega === 'delivery' && !esNacional ? costoDelivery : 0;
     const totalPagarUSD = Number((subtotal + totalImpuestos + costoDeliveryFinal).toFixed(2));
     const totalPagarBS = tasaBcv > 0 ? aBolivares(totalPagarUSD, tasaBcv) : 0; // el servidor recalcula con su propia tasa y precios
@@ -199,7 +217,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
     const handleSiguiente = () => {
         if (activeStep === 0 && formCliente.validate().hasErrors) return;
         if (activeStep === 1 && metodoEntrega === 'delivery' && !coordenadasGPS) {
-            return alert("Debes marcar tu ubicación GPS en el mapa para continuar.");
+            return setAvisoMapa('Marca tu domicilio en el mapa para continuar.');
         }
         if (activeStep === 1 && sinCobertura) return;
         setActiveStep((current) => current + 1);
@@ -262,7 +280,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     cart, cliente: clientePayload, metodoEntrega: esNacional ? 'nacional' : metodoEntrega, pagoOnlinePickup,
-                    coordenadasGPS, costoDelivery: costoDeliveryFinal,
+                    coordenadasGPS, direccionMapa, costoDelivery: costoDeliveryFinal,
                     pagoMovil: requierePagoOnline ? { referencia } : null
                 })
             });
@@ -428,39 +446,50 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
 
                         {metodoEntrega === 'delivery' && (
                             <Paper withBorder p="md" radius="md" mt="md" bg="gray.0">
-                                <Stack align="center" ta="center">
-                                    <ThemeIcon size={40} radius="xl" color="blue" variant="light"><IconGps size={22} /></ThemeIcon>
-                                    <Box>
-                                        <Text fw={700} size="sm">Ubicación GPS de tu Domicilio</Text>
-                                        <Text size="xs" c="dimmed" maw={320} mt={2}>
-                                            Haz clic para obtener tu GPS y <b>arrastra el marcador rojo</b> si necesitas ajustar el punto exacto en el mapa. Delivery disponible en {ZONAS_DELIVERY.join(', ')}.
-                                        </Text>
-                                    </Box>
-                                    <Button color="#005AAA" size="xs" radius="xl" leftSection={<IconMapPinCheck size={16} />} onClick={obtenerUbicacionGPS} loading={obteniendoGPS}>
-                                        {coordenadasGPS ? 'Reubicar con mi GPS' : 'Detectar mi Ubicación GPS'}
+                                <Stack gap="sm">
+                                    <Group gap="xs" wrap="nowrap" align="flex-start">
+                                        <ThemeIcon size={34} radius="xl" color="blue" variant="light"><IconGps size={20} /></ThemeIcon>
+                                        <Box>
+                                            <Text fw={700} size="sm">¿Dónde entregamos?</Text>
+                                            <Text size="xs" c="dimmed">Toca el mapa para colocar el pin en tu domicilio o usa tu ubicación actual. Puedes arrastrar el pin para afinar el punto. Delivery en {ZONAS_DELIVERY.join(', ')}.</Text>
+                                        </Box>
+                                    </Group>
+
+                                    <Button color="#005AAA" variant="light" radius="xl" fullWidth leftSection={<IconMapPinCheck size={16} />} onClick={obtenerUbicacionGPS} loading={obteniendoGPS}>
+                                        Usar mi ubicación actual
                                     </Button>
+                                    {avisoMapa && <Text size="xs" c="red.8" fw={600}>{avisoMapa}</Text>}
 
                                     {/* MAPA INTERACTIVO DE GOOGLE */}
-                                    <Box ref={mapContainerRef} w="100%" h="220px" style={{ borderRadius: '8px', border: '1px solid #ced4da', display: coordenadasGPS ? 'block' : 'none' }} />
+                                    <Box ref={mapContainerRef} w="100%" h={260} style={{ borderRadius: '8px', border: '1px solid #ced4da' }} />
 
-                                    {calculandoDistancia && <Loader size="xs" mt="sm" />}
+                                    {!coordenadasGPS && <Text size="xs" c="dimmed" ta="center">Todavía no has marcado tu domicilio en el mapa.</Text>}
+                                    {calculandoDistancia && <Group justify="center" gap="xs"><Loader size="xs" /><Text size="xs" c="dimmed">Verificando tu zona...</Text></Group>}
+
+                                    {coordenadasGPS && !calculandoDistancia && direccionMapa && (
+                                        <Paper bg="white" p="xs" radius="md" withBorder>
+                                            <Text size="xs" c="dimmed">Entregaremos cerca de:</Text>
+                                            <Text size="sm" fw={600}>{direccionMapa}</Text>
+                                            {precisionGPS ? <Text size="xs" c="dimmed">Precisión del GPS: {precisionGPS.toFixed(0)} m. Si no es exacto, arrastra el pin.</Text> : null}
+                                        </Paper>
+                                    )}
 
                                     {coordenadasGPS && !calculandoDistancia && tipoUbicacion === UBICACION.NACIONAL && (
-                                        <Alert color="blue" variant="light" icon={<IconAlertCircle size={18} />} title="Tu ubicación queda fuera de nuestra zona de delivery" ta="left">
+                                        <Alert color="blue" variant="light" icon={<IconAlertCircle size={18} />} title="Tu ubicación queda fuera de nuestra zona de delivery">
                                             <Text size="sm">Nuestro delivery cubre {ZONAS_DELIVERY.join(', ')}. Tu pedido se enviará como <b>envío nacional por Zoom con cobro a destino</b>: pagas ahora solo tus productos y el flete lo cancelas a Zoom al recibir el envío.</Text>
                                         </Alert>
                                     )}
 
                                     {coordenadasGPS && !calculandoDistancia && sinCobertura && (
-                                        <Alert color="red" variant="light" icon={<IconAlertCircle size={18} />} title="No enviamos a esta ubicación" ta="left">
+                                        <Alert color="red" variant="light" icon={<IconAlertCircle size={18} />} title="No enviamos a esta ubicación">
                                             <Text size="sm">Solo realizamos envíos dentro de Venezuela. Marca una ubicación en el país para continuar.</Text>
                                         </Alert>
                                     )}
 
-                                    {coordenadasGPS && !calculandoDistancia && tipoUbicacion === UBICACION.ZONA && (
-                                        <Paper bg="white" p="xs" radius="md" w="100%" withBorder>
+                                    {coordenadasGPS && !calculandoDistancia && tipoUbicacion === UBICACION.ZONA && costoDelivery > 0 && (
+                                        <Paper bg="white" p="xs" radius="md" withBorder>
                                             <Group justify="space-between">
-                                                <Text size="xs" c="teal" fw={700}>✓ Pin fijado {precisionGPS ? `(Precisión: ${precisionGPS.toFixed(0)}m)` : ''}</Text>
+                                                <Text size="xs" c="teal.9" fw={700}>✓ Tenemos delivery hasta tu ubicación</Text>
                                                 <Text size="xs">Distancia: <b>{distanciaKm.toFixed(1)} km</b></Text>
                                             </Group>
                                             <Divider my={4} />
@@ -540,7 +569,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                     </Button>
 
                     {activeStep < 2 && (
-                        <Button color="#0B1B3D" onClick={handleSiguiente} disabled={activeStep === 1 && metodoEntrega === 'delivery' && (!coordenadasGPS || sinCobertura || calculandoDistancia)}>
+                        <Button color="#0B1B3D" onClick={handleSiguiente} disabled={activeStep === 1 && metodoEntrega === 'delivery' && (!coordenadasGPS || sinCobertura || sinTarifa || calculandoDistancia)}>
                             Continuar
                         </Button>
                     )}

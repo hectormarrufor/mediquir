@@ -37,6 +37,8 @@ const Venta = sequelize.define('Venta', {
     costoFleteReal: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
     // Recibo V- convertido en factura: fecha de emisión de la factura (manda sobre createdAt en libros e IVA) y el número que tenía
     fechaEmision: { type: DataTypes.DATE, allowNull: true },
+    // Destino marcado por el cliente en el mapa de la tienda: dirección que entendió Google + "(GPS: lat, lng)"
+    direccionEntrega: { type: DataTypes.TEXT, allowNull: true },
     numeroDocumentoAnterior: { type: DataTypes.STRING, allowNull: true },
     quienRetira: {
         type: DataTypes.STRING, 
