@@ -7,7 +7,6 @@ const API_URL = '/api/users';
 
 // Obtener todos los clientes (GET)
 export async function obtenerUsuarios() {
-  console.log(process.env)
   try {
     const response = await fetch(API_URL);
     if (!response.ok) {
@@ -36,7 +35,6 @@ export async function obtenerUsuarioPorId(id) {
 
 // Crear un nuevo cliente (POST)
 export async function crearUsuario(usuario) {
-  console.log(usuario);
   
 
   const encryptedPassword = await bcrypt.hash(usuario.password, 10);
@@ -50,7 +48,6 @@ export async function crearUsuario(usuario) {
       body: JSON.stringify({ ...usuario, password: encryptedPassword }),
     });
     const json = await response.json()
-    console.log(json)
 
     if (!json.error) {
       return json;

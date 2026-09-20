@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 2340" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="base" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#050D1F"/>
+      <stop offset="0.55" stop-color="#0A1A3A"/>
+      <stop offset="1" stop-color="#06122B"/>
+    </linearGradient>
+    <radialGradient id="luzAzul" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#338ADD" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#338ADD" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="luzCielo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#6CC0FF" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#6CC0FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="luzCalida" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#F93200" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#F93200" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ola1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#005AAA" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#6CC0FF" stop-opacity="0.22"/>
+    </linearGradient>
+    <linearGradient id="ola2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6CC0FF" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#005AAA" stop-opacity="0.38"/>
+    </linearGradient>
+    <linearGradient id="ola3" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0E72CC" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#0B1B3D" stop-opacity="0.30"/>
+    </linearGradient>
+    <linearGradient id="desvanece" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="1"/>
+      <stop offset="0.6" stop-color="#fff" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <mask id="mascara"><rect width="1080" height="2340" fill="url(#desvanece)"/></mask>
+    <pattern id="cruces" width="140" height="140" patternUnits="userSpaceOnUse">
+      <path d="M70 58v24M58 70h24" stroke="#FFFFFF" stroke-opacity="0.05" stroke-width="4" stroke-linecap="round"/>
+    </pattern>
+  </defs>
+
+  <rect width="1080" height="2340" fill="url(#base)"/>
+
+  <circle cx="90" cy="180" r="640" fill="url(#luzAzul)"/>
+  <circle cx="1020" cy="900" r="560" fill="url(#luzCielo)"/>
+  <circle cx="240" cy="1500" r="420" fill="url(#luzCalida)"/>
+
+  <rect width="1080" height="2340" fill="url(#cruces)" mask="url(#mascara)"/>
+
+  <!-- Trazo de electrocardiograma -->
+  <path d="M-20 700 H250 L300 640 L370 780 L450 520 L530 860 L590 700 H1100" fill="none" stroke="#6CC0FF" stroke-opacity="0.22" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M-20 700 H250 L300 640 L370 780 L450 520 L530 860 L590 700 H1100" fill="none" stroke="#6CC0FF" stroke-opacity="0.25" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 4)" style="filter:blur(7px)"/>
+
+  <!-- Olas inferiores -->
+  <path d="M0 1880 C 220 1780 420 1980 640 1900 S 940 1780 1080 1850 V2340 H0 Z" fill="url(#ola3)"/>
+  <path d="M0 2000 C 260 1900 460 2100 700 2020 S 960 1930 1080 1990 V2340 H0 Z" fill="url(#ola1)"/>
+  <path d="M0 2130 C 240 2050 500 2230 760 2160 S 990 2100 1080 2140 V2340 H0 Z" fill="url(#ola2)"/>
+</svg>

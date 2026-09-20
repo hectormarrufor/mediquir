@@ -181,7 +181,6 @@ export default function LandingMediquir({ seo = null }) {
                         tasaBcv={bcv} // Pásale tu tasa BCV real actual o un estado/prop
                         onCancel={() => setShowCheckout(false)}
                         onSuccess={(data) => {
-                            console.log("Orden creada:", data);
                             // Aquí puedes vaciar el carrito local si lo deseas
                         }}
                     />

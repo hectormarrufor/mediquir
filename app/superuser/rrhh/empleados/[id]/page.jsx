@@ -70,10 +70,6 @@ export default function Page({ params }) {
         return () => (mounted = false)
     }, [id]);
 
-    useEffect(() => {
-        console.log(empleado);
-    }, [empleado]);
-
 
 
     if (cargando) {

@@ -146,10 +146,24 @@ html { scroll-behavior: smooth; }
   to   { transform: translate3d(-7vmax, -4vmax, 0) scale(0.95); }
 }
 
-/* Móvil y "reducir movimiento": sin animación (ahorra batería) y cuadrícula más fina */
+/* Fondo propio para teléfono: ilustración vertical (ECG, cruces médicas y olas) en versión clara y oscura.
+   Sustituye a la malla animada y a la foto de escritorio, que en pantallas chicas pesan y distraen. */
+.app-bg__movil {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center top;
+}
+.app-bg[data-variant='light'] .app-bg__movil { background-image: url('/tenants/mediquir/fondo-movil-claro.svg'); }
+.app-bg[data-variant='dark'] .app-bg__movil { background-image: url('/tenants/mediquir/fondo-movil-oscuro.svg'); }
+
+/* Móvil y "reducir movimiento": sin animación (ahorra batería) y sin capas pesadas */
 @media (max-width: 48em) {
-  .app-bg__blob { animation: none; }
-  .app-bg__grid { background-size: 40px 40px; }
+  .app-bg__movil { display: block; }
+  .app-bg__photo, .app-bg__grid, .app-bg__blob { display: none; }
+  .app-bg__noise { opacity: calc(var(--bg-noise) * 0.6); }
 }
 
 @media (prefers-reduced-motion: reduce) {

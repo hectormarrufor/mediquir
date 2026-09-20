@@ -133,7 +133,6 @@ export default function DepartamentosPage() {
             <Modal centered opened={editModalIsOpen} onClose={() => setEditModalIsOpen(false)} title="Editar Departamento">
                 {/* Aquí iría el formulario de edición */}
                 <p>Formulario de edición para {selectedDepartamento?.nombre} (pendiente de implementar)</p>
-                {console.log(selectedDepartamento)}
                 <TextInput label="Nombre" placeholder="Editar nombre..." defaultValue={selectedDepartamento?.nombre} onChange={(e) => setSelectedDepartamento({...selectedDepartamento, nombre: e.target.value})}/>
                 <Textarea label="Descripción" placeholder="Editar descripción..." defaultValue={selectedDepartamento?.descripcion} onChange={(e) => setSelectedDepartamento({...selectedDepartamento, descripcion: e.target.value})}/>
                 <Button mt={15} onClick={() => {onConfirmEdit(selectedDepartamento)}}>Guardar Cambios</Button>

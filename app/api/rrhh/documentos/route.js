@@ -6,7 +6,6 @@ export async function POST(req) {
         const body = await req.json();
         const { empleadoId, tipo, gradoLicencia } = body;
 
-        console.log("Cuerpo recibido en documento empleado:", body);
 
         // 1. Construir el criterio de búsqueda para saber si ya existe
         let whereClause = {

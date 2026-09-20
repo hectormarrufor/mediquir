@@ -49,7 +49,6 @@ export default function DepartamentosTable({ departamentos, onDelete, onEdit }) 
                 </tbody>
             </table>
             <Modal opened={empleadosModal.length > 0} centered title="Lista de empleados" onClose={() => setEmpleadosModal([])}>
-                {console.log(empleadosModal)}
                 {empleadosModal &&
                 empleadosModal.map(empleado => 
                    <Title><Link href={`/superuser/rrhh/empleados/${empleado.id}`}>{`${empleado.nombre} ${empleado.apellido}`}</Link></Title>

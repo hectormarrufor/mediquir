@@ -36,7 +36,7 @@ export async function suscribirsePush(fetched) {
       else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browser = "Safari";
       else if (/Edg/i.test(ua)) browser = "Edge";
     }
-    console.log(`Suscripción push creada en ${os} usando ${browser}:`, sub);
+    console.log(`Suscripción push creada en ${os} usando ${browser}`);
 
 
 

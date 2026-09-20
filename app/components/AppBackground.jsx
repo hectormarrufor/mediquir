@@ -22,6 +22,8 @@ export default function AppBackground() {
             {variant === 'dark' && (
                 <Box className="app-bg__photo" style={{ backgroundImage: `url(${tenant.assets.fondoGlobal})` }} />
             )}
+            {/* Solo se ve en el teléfono (ver global.css): ilustración vertical propia, más liviana que la malla de escritorio */}
+            <Box className="app-bg__movil" />
             <Box className="app-bg__blob app-bg__blob--a" />
             <Box className="app-bg__blob app-bg__blob--b" />
             <Box className="app-bg__blob app-bg__blob--c" />

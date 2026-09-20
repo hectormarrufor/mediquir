@@ -51,10 +51,6 @@ export default function DetallePedidoMayorPage() {
         }
     });
 
-    useEffect(() => {
-        console.log('Pedido cargado:', pedido);
-    }, [pedido]);
-
     const { data: empleados } = useQuery({
         queryKey: ['personal-asignable'],
         enabled: !esVendedor,
