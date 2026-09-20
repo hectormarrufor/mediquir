@@ -33,7 +33,12 @@ const Venta = sequelize.define('Venta', {
         type: DataTypes.DECIMAL(10, 2), 
         defaultValue: 0.00 
     },
-    quienRetira: { 
+    // Lo que cobró de verdad la empresa de delivery (costoFlete es lo que se le cobró al cliente): para saber si el cálculo fue acertado
+    costoFleteReal: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
+    // Recibo V- convertido en factura: fecha de emisión de la factura (manda sobre createdAt en libros e IVA) y el número que tenía
+    fechaEmision: { type: DataTypes.DATE, allowNull: true },
+    numeroDocumentoAnterior: { type: DataTypes.STRING, allowNull: true },
+    quienRetira: {
         type: DataTypes.STRING, 
         allowNull: true // Nombre y Cédula del chofer
     },

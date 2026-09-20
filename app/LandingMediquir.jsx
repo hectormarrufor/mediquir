@@ -23,6 +23,8 @@ export default function LandingMediquir({ seo = null }) {
         removeFromCart,
         updateQuantity,
         subtotal,
+        totalImpuestos,
+        ivaDetalle,
         totalItems,
         isLoaded,
         isVerifying,
@@ -212,6 +214,7 @@ export default function LandingMediquir({ seo = null }) {
                                                     <Text size="sm" fw={700} lineClamp={2} c="navy.9">{item.product.nombre}</Text>
                                                     {presClave !== 'UNIDAD' && <Badge size="sm" color="grape" variant="filled" tt="none" mt={2}>{item.presentacionEtiqueta} · {item.quantity} en total</Badge>}
                                                     <Text size="xs" c="dimmed" fw={600}>Ref ${formatearPrecio(item.precioFinal)} c/u{bcv ? ` · Bs ${formatearBs(aBolivares(item.precioFinal, bcv))}` : ''}</Text>
+                                                    <Text size="xs" fw={600} c={Number(item.product.porcentajeIva) > 0 ? 'orange.9' : 'teal.9'}>{Number(item.product.porcentajeIva) > 0 ? `+ IVA ${Number(item.product.porcentajeIva)}%` : 'Exento de IVA'}</Text>
 
                                                     {isOut && (
                                                         <Badge color="red" size="xs" variant="filled" mt={4}>
@@ -254,14 +257,27 @@ export default function LandingMediquir({ seo = null }) {
                         </ScrollArea>
 
                         <Box pos="absolute" bottom={0} left={0} right={0} p="md" bg="white" style={{ borderTop: '1px solid #E9ECEF' }}>
-                            <Group justify="space-between" mb="md">
+                            <Group justify="space-between" mb={4}>
                                 <Text fw={700} size="md" c="gray.7">Subtotal:</Text>
                                 <Box ta="right">
                                     <Text fw={900} size="xl" c="brand.6" lh={1.1}>Ref ${subtotal.toFixed(2)}</Text>
                                     {bcv && <Text size="sm" fw={600} c="dimmed">Bs {formatearBs(aBolivares(subtotal, bcv))}</Text>}
                                 </Box>
                             </Group>
-                            <Text size="xs" c="dimmed" mb="sm">Subtotal sin IVA. El IVA (16%) de los productos que lo llevan se calcula al pagar.</Text>
+                            {ivaDetalle.map((d) => (
+                                <Group key={d.alicuota} justify="space-between" mb={4}>
+                                    <Text fw={600} size="sm" c="gray.7">IVA ({d.alicuota}%) sobre ${formatearPrecio(d.base)}:</Text>
+                                    <Text fw={700} size="sm" c="gray.8">Ref ${formatearPrecio(d.iva)}</Text>
+                                </Group>
+                            ))}
+                            <Group justify="space-between" mb="xs">
+                                <Text fw={800} size="md" c="navy.9">Total con IVA:</Text>
+                                <Box ta="right">
+                                    <Text fw={900} size="lg" c="navy.9" lh={1.1}>Ref ${(subtotal + totalImpuestos).toFixed(2)}</Text>
+                                    {bcv && <Text size="xs" fw={600} c="dimmed">Bs {formatearBs(aBolivares(subtotal + totalImpuestos, bcv))}</Text>}
+                                </Box>
+                            </Group>
+                            <Text size="xs" c="dimmed" mb="sm">El delivery, si lo eliges, se calcula al pagar y no lleva IVA.</Text>
                             <Button
                                 fullWidth
                                 size="lg"

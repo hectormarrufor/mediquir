@@ -98,7 +98,8 @@ export async function eliminarVenta({ venta, transaction: t }) {
 // Borra del Blob los archivos de la venta: los conocidos y cualquier otro guardado bajo su número (versiones que se subieron dos veces)
 export async function borrarArchivosDeVenta(numeroDocumento, archivosConocidos = []) {
     const urls = new Set(archivosConocidos);
-    for (const prefix of [`retenciones/${numeroDocumento}/`, `empaques/${numeroDocumento}/`]) {
+    // numeroDocumento puede ser una lista: el número actual y el V- anterior si el recibo se convirtió en factura
+    for (const prefix of [].concat(numeroDocumento).filter(Boolean).flatMap((n) => [`retenciones/${n}/`, `empaques/${n}/`])) {
         let cursor;
         do {
             const pagina = await list({ prefix, cursor });

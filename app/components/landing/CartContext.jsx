@@ -149,16 +149,17 @@ export function CartProvider({ children }) {
                 return { precioUnitario: item.precioFinal, cantidad: item.quantity, aplicaIva: porcentajeIva > 0, porcentajeIva };
             }),
         })
-        : { subtotal: 0, montoIva: 0 };
+        : { subtotal: 0, montoIva: 0, ivaDetalle: [] };
     const subtotal = factura.subtotal;
     const totalImpuestos = factura.montoIva;
+    const ivaDetalle = factura.ivaDetalle; // [{ alicuota, base, iva }]: para mostrar el impuesto claramente
 
     const totalItems = cart.reduce((acc, item) => acc + (item.cantidadPres ?? item.quantity), 0);
 
     return (
         <CartContext.Provider value={{ 
             cart, addToCart, removeFromCart, updateQuantity, 
-            subtotal, totalImpuestos, totalItems, // Exportamos totalImpuestos
+            subtotal, totalImpuestos, ivaDetalle, totalItems, // Exportamos totalImpuestos
             isLoaded, isVerifying, verifyStockBeforeCheckout, clearCart, unidadesEnCarrito,
         }}>
             {children}

@@ -9,6 +9,7 @@ import { useCart } from './components/landing/CartContext';
 import { aBolivares } from '@/app/constants/facturacion';
 import { DATOS_PAGO_MOVIL } from '@/app/constants/empresa';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
+import { ZONAS_DELIVERY, UBICACION, clasificarUbicacion } from '@/app/constants/zonasDelivery';
 
 // Coordenadas base de Mediquir en Ciudad Ojeda
 const MEDIQUIR_LOCATION = { lat: 10.195099414915264, lng: -71.31187255102861 };
@@ -19,7 +20,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
     const { tasa: tasaHook } = useTasaBcv();
     const tasaBcv = Number(tasaProp) > 0 ? Number(tasaProp) : (tasaHook || 0);
 
-    const { cart, subtotal, totalImpuestos, clearCart } = useCart();
+    const { cart, subtotal, totalImpuestos, ivaDetalle, clearCart } = useCart();
     const [mensajeCarga, setMensajeCarga] = useState('Procesando orden...');
     const [buscandoCliente, setBuscandoCliente] = useState(false);
     const [activeStep, setActiveStep] = useState(0);
@@ -32,6 +33,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
     const [obteniendoGPS, setObteniendoGPS] = useState(false);
     const [distanciaKm, setDistanciaKm] = useState(0);
     const [costoDelivery, setCostoDelivery] = useState(0);
+    const [tipoUbicacion, setTipoUbicacion] = useState(UBICACION.ZONA); // ZONA (delivery) | NACIONAL (Zoom, cobro a destino) | FUERA_PAIS
     const [calculandoDistancia, setCalculandoDistancia] = useState(false);
 
     // Referencias para Google Maps Interactivo
@@ -140,8 +142,31 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
         );
     };
 
-    const calcularDistanciaConGoogle = (destinoLatLng) => {
+    // Delivery solo en Ciudad Ojeda, Lagunillas y Cabimas; el resto de Venezuela va por envío nacional. Si Google no responde se asume zona de delivery.
+    const clasificarDestino = (latLng) => new Promise((resolve) => {
+        try {
+            new window.google.maps.Geocoder().geocode({ location: latLng }, (resultados, estado) => {
+                resolve(estado === 'OK' && resultados?.length ? clasificarUbicacion(resultados) : UBICACION.ZONA);
+            });
+        } catch {
+            resolve(UBICACION.ZONA);
+        }
+    });
+
+    const calcularDistanciaConGoogle = async (destinoLatLng) => {
+        if (!window.google?.maps) {
+            alert('El mapa no está disponible en este momento. Recarga la página o elige retirar en tienda.');
+            return;
+        }
         setCalculandoDistancia(true);
+        const tipo = await clasificarDestino(destinoLatLng);
+        setTipoUbicacion(tipo);
+        if (tipo !== UBICACION.ZONA) {
+            setDistanciaKm(0);
+            setCostoDelivery(0);
+            setCalculandoDistancia(false);
+            return;
+        }
         const service = new window.google.maps.DistanceMatrixService();
 
         service.getDistanceMatrix({
@@ -160,10 +185,13 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
         });
     };
 
-    const costoDeliveryFinal = metodoEntrega === 'delivery' ? costoDelivery : 0;
+    // Envío nacional: el pedido se paga sin delivery y el flete lo paga el cliente a Zoom al recibir (no pasa por la tienda)
+    const esNacional = metodoEntrega === 'delivery' && tipoUbicacion === UBICACION.NACIONAL;
+    const sinCobertura = metodoEntrega === 'delivery' && tipoUbicacion === UBICACION.FUERA_PAIS;
+    const costoDeliveryFinal = metodoEntrega === 'delivery' && !esNacional ? costoDelivery : 0;
     const totalPagarUSD = Number((subtotal + totalImpuestos + costoDeliveryFinal).toFixed(2));
     const totalPagarBS = tasaBcv > 0 ? aBolivares(totalPagarUSD, tasaBcv) : 0; // el servidor recalcula con su propia tasa y precios
-    const requierePagoOnline = metodoEntrega === 'delivery' || Boolean(pagoOnlinePickup);
+    const requierePagoOnline = metodoEntrega === 'delivery' || Boolean(pagoOnlinePickup); // el envío nacional también se paga por adelantado (solo los productos)
     // Fuera del horario de despacho (4:30 p. m. entre semana, 12:30 p. m. el sábado) el cliente debe saber que saldrá al día siguiente
     const avisoHorario = requierePagoOnline ? avisoDespacho() : null;
     const [aceptaHorario, setAceptaHorario] = useState(false);
@@ -173,6 +201,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
         if (activeStep === 1 && metodoEntrega === 'delivery' && !coordenadasGPS) {
             return alert("Debes marcar tu ubicación GPS en el mapa para continuar.");
         }
+        if (activeStep === 1 && sinCobertura) return;
         setActiveStep((current) => current + 1);
     };
 
@@ -232,7 +261,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    cart, cliente: clientePayload, metodoEntrega, pagoOnlinePickup,
+                    cart, cliente: clientePayload, metodoEntrega: esNacional ? 'nacional' : metodoEntrega, pagoOnlinePickup,
                     coordenadasGPS, costoDelivery: costoDeliveryFinal,
                     pagoMovil: requierePagoOnline ? { referencia } : null
                 })
@@ -404,7 +433,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                                     <Box>
                                         <Text fw={700} size="sm">Ubicación GPS de tu Domicilio</Text>
                                         <Text size="xs" c="dimmed" maw={320} mt={2}>
-                                            Haz clic para obtener tu GPS y <b>arrastra el marcador rojo</b> si necesitas ajustar el punto exacto en el mapa.
+                                            Haz clic para obtener tu GPS y <b>arrastra el marcador rojo</b> si necesitas ajustar el punto exacto en el mapa. Delivery disponible en {ZONAS_DELIVERY.join(', ')}.
                                         </Text>
                                     </Box>
                                     <Button color="#005AAA" size="xs" radius="xl" leftSection={<IconMapPinCheck size={16} />} onClick={obtenerUbicacionGPS} loading={obteniendoGPS}>
@@ -416,7 +445,19 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
 
                                     {calculandoDistancia && <Loader size="xs" mt="sm" />}
 
-                                    {coordenadasGPS && !calculandoDistancia && (
+                                    {coordenadasGPS && !calculandoDistancia && tipoUbicacion === UBICACION.NACIONAL && (
+                                        <Alert color="blue" variant="light" icon={<IconAlertCircle size={18} />} title="Tu ubicación queda fuera de nuestra zona de delivery" ta="left">
+                                            <Text size="sm">Nuestro delivery cubre {ZONAS_DELIVERY.join(', ')}. Tu pedido se enviará como <b>envío nacional por Zoom con cobro a destino</b>: pagas ahora solo tus productos y el flete lo cancelas a Zoom al recibir el envío.</Text>
+                                        </Alert>
+                                    )}
+
+                                    {coordenadasGPS && !calculandoDistancia && sinCobertura && (
+                                        <Alert color="red" variant="light" icon={<IconAlertCircle size={18} />} title="No enviamos a esta ubicación" ta="left">
+                                            <Text size="sm">Solo realizamos envíos dentro de Venezuela. Marca una ubicación en el país para continuar.</Text>
+                                        </Alert>
+                                    )}
+
+                                    {coordenadasGPS && !calculandoDistancia && tipoUbicacion === UBICACION.ZONA && (
                                         <Paper bg="white" p="xs" radius="md" w="100%" withBorder>
                                             <Group justify="space-between">
                                                 <Text size="xs" c="teal" fw={700}>✓ Pin fijado {precisionGPS ? `(Precisión: ${precisionGPS.toFixed(0)}m)` : ''}</Text>
@@ -440,8 +481,11 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                     <Stack mt="xl" gap="md">
                         <Paper withBorder p="md" radius="md" bg="gray.0">
                             <Group justify="space-between"><Text size="sm">Subtotal:</Text><Text size="sm">${subtotal.toFixed(2)}</Text></Group>
-                            <Group justify="space-between"><Text size="sm">IVA (16%):</Text><Text size="sm">${totalImpuestos.toFixed(2)}</Text></Group>
-                            {metodoEntrega === 'delivery' && <Group justify="space-between"><Text size="sm">Delivery:</Text><Text size="sm">${costoDelivery.toFixed(2)}</Text></Group>}
+                            {ivaDetalle.length > 0
+                                ? ivaDetalle.map((d) => <Group key={d.alicuota} justify="space-between"><Text size="sm">IVA ({d.alicuota}%) sobre ${d.base.toFixed(2)}:</Text><Text size="sm">${d.iva.toFixed(2)}</Text></Group>)
+                                : <Group justify="space-between"><Text size="sm">IVA:</Text><Text size="sm">Exento</Text></Group>}
+                            {esNacional && <Group justify="space-between"><Text size="sm">Envío nacional por Zoom:</Text><Text size="sm">Cobro a destino</Text></Group>}
+                            {metodoEntrega === 'delivery' && !esNacional && <Group justify="space-between"><Text size="sm">Delivery (sin IVA):</Text><Text size="sm">${costoDelivery.toFixed(2)}</Text></Group>}
                             <Divider my="sm" />
                             <Group justify="space-between"><Text fw={900} size="lg">Total USD:</Text><Text fw={900} size="xl" c="#0B1B3D">${totalPagarUSD.toFixed(2)}</Text></Group>
                             <Group justify="space-between" mt={5}><Text fw={700} size="sm" c="dimmed">Total BS (Tasa: {tasaBcv}):</Text><Text fw={900} size="lg" c="blue.7">Bs {totalPagarBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text></Group>
@@ -456,7 +500,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
 
                         {requierePagoOnline ? (
                             <Paper withBorder p="md" radius="md" style={{ borderColor: '#005AAA' }}>
-                                <Text fw={700} c="#005AAA" mb="xs">Datos para Pago Móvil ({metodoEntrega === 'pickup' ? 'Retiro Prepagado' : 'Delivery'})</Text>
+                                <Text fw={700} c="#005AAA" mb="xs">Datos para Pago Móvil ({metodoEntrega === 'pickup' ? 'Retiro Prepagado' : (esNacional ? 'Envío Nacional' : 'Delivery')})</Text>
                                 <Text size="sm"><b>Banco:</b> {DATOS_PAGO_MOVIL.banco}</Text>
                                 <Text size="sm"><b>Teléfono:</b> {DATOS_PAGO_MOVIL.telefono}</Text>
                                 <Text size="sm"><b>Cédula:</b> {DATOS_PAGO_MOVIL.cedula}</Text>
@@ -496,7 +540,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                     </Button>
 
                     {activeStep < 2 && (
-                        <Button color="#0B1B3D" onClick={handleSiguiente} disabled={activeStep === 1 && metodoEntrega === 'delivery' && !coordenadasGPS}>
+                        <Button color="#0B1B3D" onClick={handleSiguiente} disabled={activeStep === 1 && metodoEntrega === 'delivery' && (!coordenadasGPS || sinCobertura || calculandoDistancia)}>
                             Continuar
                         </Button>
                     )}

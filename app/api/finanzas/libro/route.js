@@ -118,19 +118,19 @@ async function libroCompras(q) {
 
 async function libroVentas(q) {
     const [facturas, retenciones, anuladas, noFiscales, pendientes, notas] = await Promise.all([
-        q(`SELECT v."id", (v."createdAt" AT TIME ZONE 'America/Caracas')::date AS emision, v."numeroDocumento" AS numero, v."numeroControl" AS control, v."tipoTransaccion" AS "tipoTrans",
+        q(`SELECT v."id", (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date AS emision, v."numeroDocumento" AS numero, v."numeroControl" AS control, v."tipoTransaccion" AS "tipoTrans",
                 v."moneda"::text AS moneda, v."tasaCambio"::float AS tasa, v."montoIva"::float AS iva, v."totalFinal"::float AS total, c."identificacion" AS rif, c."nombre",
                 COALESCE((SELECT SUM(d."subtotal") FROM "VentaDetalles" d WHERE d."ventaId" = v."id" AND d."aplicaIva" = true), 0)::float AS gravada
            FROM "Ventas" v LEFT JOIN "Clientes" c ON c."id" = v."clienteId"
-           WHERE v."tipoDocumento" = 'FACTURA' AND v."statusDespacho" <> 'Cancelado' AND (v."createdAt" AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta
-           ORDER BY v."createdAt", v."numeroDocumento"`),
+           WHERE v."tipoDocumento" = 'FACTURA' AND v."statusDespacho" <> 'Cancelado' AND (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta
+           ORDER BY COALESCE(v."fechaEmision", v."createdAt"), v."numeroDocumento"`),
         q(`SELECT r.*, v."moneda"::text AS "monedaDoc", v."tasaCambio"::float AS "tasaDoc", v."totalFinal"::float AS "totalDoc"
            FROM "RetencionesIva" r LEFT JOIN "Ventas" v ON v."id" = r."ventaId"
            WHERE r."tipo" = 'VENTA' AND r."estado" = 'REGISTRADA' AND r."fecha" BETWEEN :desde AND :hasta ORDER BY r."fecha", r."id"`),
         q(`SELECT v."moneda"::text AS moneda, v."tasaCambio"::float AS tasa, v."totalFinal"::float AS total, v."montoIva"::float AS iva FROM "Ventas" v
-           WHERE v."tipoDocumento" = 'FACTURA' AND v."statusDespacho" = 'Cancelado' AND (v."createdAt" AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta`),
+           WHERE v."tipoDocumento" = 'FACTURA' AND v."statusDespacho" = 'Cancelado' AND (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta`),
         q(`SELECT v."moneda"::text AS moneda, v."tasaCambio"::float AS tasa, v."totalFinal"::float AS total FROM "Ventas" v
-           WHERE v."tipoDocumento" <> 'FACTURA' AND v."statusDespacho" <> 'Cancelado' AND (v."createdAt" AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta`),
+           WHERE v."tipoDocumento" <> 'FACTURA' AND v."statusDespacho" <> 'Cancelado' AND (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta`),
         // Retenciones calculadas al facturar a las que aún les falta el comprobante del cliente: no entran al libro hasta tenerlo
         q(`SELECT r."facturaAfectada", r."contraparteNombre", r."estado", r."ivaRetenido"::float AS "ivaRetenido" FROM "RetencionesIva" r
            WHERE r."tipo" = 'VENTA' AND r."estado" IN ('PENDIENTE', 'POR_REVISAR') AND r."fecha" BETWEEN :desde AND :hasta ORDER BY r."fecha", r."id"`),

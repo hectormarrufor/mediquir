@@ -16,6 +16,7 @@ import { borrarFotosSobrantes } from '../_fotosEmpaque';
 import { registrarAbono, ErrorAbono } from '../../_lib/abonos';
 import { recalcularCobro } from '../../_lib/retencionesVenta';
 import { eliminarVenta, borrarArchivosDeVenta } from '../_eliminar';
+import { convertirAFactura, ErrorConversion } from '../../_lib/convertirFactura';
 
 // Error de reglas de logística (permisos, estados) con su código HTTP
 class ErrorLogistica extends Error {
@@ -179,6 +180,14 @@ export async function PUT(request, { params }) {
             return NextResponse.json({ success: true });
         }
 
+        // Recibo V- -> factura F- (el cliente la pidió después de comprar). Solo administración; la fecha de emisión es hoy
+        if (accion === 'CONVERTIR_A_FACTURA') {
+            if (rol !== 'admin') throw new ErrorLogistica('Solo un administrador puede convertir un recibo en factura', 403);
+            const r = await convertirAFactura({ venta, transaction: t });
+            await t.commit();
+            return NextResponse.json({ success: true, ...r });
+        }
+
         // ==========================================================
         // 📋 ASIGNAR: la administración indica quién empaca y quién etiqueta (no toca el stock)
         // ==========================================================
@@ -285,6 +294,7 @@ export async function PUT(request, { params }) {
         if (accion === 'DATOS_ENVIO') {
             if (cerrada) throw new ErrorLogistica('Este pedido ya está cerrado', 409);
             if (venta.tipoEntrega === 'pickup') throw new ErrorLogistica('Este pedido es retiro en tienda: no lleva transporte ni flete', 409);
+            if (venta.tipoVenta === 'ONLINE' && venta.tipoEntrega === 'flete') throw new ErrorLogistica('Envío nacional por Zoom con cobro a destino: el flete no forma parte de esta venta', 409);
 
             const flete = Math.round(Number(body.costoFlete ?? venta.costoFlete ?? 0) * 100) / 100;
             if (!Number.isFinite(flete) || flete < 0) throw new ErrorLogistica('El flete debe ser un monto igual o mayor a 0');
@@ -315,6 +325,13 @@ export async function PUT(request, { params }) {
             venta.quienRetira = quienRetira;
             venta.fechaHoraRetiro = fechaHoraRetiro ? new Date(fechaHoraRetiro) : new Date();
             // El flete que se le cobra al cliente (venta.costoFlete) se fija en DATOS_ENVIO; aquí solo se asienta lo que pagó la empresa
+            // Compra de la tienda: el delivery que pagó el cliente es dinero de la empresa de transporte (no fue ingreso), así que no hay gasto:
+            // solo se anota lo que cobró de verdad (costoFleteReal) para compararlo con lo que se le cobró al cliente
+            const esTienda = venta.tipoVenta === 'ONLINE';
+            if (esTienda) {
+                const real = Number(costoFlete);
+                venta.costoFleteReal = venta.tipoEntrega === 'delivery' && Number.isFinite(real) && real >= 0 ? Math.round(real * 100) / 100 : null;
+            }
             await venta.save({ transaction: t });
 
             // Marcamos las salidas de inventario como Entregadas
@@ -325,7 +342,7 @@ export async function PUT(request, { params }) {
 
             // GESTIÓN FINANCIERA DEL FLETE (GASTO)
             const fleteNum = Number(costoFlete) || 0;
-            if (fleteNum > 0) {
+            if (fleteNum > 0 && !esTienda) {
                 let catFlete = await CategoriaFinanciera.findOne({ where: { nombre: 'Gasto por Fletes' }, transaction: t });
                 if (!catFlete) catFlete = await CategoriaFinanciera.create({ nombre: 'Gasto por Fletes', tipo: 'GASTO' }, { transaction: t });
 
@@ -355,8 +372,36 @@ export async function PUT(request, { params }) {
                 }, { transaction: t });
             }
 
+            // Compra de la tienda: la diferencia entre lo cobrado al cliente y lo que cobró el delivery es movimiento de tesorería (no va a los
+            // libros): cobró de menos -> GASTO "Faltante de Delivery"; cobró de más -> INGRESO "Sobrante de Delivery"
+            if (esTienda && venta.costoFleteReal !== null) {
+                const dif = Math.round((Number(venta.costoFlete || 0) - Number(venta.costoFleteReal)) * 100) / 100;
+                if (dif !== 0) {
+                    const sobrante = dif > 0;
+                    const nombreCat = sobrante ? 'Sobrante de Delivery' : 'Faltante de Delivery';
+                    let cat = await CategoriaFinanciera.findOne({ where: { nombre: nombreCat }, transaction: t });
+                    if (!cat) cat = await CategoriaFinanciera.create({ nombre: nombreCat, tipo: sobrante ? 'INGRESO' : 'GASTO' }, { transaction: t });
+                    const tasa = Number(venta.tasaCambio) || 1;
+                    const monto = Math.abs(dif);
+                    const montoUsd = venta.moneda === 'USD' ? monto : aDolares(monto, tasa);
+                    const montoVes = venta.moneda === 'USD' ? aBolivares(monto, tasa) : monto;
+                    await MovimientoFinanciero.create({
+                        tipo: sobrante ? 'INGRESO' : 'GASTO',
+                        fecha: new Date(),
+                        metodoPago: 'Ajuste de delivery',
+                        referencia: `Delivery ${venta.numeroDocumento}`,
+                        montoUsd: Number(montoUsd.toFixed(2)),
+                        tasaBcvAplicada: tasa,
+                        montoVes: Number(montoVes.toFixed(2)),
+                        descripcion: `${sobrante ? 'Se cobró de más' : 'Se cobró de menos'} por delivery en ${venta.numeroDocumento}: cobrado ${Number(venta.costoFlete || 0).toFixed(2)}, cobró el delivery ${Number(venta.costoFleteReal).toFixed(2)} (${venta.quienRetira || 'sin agencia'})`,
+                        categoriaId: cat.id,
+                        ventaId: venta.id,
+                    }, { transaction: t });
+                }
+            }
+
             await t.commit();
-            return NextResponse.json({ success: true, message: 'Despacho registrado y gasto de flete asentado' });
+            return NextResponse.json({ success: true, message: esTienda ? 'Despacho registrado' : 'Despacho registrado y gasto de flete asentado' });
         }
 
         // ==========================================================
@@ -387,7 +432,7 @@ export async function PUT(request, { params }) {
 
     } catch (error) {
         if (!t.finished) await t.rollback();
-        if (error instanceof ErrorLogistica) return NextResponse.json({ error: error.message }, { status: error.status });
+        if (error instanceof ErrorLogistica || error instanceof ErrorConversion) return NextResponse.json({ error: error.message }, { status: error.status });
         console.error('Error procesando PUT de venta:', error);
         return NextResponse.json({ error: 'Error interno', detalle: error.message }, { status: 500 });
     }
@@ -438,7 +483,7 @@ export async function DELETE(request, { params }) {
         // Archivos del Blob (comprobantes de retención y fotos de empaque): fuera de la transacción para no retenerla durante la red
         let archivosBorrados = 0;
         try {
-            archivosBorrados = await borrarArchivosDeVenta(ventaAMatar.numeroDocumento, archivos);
+            archivosBorrados = await borrarArchivosDeVenta([ventaAMatar.numeroDocumento, ventaAMatar.numeroDocumentoAnterior], archivos);
         } catch (e) {
             console.error('No se pudieron borrar los archivos del Blob de la venta eliminada:', archivos, e.message);
         }

@@ -42,7 +42,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
     const exentoBs = Math.max(0, Number((totalBs - baseBs - ivaBs).toFixed(2)));
     const exentoUsd = Math.max(0, Number((totalUsd - baseUsd - ivaUsd).toFixed(2)));
 
-    const dias = venta.fechaVencimiento ? Math.max(0, Math.round((new Date(venta.fechaVencimiento) - new Date(venta.createdAt)) / 86400000)) : 0;
+    const dias = venta.fechaVencimiento ? Math.max(0, Math.round((new Date(venta.fechaVencimiento) - new Date(venta.fechaEmision || venta.createdAt)) / 86400000)) : 0;
     const condicion = condicionTexto || (venta.condicionPago === 'Credito' ? `CREDITO a ${dias} Días` : 'CONTADO');
     const demasiados = detalles.length > CONFIG_FISCAL.maxRenglonesFactura;
 
@@ -72,7 +72,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                 <div className="fl-doc">
                     <div className="fl-titulo"><span className="fl-azul" style={titulo.length > 8 ? { fontSize: '11px' } : undefined}>{titulo}</span><span className="fl-numero">{venta.numeroDocumento}</span></div>
                     <div className="fl-oc">{referencia || 'ORDEN DE COMPRA'}</div>
-                    <div className="fl-fechas"><span>Emisión: <b>{fecha(venta.createdAt)}</b></span>{!sinVence && <span>Vence: <b>{fecha(venta.fechaVencimiento || venta.createdAt)}</b></span>}</div>
+                    <div className="fl-fechas"><span>Emisión: <b>{fecha(venta.fechaEmision || venta.createdAt)}</b></span>{!sinVence && <span>Vence: <b>{fecha(venta.fechaVencimiento || venta.fechaEmision || venta.createdAt)}</b></span>}</div>
                     <div className="fl-cond">
                         <div><div className="fl-cond-t">{etiquetaCondicion}</div><div className="fl-cond-v">{condicion}</div></div>
                         <div className="fl-control"><div className="fl-cond-t">Control</div><div className="fl-cond-v">{venta.numeroControl || ''}</div></div>

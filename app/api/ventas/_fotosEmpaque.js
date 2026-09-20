@@ -8,17 +8,20 @@ export const DIAS_RETENCION_FOTOS = 90;
 export const DIAS_CANCELADAS = 7;
 export const DIAS_SIN_FIRMAR = 30;
 
-const prefijoDe = (venta) => `empaques/${venta.numeroDocumento}/`;
+// Si la venta era un recibo V- que se convirtió en factura, las fotos siguen bajo el número anterior
+const prefijosDe = (venta) => [venta.numeroDocumento, venta.numeroDocumentoAnterior].filter(Boolean).map((n) => `empaques/${n}/`);
 
 // Todas las fotos del pedido que hay en el Blob
 async function fotosEnBlob(venta) {
     const urls = [];
-    let cursor;
-    do {
-        const pagina = await list({ prefix: prefijoDe(venta), cursor });
-        urls.push(...pagina.blobs.map((b) => b.url));
-        cursor = pagina.hasMore ? pagina.cursor : undefined;
-    } while (cursor);
+    for (const prefix of prefijosDe(venta)) {
+        let cursor;
+        do {
+            const pagina = await list({ prefix, cursor });
+            urls.push(...pagina.blobs.map((b) => b.url));
+            cursor = pagina.hasMore ? pagina.cursor : undefined;
+        } while (cursor);
+    }
     return urls;
 }
 

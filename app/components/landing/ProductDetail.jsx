@@ -89,7 +89,7 @@ function DetailBody({ product, onClose, isMobile }) {
                         <Text fw={700} size="lg" c="dimmed" lh={1.2}>Bs {formatearBs(aBolivares(precioPres, tasa))} <Text span size="xs" fw={500}>· tasa BCV {formatearBs(tasa)}</Text></Text>
                     )}
                     <Text size="xs" c="dimmed">
-                        {porcentajeIva > 0 ? `Precio sin IVA. Se añade IVA ${porcentajeIva}% al facturar.` : 'Producto exento de IVA.'}
+                        {porcentajeIva > 0 ? `Precio sin IVA. Se suma el IVA (${porcentajeIva}%) al pagar.` : 'Producto exento de IVA.'}
                     </Text>
 
                     {isOutOfStock ? (

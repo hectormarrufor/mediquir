@@ -3,7 +3,7 @@
 import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
 import { notificarTodos } from '@/app/handlers/notificar';
-import { Cliente, Producto, PagoSms, Venta, VentaDetalle, Correlativo, MovimientoFinanciero, sequelize } from '@/models';
+import { Cliente, Producto, PagoSms, Venta, VentaDetalle, Correlativo, MovimientoFinanciero, CategoriaFinanciera, sequelize } from '@/models';
 import { tasaVigente } from '../../_lib/tasaBcv';
 import { calcularFactura, precioVentaWeb, aBolivares } from '@/app/constants/facturacion';
 import { presentacionDe } from '@/app/constants/presentaciones';
@@ -34,10 +34,11 @@ export async function POST(req) {
 
         if (!Array.isArray(cart) || cart.length === 0) throw new ErrorNegocio('El carrito está vacío');
         if (!cliente?.identificacion || !cliente?.nombre) throw new ErrorNegocio('Faltan los datos del cliente');
-        if (!['pickup', 'delivery'].includes(metodoEntrega)) throw new ErrorNegocio('Método de entrega inválido');
+        // 'nacional' = fuera de la zona de delivery: envío por Zoom con cobro a destino (sin flete en esta venta ni movimiento de tesorería)
+        if (!['pickup', 'delivery', 'nacional'].includes(metodoEntrega)) throw new ErrorNegocio('Método de entrega inválido');
 
         // Bandera central: ¿La compra requiere pago online previo?
-        const requierePagoOnline = metodoEntrega === 'delivery' || Boolean(pagoOnlinePickup);
+        const requierePagoOnline = metodoEntrega !== 'pickup' || Boolean(pagoOnlinePickup);
 
         // 1. GESTIÓN DEL CLIENTE (Búsqueda o creación automática)
         const [registroCliente] = await Cliente.findOrCreate({
@@ -157,7 +158,8 @@ export async function POST(req) {
             tasaCambio: tasaBcv,
             subtotal: subtotalCalculado,
             montoIva: factura.montoIva,
-            tipoEntrega: metodoEntrega,
+            tipoEntrega: metodoEntrega === 'nacional' ? 'flete' : metodoEntrega,
+            quienRetira: metodoEntrega === 'nacional' ? 'Zoom (envío nacional, cobro a destino)' : null,
             totalDescuento: 0.00,
             totalFinal: totalFinalCalculado
         }, { transaction });
@@ -221,19 +223,32 @@ export async function POST(req) {
             await nuevaVenta.save({ transaction });
 
             // 6. CREACIÓN DEL MOVIMIENTO FINANCIERO ASOCIADO AL PAGO SMS
-            const tasaAplicada = tasaBcv;
-            await MovimientoFinanciero.create({
-                tipo: 'INGRESO',
-                fecha: new Date().toISOString().split('T')[0],
-                metodoPago: 'Pago Móvil',
-                referencia: pagoEncontrado.referencia,
-                montoUsd: totalFinalCalculado,
-                tasaBcvAplicada: tasaAplicada,
-                montoVes: totalPagarBS,
-                descripcion: `Ingreso por Venta Online #${nuevaVenta.numeroDocumento} - Pago Móvil (Banco: ${pagoEncontrado.banco || 'N/A'}, Ref: ${pagoEncontrado.referencia})`,
-                ventaId: nuevaVenta.id,
-                pagoSmsId: pagoEncontrado.id
-            }, { transaction });
+            // El cobro se reparte: el subtotal y el IVA quedan en la tienda (mientras la venta sea un recibo V-; si luego piden factura, el IVA
+            // pasa a "IVA Recaudado" y queda reservado para el SENIAT). El delivery NO es ingreso: es dinero de la empresa de transporte,
+            // por eso no genera movimiento; el monto cobrado queda en Venta.costoFlete para compararlo con lo que cobre el delivery.
+            let catVentas = await CategoriaFinanciera.findOne({ where: { nombre: 'Ingresos por Ventas' }, transaction });
+            if (!catVentas) catVentas = await CategoriaFinanciera.create({ nombre: 'Ingresos por Ventas', tipo: 'INGRESO' }, { transaction });
+
+            const partes = [
+                { monto: factura.subtotal, descripcion: `Venta Online ${nuevaVenta.numeroDocumento} (subtotal) - Pago Móvil (Banco: ${pagoEncontrado.banco || 'N/A'}, Ref: ${pagoEncontrado.referencia})` },
+                { monto: factura.montoIva, descripcion: `IVA de Venta Online ${nuevaVenta.numeroDocumento} (recibo sin factura)` },
+            ];
+            for (const { monto, descripcion } of partes) {
+                if (!(monto > 0)) continue;
+                await MovimientoFinanciero.create({
+                    tipo: 'INGRESO',
+                    fecha: new Date().toISOString().split('T')[0],
+                    metodoPago: 'Pago Móvil',
+                    referencia: pagoEncontrado.referencia,
+                    montoUsd: monto,
+                    tasaBcvAplicada: tasaBcv,
+                    montoVes: aBolivares(monto, tasaBcv),
+                    descripcion,
+                    categoriaId: catVentas.id,
+                    ventaId: nuevaVenta.id,
+                    pagoSmsId: pagoEncontrado.id
+                }, { transaction });
+            }
         }
 
         // 7. INSERCIÓN DE LOS DETALLES VINCULADOS A LA VENTA
@@ -250,7 +265,7 @@ export async function POST(req) {
             await notificarTodos({
                 tag: 'NUEVA_VENTA_WEB',
                 title: `🛒 ¡Nueva Venta Online! (${numeroDocGenerado})`,
-                body: `Cliente: ${cliente.nombre} | Total: $${totalFinalCalculado.toFixed(2)} (Bs ${totalPagarBS.toFixed(2)}) [${metodoEntrega.toUpperCase()}${pagoOnlinePickup ? ' - PREPAGADO' : ''}]`,
+                body: `Cliente: ${cliente.nombre} | Total: $${totalFinalCalculado.toFixed(2)} (Bs ${totalPagarBS.toFixed(2)}) [${metodoEntrega === 'nacional' ? 'ENVÍO NACIONAL ZOOM' : metodoEntrega.toUpperCase()}${pagoOnlinePickup ? ' - PREPAGADO' : ''}]`,
                 url: `/superuser/ventas/${nuevaVenta.id}`
             });
         } catch (notifError) {

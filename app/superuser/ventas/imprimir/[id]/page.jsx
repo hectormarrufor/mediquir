@@ -64,11 +64,16 @@ export default function ImprimirRecibo() {
     const ivaBs = venta.moneda === 'BS' ? Number(venta.montoIva) : Number(venta.montoIva) * Number(venta.tasaCambio);
     const ivaUsd = venta.moneda === 'USD' ? Number(venta.montoIva) : Number(venta.montoIva) / Number(venta.tasaCambio);
 
-    const baseBs = totalBs - ivaBs;
-    const baseUsd = totalUsd - ivaUsd;
+    // Recibo de venta (V-) de la tienda: desglosa el IVA cobrado, pero NO es un documento fiscal
+    const conIva = Number(venta.montoIva) > 0;
+    const fleteBs = venta.moneda === 'BS' ? Number(venta.costoFlete || 0) : Number(venta.costoFlete || 0) * Number(venta.tasaCambio);
+    const fleteUsd = venta.moneda === 'USD' ? Number(venta.costoFlete || 0) : Number(venta.costoFlete || 0) / Number(venta.tasaCambio);
+    const baseBs = totalBs - ivaBs - fleteBs;
+    const baseUsd = totalUsd - ivaUsd - fleteUsd;
+    const noFiscal = venta.tipoDocumento === 'VENTA_RAPIDA';
 
     const formatoNumero = (num) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
-    const fechaEmision = new Date(venta.createdAt).toLocaleDateString('es-VE');
+    const fechaEmision = new Date(venta.fechaEmision || venta.createdAt).toLocaleDateString('es-VE');
     const fechaVence = venta.fechaVencimiento ? new Date(venta.fechaVencimiento).toLocaleDateString('es-VE') : fechaEmision;
 
     // 🔥 MAGIA DINÁMICA: EVALUAMOS LA CANTIDAD DE ARTÍCULOS 🔥
@@ -112,6 +117,7 @@ export default function ImprimirRecibo() {
                     
                     <div className="doc-box">
                         <h2 className="doc-title">{tituloDocumento}</h2>
+                        {noFiscal && <div className="label-red text-center" style={{ fontSize: '0.7rem', fontWeight: 700 }}>COMPROBANTE NO FISCAL</div>}
                         <h1 className="doc-number">{venta.numeroDocumento}</h1>
                         <table className="doc-meta">
                             <tbody>
@@ -162,7 +168,7 @@ export default function ImprimirRecibo() {
                         <tbody>
                             <tr>
                                 <td className="total-cell border-right text-center">
-                                    {esFactura ? (
+                                    {conIva ? (
                                         <>
                                             <span className="label-red">TOTAL IMPUESTO: 16%</span><br/>
                                             <div className="monto-split">
@@ -175,10 +181,10 @@ export default function ImprimirRecibo() {
                                     )}
                                 </td>
                                 <td className="total-cell border-right text-center">
-                                    <span className="label-red">TOTAL EXENTO:</span><br/>
+                                    <span className="label-red">{fleteBs > 0 ? 'EXENTO (DELIVERY):' : 'TOTAL EXENTO:'}</span><br/>
                                     <div className="monto-split">
-                                        <strong>0,00 <span className="label-red">Bs.</span></strong>
-                                        <strong>0,00 <span className="label-red">USD</span></strong>
+                                        <strong>{formatoNumero(fleteBs)} <span className="label-red">Bs.</span></strong>
+                                        <strong>{formatoNumero(fleteUsd)} <span className="label-red">USD</span></strong>
                                     </div>
                                 </td>
                                 <td className="total-cell text-center" style={{ backgroundColor: '#f9f9f9' }}>
@@ -188,7 +194,7 @@ export default function ImprimirRecibo() {
                             </tr>
                             <tr>
                                 <td className="total-cell border-right text-center">
-                                    {esFactura ? (
+                                    {conIva ? (
                                         <>
                                             <span className="label-red">BASE IMPONIBLE:</span><br/>
                                             <div className="monto-split">
@@ -217,6 +223,7 @@ export default function ImprimirRecibo() {
                         <span className="text-black">{numeroALetras(totalBs)}</span>
                     </div>
 
+                    {noFiscal && <div className="label-red text-center" style={{ fontWeight: 700, letterSpacing: 1 }}>COMPROBANTE NO FISCAL</div>}
                     <div className="original-label label-red text-center">ORIGINAL - CLIENTE</div>
 
                     {esFactura && (

@@ -24,12 +24,13 @@ import { useAuth } from '@/hooks/useAuth';
 export default function DetallePedidoMayorPage() {
     const params = useParams();
     const router = useRouter();
-    const { userId, esVendedor } = useAuth();
+    const { userId, esVendedor, rolUsuario } = useAuth();
 
     const [galeriaModal, setGaleriaModal] = useState({ imagenes: [], indice: 0 });
     const [modalEmpacar, setModalEmpacar] = useState(false);
     const [modalDespacho, setModalDespacho] = useState(false);
     const [modalAbono, setModalAbono] = useState(false);
+    const [modalFactura, setModalFactura] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [precioBCV, setPrecioBCV] = useState(1);
 
@@ -76,6 +77,8 @@ export default function DetallePedidoMayorPage() {
     if (pedido.statusDespacho === 'Empacado') pasoActual = 1;
     if (pedido.statusDespacho === 'Completado' || pedido.statusDespacho === 'Despachado') pasoActual = 2;
 
+    // Compra de la tienda fuera de la zona de delivery: envío nacional por Zoom con cobro a destino (la tesorería no interviene)
+    const esNacional = pedido.tipoVenta === 'ONLINE' && pedido.tipoEntrega === 'flete';
     const cuentaPorCobrar = pedido.cuentaPorCobrar; // Asumiendo que tu backend lo incluye
     const esCredito = pedido.condicionPago === 'Credito';
 
@@ -103,6 +106,7 @@ export default function DetallePedidoMayorPage() {
 
     const handleConfirmarEmpaque = (values) => handleAction('EMPACAR', { ...values, vendedorId: userId }, setModalEmpacar, 'Caja armada y stock descontado.');
     const handleAsignar = (values) => handleAction('ASIGNAR', values, setModalEmpacar, 'Personal asignado. Les avisamos para que preparen el pedido.');
+    const handleConvertirFactura = () => handleAction('CONVERTIR_A_FACTURA', {}, setModalFactura, 'Convertido en factura. Ahora aparece en el libro de ventas con la fecha de hoy.');
     const handleFirmar = (accion, mensaje) => handleAction(accion, {}, null, mensaje);
     const handleConfirmarDespacho = (values) => handleAction('DESPACHAR', values, setModalDespacho, 'Despacho registrado y flete asentado.');
 
@@ -147,6 +151,10 @@ export default function DetallePedidoMayorPage() {
                     Volver
                 </Button>
                 <Title order={2} c="blue.9">Pedido: {pedido.numeroDocumento}</Title>
+                {pedido.numeroDocumentoAnterior && <Badge size="lg" variant="outline" color="gray">Antes: {pedido.numeroDocumentoAnterior}</Badge>}
+                {rolUsuario === 'admin' && pedido.tipoDocumento === 'VENTA_RAPIDA' && pedido.clienteId && pedido.statusDespacho !== 'Cancelado' && (
+                    <Button size="xs" variant="light" color="indigo" leftSection={<IconReceiptTax size={16} />} onClick={() => setModalFactura(true)}>Convertir en factura</Button>
+                )}
 
                 {/* Status de Pago */}
                 <Badge size="lg" color={pedido.statusPago === 'PAGADO' ? 'green' : 'orange'}>
@@ -160,7 +168,7 @@ export default function DetallePedidoMayorPage() {
 
                 {/* Tipo de Entrega */}
                 <Badge size="lg" variant="outline" color={pedido.tipoEntrega === 'pickup' ? 'grape' : 'cyan'}>
-                    {pedido.tipoEntrega === 'pickup' ? '🏪 Pickup (Retiro)' : '🚚 Delivery'}
+                    {pedido.tipoEntrega === 'pickup' ? '🏪 Pickup (Retiro)' : (esNacional ? '📦 Envío nacional (Zoom)' : '🚚 Delivery')}
                 </Badge>
             </Group>
 
@@ -317,7 +325,7 @@ export default function DetallePedidoMayorPage() {
                                     <Text size="sm" fw={600}>{pedido.etiquetador?.empleado ? `${pedido.etiquetador.empleado.nombre} ${pedido.etiquetador.empleado.apellido}` : 'Pendiente'}</Text>
                                 </Paper>
 
-                                {!esVendedor && <EnvioCard pedido={pedido} onCambio={refetch} />}
+                                {!esVendedor && !esNacional && <EnvioCard pedido={pedido} onCambio={refetch} />}
 
                                 {!esVendedor && <RetencionIvaCard pedido={pedido} onCambio={refetch} />}
 
@@ -332,14 +340,32 @@ export default function DetallePedidoMayorPage() {
                                             <Badge color="grape" variant="light" mb="xs">Retiro en Tienda (Pickup)</Badge>
                                             <Text size="xs" c="dimmed">El cliente retira directamente en el establecimiento. No aplica costo de flete ni agencia de envíos.</Text>
                                         </Box>
+                                    ) : esNacional ? (
+                                        <Box>
+                                            <Badge color="indigo" variant="light" mb="xs">Envío nacional por Zoom</Badge>
+                                            <Text size="xs" c="dimmed">Cobro a destino: el cliente paga el flete a Zoom al recibir. No hay flete en esta venta ni movimiento de tesorería.</Text>
+                                            {pedido.quienRetira && <Text size="sm" fw={600} mt={6}>{pedido.quienRetira}</Text>}
+                                        </Box>
                                     ) : (
                                         <Box>
                                             <Badge color="cyan" variant="light" mb="xs">Envío por Delivery / Agencia</Badge>
                                             <Text size="xs" c="dimmed">Quién retira / Agencia:</Text>
                                             <Text size="sm" fw={600} mb={6}>{pedido.quienRetira || 'Pendiente de asignar agencia'}</Text>
 
-                                            <Text size="xs" c="dimmed">Costo de Flete (Gasto):</Text>
+                                            <Text size="xs" c="dimmed">{pedido.tipoVenta === 'ONLINE' ? 'Delivery cobrado al cliente (va a la empresa de transporte):' : 'Costo de Flete (Gasto):'}</Text>
                                             <PrecioVisual valor={pedido.costoFlete || 0} simbolo={pedido.moneda} size="sm" fw={700} />
+                                            {pedido.tipoVenta === 'ONLINE' && pedido.costoFleteReal !== null && pedido.costoFleteReal !== undefined && (() => {
+                                                const dif = Math.round((Number(pedido.costoFlete) - Number(pedido.costoFleteReal)) * 100) / 100;
+                                                return (
+                                                    <Box mt={6}>
+                                                        <Text size="xs" c="dimmed">Lo que cobró el delivery:</Text>
+                                                        <PrecioVisual valor={pedido.costoFleteReal} simbolo={pedido.moneda} size="sm" fw={700} />
+                                                        <Badge mt={4} size="sm" variant="light" color={dif === 0 ? 'teal' : (dif > 0 ? 'blue' : 'red')}>
+                                                            {dif === 0 ? 'El cálculo fue exacto' : (dif > 0 ? `Se cobró de más al cliente: ${dif.toFixed(2)}` : `Se cobró de menos al cliente: ${Math.abs(dif).toFixed(2)}`)}
+                                                        </Badge>
+                                                    </Box>
+                                                );
+                                            })()}
 
                                             <Text size="xs" c="red.7" mt={6} fs="italic">
                                                 ⚠️ Recuerda contactar a la agencia de delivery para gestionar la salida.
@@ -483,7 +509,7 @@ export default function DetallePedidoMayorPage() {
                 <form onSubmit={formDespacho.onSubmit((values) => {
                     const body = pedido.tipoEntrega === 'pickup'
                         ? { quienRetira: 'Cliente en Tienda (Pickup)', costoFlete: 0, fechaHoraRetiro: new Date().toISOString() }
-                        : values;
+                        : (esNacional ? { ...values, costoFlete: 0 } : values);
                     handleConfirmarDespacho(body);
                 })}>
                     <Stack gap="md">
@@ -491,17 +517,25 @@ export default function DetallePedidoMayorPage() {
                             <Text size="sm">¿Confirmas que el cliente ha retirado su pedido en tienda? Esto cambiará el estado de despacho a <b>COMPLETADO</b>.</Text>
                         ) : (
                             <>
-                                <TextInput label="Chofer / Agencia de Delivery" withAsterisk {...formDespacho.getInputProps('quienRetira')} />
+                                <TextInput label={esNacional ? 'Zoom: número de guía' : 'Chofer / Agencia de Delivery'} withAsterisk {...formDespacho.getInputProps('quienRetira')} />
                                 <TextInput type="datetime-local" label="Fecha y Hora de Entrega a Agencia" withAsterisk {...formDespacho.getInputProps('fechaHoraRetiro')} />
-                                <NumberInput label="Lo que pagó la empresa por el flete (gasto)" description="El flete que se le cobra al cliente se fija en «Envío y transporte»" decimalScale={2} withAsterisk {...formDespacho.getInputProps('costoFlete')} />
-                                <Text size="xs" c="dimmed">ℹ️ Al registrar esto, recuerda contactar a la agencia de delivery para el despacho.</Text>
+                                {!esNacional && <NumberInput label={pedido.tipoVenta === 'ONLINE' ? 'Lo que cobró el delivery' : 'Lo que pagó la empresa por el flete (gasto)'} description={pedido.tipoVenta === 'ONLINE' ? `Se compara con lo que se le cobró al cliente (${Number(pedido.costoFlete || 0).toFixed(2)}); genera un ajuste en tesorería` : 'El flete que se le cobra al cliente se fija en «Envío y transporte»'} decimalScale={2} withAsterisk {...formDespacho.getInputProps('costoFlete')} />}
+                                <Text size="xs" c="dimmed">{esNacional ? 'ℹ️ Envío por Zoom con cobro a destino: el cliente paga el flete al recibir.' : 'ℹ️ Al registrar esto, recuerda contactar a la agencia de delivery para el despacho.'}</Text>
                             </>
                         )}
                         <Button loading={isSubmitting} type="submit" fullWidth color="grape">
-                            {pedido.tipoEntrega === 'pickup' ? 'Marcar como Retirado' : 'Asentar Despacho y Gasto'}
+                            {pedido.tipoEntrega === 'pickup' ? 'Marcar como Retirado' : (pedido.tipoVenta === 'ONLINE' ? 'Asentar Despacho' : 'Asentar Despacho y Gasto')}
                         </Button>
                     </Stack>
                 </form>
+            </Modal>
+
+            <Modal opened={modalFactura} onClose={() => setModalFactura(false)} title={<Title order={4}>Convertir en factura</Title>} centered>
+                <Stack gap="md">
+                    <Text size="sm">El recibo <b>{pedido.numeroDocumento}</b> pasará a ser una <b>factura</b> con un número F- nuevo y fecha de emisión <b>de hoy</b>, y entrará al libro de ventas de este periodo.</Text>
+                    <Text size="sm">El IVA ya cobrado dejará de contar como ingreso de la tienda y quedará reservado para pagar al SENIAT. Esta acción no se puede deshacer.</Text>
+                    <Button loading={isSubmitting} fullWidth color="indigo" onClick={handleConvertirFactura}>Sí, convertir en factura</Button>
+                </Stack>
             </Modal>
 
             {/* 🔥 MODAL DE ABONO 🔥 */}

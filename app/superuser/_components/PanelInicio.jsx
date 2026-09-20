@@ -7,6 +7,7 @@ import { LineChart } from '@mantine/charts';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import ErroresEmpaqueCard from './ErroresEmpaqueCard';
+import DeliveryDiferenciasCard from './DeliveryDiferenciasCard';
 import {
     IconAlertTriangle, IconArrowDownRight, IconArrowRight, IconArrowUpRight, IconBuildingStore, IconCash, IconCheck, IconClockExclamation, IconPackage,
     IconReceipt, IconSettings, IconTruckDelivery, IconWallet,
@@ -131,6 +132,9 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
 
                 {/* Quién se equivoca más al empacar (solo administradores) */}
                 {isAdmin && <ErroresEmpaqueCard />}
+
+                {/* Diferencias acumuladas entre el delivery cobrado y el real (solo administradores) */}
+                {isAdmin && <DeliveryDiferenciasCard />}
 
                 {/* Módulos */}
                 <Box>
