@@ -49,7 +49,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
     return (
         <div className="fl-envoltura">
             <div className="fl-barra">
-                <span>{titulo} {venta.numeroDocumento} · media carta 8 × 5.5 in{guia ? ' · GUÍA de la forma preimpresa (no se imprime)' : ''}{vistaPrevia ? ' · VISTA PREVIA: no es un documento emitido' : ''}</span>
+                <span>{titulo} {venta.numeroDocumento} · media carta 8 × 5.5 in{guia ? (vistaPrevia ? ' · GUÍA de la forma preimpresa (se imprime)' : ' · GUÍA de la forma preimpresa (no se imprime)') : ''}{vistaPrevia ? ' · VISTA PREVIA: no es un documento emitido' : ''}</span>
                 <span>
                     <button type="button" onClick={() => window.print()}>Imprimir</button>{' '}
                     {onReasignarControl && <><button type="button" onClick={onReasignarControl}>Forma dañada: siguiente N° de control</button>{' '}</>}
@@ -61,7 +61,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
             {demasiados && <div className="fl-aviso">Esta factura tiene {detalles.length} renglones y la forma libre admite {CONFIG_FISCAL.maxRenglonesFactura}: los que sobran se saldrán de la hoja.</div>}
 
             <div id="print-section" className="fl-hoja">
-                {guia && <img className="fl-guia" src="/tenants/mediquir/forma-libre.png" alt="" />}
+                {guia && <img className={vistaPrevia ? 'fl-guia fl-guia-imprime' : 'fl-guia'} src="/tenants/mediquir/forma-libre.png" alt="" />}
 
                 {/* Cliente */}
                 <div className="fl-cliente">
@@ -169,7 +169,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                     html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
                     body * { visibility: hidden !important; }
                     #print-section, #print-section * { visibility: visible !important; }
-                    .fl-guia { display: none !important; }
+                    .fl-guia:not(.fl-guia-imprime) { display: none !important; } /* en la vista previa la guía sí se imprime */
                     .fl-envoltura { padding: 0 !important; background: transparent !important; min-height: 0; }
                     #print-section { position: absolute !important; left: 0 !important; top: 0 !important; margin: 0 !important; box-shadow: none !important; transform: none !important; }
                     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
