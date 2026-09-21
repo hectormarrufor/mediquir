@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Alert, Badge, Box, Button, Card, Center, Group, Image, NumberInput, Pagination, SegmentedControl, Select, SimpleGrid, Skeleton, Stack, Switch, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Badge, Box, Button, Card, Center, Group, Image, NumberInput, Pagination, SegmentedControl, Select, SimpleGrid, Skeleton, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
@@ -85,19 +85,17 @@ export default function B2BCatalogo() {
     const [q] = useDebouncedValue(busqueda.trim(), 350);
     const [categoriaId, setCategoriaId] = useState(null);
     const [marcaId, setMarcaId] = useState(null);
-    const [soloDisponibles, setSoloDisponibles] = useState(true);
     const [pagina, setPagina] = useState(1);
 
-    useEffect(() => { setPagina(1); }, [q, categoriaId, marcaId, soloDisponibles]);
+    useEffect(() => { setPagina(1); }, [q, categoriaId, marcaId]);
 
     const params = new URLSearchParams({ page: String(pagina) });
     if (q) params.set('q', q);
     if (categoriaId) params.set('categoriaId', categoriaId);
     if (marcaId) params.set('marcaId', marcaId);
-    if (soloDisponibles) params.set('disponibles', '1');
 
     const { data, isLoading, isFetching, error } = useQuery({
-        queryKey: ['b2b', 'catalogo', q, categoriaId, marcaId, soloDisponibles, pagina],
+        queryKey: ['b2b', 'catalogo', q, categoriaId, marcaId, pagina],
         queryFn: () => pedirJson(`/api/b2b/catalogo?${params}`),
         placeholderData: keepPreviousData,
     });
@@ -120,7 +118,6 @@ export default function B2BCatalogo() {
                 <TextInput flex="1 1 260px" placeholder="Buscar por nombre o código…" leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)} />
                 <Select placeholder="Categoría" clearable searchable data={filtros.categorias.map((c) => ({ value: String(c.id), label: c.nombre }))} value={categoriaId} onChange={setCategoriaId} w={{ base: '100%', sm: 200 }} />
                 <Select placeholder="Marca" clearable searchable data={filtros.marcas.map((m) => ({ value: String(m.id), label: m.nombre }))} value={marcaId} onChange={setMarcaId} w={{ base: '100%', sm: 200 }} />
-                <Switch color="brand.6" label="Solo con existencia" checked={soloDisponibles} onChange={(e) => setSoloDisponibles(e.currentTarget.checked)} mb={6} />
             </Group>
 
             {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}

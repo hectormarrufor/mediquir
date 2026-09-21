@@ -23,14 +23,12 @@ export async function GET(request) {
         const q = (searchParams.get('q') || '').trim().slice(0, 80);
         const categoriaId = entero(searchParams.get('categoriaId'), null);
         const marcaId = entero(searchParams.get('marcaId'), null);
-        const soloDisponibles = searchParams.get('disponibles') === '1';
         const pagina = entero(searchParams.get('page'), 1);
 
         // Solo productos con algún precio (el precio mayor cae al de venta si falta)
         const where = { [Op.and]: [{ [Op.or]: [{ precio6: { [Op.gt]: 0 } }, { precio7: { [Op.gt]: 0 } }, { costoUsd: { [Op.gt]: 0 } }] }] };
         if (categoriaId) where.categoriaId = categoriaId;
         if (marcaId) where.marcaId = marcaId;
-        if (soloDisponibles) where.stockAlmacen = { [Op.gt]: 0 };
 
         const atributos = ['id', 'codigo', 'nombre', 'imagen', 'presentacion', 'unidadesPorCaja', 'cajasPorBulto', 'unidadesPorBulto', 'stockAlmacen', 'porcentajeIva', 'precio6', 'precio7', 'costoUsd'];
         const incluir = [
