@@ -40,12 +40,13 @@ export async function GET(request) {
       {
         model: db.Puesto,
         as: 'puestos',
-        through: { attributes: [] }
+        through: { attributes: [] },
+        include: [{ model: db.Departamento, as: 'departamento', attributes: ['id', 'nombre'] }],
       },
       {
         model: db.User,
         as: 'usuario',
-        attributes: ['id', 'user'],
+        attributes: ['id', 'user', 'isAdmin'],
       }
     ];
 

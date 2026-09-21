@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
 import db from '../../../../models';
+import { requerirAdmin } from '../_lib';
 
 export async function GET(request) {
   try {
     const puestos = await db.Puesto.findAll({
+      include: [
+        { model: db.Departamento, as: 'departamento', attributes: ['id', 'nombre'] },
+        { model: db.Empleado, as: 'empleados', attributes: ['id', 'nombre', 'apellido', 'imagen', 'estado'], through: { attributes: [] } },
+      ],
       order: [['nombre', 'ASC']],
     });
     return NextResponse.json(puestos);
@@ -14,6 +19,8 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  const acceso = await requerirAdmin();
+  if (acceso.error) return acceso.error;
   try {
     const body = await request.json();
     const nuevoPuesto = await db.Puesto.create(body);
