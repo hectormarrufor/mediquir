@@ -136,7 +136,7 @@ const INVARIABLES = new Set(['ecg', 'ekg', 'cpap', 'diu', 'pap', 'kn95', 'n95', 
 const STOP = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'para', 'con', 'y', 'en', 'un', 'una']);
 function formas(palabra) {
     const t = palabra.trim();
-    if (!t || /d/.test(t) || t.length < 3) return t ? [t] : [];
+    if (!t || /\d/.test(t) || t.length < 3) return t ? [t] : [];
     if (INVARIABLES.has(t)) return [t];
     // Ya viene en plural: se ofrece también el singular
     if (/[aeiou]s$/.test(t) && t.length > 4 && !/(is|us|sis)$/.test(t)) return [t.slice(0, -1), t];
