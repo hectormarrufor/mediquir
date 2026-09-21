@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
-import { Categoria, Cliente, GrupoEquivalencia, Marca, Producto } from '@/models';
+import { Categoria, Cliente, GrupoEquivalencia, Marca, Producto, Tag } from '@/models';
+import { buscarProductos } from '@/app/helpers/busquedaProductos';
 import { requerirCliente } from '../../_lib/acceso';
 import { precioParaCliente } from '@/app/constants/facturacion';
 import { presentacionesDe } from '@/app/constants/presentaciones';
@@ -27,23 +28,36 @@ export async function GET(request) {
 
         // Solo productos con algún precio (el precio mayor cae al de venta si falta)
         const where = { [Op.and]: [{ [Op.or]: [{ precio6: { [Op.gt]: 0 } }, { precio7: { [Op.gt]: 0 } }, { costoUsd: { [Op.gt]: 0 } }] }] };
-        if (q) where[Op.and].push({ [Op.or]: [{ nombre: { [Op.iLike]: `%${q}%` } }, { codigo: { [Op.iLike]: `%${q}%` } }] });
         if (categoriaId) where.categoriaId = categoriaId;
         if (marcaId) where.marcaId = marcaId;
         if (soloDisponibles) where.stockAlmacen = { [Op.gt]: 0 };
 
-        const { rows, count } = await Producto.findAndCountAll({
-            where,
-            attributes: ['id', 'codigo', 'nombre', 'imagen', 'presentacion', 'unidadesPorCaja', 'cajasPorBulto', 'unidadesPorBulto', 'stockAlmacen', 'porcentajeIva', 'precio6', 'precio7', 'costoUsd'],
-            include: [
-                { model: Categoria, as: 'categoria', attributes: ['id', 'nombre'] },
-                { model: Marca, as: 'marca', attributes: ['id', 'nombre', 'imagen'] },
-                { model: GrupoEquivalencia, as: 'grupoEquivalencia', attributes: ['imagen'] },
-            ],
-            order: [['nombre', 'ASC']],
-            limit: TAMANO_PAGINA,
-            offset: (pagina - 1) * TAMANO_PAGINA,
-        });
+        const atributos = ['id', 'codigo', 'nombre', 'imagen', 'presentacion', 'unidadesPorCaja', 'cajasPorBulto', 'unidadesPorBulto', 'stockAlmacen', 'porcentajeIva', 'precio6', 'precio7', 'costoUsd'];
+        const incluir = [
+            { model: Categoria, as: 'categoria', attributes: ['id', 'nombre'] },
+            { model: Marca, as: 'marca', attributes: ['id', 'nombre', 'imagen'] },
+            { model: GrupoEquivalencia, as: 'grupoEquivalencia', attributes: ['nombre', 'imagen'] },
+        ];
+
+        let rows;
+        let count;
+        if (q) {
+            // Misma búsqueda que la tienda: por palabras, en nombre, etiquetas, marca, código, grupo y categoría, sin tildes ni plurales y con
+            // tolerancia a errores de tipeo; primero lo que coincide con todo y después lo que coincide en parte. Se ordena por relevancia
+            // (con existencia primero) y luego se pagina.
+            const todos = await Producto.findAll({
+                where, attributes: atributos,
+                include: [...incluir, { model: Tag, as: 'tags', attributes: ['id', 'nombre'], through: { attributes: [] } }],
+            });
+            const encontrados = buscarProductos(todos.map((p) => p.toJSON()), q, { desempate: (p) => (Number(p.stockAlmacen) > 0 ? 1 : 0) });
+            count = encontrados.length;
+            rows = encontrados.slice((pagina - 1) * TAMANO_PAGINA, pagina * TAMANO_PAGINA).map((j) => ({ toJSON: () => j }));
+        } else {
+            ({ rows, count } = await Producto.findAndCountAll({
+                where, attributes: atributos, include: incluir,
+                order: [['nombre', 'ASC']], limit: TAMANO_PAGINA, offset: (pagina - 1) * TAMANO_PAGINA,
+            }));
+        }
 
         const productos = rows.map((p) => {
             const j = p.toJSON();
