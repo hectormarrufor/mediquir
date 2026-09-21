@@ -15,6 +15,7 @@ const renglonNuevo = () => ({ descripcion: '', cantidad: 1, precio: 0, iva: true
 // Sirve para revisar cómo quedará la nota antes de emitirla de verdad (desde el detalle de la factura).
 export default function VistaPreviaNota() {
     const tasaInicial = typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get('tasa')) || 1 : 1;
+    const [guia, setGuia] = useState(false); // muestra la forma libre preimpresa debajo para ver cómo cae la nota
     const [tipo, setTipo] = useState('DEBITO');
     const [moneda, setMoneda] = useState('BS');
     const [tasa, setTasa] = useState(tasaInicial);
@@ -85,6 +86,8 @@ export default function VistaPreviaNota() {
                     condicionTexto={String(motivo || '').slice(0, 38)}
                     sinVence
                     vistaPrevia
+                    guia={guia}
+                    onToggleGuia={() => setGuia((g) => !g)}
                 />
             ) : <Alert color="orange">Completa al menos un renglón con descripción y monto para ver la nota.</Alert>}
         </Container>
