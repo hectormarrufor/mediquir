@@ -61,7 +61,6 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
             {demasiados && <div className="fl-aviso">Esta factura tiene {detalles.length} renglones y la forma libre admite {CONFIG_FISCAL.maxRenglonesFactura}: los que sobran se saldrán de la hoja.</div>}
 
             <div id="print-section" className="fl-hoja">
-                {vistaPrevia && <div className="fl-marca">VISTA PREVIA</div>}
                 {guia && <img className="fl-guia" src="/tenants/mediquir/forma-libre.png" alt="" />}
 
                 {/* Cliente */}
