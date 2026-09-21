@@ -86,7 +86,8 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
                                 {onAjustes && <Tooltip label="Control de accesos"><ActionIcon variant="white" color="gray" radius="xl" onClick={onAjustes}><IconSettings size={18} /></ActionIcon></Tooltip>}
                             </Group>
                         </Box>
-                        <Group gap="xs" w={{ base: '100%', sm: 'auto' }} wrap="nowrap">
+                        <Group gap="xs" w={{ base: '100%', sm: 'auto' }} wrap="wrap">
+                            {isAdmin && <Button component={Link} href={`/superuser/notas/vista-previa${tasa ? `?tasa=${tasa}` : ''}`} size="sm" radius="xl" tt="none" variant="white" color="navy.9" leftSection={<IconReceiptTax size={18} />} style={{ flex: '1 1 auto' }}>Vista previa de nota</Button>}
                             <Button size="sm" radius="xl" tt="none" variant="white" color="navy.9" leftSection={<IconReceipt size={18} />} onClick={onCompra} style={{ flex: '1 1 auto' }}>Registrar compra</Button>
                             <Button size="sm" radius="xl" tt="none" color="accent.6" leftSection={<IconBuildingStore size={18} />} onClick={onPos} style={{ flex: '1 1 auto' }}>Nueva venta (POS)</Button>
                         </Group>

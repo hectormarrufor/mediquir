@@ -26,7 +26,7 @@ const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-VE', { timeZone: 'A
 
 // titulo: 'Factura' (por defecto) o 'Nota de Crédito' / 'Nota de Débito'. Para una nota, `referencia` (en lugar de "ORDEN DE COMPRA") indica la factura
 // que afecta y `condicionTexto` reemplaza las condiciones de pago; `sinVence` oculta la fecha de vencimiento.
-export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factura', referencia = null, etiquetaCondicion = 'Condiciones de la Transacción', condicionTexto = null, sinVence = false, onReasignarControl = null }) {
+export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factura', referencia = null, etiquetaCondicion = 'Condiciones de la Transacción', condicionTexto = null, sinVence = false, onReasignarControl = null, vistaPrevia = false }) {
     const tasa = Number(venta.tasaCambio) || 1;
     const esBs = venta.moneda === 'BS';
     const aBs = (v) => (esBs ? Number(Number(v).toFixed(2)) : aBolivares(Number(v), tasa));
@@ -49,16 +49,17 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
     return (
         <div className="fl-envoltura">
             <div className="fl-barra">
-                <span>{titulo} {venta.numeroDocumento} · media carta 8 × 5.5 in{guia ? ' · GUÍA de la forma preimpresa (no se imprime)' : ''}</span>
+                <span>{titulo} {venta.numeroDocumento} · media carta 8 × 5.5 in{guia ? ' · GUÍA de la forma preimpresa (no se imprime)' : ''}{vistaPrevia ? ' · VISTA PREVIA: no es un documento emitido' : ''}</span>
                 <span>
                     <button type="button" onClick={() => window.print()}>Imprimir</button>{' '}
                     {onReasignarControl && <><button type="button" onClick={onReasignarControl}>Forma dañada: siguiente N° de control</button>{' '}</>}
-                    <a href={guia ? '?' : '?guia=1'}>{guia ? 'Ocultar guía' : 'Ver guía sobre la forma'}</a>
+                    {!vistaPrevia && <a href={guia ? '?' : '?guia=1'}>{guia ? 'Ocultar guía' : 'Ver guía sobre la forma'}</a>}
                 </span>
             </div>
             {demasiados && <div className="fl-aviso">Esta factura tiene {detalles.length} renglones y la forma libre admite {CONFIG_FISCAL.maxRenglonesFactura}: los que sobran se saldrán de la hoja.</div>}
 
             <div id="print-section" className="fl-hoja">
+                {vistaPrevia && <div className="fl-marca">VISTA PREVIA</div>}
                 {guia && <img className="fl-guia" src="/tenants/mediquir/forma-libre.png" alt="" />}
 
                 {/* Cliente */}
@@ -117,6 +118,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
 
                 /* La hoja: media carta horizontal. Todo va en pulgadas desde su esquina superior izquierda. */
                 .fl-hoja { position: relative; width: 8in; height: 5.5in; margin: 0 auto; background: #fff; color: #000; overflow: hidden; box-shadow: 0 0 10px rgba(0,0,0,.5); font-size: 8px; }
+                .fl-marca { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 64px; font-weight: 900; letter-spacing: 6px; color: rgba(211, 47, 47, .28); transform: rotate(-18deg); pointer-events: none; z-index: 20; }
                 .fl-guia { position: absolute; inset: 0; width: 8in; height: 5.5in; opacity: .45; pointer-events: none; z-index: 0; }
                 .fl-hoja > *:not(.fl-guia) { position: absolute; z-index: 1; }
 

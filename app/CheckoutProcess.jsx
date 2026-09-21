@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { avisoDespacho } from '@/app/constants/horario';
 import { Box, Stepper, Button, Group, Radio, Stack, Text, Paper, Loader, Alert, Divider, ThemeIcon, Checkbox, TextInput, Select } from '@mantine/core';
 import { useForm } from '@mantine/form';
+import { SITIO } from '@/app/lib/seo';
 import { IconBuildingStore, IconMotorbike, IconCheck, IconAlertCircle, IconUser, IconGps, IconMapPinCheck } from '@tabler/icons-react';
 import { useCart } from './components/landing/CartContext';
 import { aBolivares } from '@/app/constants/facturacion';
@@ -430,7 +431,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                             label="Nombre Completo / Razón Social" 
                             placeholder={buscandoCliente ? "Buscando en base de datos..." : "Ej: Juan Pérez o Inversiones M&M C.A."} 
                             withAsterisk 
-                            disabled={buscandoCliente}
+                            disabled={buscandoCliente || datosGuardados}
                             description={datosGuardados ? 'Datos guardados: se usan los de tu ficha' : undefined}
                             {...formCliente.getInputProps('nombre')}
                         />
@@ -439,16 +440,22 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                             label="Teléfono de Contacto" 
                             placeholder="Ej: 04141234567" 
                             withAsterisk 
-                            disabled={buscandoCliente}
+                            disabled={buscandoCliente || datosGuardados}
                             {...formCliente.getInputProps('telefono')} 
                         />
                         
                         <TextInput 
                             label="Correo Electrónico (Opcional)" 
                             placeholder="correo@ejemplo.com" 
-                            disabled={buscandoCliente}
+                            disabled={buscandoCliente || datosGuardados}
                             {...formCliente.getInputProps('email')} 
                         />
+                        {datosGuardados && (
+                            <Alert color="blue" variant="light" p="xs" title="¿No son tus datos?">
+                                <Text size="sm">Por tu seguridad no los mostramos completos ni se pueden editar aquí. Si cambiaron o no son tuyos, escríbenos por WhatsApp y los actualizamos.</Text>
+                                <Button component="a" target="_blank" rel="noopener noreferrer" mt="xs" size="xs" color="green.8" href={`https://wa.me/${SITIO.whatsapp}?text=${encodeURIComponent(`Hola, mi documento es ${obtenerIdentificacionFormateada()} y quiero actualizar mis datos en el sistema.`)}`}>Actualizar mis datos por WhatsApp</Button>
+                            </Alert>
+                        )}
                     </Stack>
                 </Stepper.Step>
 
