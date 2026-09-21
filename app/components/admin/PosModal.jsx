@@ -393,11 +393,11 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
         <>
             <Modal 
                 opened={opened} onClose={onClose} size="95%" fullScreen={isMobile} 
-                title={<Title order={3} c="blue.9" component="div">Terminal POS - Nueva Venta</Title>} 
+                title={<Title order={isMobile ? 5 : 3} c="blue.9" component="div">{isMobile ? 'Nueva venta (POS)' : 'Terminal POS - Nueva Venta'}</Title>} 
                 centered
                 styles={{
-                    inner: { padding: isMobile ? 0 : '16px' }, content: { borderRadius: isMobile ? 0 : '8px' },
-                    body: { padding: isMobile ? '4px' : '20px' }, header: { padding: isMobile ? '10px 8px' : '20px' }
+                    inner: { padding: isMobile ? 0 : '16px' }, content: { borderRadius: isMobile ? 0 : '8px', ...(isMobile ? { padding: 0 } : {}) },
+                    body: { padding: isMobile ? '4px 4px 0' : '20px' }, header: { padding: isMobile ? '6px 8px' : '20px', ...(isMobile ? { position: 'sticky', top: 0, zIndex: 20, background: '#fff', borderBottom: '1px solid #e9ecef', minHeight: 44 } : {}) }
                 }}
             >
                 <Paper p={{ base: 6, md: 'xs' }} mb="sm" bg="blue.0" radius={{ base: 4, md: 'md' }}>
@@ -428,7 +428,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                 )}
                             </Group>
 
-                            <ScrollArea style={{ flex: 1, maxHeight: isMobile ? 350 : 'none' }} type="auto">
+                            <ScrollArea style={{ flex: 1, maxHeight: isMobile ? 240 : 'none' }} type="auto">
                                 <Stack gap={isMobile ? 4 : 'xs'}>
                                     {productosFiltrados.slice(0, 20).map(prod => {
                                         const infoPreview = calcularPrecioInfo(prod, formVenta.values.tipoPrecio);
@@ -553,99 +553,145 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                 </Group>
                             )}
 
-                            <ScrollArea style={{ flex: isMobile ? 'none' : 1 }} offsetScrollbars type="auto" mb="sm">
-                                <Table striped highlightOnHover verticalSpacing="xs" style={{ minWidth: isMobile ? 550 : '100%' }}>
-                                    <Table.Thead>
-                                        <Table.Tr>
-                                            <Table.Th style={{ width: '36%' }}>Producto</Table.Th>
-                                            <Table.Th style={{ width: '28%', textAlign: 'center' }}>Cantidad</Table.Th>
-                                            <Table.Th style={{ width: puedeEditarPrecio ? '18%' : '12%', textAlign: 'right' }}>Unit.</Table.Th>
-                                            <Table.Th style={{ width: '13%', textAlign: 'right' }}>Total</Table.Th>
-                                            <Table.Th style={{ width: '5%' }}></Table.Th>
-                                        </Table.Tr>
-                                    </Table.Thead>
-                                    <Table.Tbody>
-                                        {carrito.map((item, idxItem) => (
-                                            <Table.Tr key={item.clave}>
-                                                <Table.Td>
-                                                    <Group gap="xs" wrap="nowrap">
-                                                        {item.isFicticio ? (
-                                                            <Avatar color="grape" size="sm" radius="sm"><IconEdit size={14} /></Avatar>
-                                                        ) : (
-                                                            <Avatar src={item.imagen || item.marcaImagen} size="sm" radius="sm"><IconPackage size={14} /></Avatar>
-                                                        )}
-                                                        <Box>
-                                                            <Group gap={4}>
-                                                                <Text fw={600} size="sm" lineClamp={2}>{item.nombre}</Text>
-                                                                {item.tieneDescuento && (
-                                                                    <Badge size="xs" color="red" variant="filled">-{item.porcentajeDescuento}%</Badge>
-                                                                )}
-                                                                {((item.isFicticio && !item.aplicaIva) || (!item.isFicticio && item.porcentajeIva === 0)) && formVenta.values.conIva && (
-                                                                    <Badge size="xs" color="gray" variant="light">EXENTO</Badge>
-                                                                )}
-                                                            </Group>
-                                                            {!item.isFicticio && item.marcaNombre && <Text size="xs" c="dimmed">{item.marcaNombre}</Text>}
-                                                            {!item.isFicticio && item.presentacion !== 'UNIDAD' && (
-                                                                <Badge size="sm" color="grape" variant="filled" tt="none" mt={2}>{item.presentacionEtiqueta} · {item.cantidad} unidades</Badge>
-                                                            )}
-                                                            {item.isFicticio && <Text size="xs" c="dimmed">Código: 1010</Text>}
-                                                            
-                                                            {!item.isFicticio && (
-                                                                <Checkbox
-                                                                    size="xs"
-                                                                    mt={4}
-                                                                    color="teal"
-                                                                    label="Afectar inventario"
-                                                                    checked={item.afectaInventario}
-                                                                    onChange={(e) => toggleAfectaInventario(item.clave, e.currentTarget.checked)}
-                                                                />
-                                                            )}
-                                                        </Box>
+                            {isMobile ? (
+                                <Stack gap={6} mb="sm" style={{ order: -1 }}>
+                                    <Group justify="space-between">
+                                        <Text fw={800} size="sm" c="blue.9">Carrito ({carrito.length})</Text>
+                                        {carrito.length > 0 && <Text size="xs" c="dimmed">{carrito.reduce((a, i) => a + i.cantidad, 0)} unidades</Text>}
+                                    </Group>
+                                    {carrito.length === 0 && <Text c="dimmed" ta="center" size="sm" py="md">Toca un producto de la lista para agregarlo</Text>}
+                                    {carrito.map((item, idxItem) => (
+                                        <Paper key={item.clave} withBorder radius="md" p="xs" style={{ borderLeft: `4px solid ${!item.isFicticio && item.presentacion !== 'UNIDAD' ? '#7048e8' : '#1971c2'}` }}>
+                                            <Group wrap="nowrap" align="flex-start" gap="xs">
+                                                {item.isFicticio ? <Avatar color="grape" size="sm" radius="sm"><IconEdit size={14} /></Avatar> : <Avatar src={item.imagen || item.marcaImagen} size="sm" radius="sm"><IconPackage size={14} /></Avatar>}
+                                                <Box style={{ flex: 1, minWidth: 0 }}>
+                                                    <Text fw={700} size="sm" lineClamp={2} lh={1.2}>{item.nombre}</Text>
+                                                    <Group gap={4} mt={2}>
+                                                        {item.tieneDescuento && <Badge size="xs" color="red" variant="filled">-{item.porcentajeDescuento}%</Badge>}
+                                                        {((item.isFicticio && !item.aplicaIva) || (!item.isFicticio && item.porcentajeIva === 0)) && formVenta.values.conIva && <Badge size="xs" color="gray" variant="light">EXENTO</Badge>}
+                                                        {!item.isFicticio && item.presentacion !== 'UNIDAD' && <Badge size="xs" color="grape.7" variant="filled" tt="none">{item.presentacionEtiqueta} · {item.cantidad} und</Badge>}
+                                                        {item.isFicticio && <Badge size="xs" color="grape" variant="light">Ficticio 1010</Badge>}
                                                     </Group>
-                                                </Table.Td>
-                                                
-                                                <Table.Td>
-                                                    <Group gap="xs" wrap="nowrap" justify="center">
-                                                        <ActionIcon size="md" color="gray" variant="light" onClick={() => cambiarCantidad(item.clave, -1)}>
-                                                            <IconMinus size={16} />
-                                                        </ActionIcon>
-                                                        
-                                                        <NumberInput
-                                                            value={item.cantidadPres}
-                                                            onChange={(val) => setCantidadAbsoluta(item.clave, val)}
-                                                            min={1} allowDecimal={false} size="sm" w={75} hideControls
-                                                            styles={{ input: { textAlign: 'center', fontWeight: 900, fontSize: '1rem', color: '#1971c2', backgroundColor: '#f8f9fa' } }}
-                                                        />
-                                                        
-                                                        <ActionIcon size="md" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)}>
-                                                            <IconPlus size={16} />
-                                                        </ActionIcon>
-                                                    </Group>
-                                                </Table.Td>
-
-                                                <Table.Td style={{ textAlign: 'right' }}>
+                                                </Box>
+                                                <ActionIcon color="red" variant="subtle" onClick={() => eliminarItem(item.clave)} aria-label="Quitar del carrito"><IconTrash size={18} /></ActionIcon>
+                                            </Group>
+                                            <Group justify="space-between" align="center" mt={6} wrap="nowrap" gap={6}>
+                                                <Group gap={4} wrap="nowrap">
+                                                    <ActionIcon size="lg" color="gray" variant="light" onClick={() => cambiarCantidad(item.clave, -1)} aria-label="Menos"><IconMinus size={16} /></ActionIcon>
+                                                    <NumberInput value={item.cantidadPres} onChange={(val) => setCantidadAbsoluta(item.clave, val)} min={1} allowDecimal={false} size="sm" w={60} hideControls
+                                                        styles={{ input: { textAlign: 'center', fontWeight: 900, fontSize: '1rem', color: '#1971c2', backgroundColor: '#f8f9fa' } }} />
+                                                    <ActionIcon size="lg" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)} aria-label="Más"><IconPlus size={16} /></ActionIcon>
+                                                </Group>
+                                                <Box ta="right">
                                                     {puedeEditarPrecio ? (
-                                                        <PrecioEditable
-                                                            valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)}
-                                                            onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)}
-                                                        />
+                                                        <PrecioEditable valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)} onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)} />
                                                     ) : (
-                                                        <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="sm" fw={500} />
+                                                        <Text size="xs" c="dimmed">c/u <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="xs" fw={600} /></Text>
                                                     )}
-                                                </Table.Td>
-                                                <Table.Td style={{ textAlign: 'right' }}>
-                                                    <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="sm" fw={800} />
-                                                </Table.Td>
-                                                <Table.Td style={{ textAlign: 'right' }}>
-                                                    <ActionIcon color="red" variant="subtle" onClick={() => eliminarItem(item.clave)}>
-                                                        <IconTrash size={18} />
-                                                    </ActionIcon>
-                                                </Table.Td>
+                                                    <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="md" fw={800} />
+                                                </Box>
+                                            </Group>
+                                            {!item.isFicticio && (
+                                                <Checkbox size="xs" mt={6} color="teal" label="Afectar inventario" checked={item.afectaInventario} onChange={(e) => toggleAfectaInventario(item.clave, e.currentTarget.checked)} />
+                                            )}
+                                        </Paper>
+                                    ))}
+                                </Stack>
+                            ) : (
+                                <ScrollArea style={{ flex: isMobile ? 'none' : 1 }} offsetScrollbars type="auto" mb="sm">
+                                    <Table striped highlightOnHover verticalSpacing="xs" style={{ minWidth: isMobile ? 550 : '100%' }}>
+                                        <Table.Thead>
+                                            <Table.Tr>
+                                                <Table.Th style={{ width: '36%' }}>Producto</Table.Th>
+                                                <Table.Th style={{ width: '28%', textAlign: 'center' }}>Cantidad</Table.Th>
+                                                <Table.Th style={{ width: puedeEditarPrecio ? '18%' : '12%', textAlign: 'right' }}>Unit.</Table.Th>
+                                                <Table.Th style={{ width: '13%', textAlign: 'right' }}>Total</Table.Th>
+                                                <Table.Th style={{ width: '5%' }}></Table.Th>
                                             </Table.Tr>
-                                        ))}
-                                    </Table.Tbody>
-                                </Table>
-                            </ScrollArea>
+                                        </Table.Thead>
+                                        <Table.Tbody>
+                                            {carrito.map((item, idxItem) => (
+                                                <Table.Tr key={item.clave}>
+                                                    <Table.Td>
+                                                        <Group gap="xs" wrap="nowrap">
+                                                            {item.isFicticio ? (
+                                                                <Avatar color="grape" size="sm" radius="sm"><IconEdit size={14} /></Avatar>
+                                                            ) : (
+                                                                <Avatar src={item.imagen || item.marcaImagen} size="sm" radius="sm"><IconPackage size={14} /></Avatar>
+                                                            )}
+                                                            <Box>
+                                                                <Group gap={4}>
+                                                                    <Text fw={600} size="sm" lineClamp={2}>{item.nombre}</Text>
+                                                                    {item.tieneDescuento && (
+                                                                        <Badge size="xs" color="red" variant="filled">-{item.porcentajeDescuento}%</Badge>
+                                                                    )}
+                                                                    {((item.isFicticio && !item.aplicaIva) || (!item.isFicticio && item.porcentajeIva === 0)) && formVenta.values.conIva && (
+                                                                        <Badge size="xs" color="gray" variant="light">EXENTO</Badge>
+                                                                    )}
+                                                                </Group>
+                                                                {!item.isFicticio && item.marcaNombre && <Text size="xs" c="dimmed">{item.marcaNombre}</Text>}
+                                                                {!item.isFicticio && item.presentacion !== 'UNIDAD' && (
+                                                                    <Badge size="sm" color="grape" variant="filled" tt="none" mt={2}>{item.presentacionEtiqueta} · {item.cantidad} unidades</Badge>
+                                                                )}
+                                                                {item.isFicticio && <Text size="xs" c="dimmed">Código: 1010</Text>}
+                                                                
+                                                                {!item.isFicticio && (
+                                                                    <Checkbox
+                                                                        size="xs"
+                                                                        mt={4}
+                                                                        color="teal"
+                                                                        label="Afectar inventario"
+                                                                        checked={item.afectaInventario}
+                                                                        onChange={(e) => toggleAfectaInventario(item.clave, e.currentTarget.checked)}
+                                                                    />
+                                                                )}
+                                                            </Box>
+                                                        </Group>
+                                                    </Table.Td>
+                                                    
+                                                    <Table.Td>
+                                                        <Group gap="xs" wrap="nowrap" justify="center">
+                                                            <ActionIcon size="md" color="gray" variant="light" onClick={() => cambiarCantidad(item.clave, -1)}>
+                                                                <IconMinus size={16} />
+                                                            </ActionIcon>
+                                                            
+                                                            <NumberInput
+                                                                value={item.cantidadPres}
+                                                                onChange={(val) => setCantidadAbsoluta(item.clave, val)}
+                                                                min={1} allowDecimal={false} size="sm" w={75} hideControls
+                                                                styles={{ input: { textAlign: 'center', fontWeight: 900, fontSize: '1rem', color: '#1971c2', backgroundColor: '#f8f9fa' } }}
+                                                            />
+                                                            
+                                                            <ActionIcon size="md" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)}>
+                                                                <IconPlus size={16} />
+                                                            </ActionIcon>
+                                                        </Group>
+                                                    </Table.Td>
+
+                                                    <Table.Td style={{ textAlign: 'right' }}>
+                                                        {puedeEditarPrecio ? (
+                                                            <PrecioEditable
+                                                                valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)}
+                                                                onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)}
+                                                            />
+                                                        ) : (
+                                                            <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="sm" fw={500} />
+                                                        )}
+                                                    </Table.Td>
+                                                    <Table.Td style={{ textAlign: 'right' }}>
+                                                        <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="sm" fw={800} />
+                                                    </Table.Td>
+                                                    <Table.Td style={{ textAlign: 'right' }}>
+                                                        <ActionIcon color="red" variant="subtle" onClick={() => eliminarItem(item.clave)}>
+                                                            <IconTrash size={18} />
+                                                        </ActionIcon>
+                                                    </Table.Td>
+                                                </Table.Tr>
+                                            ))}
+                                        </Table.Tbody>
+                                    </Table>
+                                </ScrollArea>
+                            )}
 
                             {tipoVenta === 'MAYOR' && (
                                 <Group mb="sm" grow>
@@ -654,37 +700,52 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                 </Group>
                             )}
 
-                            <Divider mb="xs" />
+                            {!isMobile && (
+                                <>
+                                    <Divider mb="xs" />
 
-                            <Group justify="space-between" align="flex-end">
-                                <Stack gap={2}>
-                                    <Group gap="xs">
-                                        <Text size="xs" c="dimmed">Subtotal:</Text>
-                                        <PrecioVisual valor={subtotal} simbolo={simboloMoneda} size="xs" c="dimmed" />
-                                    </Group>
-                                    <Group gap="xs">
-                                        <Text size="xs" c="dimmed">IVA (16%):</Text>
-                                        <PrecioVisual valor={montoIva} simbolo={simboloMoneda} size="xs" c="dimmed" />
-                                    </Group>
-                                    {costoFleteNum > 0 && (
-                                        <Group gap="xs">
-                                            <Text size="xs" c="dimmed">Flete:</Text>
-                                            <PrecioVisual valor={costoFleteNum} simbolo={simboloMoneda} size="xs" c="dimmed" />
-                                        </Group>
-                                    )}
-                                    <Group gap="xs" mt={2}>
-                                        <Text fw={900} size="md" c="blue.9">Total a Pagar:</Text>
-                                        <PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="lg" fw={900} c="blue.9" />
-                                    </Group>
-                                </Stack>
+                                    <Group justify="space-between" align="flex-end">
+                                        <Stack gap={2}>
+                                            <Group gap="xs">
+                                                <Text size="xs" c="dimmed">Subtotal:</Text>
+                                                <PrecioVisual valor={subtotal} simbolo={simboloMoneda} size="xs" c="dimmed" />
+                                            </Group>
+                                            <Group gap="xs">
+                                                <Text size="xs" c="dimmed">IVA (16%):</Text>
+                                                <PrecioVisual valor={montoIva} simbolo={simboloMoneda} size="xs" c="dimmed" />
+                                            </Group>
+                                            {costoFleteNum > 0 && (
+                                                <Group gap="xs">
+                                                    <Text size="xs" c="dimmed">Flete:</Text>
+                                                    <PrecioVisual valor={costoFleteNum} simbolo={simboloMoneda} size="xs" c="dimmed" />
+                                                </Group>
+                                            )}
+                                            <Group gap="xs" mt={2}>
+                                                <Text fw={900} size="md" c="blue.9">Total a Pagar:</Text>
+                                                <PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="lg" fw={900} c="blue.9" />
+                                            </Group>
+                                        </Stack>
 
-                                <Button size="md" color="blue.8" leftSection={<IconReceiptTax size={20} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>
-                                    Revisar
-                                </Button>
-                            </Group>
+                                        <Button size="md" color="blue.8" leftSection={<IconReceiptTax size={20} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>
+                                            Revisar
+                                        </Button>
+                                    </Group>
+                                </>
+                            )}
                         </Paper>
                     </Grid.Col>
                 </Grid>
+                {isMobile && (
+                    <Box style={{ position: 'sticky', bottom: 0, zIndex: 15, background: '#fff', margin: '6px -4px 0', padding: '8px 12px calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -6px 16px rgba(0,0,0,0.12)', borderTop: '1px solid #e9ecef' }}>
+                        <Group justify="space-between" align="center" wrap="nowrap" gap="xs">
+                            <Box style={{ minWidth: 0 }}>
+                                <Text size="xs" c="dimmed" lh={1.2}>Subtotal <PrecioVisual valor={subtotal} simbolo={simboloMoneda} size="xs" c="dimmed" /> · IVA <PrecioVisual valor={montoIva} simbolo={simboloMoneda} size="xs" c="dimmed" />{costoFleteNum > 0 && <> · Flete <PrecioVisual valor={costoFleteNum} simbolo={simboloMoneda} size="xs" c="dimmed" /></>}</Text>
+                                <Group gap={6} wrap="nowrap"><Text fw={900} size="sm" c="blue.9">Total:</Text><PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="xl" fw={900} c="blue.9" /></Group>
+                            </Box>
+                            <Button size="md" color="blue.8" leftSection={<IconReceiptTax size={20} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>Revisar</Button>
+                        </Group>
+                    </Box>
+                )}
             </Modal>
 
             {/* 🔥 MODAL SECUNDARIO: CREAR CLIENTE EN CALIENTE 🔥 */}

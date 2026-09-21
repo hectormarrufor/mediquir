@@ -7,6 +7,7 @@ import {
     Text, Divider, Badge, Checkbox, Box, ScrollArea, Alert, SegmentedControl
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
+import { useMediaQuery } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
     IconTrash, IconPlus, IconMinus, IconCheck, IconShieldCheck, IconAlertTriangle 
@@ -22,6 +23,7 @@ import { PreguntarNumero, useNumeracion } from '@/app/superuser/_components/Nume
 export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
     const { userId } = useAuth();
     const queryClient = useQueryClient();
+    const isMobile = useMediaQuery('(max-width: 768px)');
     
     const [carritoCompra, setCarritoCompra] = useState([]);
     const [busquedaProd, setBusquedaProd] = useState('');
@@ -275,29 +277,30 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
     return (
         <>
             {/* 🔥 MODAL DE COMPRA AMPLIADO A FULLSCREEN 🔥 */}
-            <Modal opened={opened} onClose={onClose} fullScreen title={<Title order={2} c="blue.9">Registrar Factura / Nota de Compra (Proveedor)</Title>}>
+            <Modal opened={opened} onClose={onClose} fullScreen title={<Title order={isMobile ? 5 : 2} c="blue.9" tt={isMobile ? 'none' : undefined}>{isMobile ? 'Registrar compra' : 'Registrar Factura / Nota de Compra (Proveedor)'}</Title>}
+                styles={isMobile ? { content: { padding: 0 }, header: { padding: '8px 12px', minHeight: 44, background: '#fff', zIndex: 30 }, body: { padding: '0 4px' } } : undefined}>
                 
-                <Box p="md" maw={1600} mx="auto">
-                    <Alert icon={<IconShieldCheck size={20} />} title="Declaración de Responsabilidad de Recepción" color="red" variant="light" mb="md">
+                <Box p={isMobile ? 4 : 'md'} maw={1600} mx="auto">
+                    <Alert icon={<IconShieldCheck size={isMobile ? 16 : 20} />} title="Declaración de Responsabilidad de Recepción" color="red" variant="light" mb={isMobile ? 6 : 'md'} p={isMobile ? 'xs' : undefined} styles={isMobile ? { title: { fontSize: 12, textTransform: 'none' }, message: { fontSize: 11, lineHeight: 1.3 } } : undefined}>
                         Al registrar y firmar esta factura, certifica bajo su estricta responsabilidad que la mercancía física ingresada al almacén ha sido contada y validada.
                     </Alert>
 
                     <Grid gutter="lg">
                         <Grid.Col span={{ base: 12, md: 5 }}>
-                            <Paper withBorder p="md" radius="md" h="78vh" style={{ display: 'flex', flexDirection: 'column' }}>
-                                <TextInput size="md" placeholder="Buscar producto por nombre o SKU..." mb="md" value={busquedaProd} onChange={(e) => setBusquedaProd(e.currentTarget.value)} data-autofocus />
+                            <Paper withBorder p={isMobile ? 'xs' : 'md'} radius="md" h={isMobile ? 260 : '78vh'} style={{ display: 'flex', flexDirection: 'column' }}>
+                                <TextInput size={isMobile ? 'sm' : 'md'} placeholder="Buscar producto por nombre o SKU..." mb={isMobile ? 6 : 'md'} value={busquedaProd} onChange={(e) => setBusquedaProd(e.currentTarget.value)} data-autofocus />
                                 <ScrollArea style={{ flex: 1 }} type="auto">
                                     <Stack gap="xs">
                                         {productosFiltrados.map(prod => (
                                             <Paper key={prod.id} p="sm" withBorder radius="sm" style={{ cursor: 'pointer' }} onClick={() => agregarAlCarritoCompra(prod)}>
                                                 <Group justify="space-between" wrap="nowrap">
-                                                    <Box maw="75%">
-                                                        <Text fw={600} size="md" lineClamp={1}>{prod.nombre}</Text>
-                                                        <Text size="sm" c="dimmed">SKU: {prod.codigo} | Stock Actual: {prod.stockAlmacen}</Text>
+                                                    <Box style={{ minWidth: 0, flex: 1 }}>
+                                                        <Text fw={600} size={isMobile ? 'sm' : 'md'} lineClamp={isMobile ? 2 : 1}>{prod.nombre}</Text>
+                                                        <Text size={isMobile ? 'xs' : 'sm'} c="dimmed">SKU: {prod.codigo} | Stock: {prod.stockAlmacen}</Text>
                                                     </Box>
                                                     {prod.costoUsd !== undefined && (
-                                                        <Badge color="blue" size="lg" variant="light">
-                                                            Costo: <PrecioVisual valor={prod.costoUsd} simbolo="$" size="sm" />
+                                                        <Badge color="blue" size={isMobile ? 'md' : 'lg'} variant="light" tt="none" style={{ flexShrink: 0 }}>
+                                                            {isMobile ? '' : 'Costo: '}<PrecioVisual valor={prod.costoUsd} simbolo="$" size="sm" />
                                                         </Badge>
                                                     )}
                                                 </Group>
@@ -309,41 +312,42 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                         </Grid.Col>
 
                         <Grid.Col span={{ base: 12, md: 7 }}>
-                            <Paper withBorder p="lg" radius="md" h="78vh" style={{ display: 'flex', flexDirection: 'column' }}>
+                            <Paper withBorder p={isMobile ? 'xs' : 'lg'} radius="md" h={isMobile ? 'auto' : '78vh'} style={{ display: 'flex', flexDirection: 'column' }}>
                                 
-                                <Group grow mb="md">
+                                <Group grow mb={isMobile ? 6 : 'md'} gap={isMobile ? 6 : 'md'} align="flex-start">
                                     <Select 
-                                        size="md"
+                                        size={isMobile ? 'sm' : 'md'}
                                         label="Proveedor" placeholder="Seleccione proveedor..." searchable
                                         data={proveedores?.map(p => ({ value: String(p.id), label: `${p.nombre} (RIF: ${p.identificacion})` })) || []}
                                         {...formCompra.getInputProps('proveedorId')}
                                     />
-                                    <Button size="md" variant="light" color="grape" mt={24} onClick={() => setModalCrearProv(true)}>+ Nuevo Proveedor</Button>
+                                    <Button size={isMobile ? 'xs' : 'md'} variant="light" color="grape" mt={isMobile ? 26 : 24} style={{ flex: '0 0 auto' }} tt="none" onClick={() => setModalCrearProv(true)}>+ Nuevo Proveedor</Button>
                                 </Group>
 
-                                <Group grow mb="md">
+                                <Group grow mb={isMobile ? 6 : 'md'} gap={isMobile ? 6 : 'md'} align="flex-start">
                                     <Select 
-                                        size="md"
+                                        size={isMobile ? 'sm' : 'md'}
                                         label="Tipo de Documento"
                                         data={[{ value: 'FACTURA', label: 'Factura (Aplica IVA)' }, { value: 'NOTA_ENTREGA', label: 'Nota de Entrega' }]}
                                         {...formCompra.getInputProps('tipoDocumento')}
                                     />
-                                    <TextInput size="md" label="Nro. de Factura / Recibo" placeholder="Ej: F-98765" withAsterisk {...formCompra.getInputProps('numeroDocumento')} />
-                                    {esFactura && <TextInput size="md" mt="xs" label="Nro. de control" placeholder="Ej: 00-009497" description="Para el libro de compras" {...formCompra.getInputProps('numeroControl')} />}
+                                    <TextInput size={isMobile ? 'sm' : 'md'} label="Nro. de Factura / Recibo" placeholder="Ej: F-98765" withAsterisk {...formCompra.getInputProps('numeroDocumento')} />
+                                    {esFactura && !isMobile && <TextInput size="md" mt="xs" label="Nro. de control" placeholder="Ej: 00-009497" description="Para el libro de compras" {...formCompra.getInputProps('numeroControl')} />}
                                 </Group>
+                                {esFactura && isMobile && <TextInput size="sm" mb={6} label="Nro. de control" placeholder="Ej: 00-009497" {...formCompra.getInputProps('numeroControl')} />}
 
                                 {!esFactura && <Alert color="gray" variant="light" mb="md" p="xs"><Text size="xs">La nota de entrega no es un documento fiscal: se registra sin IVA, sin retención y sin número de control, y no entra al libro de compras. El inventario y el costo se actualizan igual.</Text></Alert>}
 
-                                <Group grow mb="md">
+                                <Group grow mb={isMobile ? 6 : 'md'} gap={isMobile ? 6 : 'md'} align="flex-start">
                                     <TextInput size="md" type="date" label="Fecha de Factura" withAsterisk {...formCompra.getInputProps('fechaFactura')} />
-                                    <Select size="md" label="Condición de Pago" data={[{ value: 'Contado', label: 'Contado' }, { value: 'Credito', label: 'Crédito' }]} {...formCompra.getInputProps('condicionPago')} />
+                                    <Select size={isMobile ? 'sm' : 'md'} label="Condición de Pago" data={[{ value: 'Contado', label: 'Contado' }, { value: 'Credito', label: 'Crédito' }]} {...formCompra.getInputProps('condicionPago')} />
                                     {formCompra.values.condicionPago === 'Credito' && (
-                                        <NumberInput size="md" label="Días de Crédito" min={1} withAsterisk {...formCompra.getInputProps('diasCredito')} />
+                                        <NumberInput size={isMobile ? 'sm' : 'md'} label="Días de Crédito" min={1} withAsterisk {...formCompra.getInputProps('diasCredito')} />
                                     )}
                                 </Group>
 
-                                <Group mb="md" justify="space-between">
-                                    <Select size="md" label="Moneda" data={['USD', 'BS']} w={150} {...formCompra.getInputProps('moneda')} />
+                                <Group mb={isMobile ? 6 : 'md'} justify="space-between" gap={isMobile ? 6 : 'md'}>
+                                    <Select size={isMobile ? 'sm' : 'md'} label="Moneda" data={['USD', 'BS']} w={150} {...formCompra.getInputProps('moneda')} />
                                     {esFactura && (
                                         <Group>
                                             <Checkbox label={<Text fw={600} size="md">Retener IVA (agente de retención)</Text>} description="Se emite el comprobante con su correlativo" {...formCompra.getInputProps('aplicarRetencion', { type: 'checkbox' })} />
@@ -354,6 +358,48 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                     )}
                                 </Group>
 
+                                {isMobile ? (
+                                    <Stack gap={6} mb="sm">
+                                        {carritoCompra.length === 0 && <Text size="sm" c="dimmed" ta="center" py="md">Toca un producto de la lista para agregarlo.</Text>}
+                                        {carritoCompra.map(item => {
+                                            const diferencia = item.precioCompraUnitario - item.costoAnterior;
+                                            const variacionPorcentual = item.costoAnterior > 0 ? ((diferencia / item.costoAnterior) * 100).toFixed(1) : 100;
+                                            return (
+                                                <Paper key={item.id} withBorder p="xs" radius="md">
+                                                    <Group justify="space-between" wrap="nowrap" align="flex-start" mb={4}>
+                                                        <Box style={{ minWidth: 0, flex: 1 }}>
+                                                            <Text fw={700} size="sm" lineClamp={2} lh={1.25}>{item.nombre}</Text>
+                                                            <Text size="xs" c="dimmed">SKU: {item.codigo} · costo ant. <PrecioVisual valor={item.costoAnterior} simbolo="$" size="xs" c="dimmed" /></Text>
+                                                        </Box>
+                                                        <ActionIcon color="red" variant="subtle" size="md" onClick={() => eliminarItem(item.id)}><IconTrash size={18}/></ActionIcon>
+                                                    </Group>
+                                                    <SegmentedControl
+                                                        fullWidth size="xs" mb={6} value={item.unidadCompra} onChange={(v) => cambiarUnidadCompra(item.id, v)}
+                                                        data={[
+                                                            { value: 'unidad', label: 'Unidades' },
+                                                            ...(item.undPorCaja > 0 ? [{ value: 'caja', label: `Caja (${item.undPorCaja})` }] : []),
+                                                            ...(item.undPorBulto > 1 ? [{ value: 'bulto', label: `Bulto (${item.undPorBulto})` }] : []),
+                                                        ]}
+                                                    />
+                                                    <Group gap={8} wrap="nowrap" align="flex-start">
+                                                        <Group gap={4} wrap="nowrap">
+                                                            <ActionIcon size="lg" variant="light" onClick={() => cambiarCantidad(item.id, -1)}><IconMinus size={16}/></ActionIcon>
+                                                            <NumberInput value={item.cantidadCompra} onChange={(v) => actualizarCantidadCompra(item.id, v)} min={1} allowDecimal={false} hideControls w={58} size="sm" styles={{ input: { textAlign: 'center', paddingInline: 4 } }} />
+                                                            <ActionIcon size="lg" variant="light" onClick={() => cambiarCantidad(item.id, 1)}><IconPlus size={16}/></ActionIcon>
+                                                        </Group>
+                                                        <Box style={{ flex: 1, minWidth: 0 }}>
+                                                            <NumberInput value={item.precioCompra} onChange={(val) => actualizarPrecioCompra(item.id, val)} decimalScale={4} size="sm" leftSection="$" />
+                                                        </Box>
+                                                    </Group>
+                                                    <Text size="xs" c="dimmed" mt={4}>
+                                                        por {item.unidadCompra}{item.unidadCompra !== 'unidad' ? ` = ${item.cantidad.toLocaleString('es-VE')} und · ${item.precioCompraUnitario.toFixed(4)} c/u` : ''}
+                                                        {diferencia !== 0 && <Text span size="xs" fw={700} c={diferencia > 0 ? 'red' : 'teal'}> · {diferencia > 0 ? `▲ +${variacionPorcentual}%` : `▼ ${variacionPorcentual}%`}</Text>}
+                                                    </Text>
+                                                </Paper>
+                                            );
+                                        })}
+                                    </Stack>
+                                ) : (
                                 <ScrollArea style={{ flex: 1 }} type="auto" mb="md">
                                     <Table striped highlightOnHover verticalSpacing="md">
                                         <Table.Thead>
@@ -415,8 +461,9 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                         </Table.Tbody>
                                     </Table>
                                 </ScrollArea>
+                                )}
 
-                                <Divider mb="md" />
+                                {!isMobile && <Divider mb="md" />}
 
                                 {faltaNumeracionRet && (
                                     <Alert color="orange" variant="light" mb="md" title="Antes de retener: ¿con qué número empiezan tus comprobantes?">
@@ -425,6 +472,17 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                     </Alert>
                                 )}
 
+                                {isMobile ? (
+                                    <Box style={{ position: 'sticky', bottom: 0, zIndex: 15, background: '#fff', margin: '6px -8px -8px', padding: '8px 12px calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -6px 16px rgba(0,0,0,0.12)', borderTop: '1px solid var(--mantine-color-gray-3)' }}>
+                                        <Group justify="space-between" mb={6} wrap="nowrap">
+                                            <Text size="xs" c="dimmed">Subtotal <PrecioVisual valor={subtotal} simbolo={formCompra.values.moneda === 'BS' ? 'Bs' : '$'} size="xs" />{esFactura && <> · IVA <PrecioVisual valor={montoIva} simbolo={formCompra.values.moneda === 'BS' ? 'Bs' : '$'} size="xs" /></>}{montoRetencion > 0 && <Text span size="xs" c="red" fw={700}> · Ret. −<PrecioVisual valor={montoRetencion} simbolo={formCompra.values.moneda === 'BS' ? 'Bs' : '$'} size="xs" /></Text>}</Text>
+                                            <Text fw={900} size="lg" c="blue.9" style={{ whiteSpace: 'nowrap' }}><PrecioVisual valor={totalFinal} simbolo={formCompra.values.moneda === 'BS' ? 'Bs' : '$'} size="lg" fw={900} c="blue.9" /></Text>
+                                        </Group>
+                                        <Button fullWidth size="md" color="green.8" tt="none" leftSection={<IconCheck size={20} />} onClick={handleLanzarSimulacion} loading={isSubmitting} disabled={carritoCompra.length === 0 || faltaNumeracionRet}>
+                                            Analizar compra y costos
+                                        </Button>
+                                    </Box>
+                                ) : (
                                 <Group justify="space-between" align="flex-end">
                                     <Stack gap={4}>
                                         <Text size="sm" c="dimmed">Subtotal: <PrecioVisual valor={subtotal} simbolo={formCompra.values.moneda === 'BS' ? 'Bs' : '$'} size="sm" /></Text>
@@ -438,6 +496,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                         Analizar Compra y Costos
                                     </Button>
                                 </Group>
+                                )}
                             </Paper>
                         </Grid.Col>
                     </Grid>
@@ -463,14 +522,14 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                         }
                     })}>
                         <Stack gap="md">
-                            <TextInput size="md" label="RIF" withAsterisk {...formNuevoProv.getInputProps('identificacion')} />
-                            <TextInput size="md" label="Razón Social" withAsterisk {...formNuevoProv.getInputProps('nombre')} />
-                            <TextInput size="md" label="Teléfono" {...formNuevoProv.getInputProps('telefono')} />
-                            <TextInput size="md" label="Email" {...formNuevoProv.getInputProps('email')} />
-                            <TextInput size="md" label="Dirección" {...formNuevoProv.getInputProps('direccion')} />
+                            <TextInput size={isMobile ? 'sm' : 'md'} label="RIF" withAsterisk {...formNuevoProv.getInputProps('identificacion')} />
+                            <TextInput size={isMobile ? 'sm' : 'md'} label="Razón Social" withAsterisk {...formNuevoProv.getInputProps('nombre')} />
+                            <TextInput size={isMobile ? 'sm' : 'md'} label="Teléfono" {...formNuevoProv.getInputProps('telefono')} />
+                            <TextInput size={isMobile ? 'sm' : 'md'} label="Email" {...formNuevoProv.getInputProps('email')} />
+                            <TextInput size={isMobile ? 'sm' : 'md'} label="Dirección" {...formNuevoProv.getInputProps('direccion')} />
                             <Group grow>
                                 <Checkbox label="Contribuyente Especial" size="md" mt={8} {...formNuevoProv.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })} />
-                                <Select size="md" label="Retención Default" data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} {...formNuevoProv.getInputProps('retencionIvaPorDefecto', { transform: (v) => Number(v) })} />
+                                <Select size={isMobile ? 'sm' : 'md'} label="Retención Default" data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} {...formNuevoProv.getInputProps('retencionIvaPorDefecto', { transform: (v) => Number(v) })} />
                             </Group>
                             <Button size="md" type="submit" color="grape" mt="md">Guardar Proveedor</Button>
                         </Stack>

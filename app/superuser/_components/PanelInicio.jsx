@@ -87,8 +87,8 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
                             </Group>
                         </Box>
                         <Group gap="xs" w={{ base: '100%', sm: 'auto' }} wrap="nowrap">
-                            <Button size="sm" radius="xl" variant="white" color="navy.9" leftSection={<IconReceipt size={18} />} onClick={onCompra} style={{ flex: '1 1 auto' }}>Registrar compra</Button>
-                            <Button size="sm" radius="xl" color="accent.6" leftSection={<IconBuildingStore size={18} />} onClick={onPos} style={{ flex: '1 1 auto' }}>Nueva venta (POS)</Button>
+                            <Button size="sm" radius="xl" tt="none" variant="white" color="navy.9" leftSection={<IconReceipt size={18} />} onClick={onCompra} style={{ flex: '1 1 auto' }}>Registrar compra</Button>
+                            <Button size="sm" radius="xl" tt="none" color="accent.6" leftSection={<IconBuildingStore size={18} />} onClick={onPos} style={{ flex: '1 1 auto' }}>Nueva venta (POS)</Button>
                         </Group>
                     </Group>
                 </Paper>
