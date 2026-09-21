@@ -9,6 +9,7 @@ import { useCart } from './components/landing/CartContext';
 import { aBolivares } from '@/app/constants/facturacion';
 import { DATOS_PAGO_MOVIL } from '@/app/constants/empresa';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
+import { notifications } from '@mantine/notifications';
 import { ZONAS_DELIVERY, UBICACION, clasificarUbicacion } from '@/app/constants/zonasDelivery';
 
 // Coordenadas base de Mediquir en Ciudad Ojeda
@@ -239,12 +240,13 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
 
             if (res.ok && data.success) {
                 const c = data.cliente;
-                formCliente.setValues({
-                    ...formCliente.values,
-                    nombre: c.nombre || '',
-                    telefono: c.telefono || '',
-                    email: c.email || '',
-                });
+                if (c.nombre) {
+                    // Solo el personal recibe la ficha completa
+                    formCliente.setValues({ ...formCliente.values, nombre: c.nombre || '', telefono: c.telefono || '', email: c.email || '' });
+                } else if (c.primerNombre) {
+                    // El público solo recibe el primer nombre: se saluda, pero los datos los escribe la persona
+                    notifications.show({ color: 'teal', title: `¡Hola de nuevo, ${c.primerNombre}!`, message: 'Completa tus datos para continuar con tu compra.', autoClose: 4500 });
+                }
             }
         } catch (error) {
             console.error("Error al buscar historial del cliente:", error);

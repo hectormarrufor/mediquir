@@ -18,10 +18,11 @@ export async function GET(request) {
         });
 
         if (cliente) {
-            // Esta ruta es pública (autocompletar del checkout): quien no es personal solo recibe el nombre,
-            // no teléfono, correo ni dirección de una persona por el solo hecho de conocer su cédula.
+            // Esta ruta es pública (autocompletar del checkout): quien no es personal solo recibe el PRIMER nombre (para saludar),
+            // no el nombre completo, ni teléfono, correo o dirección de una persona por el solo hecho de conocer su cédula.
             const { error: noEsStaff } = await requerirStaff();
-            const visible = noEsStaff ? { nombre: cliente.nombre } : cliente;
+            const primerNombre = String(cliente.nombre || '').trim().split(/\s+/)[0] || null;
+            const visible = noEsStaff ? { primerNombre } : cliente;
             return NextResponse.json({ success: true, cliente: visible }, { status: 200 });
         } else {
             return NextResponse.json({ success: false, message: 'Cliente no encontrado' }, { status: 404 });

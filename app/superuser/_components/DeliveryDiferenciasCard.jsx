@@ -27,7 +27,7 @@ export default function DeliveryDiferenciasCard() {
     const subvalorado = hayDatos && data.neto < 0;
 
     return (
-        <Paper withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+        <Paper withBorder radius="lg" p={{ base: 'xs', sm: 'md' }} style={{ boxShadow: 'var(--mm-shadow-card)' }}>
             <Group gap="sm" wrap="nowrap" mb="xs">
                 <ThemeIcon size={40} radius="xl" variant="light" color={subvalorado ? 'red' : 'teal'}><IconMotorbike size={22} /></ThemeIcon>
                 <Box>

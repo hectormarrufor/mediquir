@@ -22,7 +22,7 @@ export default function ErroresEmpaqueCard() {
     const totalErrores = (data?.empleados || []).reduce((a, e) => a + e.errores, 0);
 
     return (
-        <Paper withBorder radius="lg" p="md" component={Link} href="/superuser/empaque/errores" style={{ boxShadow: 'var(--mm-shadow-card)', display: 'block', textDecoration: 'none', color: 'inherit' }}>
+        <Paper withBorder radius="lg" p={{ base: 'xs', sm: 'md' }} component={Link} href="/superuser/empaque/errores" style={{ boxShadow: 'var(--mm-shadow-card)', display: 'block', textDecoration: 'none', color: 'inherit' }}>
             <Group justify="space-between" mb="xs" wrap="nowrap">
                 <Group gap="sm" wrap="nowrap">
                     <ThemeIcon size={40} radius="xl" variant="light" color={totalErrores > 0 ? 'orange' : 'teal'}><IconTargetArrow size={22} /></ThemeIcon>

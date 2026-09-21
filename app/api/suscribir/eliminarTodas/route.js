@@ -1,7 +1,11 @@
 import db from '@/models';
+import { getSesion } from '../../notificaciones/_lib';
+import { rolDe } from '@/app/constants/roles';
 
 
 export async function GET() {
+  const sesion = await getSesion();
+  if (!sesion || sesion.clienteId || rolDe(sesion) !== 'admin') return new Response(JSON.stringify({ error: 'Solo administradores' }), { status: 403 });
   try {
 
       await db.PushSubscription.destroy({

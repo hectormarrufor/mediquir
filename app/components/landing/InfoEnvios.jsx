@@ -16,15 +16,16 @@ const DATOS = [
 
 export default function InfoEnvios() {
     return (
-        <Box px={{ base: 'sm', sm: 'md' }} py="md" maw={1400} mx="auto">
-            <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }} spacing="sm">
+        <Box px={{ base: 'xs', sm: 'md' }} py={{ base: 6, sm: 'md' }} maw={1400} mx="auto">
+            <SimpleGrid cols={{ base: 2, md: 4 }} spacing={{ base: 6, sm: 'sm' }}>
                 {DATOS.map((d) => (
-                    <Paper key={d.titulo} withBorder radius="lg" p="sm" bg="white" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
-                        <Group wrap="nowrap" gap="sm" align="center">
-                            <ThemeIcon size={38} radius="md" variant="light" color={d.color}><d.icono size={22} /></ThemeIcon>
+                    <Paper key={d.titulo} withBorder radius="lg" p={{ base: 6, sm: 'sm' }} bg="white" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+                        <Group wrap="nowrap" gap={6} align="center">
+                            <ThemeIcon size={38} radius="md" variant="light" color={d.color} visibleFrom="sm"><d.icono size={22} /></ThemeIcon>
+                            <ThemeIcon size={26} radius="md" variant="light" color={d.color} hiddenFrom="sm"><d.icono size={15} /></ThemeIcon>
                             <Box style={{ minWidth: 0 }}>
-                                <Text size="sm" fw={800} c="navy.9" lh={1.2}>{d.titulo}</Text>
-                                <Text size="xs" c="gray.7" lh={1.3}>{d.texto}</Text>
+                                <Text fz={{ base: 11, sm: 14 }} fw={800} c="navy.9" lh={1.2}>{d.titulo}</Text>
+                                <Text fz={{ base: 9.5, sm: 12 }} c="gray.7" lh={1.25} lineClamp={2}>{d.texto}</Text>
                             </Box>
                         </Group>
                     </Paper>

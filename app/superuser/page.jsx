@@ -253,7 +253,7 @@ function PanelAdministrativo() {
 
     return (
         <Box>
-            <Box maw={1600} mx="auto" px="md" pt="sm">
+            <Box maw={1600} mx="auto" px={{ base: 0, sm: "md" }} pt={{ base: 0, sm: "sm" }}>
 
                 <Modal opened={modalAbierto} onClose={() => setModalAbierto(false)} title={<Text fw={700} size="md">Control de Accesos</Text>} size="xl">
                     <Stack gap="xs">

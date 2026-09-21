@@ -158,19 +158,19 @@ export default function DashboardVendedor() {
     const nEtiquetar = data?.porEtiquetar?.length ?? 0;
 
     return (
-        <Box maw={1400} mx="auto" px="md" py="md">
-            <Stack gap="lg">
+        <Box maw={1400} mx="auto" px={{ base: 6, sm: 'md' }} py={{ base: 6, sm: 'md' }}>
+            <Stack gap={{ base: 'xs', sm: 'lg' }}>
                 <Group justify="space-between" align="flex-end" wrap="wrap">
                     <Box>
                         <Text size="sm" c="gray.4">{new Date().toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Caracas' })}</Text>
-                        <Title order={2} c="white">Hola, {nombre || 'vendedor'} 👋</Title>
+                        <Title order={2} c="white" fz={{ base: 20, sm: 26 }}>Hola, {nombre || 'vendedor'} 👋</Title>
                     </Box>
                     {tasa && <Badge size="lg" radius="sm" variant="filled" color="teal.6" leftSection={<IconCash size={14} />} tt="none">BCV Oficial: {tasa} Bs.</Badge>}
                 </Group>
 
                 {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}
 
-                <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
+                <SimpleGrid cols={{ base: 2, lg: 4 }} spacing={{ base: 6, sm: 'md' }}>
                     <Acceso icono={IconShoppingCart} color="navy.9" titulo="Nueva venta o pedido" descripcion="Al detal o pedido al mayor" onClick={() => setPosAbierto(true)} />
                     <Acceso icono={IconReceipt2} color="orange.6" titulo="Registrar compra" descripcion="Factura de un proveedor" onClick={() => setCompraAbierta(true)} />
                     <Acceso icono={IconArchive} color="brand.6" titulo="Inventario" descripcion="Existencia y precios" onClick={() => router.push('/superuser/inventario/consulta')} />

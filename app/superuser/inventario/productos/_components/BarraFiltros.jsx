@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActionIcon, Button, Checkbox, Group, Menu, Paper, SegmentedControl, Select, SimpleGrid, Stack, Switch, TextInput, Tooltip } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { IconArrowBackUp, IconChevronsDown, IconChevronsUp, IconColumns3, IconDownload, IconFileTypePdf, IconFilterOff, IconLock, IconLockOpen, IconPlus, IconSearch, IconX } from '@tabler/icons-react';
@@ -21,11 +21,21 @@ export default function BarraFiltros({
     columnasVisibles, setColumnasVisibles, onRestablecerColumnas, puedeEditar, bloqueado, setBloqueado,
     onDeshacer, hayHistorial, onNuevo, onListaPrecios, grupos = [], contraidos = new Set(), setContraidos = () => {},
 }) {
-    // La búsqueda se envía al servidor 300 ms después de dejar de teclear
+    // La búsqueda se envía al servidor 300 ms después de dejar de teclear.
+    // OJO: la URL tarda en actualizarse. Antes, al llegar el valor de la URL se pisaba lo que la persona ya seguía escribiendo
+    // (se perdían letras y los espacios, porque la URL guarda el texto sin espacios al final). Ahora solo se copia de la URL al campo
+    // cuando el cambio NO lo mandamos nosotros (botón "limpiar filtros", atrás del navegador, enlace compartido).
     const [texto, setTexto] = useState(params.q);
     const [textoDebounced] = useDebouncedValue(texto, 300);
-    useEffect(() => { setTexto(params.q); }, [params.q]);
-    useEffect(() => { if (textoDebounced.trim() !== params.q) setParams({ q: textoDebounced.trim() }); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [textoDebounced]);
+    const enviado = useRef(params.q);
+    useEffect(() => {
+        if (params.q !== enviado.current) { enviado.current = params.q; setTexto(params.q); }
+    }, [params.q]);
+    useEffect(() => {
+        const q = textoDebounced.trim();
+        if (q !== enviado.current) { enviado.current = q; setParams({ q }); }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [textoDebounced]);
 
     const { page: _p, pageSize: _s, ...filtrosCsv } = params;
     const hrefCsv = `/api/inventario/productos?${aQueryString({ ...filtrosCsv, formato: 'csv' })}`;

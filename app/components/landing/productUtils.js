@@ -58,7 +58,7 @@ export function getPricing(product) {
         hasDiscount,
         precioFinal,
         isOutOfStock: stock <= 0,
-        isLowStock: stock > 0 && stock <= 5,
+        isLowStock: stock > 0 && stock <= 10, // igual que el portal de clientes: 10 o menos = "Pocas unidades"
     };
 }
 

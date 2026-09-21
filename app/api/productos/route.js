@@ -48,9 +48,15 @@ export async function GET(request) {
 
         // El catálogo es público (landing), pero costos y precio mayor son solo del personal.
         if (esPublico) {
+            // "Más vendidos" solo necesita el ORDEN: se entrega un puesto (mayor = más vendido) en vez de las ventas reales
+            const porVentas = [...productos].sort((a, b) => (Number(b.nroVentas) || 0) - (Number(a.nroVentas) || 0));
+            const puesto = new Map(porVentas.map((p, i) => [p.id, porVentas.length - i]));
             const publicos = productos.map((p) => {
                 const j = p.toJSON();
-                const { costoUsd, precio6, ...resto } = j;
+                // Internos del negocio que no se publican: costo, precio mayor, stock mínimo (punto de reposición) y cuánto se vende cada producto
+                const { costoUsd, precio6, stockMinimo, nroVentas, ...resto } = j;
+                if (resto.grupoEquivalencia) { const { stockMinimoGlobal, ...grupo } = resto.grupoEquivalencia; resto.grupoEquivalencia = grupo; }
+                resto.nroVentas = puesto.get(j.id);
                 // La landing calcula el precio web con precio7; si falta se le entrega ya resuelto (sin revelar el costo)
                 return { ...resto, precio7: precioVentaWeb({ precio7: j.precio7, costoUsd, porcentajeDescuento: 0 }) };
             });

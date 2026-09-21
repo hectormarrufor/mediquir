@@ -100,7 +100,7 @@ function DetailBody({ product, onClose, isMobile }) {
                         </Text>
                     ) : (
                         <Stack gap="sm" mt="xs">
-                            {isLowStock && <Text c="orange.8" fw={700} size="sm">¡Últimas {stock} unidades!</Text>}
+                            <Badge color={isLowStock ? 'orange' : 'teal'} variant="light" size="md" w="fit-content">{isLowStock ? 'Pocas unidades' : 'Disponible'}</Badge>
                             <Group justify="space-between" wrap="nowrap">
                                 <Text size="sm" fw={600}>Cantidad</Text>
                                 <Group gap="xs" wrap="nowrap">

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Box, Drawer, Indicator, ActionIcon, Stack, Group, Text, Button, ScrollArea, Image, Badge } from '@mantine/core';
-import { IconShoppingCart, IconTrash, IconMinus, IconPlus } from '@tabler/icons-react';
+import { IconShoppingCart, IconTrash, IconMinus, IconPlus, IconPackage, IconBox } from '@tabler/icons-react';
 
 import HeroSection from './components/landing/HeroSection';
 import CategorySection from './components/landing/CategorySection';
@@ -206,7 +206,7 @@ export default function LandingMediquir({ seo = null }) {
                                         const porPres = item.unidadesPorPres || 1;
 
                                         return (
-                                            <Group key={`${item.product.id}:${presClave}`} wrap="nowrap" align="flex-start" opacity={isOut ? 0.6 : 1}>
+                                            <Group key={`${item.product.id}:${presClave}`} wrap="nowrap" align="flex-start" opacity={isOut ? 0.6 : 1} pl="xs" style={{ borderLeft: `4px solid var(--mantine-color-${presClave === 'UNIDAD' ? 'navy-9' : 'grape-7'})`, borderRadius: 4 }}>
                                                 <Image
                                                     src={getMainImage(item.product)}
                                                     w={65} h={65} radius="md" fit="contain" bg="gray.1" p={4}
@@ -214,7 +214,8 @@ export default function LandingMediquir({ seo = null }) {
                                                 />
                                                 <Box flex={1}>
                                                     <Text size="sm" fw={700} lineClamp={2} c="navy.9">{item.product.nombre}</Text>
-                                                    {presClave !== 'UNIDAD' && <Badge size="sm" color="grape" variant="filled" tt="none" mt={2}>{item.presentacionEtiqueta} · {item.quantity} en total</Badge>}
+                                                    {presClave !== 'UNIDAD' && <Badge size="sm" color="grape.7" variant="filled" tt="none" mt={2} leftSection={<IconPackage size={11} />}>{item.presentacionEtiqueta} · {item.quantity} und en total</Badge>}
+                                                    {presClave === 'UNIDAD' && <Badge size="sm" color="navy.9" variant="light" tt="none" mt={2} leftSection={<IconBox size={11} />}>Por unidad</Badge>}
                                                     <Text size="xs" c="dimmed" fw={600}>Ref ${formatearPrecio(item.precioFinal)} c/u{bcv ? ` · Bs ${formatearBs(aBolivares(item.precioFinal, bcv))}` : ''}</Text>
                                                     <Text size="xs" fw={600} c={Number(item.product.porcentajeIva) > 0 ? 'orange.9' : 'teal.9'}>{Number(item.product.porcentajeIva) > 0 ? `+ IVA ${Number(item.product.porcentajeIva)}%` : 'Exento de IVA'}</Text>
 

@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Badge, Box, Button, Group, Text, ActionIcon } from '@mantine/core';
-import { IconShoppingCartPlus, IconCheck } from '@tabler/icons-react';
+import { IconShoppingCartPlus, IconCheck, IconPackage } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useCart } from './CartContext';
 import ImageCarousel from './ImageCarousel';
@@ -19,6 +19,7 @@ export default function ProductCard({ product, isMobile }) {
 
     const images = useMemo(() => getProductImages(product), [product]);
     const { stock, precioBase, porcentajeAhorro, hasDiscount, precioFinal, isOutOfStock, isLowStock } = getPricing(product);
+    const unidadEtiqueta = presentacionesTienda(product).find((p) => p.clave === 'UNIDAD')?.etiqueta || 'Unidad';
     const { tasa } = useTasaBcv();
     const enCarrito = unidadesEnCarrito(product.id);
     const puedeAgregar = !isOutOfStock && enCarrito < stock;
@@ -69,15 +70,12 @@ export default function ProductCard({ product, isMobile }) {
                             -{porcentajeAhorro}%
                         </Badge>
                     )}
-                    {isOutOfStock ? (
-                        <Badge color="gray.7" variant="filled" size="sm" pos="absolute" top={8} right={8} style={{ zIndex: 2 }}>
-                            Agotado
-                        </Badge>
-                    ) : isLowStock && (
-                        <Badge color="orange" variant="light" size={isMobile ? 'xs' : 'sm'} pos="absolute" top={isMobile ? 4 : 8} right={isMobile ? 4 : 8} style={{ zIndex: 2 }}>
-                            Últimas {stock}
-                        </Badge>
-                    )}
+                    <Badge
+                        color={isOutOfStock ? 'gray.7' : isLowStock ? 'orange.6' : 'teal.7'} variant="filled" tt="none"
+                        size={isMobile ? 'xs' : 'sm'} pos="absolute" top={isMobile ? 4 : 8} right={isMobile ? 4 : 8} style={{ zIndex: 2 }}
+                    >
+                        {isOutOfStock ? 'Agotado' : isLowStock ? 'Pocas unidades' : 'Disponible'}
+                    </Badge>
 
                     <Box style={{ opacity: isOutOfStock ? 0.45 : 1 }}>
                         <ImageCarousel
@@ -114,26 +112,42 @@ export default function ProductCard({ product, isMobile }) {
                                 <Text td="line-through" fz={11} c="dimmed" lh={1}>${formatearPrecio(precioBase)}</Text>
                             )}
                             <Text fw={800} fz={{ base: 13, sm: 19 }} lh={1.15} c={hasDiscount ? 'red.7' : 'brand.6'}>
-                                Ref ${formatearPrecio(precioFinal)}
+                                Ref ${formatearPrecio(precioFinal)}{caja && <Text span fz={{ base: 8, sm: 11 }} fw={600} c="dimmed"> c/u</Text>}
                             </Text>
                             {tasa && <Text fz={{ base: 9, sm: 12 }} fw={600} c="dimmed" lh={1.2}>Bs {formatearBs(aBolivares(precioFinal, tasa))}</Text>}
                         </Box>
-                        <ActionIcon
-                            size={isMobile ? 28 : 38}
-                            radius="xl"
-                            color="navy.9"
-                            variant={puedeAgregar ? 'filled' : 'light'}
-                            disabled={!puedeAgregar}
-                            onClick={handleQuickAdd}
-                            aria-label={`Añadir ${product.nombre} al carrito`}
-                        >
-                            <IconShoppingCartPlus size={isMobile ? 15 : 20} />
-                        </ActionIcon>
+                        {!caja && (
+                            <ActionIcon
+                                size={isMobile ? 28 : 38}
+                                radius="xl"
+                                color="navy.9"
+                                variant={puedeAgregar ? 'filled' : 'light'}
+                                disabled={!puedeAgregar}
+                                onClick={handleQuickAdd}
+                                aria-label={`Añadir ${product.nombre} al carrito`}
+                            >
+                                <IconShoppingCartPlus size={isMobile ? 15 : 20} />
+                            </ActionIcon>
+                        )}
                     </Group>
                     {caja && (
-                        <Button size="compact-xs" variant="light" color="navy.9" fullWidth mt={4} styles={isMobile ? { root: { height: 22, fontSize: 10, paddingInline: 4 } } : undefined} disabled={!puedeCaja} onClick={handleQuickAddCaja}>
-                            {isMobile ? '+ Caja' : `+ ${caja.etiqueta} · $${formatearPrecio(montoRenglon(precioFinal, caja.unidades))}`}
-                        </Button>
+                        <Box mt={4} style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 3 : 5 }}>
+                            {isMobile && <Text fz={9} fw={800} c="grape.8" lh={1.1} ta="center">{caja.etiqueta}: ${formatearPrecio(montoRenglon(precioFinal, caja.unidades))}</Text>}
+                            <Button
+                                size="compact-xs" color="navy.9" variant={puedeAgregar ? 'filled' : 'light'} fullWidth disabled={!puedeAgregar}
+                                leftSection={<IconShoppingCartPlus size={isMobile ? 12 : 14} />} onClick={handleQuickAdd}
+                                styles={isMobile ? { root: { height: 24, fontSize: 10, paddingInline: 4 }, section: { marginInlineEnd: 3 } } : undefined}
+                            >
+                                + {unidadEtiqueta}
+                            </Button>
+                            <Button
+                                size="compact-xs" color="grape.7" variant={puedeCaja ? 'filled' : 'light'} fullWidth disabled={!puedeCaja}
+                                leftSection={<IconPackage size={isMobile ? 12 : 14} />} onClick={handleQuickAddCaja}
+                                styles={isMobile ? { root: { height: 24, fontSize: 10, paddingInline: 4 }, section: { marginInlineEnd: 3 } } : undefined}
+                            >
+                                {isMobile ? `+ Caja x${caja.unidades}` : `+ ${caja.etiqueta} · $${formatearPrecio(montoRenglon(precioFinal, caja.unidades))}`}
+                            </Button>
+                        </Box>
                     )}
                 </Box>
             </Box>
