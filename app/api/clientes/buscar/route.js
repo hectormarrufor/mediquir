@@ -1,7 +1,8 @@
 // Ruta: app/api/clientes/buscar/route.js
 // Autocompletar del checkout de la tienda. Es una ruta PÚBLICA y solo la usa ese checkout, así que devuelve lo mínimo para TODOS
 // (también para el personal con sesión abierta: la ficha completa se consulta en el módulo de clientes, no aquí):
-//   · primer nombre (para saludar) y el teléfono y correo enmascarados, para que la persona reconozca que es ella.
+//   · nombre con solo el primer nombre visible, y teléfono y correo enmascarados: el checkout los pone en el formulario para que la
+//     persona no tenga que reescribirlos (el servidor usa los que ya tiene guardados).
 // Nunca el nombre completo, el teléfono, el correo ni la dirección de alguien por el solo hecho de conocer su cédula.
 
 import { Cliente } from '@/models';
@@ -13,6 +14,9 @@ const maskTelefono = (t) => {
     const d = String(t || '').replace(/\D/g, '');
     return d.length >= 6 ? `${d.slice(0, 2)}${'*'.repeat(d.length - 4)}${d.slice(-2)}` : null;
 };
+
+// "Juan Pérez López" -> "Juan P**** L****": el primer nombre a la vista, el resto solo con la inicial
+const maskNombre = (n) => String(n || '').trim().split(/\s+/).map((p, i) => (i === 0 ? p : `${p[0]}${'*'.repeat(Math.max(2, p.length - 1))}`)).join(' ');
 
 const maskEmail = (e) => {
     const [usuario, dominio] = String(e || '').split('@');
@@ -35,7 +39,7 @@ export async function GET(request) {
         const primerNombre = String(cliente.nombre || '').trim().split(/\s+/)[0] || null;
         return NextResponse.json({
             success: true,
-            cliente: { primerNombre, telefonoOculto: maskTelefono(cliente.telefono), emailOculto: maskEmail(cliente.email) },
+            cliente: { primerNombre, nombreOculto: maskNombre(cliente.nombre), telefonoOculto: maskTelefono(cliente.telefono), emailOculto: maskEmail(cliente.email) },
         }, { status: 200 });
     } catch (error) {
         console.error('Error buscando cliente:', error);

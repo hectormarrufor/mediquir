@@ -91,7 +91,7 @@ export async function POST(req) {
             : null;
 
         // 1. GESTIÓN DEL CLIENTE (Búsqueda o creación automática)
-        const [registroCliente] = await Cliente.findOrCreate({
+        const [registroCliente, clienteNuevo] = await Cliente.findOrCreate({
             where: { identificacion: cliente.identificacion },
             defaults: {
                 nombre: cliente.nombre,
@@ -103,6 +103,10 @@ export async function POST(req) {
             },
             transaction
         });
+
+        // Los datos enmascarados (con asteriscos) solo existen para clientes que ya están guardados: se usan los de su ficha
+        if (clienteNuevo && [cliente.nombre, cliente.telefono, cliente.email].some((v) => String(v || '').includes('*'))) throw new ErrorNegocio('Revisa tus datos: no pueden llevar asteriscos');
+        cliente.nombre = registroCliente.nombre;
 
         // 2. EL SERVIDOR CALCULA TODO: precios, IVA, total y tasa salen de la base de datos, no del navegador
         const tasaBcv = await tasaVigente({ transaction });

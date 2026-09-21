@@ -53,6 +53,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
     const idIntentoRef = useRef(null); // los reintentos automáticos comparten id: el servidor los cuenta como UN intento
 
     // Formulario de Cliente con Tipo de Documento y Contribuyente Especial
+    const [datosGuardados, setDatosGuardados] = useState(false); // los campos del cliente vienen enmascarados de su ficha
     const formCliente = useForm({
         initialValues: {
             tipoDoc: 'V-',
@@ -66,7 +67,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
         validate: {
             numIdentificacion: (value) => (value.replace(/\D/g, '').length < 6 ? 'Número de documento inválido' : null),
             nombre: (value) => (value.length < 3 ? 'Nombre muy corto' : null),
-            telefono: (value) => (value.replace(/\D/g, '').length < 10 ? 'Teléfono inválido (mínimo 10 dígitos)' : null),
+            telefono: (value) => (value.includes('*') ? null : value.replace(/\D/g, '').length < 10 ? 'Teléfono inválido (mínimo 10 dígitos)' : null),
         },
     });
 
@@ -232,6 +233,8 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
         if (numId.length < 5) return;
 
         setBuscandoCliente(true);
+        // Si había datos enmascarados de otra cédula, se limpian antes de buscar la nueva
+        if (datosGuardados) { formCliente.setValues({ ...formCliente.values, nombre: '', telefono: '', email: '' }); setDatosGuardados(false); }
         const identificacionCompleta = obtenerIdentificacionFormateada();
 
         try {
@@ -240,10 +243,12 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
 
             if (res.ok && data.success) {
                 const c = data.cliente;
-                // Solo se saluda y se muestran el teléfono y el correo enmascarados: los datos los escribe la persona
+                // Los datos que ya tenemos se ponen enmascarados (el servidor usa los guardados): la persona no los reescribe ni se ven completos
                 if (c.primerNombre) {
+                    formCliente.setValues({ ...formCliente.values, nombre: c.nombreOculto || c.primerNombre, telefono: c.telefonoOculto || '', email: c.emailOculto || '' });
+                    setDatosGuardados(true);
                     const guardados = [c.telefonoOculto && `teléfono ${c.telefonoOculto}`, c.emailOculto && `correo ${c.emailOculto}`].filter(Boolean).join(' · ');
-                    notifications.show({ color: 'teal', title: `¡Hola de nuevo, ${c.primerNombre}!`, message: `${guardados ? `Tenemos guardado tu ${guardados}. ` : ''}Completa tus datos para continuar con tu compra.`, autoClose: 6000 });
+                    notifications.show({ color: 'teal', title: `¡Hola de nuevo, ${c.primerNombre}!`, message: `${guardados ? `Tenemos guardado tu ${guardados}. ` : ''}Ya tenemos tus datos y los mostramos ocultos por tu seguridad.`, autoClose: 6000 });
                 }
             }
         } catch (error) {
@@ -426,7 +431,8 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                             placeholder={buscandoCliente ? "Buscando en base de datos..." : "Ej: Juan Pérez o Inversiones M&M C.A."} 
                             withAsterisk 
                             disabled={buscandoCliente}
-                            {...formCliente.getInputProps('nombre')} 
+                            description={datosGuardados ? 'Datos guardados: se usan los de tu ficha' : undefined}
+                            {...formCliente.getInputProps('nombre')}
                         />
                         
                         <TextInput 
