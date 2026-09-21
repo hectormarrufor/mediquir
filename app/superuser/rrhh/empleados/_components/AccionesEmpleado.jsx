@@ -6,7 +6,7 @@ import { IconBrandWhatsapp, IconDotsVertical, IconEdit, IconEye, IconKey, IconPh
 import { normalizarWhatsApp } from '@/app/constants/contacto';
 
 // Menú de acciones de un empleado (hoja y tarjeta móvil)
-export default function AccionesEmpleado({ empleado, esAdmin, onFicha, onEditar, onUsuario, onEliminar }) {
+export default function AccionesEmpleado({ empleado, esAdmin, puedeUsuarios, onFicha, onEditar, onUsuario, onRestablecer, onEliminar }) {
     const wa = normalizarWhatsApp(empleado.telefono);
     return (
         <Menu position="bottom-end" withinPortal shadow="md" width={210}>
@@ -18,15 +18,16 @@ export default function AccionesEmpleado({ empleado, esAdmin, onFicha, onEditar,
                 <Menu.Item leftSection={<IconEdit size={14} />} onClick={() => onEditar(empleado)}>Editar todos los datos</Menu.Item>
                 {empleado.telefono && <Menu.Item component="a" href={`tel:${empleado.telefono}`} leftSection={<IconPhone size={14} />}>Llamar</Menu.Item>}
                 {wa && <Menu.Item component="a" href={`https://wa.me/${wa}`} target="_blank" leftSection={<IconBrandWhatsapp size={14} />}>WhatsApp</Menu.Item>}
-                {esAdmin && (
+                {(esAdmin || puedeUsuarios) && <Menu.Divider />}
+                {puedeUsuarios && (
                     <>
-                        <Menu.Divider />
                         <Menu.Item leftSection={empleado.usuario ? <IconKey size={14} /> : <IconUserPlus size={14} />} onClick={() => onUsuario(empleado)}>
                             {empleado.usuario ? 'Editar usuario' : 'Crear usuario'}
                         </Menu.Item>
-                        <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => onEliminar(empleado)}>Eliminar</Menu.Item>
+                        {empleado.usuario && <Menu.Item color="orange" leftSection={<IconKey size={14} />} onClick={() => onRestablecer(empleado)}>Restablecer contraseña</Menu.Item>}
                     </>
                 )}
+                {esAdmin && <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => onEliminar(empleado)}>Eliminar</Menu.Item>}
             </Menu.Dropdown>
         </Menu>
     );

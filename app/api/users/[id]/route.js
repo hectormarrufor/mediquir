@@ -27,9 +27,9 @@ export async function GET(request, { params }) {
   }
 }
 
-// El personal puede editar datos de un usuario; los campos de privilegio (isAdmin, empleado, cliente) solo un administrador.
+// Cambiar el usuario o la contraseña de OTRA persona es cosa de administradores (antes cualquier empleado podía cambiar la clave de un admin).
 export async function PUT(request, { params }) {
-  const acceso = await requerirStaff();
+  const acceso = await requerirAdmin();
   if (acceso.error) return acceso.error;
   try {
     const { id } = await params;

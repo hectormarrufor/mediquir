@@ -1,16 +1,10 @@
 import { NextResponse } from 'next/server';
-import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { Cliente, User } from '@/models';
 import { requerirNoVendedor } from '../../../_lib/acceso';
+import { claveTemporal } from '../../../_lib/claveTemporal';
 
 export const dynamic = 'force-dynamic';
-
-// Clave temporal legible: sin caracteres que se confunden (0/O, 1/l/I)
-const ALFABETO = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-function claveTemporal(largo = 10) {
-    return Array.from(crypto.randomBytes(largo), (b) => ALFABETO[b % ALFABETO.length]).join('');
-}
 
 // Usuario sugerido: iniciales del nombre + dígitos de la identificación
 function sugerirUsuario(cliente) {

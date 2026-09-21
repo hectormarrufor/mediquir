@@ -22,6 +22,7 @@ import AccionesEmpleado from './_components/AccionesEmpleado';
 import EmpleadoCard from './_components/EmpleadoCard';
 import CrearUsuarioModal from './CrearUsuarioModal';
 import EditUsuarioModal from './EditUsuarioModal';
+import RestablecerClaveModal from './_components/RestablecerClaveModal';
 import { AUSENTES, COLOR_ESTADO, COLUMNAS, ESTADOS, ETIQUETA_ESTADO, OPCIONALES, VISIBLES_POR_DEFECTO, aCsv, comparar, prepararEmpleado } from './_lib/columnas';
 
 const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
@@ -46,8 +47,9 @@ export default function EmpleadosPage() {
     const router = useRouter();
     const queryClient = useQueryClient();
     const isMobile = useMediaQuery('(max-width: 48em)');
-    const { rolUsuario } = useAuth();
+    const { rolUsuario, isAdmin } = useAuth();
     const esAdmin = rolUsuario === 'admin';
+    const puedeUsuarios = Boolean(isAdmin); // crear / cambiar / restablecer usuarios: solo administradores del sistema (el servidor también lo exige)
     const { data, isLoading, isFetching, error, refetch } = useQuery({ queryKey: KEY, queryFn: cargarEmpleados });
 
     const [busqueda, setBusqueda] = useState('');
@@ -61,7 +63,7 @@ export default function EmpleadosPage() {
     const [visibles, setVisibles] = useLocalStorage({ key: 'rrhh.emp.columnas.v1', defaultValue: VISIBLES_POR_DEFECTO });
     const [aEliminar, setAEliminar] = useState(null);
     const [eliminando, setEliminando] = useState(false);
-    const [usuarioDe, setUsuarioDe] = useState(null); // { empleado, modo }
+    const [usuarioDe, setUsuarioDe] = useState(null); // { empleado, modo: crear | editar | restablecer }
 
     const filas = useMemo(() => (data || []).map(prepararEmpleado), [data]);
     const departamentos = useMemo(() => [...new Set(filas.flatMap((f) => f.departamentos))].sort(), [filas]);
@@ -144,8 +146,8 @@ export default function EmpleadosPage() {
     const ficha = (e) => router.push(`/superuser/rrhh/empleados/${e.id}`);
     const acciones = (e) => (
         <AccionesEmpleado
-            empleado={e} esAdmin={esAdmin} onFicha={ficha} onEditar={(x) => router.push(`/superuser/rrhh/empleados/${x.id}/editar`)}
-            onUsuario={(x) => setUsuarioDe({ empleado: x, modo: x.usuario ? 'editar' : 'crear' })} onEliminar={setAEliminar}
+            empleado={e} esAdmin={esAdmin} puedeUsuarios={puedeUsuarios} onFicha={ficha} onEditar={(x) => router.push(`/superuser/rrhh/empleados/${x.id}/editar`)}
+            onUsuario={(x) => setUsuarioDe({ empleado: x, modo: x.usuario ? 'editar' : 'crear' })} onRestablecer={(x) => setUsuarioDe({ empleado: x, modo: 'restablecer' })} onEliminar={setAEliminar}
         />
     );
 
@@ -243,6 +245,7 @@ export default function EmpleadosPage() {
             </Modal>
 
             <CrearUsuarioModal empleado={usuarioDe?.empleado} opened={usuarioDe?.modo === 'crear'} onClose={() => setUsuarioDe(null)} onUserCreated={() => { setUsuarioDe(null); refetch(); }} />
+            <RestablecerClaveModal empleado={usuarioDe?.empleado} opened={usuarioDe?.modo === 'restablecer'} onClose={() => setUsuarioDe(null)} />
             <EditUsuarioModal usuario={usuarioDe?.empleado?.usuario} opened={usuarioDe?.modo === 'editar'} onClose={() => setUsuarioDe(null)} onUpdated={() => { setUsuarioDe(null); refetch(); }} />
         </Box>
     );
