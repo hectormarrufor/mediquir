@@ -17,6 +17,8 @@ const BASE = {
     par: { etiqueta: 'Par', singular: 'par', plural: 'pares', corto: 'pares' },
     paqx2: { etiqueta: 'Paquete x2', singular: 'paquete x2', plural: 'paquetes x2', corto: 'paq x2' },
     paqx4: { etiqueta: 'Paquete x4', singular: 'paquete x4', plural: 'paquetes x4', corto: 'paq x4' },
+    paqx100: { etiqueta: 'Paquete x100', singular: 'paquete x100', plural: 'paquetes x100', corto: 'paq x100' },
+    paqx200: { etiqueta: 'Paquete x200', singular: 'paquete x200', plural: 'paquetes x200', corto: 'paq x200' },
     cx100: { etiqueta: 'Caja x100', singular: 'caja x100', plural: 'cajas x100', corto: 'cx100' },
     cx200: { etiqueta: 'Caja x200', singular: 'caja x200', plural: 'cajas x200', corto: 'cx200' },
     // Manguera y similares: la unidad es el METRO (enteros) y el ROLLO completo es el nivel de "caja" (unidadesPorCaja = metros del rollo)

@@ -72,7 +72,7 @@ const Producto = sequelize.define('Producto', {
     // --- LOGÍSTICA B2B ---
     presentacion: {
         // 'caja' se conserva en el tipo de la base solo por compatibilidad: ya no se usa (la caja es unidadesPorCaja)
-        type: DataTypes.ENUM('unidad', 'par', 'paqx2', 'paqx4', 'caja', 'cx100', 'cx200', 'metro', 'rollo'),
+        type: DataTypes.ENUM('unidad', 'par', 'paqx2', 'paqx4', 'caja', 'cx100', 'cx200', 'metro', 'rollo', 'paqx100', 'paqx200'),
         allowNull: false,
         defaultValue: 'unidad'
     },

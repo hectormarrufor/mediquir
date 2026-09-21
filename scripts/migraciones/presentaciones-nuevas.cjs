@@ -1,5 +1,6 @@
 // Migración aditiva: nuevas presentaciones base de producto (qué es UNA unidad).
 //   cx100 / cx200 -> "Caja x100" / "Caja x200" como unidad de venta (stock, costo y precio por caja de 100 o 200).
+//   paqx100 / paqx200 -> "Paquete x100" / "Paquete x200".
 //   metro / rollo -> mangueras y similares: se vende por metro (números enteros) o el rollo completo.
 // Solo agrega valores al tipo enumerado (no modifica datos). Se puede ejecutar varias veces.   node scripts/migraciones/presentaciones-nuevas.cjs
 require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
@@ -14,7 +15,7 @@ const { Client } = require('pg');
         if (!rows.length) throw new Error('No se encontró el tipo de Productos.presentacion');
         const tipo = rows[0].typname;
         if (!/^[A-Za-z_]+$/.test(tipo)) throw new Error('Nombre de tipo inesperado: ' + tipo);
-        for (const v of ['cx100', 'cx200', 'metro', 'rollo']) await db.query(`ALTER TYPE "${tipo}" ADD VALUE IF NOT EXISTS '${v}'`);
+        for (const v of ['cx100', 'cx200', 'metro', 'rollo', 'paqx100', 'paqx200']) await db.query(`ALTER TYPE "${tipo}" ADD VALUE IF NOT EXISTS '${v}'`);
         const { rows: valores } = await db.query(`SELECT unnest(enum_range(NULL::"${tipo}"))::text AS v`);
         console.log('Migración lista. Valores de', tipo + ':', valores.map((r) => r.v).join(', '));
     } catch (e) {

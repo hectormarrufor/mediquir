@@ -12,7 +12,7 @@ const AZUL_CLARO = [230, 241, 252];
 const GRIS = [110, 120, 135];
 const GRIS_LINEA = [222, 228, 236];
 
-const PRESENTACION = { unidad: 'Unidad', par: 'Par', paqx2: 'Paquete x2', paqx4: 'Paquete x4', cx100: 'Caja x100', cx200: 'Caja x200', metro: 'Metro', rollo: 'Rollo' };
+const PRESENTACION = { unidad: 'Unidad', par: 'Par', paqx2: 'Paquete x2', paqx4: 'Paquete x4', paqx100: 'Paquete x100', paqx200: 'Paquete x200', cx100: 'Caja x100', cx200: 'Caja x200', metro: 'Metro', rollo: 'Rollo' };
 const FORMATO = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
 
 const NOTA_IVA = `Precios en USD, sin IVA. A los productos gravados se les añade IVA (${REGLAS.alicuotaGeneral}%) al facturar; los marcados (E) son exentos. Monto de cada renglón = precio unitario x cantidad, redondeado a 2 decimales.`;
