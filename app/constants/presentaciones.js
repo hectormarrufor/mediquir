@@ -37,7 +37,7 @@ export function presentacionesDe(producto) {
     const lista = [{ clave: 'UNIDAD', etiqueta: base.etiqueta, singular: base.singular, plural: base.plural, corto: base.corto, unidades: 1 }];
     const nc = base.nivelCaja || { etiqueta: 'Caja', singular: 'caja', plural: 'cajas' };
     if (porCaja && porCaja > 1) lista.push({ clave: 'CAJA', etiqueta: `${nc.etiqueta} x${porCaja} ${base.corto}`, singular: nc.singular, plural: nc.plural, corto: base.corto, unidades: porCaja });
-    if (porBulto && porBulto > 1 && porBulto > (porCaja || 1)) lista.push({ clave: 'BULTO', etiqueta: `Bulto x${porBulto} ${base.corto}`, singular: 'bulto', plural: 'bultos', corto: base.corto, unidades: porBulto });
+    if (porBulto && porBulto > 1 && porBulto > (porCaja || 1)) lista.push({ clave: 'BULTO', etiqueta: base.nivelCaja && porCaja && producto?.cajasPorBulto ? `Bulto x${producto.cajasPorBulto} ${base.nivelCaja.plural} (${porBulto} ${base.corto})` : `Bulto x${porBulto} ${base.corto}`, singular: 'bulto', plural: 'bultos', corto: base.corto, unidades: porBulto });
     return lista;
 }
 

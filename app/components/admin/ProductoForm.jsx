@@ -422,11 +422,11 @@ export default function ProductoForm({ productId = null }) {
                             </Grid.Col>
                             {Number(form.values.unidadesPorCaja) > 0 ? (
                                 <Grid.Col span={{ base: 12, md: 4 }}>
-                                    <NumberInput label="Cajas por bulto" description="Cajas que trae el bulto con el que compras" placeholder="Ej. 10" min={1} {...form.getInputProps('cajasPorBulto')} />
+                                    <NumberInput label={form.values.presentacion === 'metro' ? 'Rollos por bulto' : 'Cajas por bulto'} description={form.values.presentacion === 'metro' ? 'Rollos que trae el bulto con el que compras' : 'Cajas que trae el bulto con el que compras'} placeholder="Ej. 10" min={1} {...form.getInputProps('cajasPorBulto')} />
                                 </Grid.Col>
                             ) : (
                                 <Grid.Col span={{ base: 12, md: 4 }}>
-                                    <NumberInput label="Unidades por bulto" description="Sin cajas: el bulto trae las unidades directamente" placeholder="Ej. 3000" min={1} {...form.getInputProps('unidadesPorBulto')} />
+                                    <NumberInput label="Unidades por bulto" description="Sin cajas: el bulto trae las unidades directamente (p. ej. 10 paquetes x100 por bulto = 10)" placeholder="Ej. 3000" min={1} {...form.getInputProps('unidadesPorBulto')} />
                                 </Grid.Col>
                             )}
 
