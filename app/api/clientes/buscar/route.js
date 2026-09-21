@@ -1,34 +1,44 @@
 // Ruta: app/api/clientes/buscar/route.js
+// Autocompletar del checkout de la tienda. Es una ruta PÚBLICA y solo la usa ese checkout, así que devuelve lo mínimo para TODOS
+// (también para el personal con sesión abierta: la ficha completa se consulta en el módulo de clientes, no aquí):
+//   · primer nombre (para saludar) y el teléfono y correo enmascarados, para que la persona reconozca que es ella.
+// Nunca el nombre completo, el teléfono, el correo ni la dirección de alguien por el solo hecho de conocer su cédula.
 
 import { Cliente } from '@/models';
 import { NextResponse } from 'next/server';
-import { requerirStaff } from '@/app/api/inventario/_lib';
+
+export const dynamic = 'force-dynamic';
+
+const maskTelefono = (t) => {
+    const d = String(t || '').replace(/\D/g, '');
+    return d.length >= 6 ? `${d.slice(0, 2)}${'*'.repeat(d.length - 4)}${d.slice(-2)}` : null;
+};
+
+const maskEmail = (e) => {
+    const [usuario, dominio] = String(e || '').split('@');
+    if (!usuario || !dominio) return null;
+    return `${usuario[0]}${'*'.repeat(Math.max(2, usuario.length - 1))}@${dominio[0]}${'*'.repeat(Math.max(2, dominio.split('.')[0].length - 1))}.${dominio.split('.').slice(1).join('.') || '***'}`;
+};
 
 export async function GET(request) {
     const { searchParams } = new URL(request.url);
-    const identificacion = searchParams.get('id');
+    const identificacion = String(searchParams.get('id') || '').trim().slice(0, 30);
 
     if (!identificacion) {
         return NextResponse.json({ message: 'Identificación requerida' }, { status: 400 });
     }
 
     try {
-        const cliente = await Cliente.findOne({
-            where: { identificacion: identificacion }
-        });
+        const cliente = await Cliente.findOne({ where: { identificacion }, attributes: ['nombre', 'telefono', 'email'] });
+        if (!cliente) return NextResponse.json({ success: false, message: 'Cliente no encontrado' }, { status: 404 });
 
-        if (cliente) {
-            // Esta ruta es pública (autocompletar del checkout): quien no es personal solo recibe el PRIMER nombre (para saludar),
-            // no el nombre completo, ni teléfono, correo o dirección de una persona por el solo hecho de conocer su cédula.
-            const { error: noEsStaff } = await requerirStaff();
-            const primerNombre = String(cliente.nombre || '').trim().split(/\s+/)[0] || null;
-            const visible = noEsStaff ? { primerNombre } : cliente;
-            return NextResponse.json({ success: true, cliente: visible }, { status: 200 });
-        } else {
-            return NextResponse.json({ success: false, message: 'Cliente no encontrado' }, { status: 404 });
-        }
+        const primerNombre = String(cliente.nombre || '').trim().split(/\s+/)[0] || null;
+        return NextResponse.json({
+            success: true,
+            cliente: { primerNombre, telefonoOculto: maskTelefono(cliente.telefono), emailOculto: maskEmail(cliente.email) },
+        }, { status: 200 });
     } catch (error) {
-        console.error("Error buscando cliente:", error);
+        console.error('Error buscando cliente:', error);
         return NextResponse.json({ message: 'Error interno del servidor' }, { status: 500 });
     }
 }

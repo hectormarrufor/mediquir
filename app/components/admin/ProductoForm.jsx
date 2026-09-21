@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { IconDeviceFloppy, IconArrowLeft, IconPlus, IconCalculator } from '@tabler/icons-react';
 import ImageDropzone from '@/app/components/ImageDropzone';
 import { capitalizarPalabras } from '@/app/handlers/formatters';
+import { PRESENTACIONES } from '@/app/constants/inventarioCampos';
 
 
 export default function ProductoForm({ productId = null }) {
@@ -414,10 +415,10 @@ export default function ProductoForm({ productId = null }) {
                         <Title order={4} mb="md" c="gray.7">3. Logística e Inventario</Title>
                         <Grid>
                             <Grid.Col span={{ base: 12, md: 4 }}>
-                                <Select label="Presentación (qué es UNA unidad: stock, costo y precios)" description="Unidad, par o paquete. La caja se define abajo" data={[{ value: 'unidad', label: 'Unidad' }, { value: 'par', label: 'Par' }, { value: 'paqx2', label: 'Paquete x2' }, { value: 'paqx4', label: 'Paquete x4' }]} withAsterisk {...form.getInputProps('presentacion')} />
+                                <Select label="Presentación (qué es UNA unidad: stock, costo y precios)" description="Unidad, par, paquete, caja x100/x200, metro o rollo. La caja (o el rollo, si se vende por metro) se define abajo" data={PRESENTACIONES} withAsterisk {...form.getInputProps('presentacion')} />
                             </Grid.Col>
                             <Grid.Col span={{ base: 12, md: 4 }}>
-                                <NumberInput label="Unidades por caja (opcional)" description="Cuántas unidades (o pares) trae cada caja; vacío si no se vende en cajas" placeholder="Ej. 100" min={1} {...form.getInputProps('unidadesPorCaja')} />
+                                <NumberInput label={form.values.presentacion === 'metro' ? "Metros por rollo (opcional)" : "Unidades por caja (opcional)"} description={form.values.presentacion === 'metro' ? "Cuántos metros trae el rollo completo; vacío si no se vende por rollo" : "Cuántas unidades (o pares) trae cada caja; vacío si no se vende en cajas"} placeholder="Ej. 100" min={1} {...form.getInputProps('unidadesPorCaja')} />
                             </Grid.Col>
                             {Number(form.values.unidadesPorCaja) > 0 ? (
                                 <Grid.Col span={{ base: 12, md: 4 }}>

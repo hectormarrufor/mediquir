@@ -17,6 +17,11 @@ const BASE = {
     par: { etiqueta: 'Par', singular: 'par', plural: 'pares', corto: 'pares' },
     paqx2: { etiqueta: 'Paquete x2', singular: 'paquete x2', plural: 'paquetes x2', corto: 'paq x2' },
     paqx4: { etiqueta: 'Paquete x4', singular: 'paquete x4', plural: 'paquetes x4', corto: 'paq x4' },
+    cx100: { etiqueta: 'Caja x100', singular: 'caja x100', plural: 'cajas x100', corto: 'cx100' },
+    cx200: { etiqueta: 'Caja x200', singular: 'caja x200', plural: 'cajas x200', corto: 'cx200' },
+    // Manguera y similares: la unidad es el METRO (enteros) y el ROLLO completo es el nivel de "caja" (unidadesPorCaja = metros del rollo)
+    metro: { etiqueta: 'Metro', singular: 'metro', plural: 'metros', corto: 'm', nivelCaja: { etiqueta: 'Rollo', singular: 'rollo', plural: 'rollos' } },
+    rollo: { etiqueta: 'Rollo', singular: 'rollo', plural: 'rollos', corto: 'rollos' },
 };
 
 const entero = (v) => { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null; };
@@ -28,7 +33,8 @@ export function presentacionesDe(producto) {
     const porBulto = entero(producto?.unidadesPorBulto);
     // `corto` dice de qué son las unidades de una caja o un bulto ("Caja x50 pares"): así no se confunde con unidades sueltas
     const lista = [{ clave: 'UNIDAD', etiqueta: base.etiqueta, singular: base.singular, plural: base.plural, corto: base.corto, unidades: 1 }];
-    if (porCaja && porCaja > 1) lista.push({ clave: 'CAJA', etiqueta: `Caja x${porCaja} ${base.corto}`, singular: 'caja', plural: 'cajas', corto: base.corto, unidades: porCaja });
+    const nc = base.nivelCaja || { etiqueta: 'Caja', singular: 'caja', plural: 'cajas' };
+    if (porCaja && porCaja > 1) lista.push({ clave: 'CAJA', etiqueta: `${nc.etiqueta} x${porCaja} ${base.corto}`, singular: nc.singular, plural: nc.plural, corto: base.corto, unidades: porCaja });
     if (porBulto && porBulto > 1 && porBulto > (porCaja || 1)) lista.push({ clave: 'BULTO', etiqueta: `Bulto x${porBulto} ${base.corto}`, singular: 'bulto', plural: 'bultos', corto: base.corto, unidades: porBulto });
     return lista;
 }

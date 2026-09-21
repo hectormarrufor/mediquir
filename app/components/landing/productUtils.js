@@ -70,6 +70,10 @@ export function getPresentacionLabel(product) {
         case 'par': return 'Par';
         case 'paqx2': return 'Paquete x2';
         case 'paqx4': return 'Paquete x4';
+        case 'cx100': return 'Caja x100';
+        case 'cx200': return 'Caja x200';
+        case 'metro': return 'Metro';
+        case 'rollo': return 'Rollo';
         case 'caja': return product.unidadesPorCaja ? `Caja x${product.unidadesPorCaja}` : 'Caja';
         default: return 'Unidad';
     }

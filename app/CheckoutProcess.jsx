@@ -240,12 +240,10 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
 
             if (res.ok && data.success) {
                 const c = data.cliente;
-                if (c.nombre) {
-                    // Solo el personal recibe la ficha completa
-                    formCliente.setValues({ ...formCliente.values, nombre: c.nombre || '', telefono: c.telefono || '', email: c.email || '' });
-                } else if (c.primerNombre) {
-                    // El público solo recibe el primer nombre: se saluda, pero los datos los escribe la persona
-                    notifications.show({ color: 'teal', title: `¡Hola de nuevo, ${c.primerNombre}!`, message: 'Completa tus datos para continuar con tu compra.', autoClose: 4500 });
+                // Solo se saluda y se muestran el teléfono y el correo enmascarados: los datos los escribe la persona
+                if (c.primerNombre) {
+                    const guardados = [c.telefonoOculto && `teléfono ${c.telefonoOculto}`, c.emailOculto && `correo ${c.emailOculto}`].filter(Boolean).join(' · ');
+                    notifications.show({ color: 'teal', title: `¡Hola de nuevo, ${c.primerNombre}!`, message: `${guardados ? `Tenemos guardado tu ${guardados}. ` : ''}Completa tus datos para continuar con tu compra.`, autoClose: 6000 });
                 }
             }
         } catch (error) {
