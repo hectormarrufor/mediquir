@@ -59,7 +59,7 @@ export async function GET(request) {
                 resto.nroVentas = puesto.get(j.id);
                 // La landing calcula el precio web con precio7; si falta se le entrega ya resuelto (sin revelar el costo)
                 return { ...resto, precio7: precioVentaWeb({ precio7: j.precio7, costoUsd, porcentajeDescuento: 0 }) };
-            });
+            }).filter((p) => Number(p.precio7) > 0); // sin precio de venta (recién cargados, sin costo ni precio 7) no salen en la tienda
             cachePublico = { t: Date.now(), datos: publicos };
             return NextResponse.json(publicos, { status: 200, headers: { 'Cache-Control': 'private, max-age=0' } });
         }

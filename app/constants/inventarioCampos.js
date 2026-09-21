@@ -1,14 +1,12 @@
 // Reglas de los campos editables del inventario. Las usan por igual el servidor (validación
 // definitiva), la hoja (validación inmediata al escribir o pegar) y el formulario de producto,
 // para que nunca discrepen.
+import { PAQUETES } from './presentaciones';
 
 export const PRESENTACIONES = [
     { value: 'unidad', label: 'Unidad' },
     { value: 'par', label: 'Par' },
-    { value: 'paqx2', label: 'Paquete x2' },
-    { value: 'paqx4', label: 'Paquete x4' },
-    { value: 'paqx100', label: 'Paquete x100' },
-    { value: 'paqx200', label: 'Paquete x200' },
+    ...PAQUETES.map((n) => ({ value: `paqx${n}`, label: `Paquete x${n}` })),
     { value: 'cx100', label: 'Caja x100' },
     { value: 'cx200', label: 'Caja x200' },
     { value: 'metro', label: 'Metro' },
@@ -125,7 +123,7 @@ export function validarCampo(campo, crudo, specs = CAMPOS) {
 // La caja es independiente: una jeringa se vende por unidad al detal y a la vez viene en cajas de 100 y bultos de 30 cajas.
 // `unidadesPorBulto` es SIEMPRE el total de unidades del bulto; `cajasPorBulto` solo existe si hay cajas.
 // ---------------------------------------------------------------------------------------------
-const UNIDADES_FIJAS = { unidad: 1, par: 2, paqx2: 2, paqx4: 4, paqx100: 100, paqx200: 200, cx100: 100, cx200: 200, metro: 1, rollo: 1 };
+const UNIDADES_FIJAS = { unidad: 1, par: 2, ...Object.fromEntries(PAQUETES.map((n) => [`paqx${n}`, n])), cx100: 100, cx200: 200, metro: 1, rollo: 1 };
 
 // Unidades individuales que trae UNA presentación de venta (null si no se puede saber)
 export function unidadesPorPresentacion(f) {

@@ -11,14 +11,15 @@
 export const NIVELES = ['BULTO', 'CAJA', 'UNIDAD']; // de mayor a menor
 const ORDEN = { BULTO: 3, CAJA: 2, UNIDAD: 1 };
 
+// Tamaños de paquete que existen como presentación (paqx2, paqx4...). Para agregar otro: sumarlo aquí, en `PAQUETES` de
+// inventarioCampos.js y en el tipo enumerado de la base (migración lista6-carga.cjs / presentaciones-nuevas.cjs).
+export const PAQUETES = [2, 4, 5, 6, 7, 10, 12, 14, 15, 20, 24, 50, 52, 72, 80, 85, 100, 200];
+
 const BASE = {
     unidad: { etiqueta: 'Unidad', singular: 'unidad', plural: 'unidades', corto: 'und' },
     caja: { etiqueta: 'Unidad', singular: 'unidad', plural: 'unidades', corto: 'und' }, // valor antiguo: ya no se usa
     par: { etiqueta: 'Par', singular: 'par', plural: 'pares', corto: 'pares' },
-    paqx2: { etiqueta: 'Paquete x2', singular: 'paquete x2', plural: 'paquetes x2', corto: 'paq x2' },
-    paqx4: { etiqueta: 'Paquete x4', singular: 'paquete x4', plural: 'paquetes x4', corto: 'paq x4' },
-    paqx100: { etiqueta: 'Paquete x100', singular: 'paquete x100', plural: 'paquetes x100', corto: 'paq x100' },
-    paqx200: { etiqueta: 'Paquete x200', singular: 'paquete x200', plural: 'paquetes x200', corto: 'paq x200' },
+    ...Object.fromEntries(PAQUETES.map((n) => [`paqx${n}`, { etiqueta: `Paquete x${n}`, singular: `paquete x${n}`, plural: `paquetes x${n}`, corto: `paq x${n}` }])),
     cx100: { etiqueta: 'Caja x100', singular: 'caja x100', plural: 'cajas x100', corto: 'cx100' },
     cx200: { etiqueta: 'Caja x200', singular: 'caja x200', plural: 'cajas x200', corto: 'cx200' },
     // Manguera y similares: la unidad es el METRO (enteros) y el ROLLO completo es el nivel de "caja" (unidadesPorCaja = metros del rollo)
