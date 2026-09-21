@@ -30,6 +30,9 @@ const norm = (s) => String(s).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,
 const log = fs.existsSync(LOG) ? JSON.parse(fs.readFileSync(LOG, 'utf8')) : { items: {} };
 const guardarLog = () => fs.writeFileSync(LOG, JSON.stringify(log, null, 1));
 let contador = 0;
+// Ritmo conservador: Google pone captcha si busca rápido. Cada vez que aparece uno, el ritmo se vuelve más lento (x1,7, hasta x8).
+let ritmo = 1;
+const pausa = (base, extra) => espera((base + Math.random() * extra) * ritmo);
 
 // ---------- búsqueda: Google Imágenes en TU Chrome (ventana visible, perfil temporal) ----------
 // Google solo entrega resultados con JavaScript, así que se abre Chrome y se lee la página ya renderizada.
@@ -55,12 +58,14 @@ function parsearGoogle(html) {
 async function buscar(consulta) {
     navegador ??= await lanzar(9333, true);
     await navegador.ir(`https://www.google.com/search?q=${encodeURIComponent(consulta)}&udm=2&hl=es`);
+    let huboCaptcha = false;
     for (let i = 0; i < 180; i++) { // hasta 30 min esperando una verificación manual
         const info = await navegador.evaluar('location.href + " | " + document.title');
         if (!/\/sorry\/|tr[aá]fico inusual|unusual traffic/i.test(info || '')) break;
-        if (i === 0) console.log('… Google pide verificación: resuélvela en la ventana de Chrome que se abrió (espero hasta 30 min)');
+        if (i === 0) { huboCaptcha = true; ritmo = Math.min(ritmo * 1.7, 8); console.log(`… Google pide verificación: resuélvela en la ventana de Chrome (espero hasta 30 min). Ritmo ahora x${ritmo.toFixed(1)}`); }
         await espera(10000);
     }
+    if (huboCaptcha) await espera(60000); // ya resuelto: descansa 1 min antes de seguir
     for (let i = 0; i < 12; i++) { // en vez de esperar a ciegas, revisa cada 0,5 s si ya aparecieron los resultados (máx. 6 s)
         if (await navegador.evaluar("document.documentElement.outerHTML.includes(\"encrypted-tbn0\")")) break;
         await espera(500);
@@ -108,7 +113,7 @@ async function conseguir(o) {
     for (const consulta of o.consultas) {
         const r = await conseguirCon({ ...o, consulta });
         if (r) return r;
-        await espera(600);
+        await pausa(4000, 3000); // entre consultas del mismo producto
     }
     return null;
 }
@@ -212,7 +217,7 @@ async function procesar(o) {
 async function correr(lista) {
     let i = 0;
     await Promise.all(Array.from({ length: HILOS }, async () => {
-        while (i < lista.length) { const o = lista[i++]; try { await procesar(o); } catch (e) { console.log(`! ${o.etiqueta}: ${e.message}`); } await espera(2000 + Math.random() * 2000); }
+        while (i < lista.length) { const o = lista[i++]; try { await procesar(o); } catch (e) { console.log(`! ${o.etiqueta}: ${e.message}`); } await pausa(8000, 6000); } // entre un producto y el siguiente: 8 a 14 s (x ritmo)
     }));
 }
 

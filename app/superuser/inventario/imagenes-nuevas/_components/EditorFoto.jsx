@@ -19,17 +19,14 @@ export default function EditorFoto({ item, opened, onClose, onGuardar }) {
     const [res, setRes] = useState(null); // { simple, quitado, aviso, original }
     const [urls, setUrls] = useState({});
     const [eleccion, setEleccion] = useState('quitado');
+    const [arrastrando, setArrastrando] = useState(false);
 
     useEffect(() => { if (opened) { setFase('elegir'); setRes(null); setUrls({}); } }, [opened, item?.id, item?.tipo]);
     useEffect(() => () => Object.values(urls).forEach((u) => URL.revokeObjectURL(u)), [urls]);
 
-    if (!item) return null;
-    const busqueda = `https://www.google.com/search?q=${encodeURIComponent(`${item.nombre} ${item.marca || ''}`.trim())}&udm=2`;
-
-    const elegir = async (e) => {
-        const f = e.target.files?.[0];
-        e.target.value = '';
-        if (!f) return;
+    // Procesa una foto venga de donde venga: cámara, archivo, arrastrar y soltar o pegar (Ctrl+V)
+    const procesar = async (f) => {
+        if (!f || !/^image\//.test(f.type || 'image/')) { notifications.show({ color: 'orange', message: 'Eso no parece una imagen' }); return; }
         setFase('procesando');
         try {
             const r = await procesarFoto(f, setProgreso);
@@ -42,6 +39,24 @@ export default function EditorFoto({ item, opened, onClose, onGuardar }) {
             setFase('elegir');
         }
     };
+    const elegir = (e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) procesar(f); };
+    const soltar = (e) => { e.preventDefault(); setArrastrando(false); procesar(e.dataTransfer?.files?.[0]); };
+
+    // Ctrl+V: pega una imagen copiada (por ejemplo "Copiar imagen" en Google)
+    const procesarRef = useRef(null);
+    procesarRef.current = procesar;
+    useEffect(() => {
+        if (!opened || !(fase === 'elegir' || fase === 'resultado')) return undefined;
+        const alPegar = (e) => {
+            const it = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
+            if (it) { e.preventDefault(); procesarRef.current(it.getAsFile()); }
+        };
+        window.addEventListener('paste', alPegar);
+        return () => window.removeEventListener('paste', alPegar);
+    }, [opened, fase]);
+
+    if (!item) return null;
+    const busqueda = `https://www.google.com/search?q=${encodeURIComponent(`${item.nombre} ${item.marca || ''}`.trim())}&udm=2`;
 
     const guardar = async () => {
         setFase('guardando');
@@ -70,7 +85,11 @@ export default function EditorFoto({ item, opened, onClose, onGuardar }) {
                             <Button size="md" variant="light" leftSection={<IconPhotoPlus size={20} />} onClick={() => archivo.current?.click()}>Elegir archivo</Button>
                             <Button size="md" variant="default" component="a" href={busqueda} target="_blank" leftSection={<IconBrandGoogle size={20} />}>Buscar en Google</Button>
                         </SimpleGrid>
-                        <Text size="xs" c="dimmed">Si la encuentras en Google: guarda la imagen, luego usa "Elegir archivo".</Text>
+                        <Box onDragOver={(e) => { e.preventDefault(); setArrastrando(true); }} onDragLeave={() => setArrastrando(false)} onDrop={soltar}
+                            p="md" ta="center" style={{ border: `2px dashed var(--mantine-color-${arrastrando ? 'blue-6' : 'gray-4'})`, borderRadius: 12, background: arrastrando ? 'var(--mantine-color-blue-0)' : undefined }}>
+                            <Text size="sm" fw={600}>Arrastra una imagen aquí, o pégala con Ctrl + V</Text>
+                            <Text size="xs" c="dimmed">En Google: clic derecho sobre la imagen → "Copiar imagen", vuelve aquí y pega.</Text>
+                        </Box>
                     </>
                 )}
 
