@@ -34,6 +34,9 @@ const NotaFiscal = sequelize.define('NotaFiscal', {
     saldoAFavorUsd: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
     reintegradoUsd: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
     abonoId: { type: DataTypes.INTEGER, allowNull: true },
+    // Nota de débito por diferencial cambiario (tasa del pago menos tasa de la factura) y los dólares de la factura que cubre
+    esDiferencial: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    diferencialUsd: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
     anuladaAt: { type: DataTypes.DATE, allowNull: true },
     registradoPorId: { type: DataTypes.INTEGER, allowNull: true },
 }, { tableName: 'NotasFiscales', timestamps: true });

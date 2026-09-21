@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconFileDiff } from '@tabler/icons-react';
 import EmitirNotaModal from './EmitirNotaModal';
 import NotaAcciones from './NotaAcciones';
+import DiferencialCambiarioModal from './DiferencialCambiarioModal';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 const fmtFecha = (v) => (v ? `${String(v).slice(8, 10)}/${String(v).slice(5, 7)}/${String(v).slice(0, 4)}` : '');
@@ -14,6 +15,7 @@ const fmtFecha = (v) => (v ? `${String(v).slice(8, 10)}/${String(v).slice(5, 7)}
 export default function NotasFacturaCard({ pedido, onCambio }) {
     const queryClient = useQueryClient();
     const [emitiendo, setEmitiendo] = useState(null); // 'CREDITO' | 'DEBITO'
+    const [diferencial, setDiferencial] = useState(false);
     const { data, refetch } = useQuery({
         queryKey: ['notas-venta', pedido.id],
         queryFn: async () => {
@@ -34,6 +36,10 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
                 <Button size="xs" variant="light" color="red" onClick={() => setEmitiendo('CREDITO')} disabled={data && data.acreditable <= 0}>Nota de crédito</Button>
                 <Button size="xs" variant="light" color="blue" onClick={() => setEmitiendo('DEBITO')}>Nota de débito</Button>
             </Group>
+
+            {pedido.moneda === 'USD' && (
+                <Button size="xs" variant="light" color="indigo" fullWidth mb="sm" onClick={() => setDiferencial(true)}>Nota de débito por diferencial cambiario</Button>
+            )}
 
             {!notas.length ? <Text size="xs" c="dimmed">Esta factura no tiene notas.</Text> : (
                 <Stack gap={6}>
@@ -62,6 +68,7 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
                 </Stack>
             )}
 
+            {diferencial && <DiferencialCambiarioModal opened onClose={() => setDiferencial(false)} factura={pedido} onEmitida={refrescar} />}
             {emitiendo && <EmitirNotaModal opened onClose={() => setEmitiendo(null)} factura={pedido} tipo={emitiendo} onEmitida={refrescar} />}
         </Paper>
     );

@@ -21,6 +21,7 @@ import EnvioCard from '../_components/EnvioCard';
 import PagoPorVerificarCard from '../_components/PagoPorVerificarCard';
 import { aInputFechaHora, formatearFecha, formatearFechaHora } from '@/app/constants/hora';
 import NotasFacturaCard from '../_components/NotasFacturaCard';
+import ConvertirNotaEntregaModal from '../_components/ConvertirNotaEntregaModal';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function DetallePedidoMayorPage() {
@@ -33,6 +34,7 @@ export default function DetallePedidoMayorPage() {
     const [modalDespacho, setModalDespacho] = useState(false);
     const [modalAbono, setModalAbono] = useState(false);
     const [modalFactura, setModalFactura] = useState(false);
+    const [modalNotaAFactura, setModalNotaAFactura] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [precioBCV, setPrecioBCV] = useState(1);
 
@@ -150,6 +152,9 @@ export default function DetallePedidoMayorPage() {
                 </Button>
                 <Title order={2} c="blue.9">Pedido: {pedido.numeroDocumento}</Title>
                 {pedido.numeroDocumentoAnterior && <Badge size="lg" variant="outline" color="gray">Antes: {pedido.numeroDocumentoAnterior}</Badge>}
+                {rolUsuario === 'admin' && pedido.tipoDocumento === 'NOTA_ENTREGA' && pedido.condicionPago === 'Credito' && pedido.clienteId && pedido.statusDespacho !== 'Cancelado' && pedido.revisionStock !== 'PENDIENTE' && (
+                    <Button size="xs" variant="light" color="indigo" leftSection={<IconReceiptTax size={16} />} onClick={() => setModalNotaAFactura(true)}>Pasar a factura</Button>
+                )}
                 {rolUsuario === 'admin' && pedido.tipoDocumento === 'VENTA_RAPIDA' && pedido.clienteId && pedido.statusDespacho !== 'Cancelado' && (
                     <Button size="xs" variant="light" color="indigo" leftSection={<IconReceiptTax size={16} />} onClick={() => setModalFactura(true)}>Convertir en factura</Button>
                 )}
@@ -539,6 +544,8 @@ export default function DetallePedidoMayorPage() {
                     </Stack>
                 </form>
             </Modal>
+
+            {modalNotaAFactura && <ConvertirNotaEntregaModal opened onClose={() => setModalNotaAFactura(false)} pedido={pedido} onListo={refetch} />}
 
             <Modal opened={modalFactura} onClose={() => setModalFactura(false)} title={<Title order={4}>Convertir en factura</Title>} centered>
                 <Stack gap="md">

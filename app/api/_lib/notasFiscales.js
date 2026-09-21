@@ -355,3 +355,68 @@ export async function registrarReintegro({ nota, montoUsd, tasa, metodoPago, ref
     await nota.save({ transaction: t });
     return nota;
 }
+
+// ------------------------------------------------------------------ diferencial cambiario (factura emitida a crédito, pagada a otra tasa)
+// La factura se emitió en Bs con la tasa de ese día; cuando el cliente paga, el dólar vale más. El monto en dólares no cambia (no toca la
+// cuenta por cobrar): la nota de débito solo documenta ante el SENIAT la diferencia en bolívares (tasa del pago − tasa de la factura), repartida
+// entre base, exento e IVA en la misma proporción de la factura. Va en bolívares y con la tasa de hoy.
+export const textoDiferencial = (numeroFactura) => `Nota de débito correspondiente a diferencial cambiario que afecta a la factura número ${numeroFactura}`;
+
+/** Cuánto se puede cobrar de diferencial hoy y cómo se reparte. `usdSolicitado` (opcional): tramo de la factura, en dólares, que se está pagando. */
+export async function calcularDiferencial({ venta, tasaHoy, usdSolicitado, transaction }) {
+    const tasaFactura = Number(venta.tasaCambio) || 1;
+    const base = { tasaFactura, tasaHoy: Number(tasaHoy) || 0, puede: false, motivoNo: null };
+    if (venta.tipoDocumento !== 'FACTURA') return { ...base, motivoNo: 'El diferencial cambiario se emite sobre una factura' };
+    if (venta.statusDespacho === 'Cancelado') return { ...base, motivoNo: 'La factura está anulada' };
+    if (venta.moneda !== 'USD') return { ...base, motivoNo: 'La factura está en bolívares: no hay diferencial que cobrar' };
+
+    const previas = await NotaFiscal.findAll({ where: { ventaId: venta.id, esDiferencial: true, estado: 'EMITIDA' }, attributes: ['diferencialUsd'], transaction });
+    const totalUsd = r2(venta.totalFinal);
+    const cubiertoUsd = r2(previas.reduce((a, n) => a + Number(n.diferencialUsd), 0));
+    const disponibleUsd = r2(Math.max(0, totalUsd - cubiertoUsd));
+    const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, attributes: ['saldoPendiente', 'moneda', 'notaId'], transaction });
+    const saldoUsd = cxc && !cxc.notaId ? (cxc.moneda === 'BS' ? aDolares(Number(cxc.saldoPendiente), tasaFactura) : r2(cxc.saldoPendiente)) : 0;
+    const datos = { ...base, totalUsd, cubiertoUsd, disponibleUsd, saldoUsd };
+
+    const difTasa = r2(datos.tasaHoy - tasaFactura);
+    if (!(datos.tasaHoy > 0)) return { ...datos, motivoNo: 'No hay una tasa BCV vigente registrada' };
+    if (!(difTasa > 0)) return { ...datos, motivoNo: `La tasa de hoy (${datos.tasaHoy.toFixed(2)}) no es mayor que la de la factura (${tasaFactura.toFixed(2)}): no hay diferencial a favor` };
+    if (!(disponibleUsd > 0.005)) return { ...datos, motivoNo: 'Ya se emitió el diferencial de toda la factura' };
+
+    const usd = usdSolicitado === undefined || usdSolicitado === null || usdSolicitado === '' ? (saldoUsd > 0.005 ? Math.min(saldoUsd, disponibleUsd) : disponibleUsd) : r2(usdSolicitado);
+    if (!(usd > 0)) return { ...datos, usd, motivoNo: 'Indica cuántos dólares de la factura se están pagando' };
+    if (usd > disponibleUsd + 0.005) return { ...datos, usd, motivoNo: `Solo quedan ${disponibleUsd.toFixed(2)} USD de la factura sin diferencial` };
+
+    const detalles = await VentaDetalle.findAll({ where: { ventaId: venta.id }, attributes: ['subtotal', 'aplicaIva'], transaction });
+    const gravadaUsd = detalles.filter((d) => d.aplicaIva).reduce((a, d) => a + Number(d.subtotal), 0);
+    const f = usd / totalUsd;
+    const total = r2(usd * difTasa);
+    const iva = Math.min(total, r2(Number(venta.montoIva) * f * difTasa));
+    const baseImponible = iva > 0 ? Math.min(r2(total - iva), r2(gravadaUsd * f * difTasa)) : 0;
+    const exento = r2(total - baseImponible - iva);
+    if (!(total > 0)) return { ...datos, usd, motivoNo: 'La diferencia es menor a un céntimo' };
+    return { ...datos, usd, difTasa, total, baseImponible, exento, iva, puede: true };
+}
+
+/** Emite la nota de débito de diferencial cambiario (fiscal: entra al libro de ventas). No mueve la cuenta por cobrar. */
+export async function emitirNotaDiferencial({ venta, tasaHoy, usdSolicitado, usuarioId = null, transaction: t }) {
+    const c = await calcularDiferencial({ venta, tasaHoy, usdSolicitado, transaction: t });
+    if (!c.puede) throw new ErrorNota(c.motivoNo || 'No se puede emitir el diferencial', 409);
+    if (!venta.clienteId) throw new ErrorNota('Una nota de débito necesita que la factura tenga cliente', 409);
+
+    const texto = textoDiferencial(venta.numeroDocumento);
+    const numero = await siguienteNumeroNota('DEBITO', t);
+    const nota = await NotaFiscal.create({
+        tipo: 'DEBITO', origen: 'VENTA', numeroDocumento: numero, fecha: hoyCaracas(), ventaId: venta.id, clienteId: venta.clienteId,
+        moneda: 'BS', tasaCambio: c.tasaHoy, subtotal: r2(c.baseImponible + c.exento), baseImponible: c.baseImponible, montoExento: c.exento,
+        montoIva: c.iva, alicuotaIva: REGLAS.alicuotaGeneral, totalFinal: c.total, motivo: texto, esDiferencial: true, diferencialUsd: c.usd, registradoPorId: usuarioId,
+    }, { transaction: t });
+    const renglones = [];
+    if (c.baseImponible > 0) renglones.push({ monto: c.baseImponible, aplicaIva: true });
+    if (c.exento > 0) renglones.push({ monto: c.exento, aplicaIva: false });
+    await NotaFiscalDetalle.bulkCreate(renglones.map((r) => ({
+        notaId: nota.id, descripcion: texto, cantidad: 1, precioUnitario: r.monto, aplicaIva: r.aplicaIva,
+        porcentajeIva: r.aplicaIva ? REGLAS.alicuotaGeneral : 0, subtotal: r.monto,
+    })), { transaction: t });
+    return nota;
+}

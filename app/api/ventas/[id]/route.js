@@ -16,7 +16,8 @@ import { borrarFotosSobrantes } from '../_fotosEmpaque';
 import { registrarAbono, ErrorAbono } from '../../_lib/abonos';
 import { recalcularCobro } from '../../_lib/retencionesVenta';
 import { eliminarVenta, borrarArchivosDeVenta } from '../_eliminar';
-import { convertirAFactura, ErrorConversion } from '../../_lib/convertirFactura';
+import { convertirAFactura, convertirNotaEntregaAFactura, ErrorConversion } from '../../_lib/convertirFactura';
+import { tasaVigente } from '../../_lib/tasaBcv';
 import { avisarCliente } from '../../_lib/avisosCliente';
 import { confirmarPagoManual, cancelarPedidoTienda, ErrorPagoTienda } from '../../_lib/pagoTienda';
 import { fechaCaracas, desdeInputFechaHora } from '@/app/constants/hora';
@@ -220,7 +221,9 @@ export async function PUT(request, { params }) {
         // Recibo V- -> factura F- (el cliente la pidió después de comprar). Solo administración; la fecha de emisión es hoy
         if (accion === 'CONVERTIR_A_FACTURA') {
             if (rol !== 'admin') throw new ErrorLogistica('Solo un administrador puede convertir un recibo en factura', 403);
-            const r = await convertirAFactura({ venta, transaction: t });
+            const r = venta.tipoDocumento === 'NOTA_ENTREGA'
+                ? await convertirNotaEntregaAFactura({ venta, tasaHoy: await tasaVigente({ transaction: t }), transaction: t })
+                : await convertirAFactura({ venta, transaction: t });
             await t.commit();
             return NextResponse.json({ success: true, ...r });
         }
