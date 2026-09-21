@@ -6,7 +6,7 @@ import { useLocalStorage, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { IconAlertCircle, IconBarcode, IconEye, IconPencil, IconPhotoCheck } from '@tabler/icons-react';
+import { IconAlertCircle, IconBarcode, IconEye, IconPencil, IconPhotoCheck, IconReportAnalytics } from '@tabler/icons-react';
 import { COLUMNAS, VISIBLES_POR_DEFECTO, aplanarEntradas } from './_lib/columnas';
 import { useInventarioParams } from './_hooks/useInventarioParams';
 import { useEdicionInventario, useListaInventario, useOpcionesInventario, useResumenInventario } from './_hooks/useInventario';
@@ -147,6 +147,9 @@ export default function InventarioProductosPage() {
                     </Button>
                     <Button variant="white" leftSection={<IconPhotoCheck size={18} />} onClick={() => router.push('/superuser/inventario/imagenes-nuevas')}>
                         Auditar fotos
+                    </Button>
+                    <Button variant="white" leftSection={<IconReportAnalytics size={18} />} onClick={() => router.push('/superuser/inventario/auditar-datos')}>
+                        Auditar precios
                     </Button>
                 </Group>
             )}
