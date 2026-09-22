@@ -93,14 +93,11 @@ export async function GET(request) {
         });
 
         const [[m]] = [await consulta(`SELECT (SELECT count(*)::int FROM "DatoAuditoria" WHERE estado = 'APROBADO') aprobados,
-            (SELECT count(*)::int FROM "Marcas" mm WHERE mm.imagen IS NULL AND NOT EXISTS (SELECT 1 FROM "ImagenAuditoria" i WHERE i.tipo = 'marca' AND i."refId" = mm.id AND i.estado = 'OMITIDA')) marcas_sin_logo,
-            (SELECT avg((precio7 - precio6) / precio6) FROM "Productos" WHERE precio6 > 0 AND precio7 > 0) margen_p7`)].map((r) => r[0]);
+            (SELECT count(*)::int FROM "Marcas" mm WHERE mm.imagen IS NULL AND NOT EXISTS (SELECT 1 FROM "ImagenAuditoria" i WHERE i.tipo = 'marca' AND i."refId" = mm.id AND i.estado = 'OMITIDA')) marcas_sin_logo`)].map((r) => r[0]);
         const conteo = {
             fichas: fichas.length, aprobados: m.aprobados, marcasSinLogo: m.marcas_sin_logo,
             dudosos: fichas.filter((x) => x.peso >= 2).length, fotosPorRevisar: fichas.filter((x) => x.foto.estado === 'PENDIENTE').length, fotosFaltan: fichas.filter((x) => x.foto.estado === 'FALTA').length,
             datosPendientes: fichas.filter((x) => x.idsDatos.length).length,
-            // Cuánto más alto suele ponerse el precio 7 (detal) sobre el 6 (mayor): sirve para sugerir un precio 7 donde falta
-            margenP7: m.margen_p7 === null ? null : Number(m.margen_p7),
         };
         Object.keys(PESO).forEach((k) => { conteo[k] = fichas.filter((x) => x.alertas.includes(k)).length; });
 

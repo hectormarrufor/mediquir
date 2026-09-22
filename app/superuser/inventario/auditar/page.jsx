@@ -176,9 +176,12 @@ export default function AuditarPage() {
     const costo = aNum(form?.costoUsd), p6 = aNum(form?.precio6), p7 = aNum(form?.precio7);
     const margen6 = costo > 0 && p6 > 0 ? ((p6 - costo) / costo) * 100 : null;
     const margen7 = p6 > 0 && p7 > 0 ? ((p7 - p6) / p6) * 100 : null;
-    const sugerenciaP7 = p6 > 0 && !(p7 > 0) && conteo?.margenP7 != null ? p6 * (1 + conteo.margenP7) : null;
     const bulto = upcN > 1 ? upcN * (aNum(form?.cajasPorBulto) || 1) : aNum(form?.unidadesPorBulto) || null;
     const ref = actual?.referencia;
+    // El % de aumento sale del reporte de ESTE producto (su propio precio 6 y 7 del reporte), no de un promedio general:
+    // se le aplica al precio 6 que ya está guardado para sugerir un precio 7, solo como sugerencia (no se escribe solo).
+    const pctReporte = ref && Number(ref.p6) > 0 && Number(ref.p7) > 0 ? (Number(ref.p7) - Number(ref.p6)) / Number(ref.p6) : null;
+    const sugerenciaP7 = p6 > 0 && !(p7 > 0) && pctReporte !== null ? p6 * (1 + pctReporte) : null;
     const busqueda = actual ? `https://www.google.com/search?q=${encodeURIComponent(`${actual.nombre} ${actual.marcas?.[0] || ''}`.trim())}&udm=2` : '#';
     const etiquetaBoton = actual?.tipo === 'marca' ? (foto.estado === 'OK' ? 'Listo, siguiente' : 'Sin logo por ahora, siguiente')
         : hayCambios ? 'Guardar cambios y siguiente' : foto?.estado === 'FALTA' ? 'Sin foto por ahora, siguiente' : 'Todo bien, siguiente';
@@ -198,7 +201,6 @@ export default function AuditarPage() {
                     <Badge color="violet" variant="light">Fotos por revisar: {conteo.fotosPorRevisar}</Badge>
                     <Badge color="orange" variant="light">Sin foto: {conteo.fotosFaltan}</Badge>
                     <Badge color="red" variant="outline">Sin precio 7: {conteo.SIN_P7}</Badge>
-                    {conteo.margenP7 != null && <Badge color="grape" variant="light">Precio 7 promedio: +{Math.round(conteo.margenP7 * 100)} % sobre el 6</Badge>}
                 </Group>
             )}
             {error && <Alert color="red" mb="sm">{error}</Alert>}
@@ -308,7 +310,7 @@ export default function AuditarPage() {
                                     <TextInput label="Costo por unidad ($)" inputMode="decimal" value={form.costoUsd} onChange={set('costoUsd')} />
                                     <TextInput label="Precio 6 (mayor)" inputMode="decimal" value={form.precio6} onChange={set('precio6')} description={margen6 !== null ? `Margen sobre costo ${margen6.toFixed(0)} %` : undefined} />
                                     <TextInput label="Precio 7 (detal)" inputMode="decimal" value={form.precio7} onChange={set('precio7')}
-                                        description={margen7 !== null ? `${margen7.toFixed(0)} % sobre el 6` : sugerenciaP7 !== null ? `Sugerido ~${usd(sugerenciaP7)} (+${Math.round(conteo.margenP7 * 100)} % sobre el 6)` : undefined} />
+                                        description={margen7 !== null ? `${margen7.toFixed(0)} % sobre el 6` : sugerenciaP7 !== null ? `Sugerido ~${usd(sugerenciaP7)} (reporte: +${Math.round(pctReporte * 100)} %)` : undefined} />
                                     <Box>
                                         <Text size="sm" fw={500} mb={6}>IVA</Text>
                                         <Checkbox mt={4} label={aNum(form.porcentajeIva) === 16 ? 'Con IVA (16 %)' : 'Sin IVA (0 %)'} checked={aNum(form.porcentajeIva) === 16}
