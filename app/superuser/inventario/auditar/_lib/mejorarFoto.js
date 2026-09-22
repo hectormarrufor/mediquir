@@ -1,6 +1,6 @@
 // Mejora de fotos tomadas en el local, TODO en el navegador (nada sale a servicios de pago ni de terceros con la foto):
 //   1) "Sin fondo": un modelo de segmentación (U²-Net pequeño, licencia libre, /public/models/u2netp.onnx) recorta el producto y lo pone sobre blanco.
-//   2) "Ajustada": sin quitar el fondo; solo cuadra la foto, sube el contraste y blanquea los fondos claros.
+//   2) "Ajustada": sin quitar el fondo; solo cuadra la foto, tal como viene (sin tocar brillo ni contraste: forzarlo quemaba la foto).
 // Ambas se recomprimen a ~100 kB (JPEG) para no cargar de más el Blob ni la tienda.
 // El motor onnxruntime-web se descarga de jsDelivr solo cuando se usa (no engrosa la app).
 
@@ -129,27 +129,9 @@ export async function quitarFondo(canvas, lado = 900) {
     return { ok: true, canvas: cuadrar(limpio, cx0, cy0, cx1 - cx0, cy1 - cy0, lado) };
 }
 
-// Sin quitar el fondo: cuadra, sube el contraste (recorte de extremos) y blanquea los fondos claros
+// Sin quitar el fondo: solo cuadra y centra la foto tal como viene, sin tocar brillo ni contraste
 export function ajustada(canvas, lado = 900) {
-    const c = cuadrar(canvas, 0, 0, canvas.width, canvas.height, lado);
-    const ctx = c.getContext('2d');
-    const img = ctx.getImageData(0, 0, lado, lado);
-    const d = img.data;
-    const hist = new Uint32Array(256);
-    for (let i = 0; i < d.length; i += 4) hist[Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2])]++;
-    const total = lado * lado;
-    let acc = 0, lo = 0, hi = 255;
-    for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc > total * 0.01) { lo = v; break; } }
-    acc = 0;
-    for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc > total * 0.01) { hi = v; break; } }
-    const rango = Math.max(60, hi - lo);
-    for (let i = 0; i < d.length; i += 4) for (let ch = 0; ch < 3; ch++) {
-        let v = ((d[i + ch] - lo) / rango) * 255;
-        v = Math.min(255, Math.max(0, v));
-        d[i + ch] = v > 235 ? 255 : v;
-    }
-    ctx.putImageData(img, 0, 0);
-    return c;
+    return cuadrar(canvas, 0, 0, canvas.width, canvas.height, lado);
 }
 
 // Procesa la foto y devuelve las dos opciones para que la persona elija
