@@ -148,14 +148,15 @@ export function resolverEmpaque(actual, cambios) {
     const salida = { ...cambios };
 
     if (m.unidadesPorCaja) {
-        // Con caja, el total del bulto se calcula (cajas x unidades por caja)
+        // Con caja, el total del bulto se calcula (cajas x unidades por caja). Si no se dice cuántas cajas trae el
+        // bulto, es que no viene en bulto (solo por unidad o por caja): no se inventa un bulto de 1 caja.
         const soloTotal = 'unidadesPorBulto' in cambios && !['unidadesPorCaja', 'cajasPorBulto'].some((k) => k in cambios);
         if (soloTotal) return { error: 'Con unidades por caja el total del bulto se calcula: edita "Cajas/bulto" o "Und/caja"' };
         // Al agregar la caja a un producto que ya traía bulto (sin cajas), las cajas salen de dividir: 5000 und / 100 por caja = 50 cajas
         const yaTraiaBulto = !actual.unidadesPorCaja && !('cajasPorBulto' in cambios) && actual.unidadesPorBulto > 1 && actual.unidadesPorBulto % m.unidadesPorCaja === 0;
-        const cajas = m.cajasPorBulto || (yaTraiaBulto ? actual.unidadesPorBulto / m.unidadesPorCaja : 1);
-        salida.cajasPorBulto = cajas;
-        salida.unidadesPorBulto = cajas * m.unidadesPorCaja;
+        const cajas = m.cajasPorBulto || (yaTraiaBulto ? actual.unidadesPorBulto / m.unidadesPorCaja : null);
+        salida.cajasPorBulto = cajas || null;
+        salida.unidadesPorBulto = cajas ? cajas * m.unidadesPorCaja : null;
     } else {
         if (cambios.cajasPorBulto) return { error: '"Cajas/bulto" necesita "Und/caja": llena primero cuántas unidades trae la caja' };
         if ('unidadesPorCaja' in cambios) salida.cajasPorBulto = null; // se quitó la caja: el bulto conserva su total de unidades

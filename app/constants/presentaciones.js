@@ -13,7 +13,7 @@ const ORDEN = { BULTO: 3, CAJA: 2, UNIDAD: 1 };
 
 // Tamaños de paquete que existen como presentación (paqx2, paqx4...). Para agregar otro: sumarlo aquí, en `PAQUETES` de
 // inventarioCampos.js y en el tipo enumerado de la base (migración lista6-carga.cjs / presentaciones-nuevas.cjs).
-export const PAQUETES = [2, 4, 5, 6, 7, 10, 12, 14, 15, 20, 24, 50, 52, 72, 80, 85, 100, 200];
+export const PAQUETES = [2, 4, 5, 6, 7, 8, 10, 12, 14, 15, 20, 24, 50, 52, 72, 80, 85, 100, 200];
 
 const BASE = {
     unidad: { etiqueta: 'Unidad', singular: 'unidad', plural: 'unidades', corto: 'und' },

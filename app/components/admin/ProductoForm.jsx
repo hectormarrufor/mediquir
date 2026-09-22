@@ -164,12 +164,12 @@ export default function ProductoForm({ productId = null }) {
                 codigoBarras: String(values.codigoBarras || '').trim() || null,
                 codigoBarrasCaja: String(values.codigoBarrasCaja || '').trim() || null,
                 codigoBarrasBulto: String(values.codigoBarrasBulto || '').trim() || null,
+                // Con cajas: si no se dice cuántas trae el bulto, no viene en bulto (no se inventa un bulto de 1 caja).
+                // Sin cajas: las unidades que trae el bulto directamente, o null si se deja en blanco (no viene en bulto).
                 unidadesPorCaja: Number(values.unidadesPorCaja) > 0 ? Number(values.unidadesPorCaja) : null,
-                cajasPorBulto: Number(values.unidadesPorCaja) > 0 ? (Number(values.cajasPorBulto) || 1) : null,
-                // Con cajas: cajas x unidades por caja. Sin cajas: las unidades que trae el bulto directamente,
-                // o null si se deja en blanco (no viene en bulto, solo en la presentación individual).
+                cajasPorBulto: Number(values.unidadesPorCaja) > 0 ? (Number(values.cajasPorBulto) || null) : null,
                 unidadesPorBulto: Number(values.unidadesPorCaja) > 0
-                    ? (Number(values.cajasPorBulto) || 1) * Number(values.unidadesPorCaja)
+                    ? (Number(values.cajasPorBulto) > 0 ? Number(values.cajasPorBulto) * Number(values.unidadesPorCaja) : null)
                     : (Number(values.unidadesPorBulto) || null),
             };
 
@@ -423,7 +423,7 @@ export default function ProductoForm({ productId = null }) {
                             </Grid.Col>
                             {Number(form.values.unidadesPorCaja) > 0 ? (
                                 <Grid.Col span={{ base: 12, md: 4 }}>
-                                    <NumberInput label={form.values.presentacion === 'metro' ? 'Rollos por bulto' : 'Cajas por bulto'} description={form.values.presentacion === 'metro' ? 'Rollos que trae el bulto con el que compras' : 'Cajas que trae el bulto con el que compras'} placeholder="Ej. 10" min={1} {...form.getInputProps('cajasPorBulto')} />
+                                    <NumberInput label={form.values.presentacion === 'metro' ? 'Rollos por bulto (opcional)' : 'Cajas por bulto (opcional)'} description={(form.values.presentacion === 'metro' ? 'Rollos que trae el bulto con el que compras' : 'Cajas que trae el bulto con el que compras') + '; vacío si no se vende en bultos'} placeholder="Ej. 10" min={1} {...form.getInputProps('cajasPorBulto')} />
                                 </Grid.Col>
                             ) : (
                                 <Grid.Col span={{ base: 12, md: 4 }}>

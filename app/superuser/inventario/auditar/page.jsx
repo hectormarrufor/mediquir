@@ -128,7 +128,8 @@ export default function AuditarPage() {
         ['costoUsd', 'precio6', 'precio7', 'porcentajeIva'].forEach((k) => { const n = aNum(form[k]); if ((n ?? 0) !== (d[k] ?? 0)) c[k] = n ?? 0; });
         if (form.presentacion !== d.presentacion) c.presentacion = form.presentacion;
         const upc = aNum(form.unidadesPorCaja);
-        if ((upc ?? null) !== (d.unidadesPorCaja ?? null) || (upc > 1 && (aNum(form.cajasPorBulto) ?? 1) !== (d.cajasPorBulto ?? 1))) { c.unidadesPorCaja = upc || null; c.cajasPorBulto = upc > 1 ? (aNum(form.cajasPorBulto) || 1) : null; }
+        // Con caja, si no se dice cuántas trae el bulto, no viene en bulto (no se le inventa un bulto de 1 caja)
+        if ((upc ?? null) !== (d.unidadesPorCaja ?? null) || (upc > 1 && (aNum(form.cajasPorBulto) ?? null) !== (d.cajasPorBulto ?? null))) { c.unidadesPorCaja = upc || null; c.cajasPorBulto = upc > 1 ? aNum(form.cajasPorBulto) : null; }
         // Sin caja: dejar en blanco "unidades por bulto" ya no significa "bulto de 1", significa que el producto no viene en bulto
         if (!(upc > 1)) { const nb = aNum(form.unidadesPorBulto); if (nb !== (d.unidadesPorBulto ?? null)) c.unidadesPorBulto = nb; }
         return c;
@@ -177,7 +178,8 @@ export default function AuditarPage() {
     const costo = aNum(form?.costoUsd), p6 = aNum(form?.precio6), p7 = aNum(form?.precio7);
     const margen6 = costo > 0 && p6 > 0 ? ((p6 - costo) / costo) * 100 : null;
     const margen7 = p6 > 0 && p7 > 0 ? ((p7 - p6) / p6) * 100 : null;
-    const bulto = upcN > 1 ? upcN * (aNum(form?.cajasPorBulto) || 1) : aNum(form?.unidadesPorBulto) || null;
+    const cajasPorBultoN = aNum(form?.cajasPorBulto);
+    const bulto = upcN > 1 ? (cajasPorBultoN ? upcN * cajasPorBultoN : null) : aNum(form?.unidadesPorBulto) || null;
     const ref = actual?.referencia;
     // El % de aumento sale del reporte de ESTE producto (su propio precio 6 y 7 del reporte), no de un promedio general:
     // se le aplica al precio 6 que ya está guardado para sugerir un precio 7, solo como sugerencia (no se escribe solo).
@@ -324,7 +326,7 @@ export default function AuditarPage() {
                                     <Select label="Presentación (una unidad es…)" data={PRESENTACIONES} value={form.presentacion} onChange={(v) => v && setForm((f) => ({ ...f, presentacion: v }))} allowDeselect={false} />
                                     <TextInput label="Unidades por caja" placeholder="sin caja" inputMode="numeric" value={form.unidadesPorCaja} onChange={set('unidadesPorCaja')} />
                                     {upcN > 1
-                                        ? <TextInput label="Cajas por bulto" inputMode="numeric" value={form.cajasPorBulto} onChange={set('cajasPorBulto')} />
+                                        ? <TextInput label="Cajas por bulto" placeholder="sin bulto" inputMode="numeric" value={form.cajasPorBulto} onChange={set('cajasPorBulto')} />
                                         : <TextInput label="Unidades por bulto" placeholder="sin bulto" inputMode="numeric" value={form.unidadesPorBulto} onChange={set('unidadesPorBulto')} />}
                                     <TextInput label="Total por bulto" value={bulto ? `${bulto.toLocaleString('es-VE')} unid.` : 'Sin bulto'} readOnly variant="filled" />
                                 </SimpleGrid>
