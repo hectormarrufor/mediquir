@@ -95,7 +95,29 @@ export default function AuditarPage() {
         setCola((c) => { const r = c.slice(1); if (!r.length) setTimeout(() => cargar(filtro), 0); return r; });
     }, [cargar, filtro]);
     const saltar = () => { omitidos.current.add(actual.clave); setCola((c) => { const r = c.slice(1); if (!r.length) setTimeout(() => cargar(filtro), 0); return r; }); };
-    const cambiarFoto = (foto) => setCola((c) => [{ ...c[0], foto: { ...c[0].foto, ...foto } }, ...c.slice(1)]);
+
+    // Aplica el cambio (o quite) de la foto de un grupo, marca o producto a TODAS las fichas ya cargadas en la cola, no solo la
+    // actual: así, si cambias el logo de una marca y sigues, el siguiente producto de esa marca ya la muestra actualizada.
+    const aplicarFotoEnCola = (t, nuevaUrl) => setCola((c) => c.map((item) => {
+        if (!item.foto) return item;
+        const entidad = item.foto.entidad;
+        let foto = item.foto;
+        if (entidad && t.tipo === entidad.tipo && t.id === entidad.id) {
+            // Es justo la entidad que edita el botón principal de este producto (su propia foto, o el grupo del que depende)
+            foto = nuevaUrl
+                ? { ...foto, estado: 'OK', tienePropia: true, url: nuevaUrl, origen: t.tipo === 'grupo' ? 'grupo' : 'producto', puntaje: null, fuente: null, pagina: null }
+                : { ...foto, estado: item.marcaImagen ? foto.estado : 'FALTA', tienePropia: false, url: item.marcaImagen || null, origen: item.marcaImagen ? 'marca' : null, puntaje: null, fuente: null, pagina: null };
+        } else if (t.tipo === 'marca' && foto.origen === 'marca' && item.marcasInfo?.length === 1 && item.marcasInfo[0].id === t.id) {
+            // Este producto no tiene foto propia ni de grupo: está mostrando el logo de esta marca como respaldo
+            foto = { ...foto, url: nuevaUrl, origen: nuevaUrl ? 'marca' : null, estado: nuevaUrl ? 'OK' : 'FALTA' };
+        }
+        return {
+            ...item, foto,
+            grupo: item.grupo && t.tipo === 'grupo' && item.grupo.id === t.id ? { ...item.grupo, url: nuevaUrl } : item.grupo,
+            marcasInfo: item.marcasInfo?.map((m) => (t.tipo === 'marca' && m.id === t.id ? { ...m, url: nuevaUrl } : m)),
+            variantes: item.variantes?.map((v) => (t.tipo === 'producto' && v.id === t.id ? { ...v, url: nuevaUrl } : v)),
+        };
+    }));
 
     // Lo que cambió en los datos respecto a lo guardado
     const upcN = form ? aNum(form.unidadesPorCaja) : null;
@@ -137,39 +159,18 @@ export default function AuditarPage() {
     const guardarFoto = async (nombre) => {
         const t = editorTarget;
         await post('/api/inventario/imagenes-auditoria', { tipo: t.tipo, id: t.id, accion: 'CAMBIAR', imagen: nombre });
-        const nuevaUrl = `${BLOB}/${nombre}`;
-        if (t.tipo === foto.entidad.tipo && t.id === foto.entidad.id) {
-            cambiarFoto({ estado: 'OK', tienePropia: true, url: nuevaUrl, origen: t.tipo === 'grupo' ? 'grupo' : t.tipo === 'marca' ? 'marca' : 'producto', puntaje: null, fuente: null, pagina: null });
-        }
-        setCola((c) => [{
-            ...c[0],
-            grupo: c[0].grupo && t.tipo === 'grupo' && c[0].grupo.id === t.id ? { ...c[0].grupo, url: nuevaUrl } : c[0].grupo,
-            marcasInfo: c[0].marcasInfo?.map((m) => (t.tipo === 'marca' && m.id === t.id ? { ...m, url: nuevaUrl } : m)),
-            variantes: c[0].variantes?.map((v) => (t.tipo === 'producto' && v.id === t.id ? { ...v, url: nuevaUrl } : v)),
-        }, ...c.slice(1)]);
+        aplicarFotoEnCola(t, `${BLOB}/${nombre}`);
         setEditorTarget(null);
     };
-    const quitarFoto = async () => {
-        if (!window.confirm('¿Quitar esta foto? Quedará como "falta la foto".')) return;
-        try {
-            await post('/api/inventario/imagenes-auditoria', { tipo: foto.entidad.tipo, id: foto.entidad.id, accion: 'QUITAR' });
-            cambiarFoto({ estado: 'FALTA', tienePropia: false, url: actual.marcaImagen || null, origen: actual.marcaImagen ? 'marca' : null, puntaje: null, fuente: null, pagina: null });
-        } catch (e) { notifications.show({ color: 'red', message: e.message }); }
-    };
-    // Quita la foto propia de un grupo, marca o producto relacionado (no la principal). Vuelve a caer en la de arriba en la cadena (grupo -> marca).
-    const quitarRelacionado = async (t) => {
-        if (!window.confirm('¿Quitar esta foto?')) return;
+    // Quita la foto de un grupo, marca o producto (la principal o una relacionada): cae en la de arriba en la cadena (grupo -> marca).
+    const quitarRelacionado = async (t, mensaje = '¿Quitar esta foto?') => {
+        if (!window.confirm(mensaje)) return;
         try {
             await post('/api/inventario/imagenes-auditoria', { tipo: t.tipo, id: t.id, accion: 'QUITAR' });
-            setCola((c) => [{
-                ...c[0],
-                grupo: c[0].grupo && t.tipo === 'grupo' && c[0].grupo.id === t.id ? { ...c[0].grupo, url: null } : c[0].grupo,
-                marcasInfo: c[0].marcasInfo?.map((m) => (t.tipo === 'marca' && m.id === t.id ? { ...m, url: null } : m)),
-                variantes: c[0].variantes?.map((v) => (t.tipo === 'producto' && v.id === t.id ? { ...v, url: null } : v)),
-            }, ...c.slice(1)]);
-            if (t.tipo === foto.entidad.tipo && t.id === foto.entidad.id) cambiarFoto({ estado: 'FALTA', tienePropia: false, url: actual.marcaImagen || null, origen: actual.marcaImagen ? 'marca' : null, puntaje: null, fuente: null, pagina: null });
+            aplicarFotoEnCola(t, null);
         } catch (e) { notifications.show({ color: 'red', message: e.message }); }
     };
+    const quitarFoto = () => quitarRelacionado(foto.entidad, '¿Quitar esta foto? Quedará como "falta la foto".');
 
     const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.currentTarget ? e.currentTarget.value : e }));
     const costo = aNum(form?.costoUsd), p6 = aNum(form?.precio6), p7 = aNum(form?.precio7);
