@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Anchor, Badge, Box, Button, Card, Checkbox, Group, Image, List, Loader, Paper, Select, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
+import { ActionIcon, Alert, Anchor, Badge, Box, Button, Card, Checkbox, Group, Image, List, Loader, Paper, Select, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
@@ -39,6 +39,22 @@ const copiar = (texto) => {
         () => notifications.show({ color: 'red', message: 'No se pudo copiar' }),
     );
 };
+
+// Miniatura de una foto relacionada (grupo, marca o producto de una variante): se puede ver, cambiar y quitar aparte de la foto principal.
+function FotoMiniatura({ url, nombre, etiqueta, onCambiar, onQuitar }) {
+    return (
+        <Stack gap={4} align="center" w={84}>
+            {url
+                ? <Image src={url} w={72} h={72} fit="contain" radius="sm" bg="white" style={{ border: '1px solid var(--mantine-color-gray-3)' }} />
+                : <Box w={72} h={72} style={{ border: '2px dashed var(--mantine-color-gray-4)', borderRadius: 8, display: 'grid', placeItems: 'center' }}><IconCamera size={20} color="var(--mantine-color-gray-5)" /></Box>}
+            <Text size="xs" ta="center" lineClamp={2}>{nombre}</Text>
+            <Group gap={4} wrap="nowrap">
+                <Button size="compact-xs" variant="light" onClick={onCambiar}>{etiqueta}</Button>
+                {url && <ActionIcon size="sm" color="red" variant="subtle" onClick={onQuitar} title="Quitar esta foto"><IconTrash size={14} /></ActionIcon>}
+            </Group>
+        </Stack>
+    );
+}
 
 // Asistente único: una ficha por producto con su FOTO (producto → grupo → marca) y sus DATOS (costo, precios, presentación, caja, bulto).
 export default function AuditarPage() {
@@ -129,6 +145,7 @@ export default function AuditarPage() {
             ...c[0],
             grupo: c[0].grupo && t.tipo === 'grupo' && c[0].grupo.id === t.id ? { ...c[0].grupo, url: nuevaUrl } : c[0].grupo,
             marcasInfo: c[0].marcasInfo?.map((m) => (t.tipo === 'marca' && m.id === t.id ? { ...m, url: nuevaUrl } : m)),
+            variantes: c[0].variantes?.map((v) => (t.tipo === 'producto' && v.id === t.id ? { ...v, url: nuevaUrl } : v)),
         }, ...c.slice(1)]);
         setEditorTarget(null);
     };
@@ -137,6 +154,20 @@ export default function AuditarPage() {
         try {
             await post('/api/inventario/imagenes-auditoria', { tipo: foto.entidad.tipo, id: foto.entidad.id, accion: 'QUITAR' });
             cambiarFoto({ estado: 'FALTA', tienePropia: false, url: actual.marcaImagen || null, origen: actual.marcaImagen ? 'marca' : null, puntaje: null, fuente: null, pagina: null });
+        } catch (e) { notifications.show({ color: 'red', message: e.message }); }
+    };
+    // Quita la foto propia de un grupo, marca o producto relacionado (no la principal). Vuelve a caer en la de arriba en la cadena (grupo -> marca).
+    const quitarRelacionado = async (t) => {
+        if (!window.confirm('¿Quitar esta foto?')) return;
+        try {
+            await post('/api/inventario/imagenes-auditoria', { tipo: t.tipo, id: t.id, accion: 'QUITAR' });
+            setCola((c) => [{
+                ...c[0],
+                grupo: c[0].grupo && t.tipo === 'grupo' && c[0].grupo.id === t.id ? { ...c[0].grupo, url: null } : c[0].grupo,
+                marcasInfo: c[0].marcasInfo?.map((m) => (t.tipo === 'marca' && m.id === t.id ? { ...m, url: null } : m)),
+                variantes: c[0].variantes?.map((v) => (t.tipo === 'producto' && v.id === t.id ? { ...v, url: null } : v)),
+            }, ...c.slice(1)]);
+            if (t.tipo === foto.entidad.tipo && t.id === foto.entidad.id) cambiarFoto({ estado: 'FALTA', tienePropia: false, url: actual.marcaImagen || null, origen: actual.marcaImagen ? 'marca' : null, puntaje: null, fuente: null, pagina: null });
         } catch (e) { notifications.show({ color: 'red', message: e.message }); }
     };
 
@@ -225,28 +256,34 @@ export default function AuditarPage() {
                             </Group>
                         </Paper>
 
-                        {/* ---- FOTOS RELACIONADAS (marca de cada variante y grupo de equivalencia): también se pueden cambiar, aparte de la del producto ---- */}
+                        {/* ---- FOTOS RELACIONADAS (grupo y logo de cada marca): también se pueden cambiar, aparte de la del producto ---- */}
                         {actual.tipo === 'producto' && (actual.grupo || actual.marcasInfo?.length > 0) && (
                             <Paper withBorder radius="md" p="xs" bg="gray.0">
                                 <Text size="xs" fw={700} c="dimmed" mb={6}>Otras fotos relacionadas (se comparten con más productos)</Text>
                                 <Group gap="sm" align="flex-start">
                                     {actual.grupo && (
-                                        <Stack gap={4} align="center" w={84}>
-                                            {actual.grupo.url
-                                                ? <Image src={actual.grupo.url} w={72} h={72} fit="contain" radius="sm" bg="white" style={{ border: '1px solid var(--mantine-color-gray-3)' }} />
-                                                : <Box w={72} h={72} style={{ border: '2px dashed var(--mantine-color-gray-4)', borderRadius: 8, display: 'grid', placeItems: 'center' }}><IconCamera size={20} color="var(--mantine-color-gray-5)" /></Box>}
-                                            <Text size="xs" ta="center" lineClamp={2}>{actual.grupo.nombre}</Text>
-                                            <Button size="compact-xs" variant="light" fullWidth onClick={() => setEditorTarget({ tipo: 'grupo', id: actual.grupo.id, nombre: actual.grupo.nombre })}>Grupo</Button>
-                                        </Stack>
+                                        <FotoMiniatura url={actual.grupo.url} nombre={actual.grupo.nombre} etiqueta="Grupo"
+                                            onCambiar={() => setEditorTarget({ tipo: 'grupo', id: actual.grupo.id, nombre: actual.grupo.nombre })}
+                                            onQuitar={() => quitarRelacionado({ tipo: 'grupo', id: actual.grupo.id })} />
                                     )}
                                     {actual.marcasInfo?.map((m) => (
-                                        <Stack key={m.id} gap={4} align="center" w={84}>
-                                            {m.url
-                                                ? <Image src={m.url} w={72} h={72} fit="contain" radius="sm" bg="white" style={{ border: '1px solid var(--mantine-color-gray-3)' }} />
-                                                : <Box w={72} h={72} style={{ border: '2px dashed var(--mantine-color-gray-4)', borderRadius: 8, display: 'grid', placeItems: 'center' }}><IconCamera size={20} color="var(--mantine-color-gray-5)" /></Box>}
-                                            <Text size="xs" ta="center" lineClamp={2}>{m.nombre}</Text>
-                                            <Button size="compact-xs" variant="light" fullWidth onClick={() => setEditorTarget({ tipo: 'marca', id: m.id, nombre: m.nombre })}>Marca</Button>
-                                        </Stack>
+                                        <FotoMiniatura key={m.id} url={m.url} nombre={m.nombre} etiqueta="Marca"
+                                            onCambiar={() => setEditorTarget({ tipo: 'marca', id: m.id, nombre: m.nombre })}
+                                            onQuitar={() => quitarRelacionado({ tipo: 'marca', id: m.id })} />
+                                    ))}
+                                </Group>
+                            </Paper>
+                        )}
+
+                        {/* ---- FOTO DE CADA PRODUCTO (una por marca): aunque el grupo tenga foto, cada marca puede lucir distinto ---- */}
+                        {actual.tipo === 'producto' && actual.variantes.length > 1 && (
+                            <Paper withBorder radius="md" p="xs" bg="gray.0">
+                                <Text size="xs" fw={700} c="dimmed" mb={6}>Foto de cada producto (puede variar según la marca)</Text>
+                                <Group gap="sm" align="flex-start">
+                                    {actual.variantes.map((v) => (
+                                        <FotoMiniatura key={v.id} url={v.url} nombre={`${v.codigo}${v.marca ? ` · ${v.marca}` : ''}`} etiqueta="Producto"
+                                            onCambiar={() => setEditorTarget({ tipo: 'producto', id: v.id, nombre: `${actual.nombre}${v.marca ? ` (${v.marca})` : ''}`, marca: v.marca })}
+                                            onQuitar={() => quitarRelacionado({ tipo: 'producto', id: v.id })} />
                                     ))}
                                 </Group>
                             </Paper>

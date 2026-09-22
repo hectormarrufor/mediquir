@@ -81,7 +81,9 @@ export async function GET(request) {
             const b = baseDe(f.codigo);
             if (!porBase.has(b)) porBase.set(b, { base: b, rep: f, foto, variantes: [], idsDatos: [], marcas: new Map() });
             const x = porBase.get(b);
-            x.variantes.push({ id: f.id, codigo: f.codigo, marca: f.marca });
+            // Aunque son "equivalentes", cada marca puede lucir distinto (una férula cambia según el fabricante):
+            // se guarda la foto PROPIA de cada variante para poder verla y cambiarla aparte de la del grupo.
+            x.variantes.push({ id: f.id, codigo: f.codigo, marca: f.marca, url: url(f.imagen) });
             if (f.marcaid) x.marcas.set(f.marcaid, { id: f.marcaid, nombre: f.marca, imagen: f.mimagen });
             if (datoPend) x.idsDatos.push(f.id);
         }
