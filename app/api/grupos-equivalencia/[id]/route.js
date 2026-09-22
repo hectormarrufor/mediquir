@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
+import { del } from '@vercel/blob';
 import { GrupoEquivalencia } from '@/models';
 import { requerirStaff } from '@/app/api/inventario/_lib';
+
+const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
 
 export async function PUT(req, { params }) {
     // Antes esta ruta no validaba sesión: cualquiera podía modificar datos.
@@ -13,6 +16,7 @@ export async function PUT(req, { params }) {
 
         const grupo = await GrupoEquivalencia.findByPk(id);
         if (!grupo) throw new Error('Grupo no encontrado');
+        const imagenAnterior = grupo.imagen;
 
         await grupo.update({
             nombre: nombre.trim(),
@@ -20,6 +24,11 @@ export async function PUT(req, { params }) {
             categoriaId: parseInt(categoriaId),
             imagen: imagen || grupo.imagen
         });
+
+        // El nombre del archivo es único: si se reemplazó, la foto anterior queda huérfana en el Blob si no se borra.
+        if (imagen && imagenAnterior && imagenAnterior !== imagen) {
+            try { await del(`${BLOB}/${imagenAnterior}`); } catch { /* ya no estaba */ }
+        }
 
         return NextResponse.json({ message: 'Grupo actualizado', grupo }, { status: 200 });
     } catch (error) {

@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
+import { del } from '@vercel/blob';
 import { Producto, Categoria, Marca, GrupoEquivalencia, Tag } from '@/models';
 import sequelize from '@/sequelize';
 import { requerirStaff } from '@/app/api/inventario/_lib';
 import { resolverEmpaque } from '@/app/constants/inventarioCampos';
+
+const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
 
 // =======================================================================
 // GET: Obtener un producto específico con todas sus relaciones
@@ -45,6 +48,7 @@ export async function PUT(req, { params }) {
 
         const producto = await Producto.findByPk(id, { transaction: t });
         if (!producto) throw new Error('Producto no encontrado');
+        const imagenAnterior = producto.imagen;
 
         // 🔥 1. ACTUALIZACIÓN DINÁMICA (Tu idea brillante) 🔥
         // Sequelize es inteligente: si productData solo trae { stockAlmacen: 50 }, 
@@ -83,6 +87,13 @@ export async function PUT(req, { params }) {
         }
 
         await t.commit();
+
+        // El nombre del archivo es único (lleva el timestamp): si se reemplazó, la foto anterior queda huérfana en el
+        // Blob si no se borra. Se hace fuera de la transacción para no retener la conexión durante el I/O de red.
+        if ('imagen' in productData && imagenAnterior && imagenAnterior !== productData.imagen) {
+            try { await del(`${BLOB}/${imagenAnterior}`); } catch { /* ya no estaba */ }
+        }
+
         return NextResponse.json({ message: 'Producto actualizado exitosamente', producto }, { status: 200 });
 
     } catch (error) {

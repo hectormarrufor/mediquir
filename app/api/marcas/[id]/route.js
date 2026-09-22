@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
+import { del } from '@vercel/blob';
 import { Marca } from '@/models';
 import { requerirStaff } from '@/app/api/inventario/_lib';
+
+const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
 
 export async function PUT(req, { params }) {
     // Antes esta ruta no validaba sesión: cualquiera podía modificar datos.
@@ -13,12 +16,18 @@ export async function PUT(req, { params }) {
 
         const marca = await Marca.findByPk(id);
         if (!marca) throw new Error('Marca no encontrada');
+        const imagenAnterior = marca.imagen;
 
         // Actualizamos. Si no envían imagen nueva, mantenemos la que ya tenía.
         await marca.update({
             nombre: nombre.trim().toUpperCase(),
-            imagen: imagen || marca.imagen 
+            imagen: imagen || marca.imagen
         });
+
+        // El nombre del archivo es único: si se reemplazó, la foto anterior queda huérfana en el Blob si no se borra.
+        if (imagen && imagenAnterior && imagenAnterior !== imagen) {
+            try { await del(`${BLOB}/${imagenAnterior}`); } catch { /* ya no estaba */ }
+        }
 
         return NextResponse.json({ message: 'Marca actualizada', marca }, { status: 200 });
     } catch (error) {

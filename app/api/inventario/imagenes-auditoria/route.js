@@ -91,11 +91,11 @@ export async function POST(request) {
         const uid = Number(acceso.sesion.id) || null;
         const marcar = (estado) => consulta(`INSERT INTO "ImagenAuditoria" (tipo, "refId", estado, "revisadoPor", "revisadoEn") VALUES (:tipo, :id, :estado, :uid, NOW())
             ON CONFLICT (tipo, "refId") DO UPDATE SET estado = :estado, "revisadoPor" = :uid, "revisadoEn" = NOW()`, { tipo, id: refId, estado, uid });
-        // Solo se borran del Blob las imágenes que cargó el proceso automático (tienen fila de auditoría); las manuales no se tocan
+        // El nombre del archivo siempre es único (lleva el timestamp de cuando se subió), así que al reemplazarla o
+        // quitarla la foto anterior queda huérfana si no se borra: se borra siempre, sea automática o puesta a mano.
         const borrarAnterior = async () => {
             if (!fila.imagen) return;
-            const [[a]] = await consulta(`SELECT 1 ok FROM "ImagenAuditoria" WHERE tipo = :tipo AND "refId" = :id AND fuente IS NOT NULL`, { tipo, id: refId });
-            if (a) { try { await del(`${BLOB}/${fila.imagen}`); } catch { /* ya no estaba */ } }
+            try { await del(`${BLOB}/${fila.imagen}`); } catch { /* ya no estaba */ }
         };
 
         if (accion === 'APROBAR') {
