@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 // Auditoría unificada: por cada producto base, su FOTO y sus DATOS (costo, precios, empaque) en una sola ficha.
 // La foto de un producto es (en este orden): la suya, la de su grupo de equivalencia o el logo de su marca.
-const CAMPOS_EDITABLES = ['costoUsd', 'precio6', 'precio7', 'porcentajeIva', 'presentacion', 'unidadesPorCaja', 'cajasPorBulto', 'unidadesPorBulto'];
+const CAMPOS_EDITABLES = ['nombre', 'costoUsd', 'precio6', 'precio7', 'porcentajeIva', 'presentacion', 'unidadesPorCaja', 'cajasPorBulto', 'unidadesPorBulto'];
 const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
 const consulta = (sql, replacements) => sequelize.query(sql, { replacements });
 const num = (v) => (v === null || v === undefined ? 0 : Number(v));
@@ -132,7 +132,7 @@ export async function GET(request) {
                 // Foto del grupo de equivalencia y de cada marca de las variantes: se pueden ver y cambiar aparte de la foto "efectiva" de arriba
                 grupo: x.rep.gid ? { id: x.rep.gid, nombre: x.rep.gnombre, url: url(x.rep.gimagen) } : null,
                 marcasInfo: [...x.marcas.values()].map((mm) => ({ id: mm.id, nombre: mm.nombre, url: url(mm.imagen) })),
-                datos: x.idsDatos.length ? { costoUsd: num(x.rep.costoUsd), precio6: num(x.rep.precio6), precio7: num(x.rep.precio7), porcentajeIva: num(x.rep.iva), presentacion: x.rep.presentacion, unidadesPorCaja: x.rep.upc, cajasPorBulto: x.rep.cpb, unidadesPorBulto: x.rep.upb } : null,
+                datos: x.idsDatos.length ? { nombre: x.rep.nombre, costoUsd: num(x.rep.costoUsd), precio6: num(x.rep.precio6), precio7: num(x.rep.precio7), porcentajeIva: num(x.rep.iva), presentacion: x.rep.presentacion, unidadesPorCaja: x.rep.upc, cajasPorBulto: x.rep.cpb, unidadesPorBulto: x.rep.upb } : null,
                 referencia: x.rep.referencia, notas: x.rep.notas || [], alertas: x.alertas,
             })),
         });

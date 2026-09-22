@@ -85,7 +85,7 @@ export default function AuditarPage() {
     useEffect(() => {
         const d = actual?.datos;
         if (!d) { setForm(null); return; }
-        setForm({ costoUsd: txt(d.costoUsd || ''), precio6: txt(d.precio6 || ''), precio7: txt(d.precio7 || ''), porcentajeIva: txt(d.porcentajeIva), presentacion: d.presentacion,
+        setForm({ nombre: d.nombre || '', costoUsd: txt(d.costoUsd || ''), precio6: txt(d.precio6 || ''), precio7: txt(d.precio7 || ''), porcentajeIva: txt(d.porcentajeIva), presentacion: d.presentacion,
             unidadesPorCaja: txt(d.unidadesPorCaja ?? ''), cajasPorBulto: txt(d.cajasPorBulto ?? ''), unidadesPorBulto: txt(d.unidadesPorBulto ?? '') });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [claveActual]);
@@ -124,6 +124,7 @@ export default function AuditarPage() {
     const cambios = useMemo(() => {
         if (!actual?.datos || !form) return {};
         const d = actual.datos, c = {};
+        if (form.nombre.trim() && form.nombre.trim() !== (d.nombre || '')) c.nombre = form.nombre.trim();
         ['costoUsd', 'precio6', 'precio7', 'porcentajeIva'].forEach((k) => { const n = aNum(form[k]); if ((n ?? 0) !== (d[k] ?? 0)) c[k] = n ?? 0; });
         if (form.presentacion !== d.presentacion) c.presentacion = form.presentacion;
         const upc = aNum(form.unidadesPorCaja);
@@ -182,7 +183,8 @@ export default function AuditarPage() {
     // se le aplica al precio 6 que ya está guardado para sugerir un precio 7, solo como sugerencia (no se escribe solo).
     const pctReporte = ref && Number(ref.p6) > 0 && Number(ref.p7) > 0 ? (Number(ref.p7) - Number(ref.p6)) / Number(ref.p6) : null;
     const sugerenciaP7 = p6 > 0 && !(p7 > 0) && pctReporte !== null ? p6 * (1 + pctReporte) : null;
-    const busqueda = actual ? `https://www.google.com/search?q=${encodeURIComponent(`${actual.nombre} ${actual.marcas?.[0] || ''}`.trim())}&udm=2` : '#';
+    const nombreEditado = form?.nombre?.trim() || actual?.nombre; // si lo estás corrigiendo, se ve el nombre nuevo de una vez
+    const busqueda = actual ? `https://www.google.com/search?q=${encodeURIComponent(`${nombreEditado} ${actual.marcas?.[0] || ''}`.trim())}&udm=2` : '#';
     const etiquetaBoton = actual?.tipo === 'marca' ? (foto.estado === 'OK' ? 'Listo, siguiente' : 'Sin logo por ahora, siguiente')
         : hayCambios ? 'Guardar cambios y siguiente' : foto?.estado === 'FALTA' ? 'Sin foto por ahora, siguiente' : 'Todo bien, siguiente';
 
@@ -216,7 +218,7 @@ export default function AuditarPage() {
                 <Card withBorder radius="md" p={isMobile ? 'sm' : 'md'} bg="white">
                     <Stack gap="sm">
                         <Box>
-                            <Text fw={800} fz={isMobile ? 'lg' : 'xl'} lh={1.2}>{actual.nombre}</Text>
+                            <Text fw={800} fz={isMobile ? 'lg' : 'xl'} lh={1.2}>{nombreEditado}</Text>
                             <Text size="sm" c="dimmed">
                                 {actual.tipo === 'marca' ? 'Marca' : (
                                     <Text span style={{ cursor: 'pointer' }} onClick={() => copiar(actual.base)} title="Clic para copiar el código">
@@ -240,7 +242,7 @@ export default function AuditarPage() {
                         {/* ---- FOTO ---- */}
                         <Paper withBorder radius="md" p="xs" bg="gray.0">
                             {foto.url
-                                ? <Image src={foto.url} alt={actual.nombre} h={isMobile ? 260 : 340} fit="contain" radius="md" bg="white" />
+                                ? <Image src={foto.url} alt={nombreEditado} h={isMobile ? 260 : 340} fit="contain" radius="md" bg="white" />
                                 : <Box h={isMobile ? 180 : 220} style={{ border: '2px dashed var(--mantine-color-gray-4)', borderRadius: 12, display: 'grid', placeItems: 'center' }}>
                                     <Stack align="center" gap={4}><IconCamera size={44} color="var(--mantine-color-gray-5)" /><Text c="dimmed" fw={600}>No tiene foto</Text></Stack>
                                 </Box>}
@@ -253,7 +255,7 @@ export default function AuditarPage() {
                                 {foto.estado === 'PENDIENTE' && foto.fuente && <Text size="xs" c="dimmed">Salió de <Anchor href={foto.pagina || foto.fuente} target="_blank" size="xs">{dominio(foto.pagina || foto.fuente)}</Anchor></Text>}
                             </Group>
                             <Group gap="xs" mt="xs">
-                                <Button size="compact-md" variant="light" color="orange" leftSection={<IconPhotoEdit size={16} />} onClick={() => setEditorTarget({ tipo: foto.entidad.tipo, id: foto.entidad.id, nombre: actual.nombre, marca: actual.marcas?.[0] })}>{foto.tienePropia ? 'Cambiar foto' : 'Agregar foto'}</Button>
+                                <Button size="compact-md" variant="light" color="orange" leftSection={<IconPhotoEdit size={16} />} onClick={() => setEditorTarget({ tipo: foto.entidad.tipo, id: foto.entidad.id, nombre: nombreEditado, marca: actual.marcas?.[0] })}>{foto.tienePropia ? 'Cambiar foto' : 'Agregar foto'}</Button>
                                 <Button size="compact-md" variant="default" component="a" href={busqueda} target="_blank" leftSection={<IconBrandGoogle size={16} />}>Buscar en Google</Button>
                                 {foto.tienePropia && <Button size="compact-md" variant="subtle" color="red" leftSection={<IconTrash size={16} />} onClick={quitarFoto}>Quitar</Button>}
                             </Group>
@@ -285,7 +287,7 @@ export default function AuditarPage() {
                                 <Group gap="sm" align="flex-start">
                                     {actual.variantes.map((v) => (
                                         <FotoMiniatura key={v.id} url={v.url} nombre={`${v.codigo}${v.marca ? ` · ${v.marca}` : ''}`} etiqueta="Producto"
-                                            onCambiar={() => setEditorTarget({ tipo: 'producto', id: v.id, nombre: `${actual.nombre}${v.marca ? ` (${v.marca})` : ''}`, marca: v.marca })}
+                                            onCambiar={() => setEditorTarget({ tipo: 'producto', id: v.id, nombre: `${nombreEditado}${v.marca ? ` (${v.marca})` : ''}`, marca: v.marca })}
                                             onQuitar={() => quitarRelacionado({ tipo: 'producto', id: v.id })} />
                                     ))}
                                 </Group>
@@ -295,6 +297,7 @@ export default function AuditarPage() {
                         {/* ---- DATOS ---- */}
                         {actual.datos && form && (
                             <>
+                                <TextInput label="Nombre del producto (vale para todas sus marcas)" value={form.nombre} onChange={set('nombre')} />
                                 {actual.alertas.filter((a) => TEXTOS[a]).map((a) => <Alert key={a} color={TEXTOS[a][1]} variant="light" p="xs" icon={<IconAlertTriangle size={16} />}>{TEXTOS[a][0]}</Alert>)}
                                 {actual.notas.length > 0 && <Alert color="blue" variant="light" p="xs" title="Notas de la carga"><List size="xs" spacing={2} style={{ overflowWrap: 'anywhere' }}>{actual.notas.map((n, i) => <List.Item key={i}>{n}</List.Item>)}</List></Alert>}
                                 {ref && (
