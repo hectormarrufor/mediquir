@@ -62,7 +62,7 @@ async function buscar(consulta) {
     for (let i = 0; i < 180; i++) { // hasta 30 min esperando una verificación manual
         const info = await navegador.evaluar('location.href + " | " + document.title');
         if (!/\/sorry\/|tr[aá]fico inusual|unusual traffic/i.test(info || '')) break;
-        if (i === 0) { huboCaptcha = true; ritmo = Math.min(ritmo * 1.7, 8); console.log(`… Google pide verificación: resuélvela en la ventana de Chrome (espero hasta 30 min). Ritmo ahora x${ritmo.toFixed(1)}`); }
+        if (i === 0) { huboCaptcha = true; ritmo = Math.min(ritmo * 1.5, 3); console.log(`… Google pide verificación: resuélvela en la ventana de Chrome (espero hasta 30 min). Ritmo ahora x${ritmo.toFixed(1)}`); }
         await espera(10000);
     }
     if (huboCaptcha) await espera(60000); // ya resuelto: descansa 1 min antes de seguir
@@ -247,7 +247,7 @@ async function revertir() {
                 lista.push(...(await objetivos(t)).filter((o) => String(o.id) === id));
             }
         } else {
-            for (const t of (TIPO ? [TIPO] : ['marcas', 'grupos', 'productos'])) lista.push(...(await objetivos(t)).filter((o) => !SECO && log.items[`${o.tipo}:${o.id}`]?.estado === 'ok' ? false : true));
+            for (const t of (TIPO ? [TIPO] : ['marcas', 'grupos', 'productos'])) lista.push(...(await objetivos(t)).filter((o) => { const e = log.items[`${o.tipo}:${o.id}`]?.estado; return SECO || !(e === 'ok' || (e === 'sin-imagen' && !process.argv.includes('--reintentar'))); }));
         }
         lista = lista.slice(0, LIMITE);
         console.log(`A procesar: ${lista.length}${SECO ? ' (modo seco)' : ''}`);

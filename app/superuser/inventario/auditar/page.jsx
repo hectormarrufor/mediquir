@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Anchor, Badge, Box, Button, Card, Group, Image, List, Loader, Paper, Select, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Anchor, Badge, Box, Button, Card, Checkbox, Group, Image, List, Loader, Paper, Select, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
-import { IconAlertTriangle, IconBrandGoogle, IconCamera, IconCheck, IconChevronLeft, IconDeviceFloppy, IconPhotoEdit, IconPlayerSkipForward, IconTrash } from '@tabler/icons-react';
+import { IconAlertTriangle, IconBrandGoogle, IconCamera, IconCheck, IconChevronLeft, IconCopy, IconDeviceFloppy, IconPhotoEdit, IconPlayerSkipForward, IconTrash } from '@tabler/icons-react';
 import { PRESENTACIONES, parseNumero } from '@/app/constants/inventarioCampos';
 import EditorFoto from './_components/EditorFoto';
 
@@ -33,6 +33,12 @@ const txt = (v) => (v === null || v === undefined ? '' : String(v).replace('.', 
 const aNum = (s) => (String(s).trim() === '' ? null : parseNumero(s));
 const usd = (n) => (Number.isFinite(n) ? `$${n.toLocaleString('es-VE', { maximumFractionDigits: 4 })}` : '—');
 const dominio = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+const copiar = (texto) => {
+    navigator.clipboard?.writeText(String(texto)).then(
+        () => notifications.show({ color: 'teal', message: `Código ${texto} copiado`, autoClose: 1000 }),
+        () => notifications.show({ color: 'red', message: 'No se pudo copiar' }),
+    );
+};
 
 // Asistente único: una ficha por producto con su FOTO (producto → grupo → marca) y sus DATOS (costo, precios, presentación, caja, bulto).
 export default function AuditarPage() {
@@ -44,7 +50,7 @@ export default function AuditarPage() {
     const [cargando, setCargando] = useState(true);
     const [error, setError] = useState('');
     const [ocupado, setOcupado] = useState(false);
-    const [editor, setEditor] = useState(false);
+    const [editorTarget, setEditorTarget] = useState(null); // { tipo, id, nombre, marca }: foto que se está cambiando (la del producto o una relacionada)
     const [form, setForm] = useState(null);
     const omitidos = useRef(new Set());
     const hechos = useRef(0);
@@ -84,7 +90,8 @@ export default function AuditarPage() {
         if (form.presentacion !== d.presentacion) c.presentacion = form.presentacion;
         const upc = aNum(form.unidadesPorCaja);
         if ((upc ?? null) !== (d.unidadesPorCaja ?? null) || (upc > 1 && (aNum(form.cajasPorBulto) ?? 1) !== (d.cajasPorBulto ?? 1))) { c.unidadesPorCaja = upc || null; c.cajasPorBulto = upc > 1 ? (aNum(form.cajasPorBulto) || 1) : null; }
-        if (!(upc > 1) && (aNum(form.unidadesPorBulto) ?? 1) !== (d.unidadesPorBulto ?? 1)) c.unidadesPorBulto = aNum(form.unidadesPorBulto) || 1;
+        // Sin caja: dejar en blanco "unidades por bulto" ya no significa "bulto de 1", significa que el producto no viene en bulto
+        if (!(upc > 1)) { const nb = aNum(form.unidadesPorBulto); if (nb !== (d.unidadesPorBulto ?? null)) c.unidadesPorBulto = nb; }
         return c;
     }, [actual, form]);
     const hayCambios = Object.keys(cambios).length > 0;
@@ -95,19 +102,35 @@ export default function AuditarPage() {
         setOcupado(true);
         try {
             const marcaFoto = foto.estado === 'PENDIENTE' ? 'APROBADA' : foto.estado === 'FALTA' ? 'OMITIDA' : null;
-            await post('/api/inventario/auditoria', {
+            const r = await post('/api/inventario/auditoria', {
                 accion: hayCambios ? 'GUARDAR' : 'APROBAR', ids: actual.idsDatos || [], cambios,
                 foto: marcaFoto ? { tipo: foto.entidad.tipo, id: foto.entidad.id, estado: marcaFoto } : null,
             });
-            notifications.show({ color: 'teal', message: hayCambios ? 'Cambios guardados' : 'Revisado', autoClose: 1200 });
+            if (r.pendiente) {
+                // Sigue faltando algo bloqueante (costo, precio 7...): no se cierra del todo, reaparecerá después de las fichas nunca revisadas
+                omitidos.current.add(actual.clave);
+                notifications.show({ color: 'yellow', message: 'Guardado, pero sigue faltando algo: la verás más adelante', autoClose: 1800 });
+            } else {
+                notifications.show({ color: 'teal', message: hayCambios ? 'Cambios guardados' : 'Revisado', autoClose: 1200 });
+            }
             avanzar();
         } catch (e) { notifications.show({ color: 'red', title: 'No se guardó', message: e.message }); } finally { setOcupado(false); }
     };
 
+    // Guarda la foto del target abierto en el editor: la del producto/grupo/marca principal, o una relacionada (marca/grupo aparte)
     const guardarFoto = async (nombre) => {
-        await post('/api/inventario/imagenes-auditoria', { tipo: foto.entidad.tipo, id: foto.entidad.id, accion: 'CAMBIAR', imagen: nombre });
-        cambiarFoto({ estado: 'OK', tienePropia: true, url: `${BLOB}/${nombre}`, origen: foto.entidad.tipo === 'grupo' ? 'grupo' : foto.entidad.tipo === 'marca' ? 'marca' : 'producto', puntaje: null, fuente: null, pagina: null });
-        setEditor(false);
+        const t = editorTarget;
+        await post('/api/inventario/imagenes-auditoria', { tipo: t.tipo, id: t.id, accion: 'CAMBIAR', imagen: nombre });
+        const nuevaUrl = `${BLOB}/${nombre}`;
+        if (t.tipo === foto.entidad.tipo && t.id === foto.entidad.id) {
+            cambiarFoto({ estado: 'OK', tienePropia: true, url: nuevaUrl, origen: t.tipo === 'grupo' ? 'grupo' : t.tipo === 'marca' ? 'marca' : 'producto', puntaje: null, fuente: null, pagina: null });
+        }
+        setCola((c) => [{
+            ...c[0],
+            grupo: c[0].grupo && t.tipo === 'grupo' && c[0].grupo.id === t.id ? { ...c[0].grupo, url: nuevaUrl } : c[0].grupo,
+            marcasInfo: c[0].marcasInfo?.map((m) => (t.tipo === 'marca' && m.id === t.id ? { ...m, url: nuevaUrl } : m)),
+        }, ...c.slice(1)]);
+        setEditorTarget(null);
     };
     const quitarFoto = async () => {
         if (!window.confirm('¿Quitar esta foto? Quedará como "falta la foto".')) return;
@@ -121,7 +144,8 @@ export default function AuditarPage() {
     const costo = aNum(form?.costoUsd), p6 = aNum(form?.precio6), p7 = aNum(form?.precio7);
     const margen6 = costo > 0 && p6 > 0 ? ((p6 - costo) / costo) * 100 : null;
     const margen7 = p6 > 0 && p7 > 0 ? ((p7 - p6) / p6) * 100 : null;
-    const bulto = upcN > 1 ? upcN * (aNum(form?.cajasPorBulto) || 1) : aNum(form?.unidadesPorBulto) || 1;
+    const sugerenciaP7 = p6 > 0 && !(p7 > 0) && conteo?.margenP7 != null ? p6 * (1 + conteo.margenP7) : null;
+    const bulto = upcN > 1 ? upcN * (aNum(form?.cajasPorBulto) || 1) : aNum(form?.unidadesPorBulto) || null;
     const ref = actual?.referencia;
     const busqueda = actual ? `https://www.google.com/search?q=${encodeURIComponent(`${actual.nombre} ${actual.marcas?.[0] || ''}`.trim())}&udm=2` : '#';
     const etiquetaBoton = actual?.tipo === 'marca' ? (foto.estado === 'OK' ? 'Listo, siguiente' : 'Sin logo por ahora, siguiente')
@@ -142,6 +166,7 @@ export default function AuditarPage() {
                     <Badge color="violet" variant="light">Fotos por revisar: {conteo.fotosPorRevisar}</Badge>
                     <Badge color="orange" variant="light">Sin foto: {conteo.fotosFaltan}</Badge>
                     <Badge color="red" variant="outline">Sin precio 7: {conteo.SIN_P7}</Badge>
+                    {conteo.margenP7 != null && <Badge color="grape" variant="light">Precio 7 promedio: +{Math.round(conteo.margenP7 * 100)} % sobre el 6</Badge>}
                 </Group>
             )}
             {error && <Alert color="red" mb="sm">{error}</Alert>}
@@ -158,8 +183,24 @@ export default function AuditarPage() {
                     <Stack gap="sm">
                         <Box>
                             <Text fw={800} fz={isMobile ? 'lg' : 'xl'} lh={1.2}>{actual.nombre}</Text>
-                            <Text size="sm" c="dimmed">{actual.tipo === 'marca' ? 'Marca' : `Código ${actual.base}`}{actual.categoria ? ` · ${actual.categoria}` : ''}</Text>
-                            {actual.tipo === 'producto' && <Group gap={4} mt={4}>{actual.marcas.map((m) => <Badge key={m} size="sm" variant="light" tt="none">{m}</Badge>)}<Text size="xs" c="dimmed">{actual.variantes.length > 1 ? `Se aplica a ${actual.variantes.length} marcas` : 'Una sola marca'} · Quedan {cola.length}+</Text></Group>}
+                            <Text size="sm" c="dimmed">
+                                {actual.tipo === 'marca' ? 'Marca' : (
+                                    <Text span style={{ cursor: 'pointer' }} onClick={() => copiar(actual.base)} title="Clic para copiar el código">
+                                        Código {actual.base} <IconCopy size={12} style={{ verticalAlign: -1 }} />
+                                    </Text>
+                                )}
+                                {actual.categoria ? ` · ${actual.categoria}` : ''}
+                            </Text>
+                            {actual.tipo === 'producto' && (
+                                <Group gap={4} mt={4}>
+                                    {actual.variantes.map((v) => (
+                                        <Badge key={v.id} size="sm" variant="light" tt="none" style={{ cursor: 'pointer' }} onClick={() => copiar(v.codigo)} title="Clic para copiar el código">
+                                            {v.codigo}{v.marca ? ` · ${v.marca}` : ''}
+                                        </Badge>
+                                    ))}
+                                    <Text size="xs" c="dimmed">{actual.variantes.length > 1 ? `Se aplica a ${actual.variantes.length} marcas` : 'Una sola marca'} · Quedan {cola.length}+</Text>
+                                </Group>
+                            )}
                         </Box>
 
                         {/* ---- FOTO ---- */}
@@ -178,11 +219,38 @@ export default function AuditarPage() {
                                 {foto.estado === 'PENDIENTE' && foto.fuente && <Text size="xs" c="dimmed">Salió de <Anchor href={foto.pagina || foto.fuente} target="_blank" size="xs">{dominio(foto.pagina || foto.fuente)}</Anchor></Text>}
                             </Group>
                             <Group gap="xs" mt="xs">
-                                <Button size="compact-md" variant="light" color="orange" leftSection={<IconPhotoEdit size={16} />} onClick={() => setEditor(true)}>{foto.tienePropia ? 'Cambiar foto' : 'Agregar foto'}</Button>
+                                <Button size="compact-md" variant="light" color="orange" leftSection={<IconPhotoEdit size={16} />} onClick={() => setEditorTarget({ tipo: foto.entidad.tipo, id: foto.entidad.id, nombre: actual.nombre, marca: actual.marcas?.[0] })}>{foto.tienePropia ? 'Cambiar foto' : 'Agregar foto'}</Button>
                                 <Button size="compact-md" variant="default" component="a" href={busqueda} target="_blank" leftSection={<IconBrandGoogle size={16} />}>Buscar en Google</Button>
                                 {foto.tienePropia && <Button size="compact-md" variant="subtle" color="red" leftSection={<IconTrash size={16} />} onClick={quitarFoto}>Quitar</Button>}
                             </Group>
                         </Paper>
+
+                        {/* ---- FOTOS RELACIONADAS (marca de cada variante y grupo de equivalencia): también se pueden cambiar, aparte de la del producto ---- */}
+                        {actual.tipo === 'producto' && (actual.grupo || actual.marcasInfo?.length > 0) && (
+                            <Paper withBorder radius="md" p="xs" bg="gray.0">
+                                <Text size="xs" fw={700} c="dimmed" mb={6}>Otras fotos relacionadas (se comparten con más productos)</Text>
+                                <Group gap="sm" align="flex-start">
+                                    {actual.grupo && (
+                                        <Stack gap={4} align="center" w={84}>
+                                            {actual.grupo.url
+                                                ? <Image src={actual.grupo.url} w={72} h={72} fit="contain" radius="sm" bg="white" style={{ border: '1px solid var(--mantine-color-gray-3)' }} />
+                                                : <Box w={72} h={72} style={{ border: '2px dashed var(--mantine-color-gray-4)', borderRadius: 8, display: 'grid', placeItems: 'center' }}><IconCamera size={20} color="var(--mantine-color-gray-5)" /></Box>}
+                                            <Text size="xs" ta="center" lineClamp={2}>{actual.grupo.nombre}</Text>
+                                            <Button size="compact-xs" variant="light" fullWidth onClick={() => setEditorTarget({ tipo: 'grupo', id: actual.grupo.id, nombre: actual.grupo.nombre })}>Grupo</Button>
+                                        </Stack>
+                                    )}
+                                    {actual.marcasInfo?.map((m) => (
+                                        <Stack key={m.id} gap={4} align="center" w={84}>
+                                            {m.url
+                                                ? <Image src={m.url} w={72} h={72} fit="contain" radius="sm" bg="white" style={{ border: '1px solid var(--mantine-color-gray-3)' }} />
+                                                : <Box w={72} h={72} style={{ border: '2px dashed var(--mantine-color-gray-4)', borderRadius: 8, display: 'grid', placeItems: 'center' }}><IconCamera size={20} color="var(--mantine-color-gray-5)" /></Box>}
+                                            <Text size="xs" ta="center" lineClamp={2}>{m.nombre}</Text>
+                                            <Button size="compact-xs" variant="light" fullWidth onClick={() => setEditorTarget({ tipo: 'marca', id: m.id, nombre: m.nombre })}>Marca</Button>
+                                        </Stack>
+                                    ))}
+                                </Group>
+                            </Paper>
+                        )}
 
                         {/* ---- DATOS ---- */}
                         {actual.datos && form && (
@@ -201,16 +269,21 @@ export default function AuditarPage() {
                                 <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs">
                                     <TextInput label="Costo por unidad ($)" inputMode="decimal" value={form.costoUsd} onChange={set('costoUsd')} />
                                     <TextInput label="Precio 6 (mayor)" inputMode="decimal" value={form.precio6} onChange={set('precio6')} description={margen6 !== null ? `Margen sobre costo ${margen6.toFixed(0)} %` : undefined} />
-                                    <TextInput label="Precio 7 (detal)" inputMode="decimal" value={form.precio7} onChange={set('precio7')} description={margen7 !== null ? `${margen7.toFixed(0)} % sobre el 6` : undefined} />
-                                    <TextInput label="IVA %" inputMode="decimal" value={form.porcentajeIva} onChange={set('porcentajeIva')} />
+                                    <TextInput label="Precio 7 (detal)" inputMode="decimal" value={form.precio7} onChange={set('precio7')}
+                                        description={margen7 !== null ? `${margen7.toFixed(0)} % sobre el 6` : sugerenciaP7 !== null ? `Sugerido ~${usd(sugerenciaP7)} (+${Math.round(conteo.margenP7 * 100)} % sobre el 6)` : undefined} />
+                                    <Box>
+                                        <Text size="sm" fw={500} mb={6}>IVA</Text>
+                                        <Checkbox mt={4} label={aNum(form.porcentajeIva) === 16 ? 'Con IVA (16 %)' : 'Sin IVA (0 %)'} checked={aNum(form.porcentajeIva) === 16}
+                                            onChange={(e) => setForm((f) => ({ ...f, porcentajeIva: e.currentTarget.checked ? '16' : '0' }))} />
+                                    </Box>
                                 </SimpleGrid>
                                 <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs">
                                     <Select label="Presentación (una unidad es…)" data={PRESENTACIONES} value={form.presentacion} onChange={(v) => v && setForm((f) => ({ ...f, presentacion: v }))} allowDeselect={false} />
                                     <TextInput label="Unidades por caja" placeholder="sin caja" inputMode="numeric" value={form.unidadesPorCaja} onChange={set('unidadesPorCaja')} />
                                     {upcN > 1
                                         ? <TextInput label="Cajas por bulto" inputMode="numeric" value={form.cajasPorBulto} onChange={set('cajasPorBulto')} />
-                                        : <TextInput label="Unidades por bulto" inputMode="numeric" value={form.unidadesPorBulto} onChange={set('unidadesPorBulto')} />}
-                                    <TextInput label="Total por bulto" value={`${bulto.toLocaleString('es-VE')} unid.`} readOnly variant="filled" />
+                                        : <TextInput label="Unidades por bulto" placeholder="sin bulto" inputMode="numeric" value={form.unidadesPorBulto} onChange={set('unidadesPorBulto')} />}
+                                    <TextInput label="Total por bulto" value={bulto ? `${bulto.toLocaleString('es-VE')} unid.` : 'Sin bulto'} readOnly variant="filled" />
                                 </SimpleGrid>
                             </>
                         )}
@@ -224,7 +297,7 @@ export default function AuditarPage() {
                 </Card>
             )}
 
-            <EditorFoto item={actual ? { tipo: foto.entidad.tipo, id: foto.entidad.id, nombre: actual.nombre, marca: actual.marcas?.[0] } : null} opened={editor} onClose={() => setEditor(false)} onGuardar={guardarFoto} />
+            <EditorFoto item={editorTarget} opened={Boolean(editorTarget)} onClose={() => setEditorTarget(null)} onGuardar={guardarFoto} />
         </Box>
     );
 }

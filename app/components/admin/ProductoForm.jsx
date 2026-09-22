@@ -166,10 +166,11 @@ export default function ProductoForm({ productId = null }) {
                 codigoBarrasBulto: String(values.codigoBarrasBulto || '').trim() || null,
                 unidadesPorCaja: Number(values.unidadesPorCaja) > 0 ? Number(values.unidadesPorCaja) : null,
                 cajasPorBulto: Number(values.unidadesPorCaja) > 0 ? (Number(values.cajasPorBulto) || 1) : null,
-                // Con cajas: cajas x unidades por caja. Sin cajas: las unidades que trae el bulto directamente.
+                // Con cajas: cajas x unidades por caja. Sin cajas: las unidades que trae el bulto directamente,
+                // o null si se deja en blanco (no viene en bulto, solo en la presentación individual).
                 unidadesPorBulto: Number(values.unidadesPorCaja) > 0
                     ? (Number(values.cajasPorBulto) || 1) * Number(values.unidadesPorCaja)
-                    : (Number(values.unidadesPorBulto) || 1),
+                    : (Number(values.unidadesPorBulto) || null),
             };
 
             delete payload.conIva;
@@ -426,7 +427,7 @@ export default function ProductoForm({ productId = null }) {
                                 </Grid.Col>
                             ) : (
                                 <Grid.Col span={{ base: 12, md: 4 }}>
-                                    <NumberInput label="Unidades por bulto" description="Sin cajas: el bulto trae las unidades directamente (p. ej. 10 paquetes x100 por bulto = 10)" placeholder="Ej. 3000" min={1} {...form.getInputProps('unidadesPorBulto')} />
+                                    <NumberInput label="Unidades por bulto (opcional)" description="Sin cajas: el bulto trae las unidades directamente (p. ej. 10 paquetes x100 por bulto = 10); vacío si no se vende en bultos" placeholder="Ej. 3000" min={1} {...form.getInputProps('unidadesPorBulto')} />
                                 </Grid.Col>
                             )}
 

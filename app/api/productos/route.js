@@ -91,12 +91,12 @@ export async function POST(req) {
             throw new Error('Faltan datos obligatorios (Nombre, Código, Categoría o Marca)');
         }
 
-        // Empaque: bulto -> (cajas) -> unidades. unidadesPorBulto es SIEMPRE el total de unidades del bulto.
+        // Empaque: bulto -> (cajas) -> unidades. unidadesPorBulto es el total de unidades del bulto, o null si no viene en bulto.
         const resuelto = resolverEmpaque({}, {
             presentacion: productData.presentacion || 'unidad',
             unidadesPorCaja: parseInt(productData.unidadesPorCaja) || null,
             cajasPorBulto: parseInt(productData.cajasPorBulto) || null,
-            unidadesPorBulto: parseInt(productData.unidadesPorBulto) || 1,
+            unidadesPorBulto: parseInt(productData.unidadesPorBulto) || null,
         });
         if (resuelto.error) throw new Error(resuelto.error);
         const empaque = { presentacion: resuelto.cambios.presentacion, unidadesPorCaja: resuelto.cambios.unidadesPorCaja ?? null, cajasPorBulto: resuelto.cambios.cajasPorBulto ?? null, unidadesPorBulto: resuelto.cambios.unidadesPorBulto };

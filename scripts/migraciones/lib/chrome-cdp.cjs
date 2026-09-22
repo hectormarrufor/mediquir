@@ -18,7 +18,8 @@ async function lanzar(puerto = 9333, visible = false) {
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
   let id = 0; const pend = new Map();
   ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); } };
-  const send = (method, params = {}) => new Promise((res) => { const i = ++id; pend.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
+  // Si Chrome no responde en 30 s se devuelve vacío en vez de quedarse colgado para siempre.
+  const send = (method, params = {}) => new Promise((res) => { const i = ++id; const t = setTimeout(() => { pend.delete(i); res({}); }, 30000); pend.set(i, (d) => { clearTimeout(t); res(d); }); try { ws.send(JSON.stringify({ id: i, method, params })); } catch { clearTimeout(t); pend.delete(i); res({}); } });
   await send('Page.enable'); await send('Runtime.enable');
   return {
     proc, perfil, send,

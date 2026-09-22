@@ -50,7 +50,7 @@ export const COLUMNAS = [
     { key: 'presentacion', label: 'Presentación', ancho: 100, tipo: 'select', campo: 'presentacion', fuente: 'presentaciones', ver: (r) => PRESENTACIONES.find((p) => p.value === r.presentacion)?.label },
     { key: 'unidadesPorCaja', label: 'Und/caja · m/rollo', ancho: 110, tipo: 'numero', campo: 'unidadesPorCaja', decimales: [0, 0], derecha: true, ayuda: 'Unidades que trae cada caja. En productos con presentación Metro: los metros que trae cada ROLLO' },
     { key: 'cajasPorBulto', label: 'Cajas/bulto · rollos', ancho: 118, tipo: 'numero', campo: 'cajasPorBulto', decimales: [0, 0], derecha: true, ayuda: 'Cajas que trae el bulto. En productos con presentación Metro: los rollos que trae el bulto' },
-    { key: 'unidadesPorBulto', label: 'Und/bulto', ancho: 76, tipo: 'numero', campo: 'unidadesPorBulto', decimales: [0, 0], derecha: true, ayuda: 'Total de unidades del bulto (con cajas: cajas × und/caja)' },
+    { key: 'unidadesPorBulto', label: 'Und/bulto', ancho: 76, tipo: 'numero', campo: 'unidadesPorBulto', decimales: [0, 0], derecha: true, ayuda: 'Total de unidades del bulto (con cajas: cajas × und/caja). Vacío = no viene en bulto' },
     { key: 'tags', label: 'Etiquetas', ancho: 160, tipo: 'tags', campo: 'tags' },
     { key: 'updatedAt', label: 'Modificado', ancho: 104, tipo: 'derivada', orden: 'updatedAt' },
     { key: 'acciones', label: '', ancho: 40, tipo: 'acciones', fija: true },

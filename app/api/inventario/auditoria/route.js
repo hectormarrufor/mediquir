@@ -60,7 +60,7 @@ export async function GET(request) {
         const limite = Math.min(Number(searchParams.get('limite')) || 20, 50);
 
         const [filas] = await consulta(`
-            SELECT p.id, p.codigo, p.nombre, p.imagen, p."grupoEquivalenciaId" gid, g.nombre gnombre, g.imagen gimagen, m.nombre marca, m.imagen mimagen, c.nombre categoria,
+            SELECT p.id, p.codigo, p.nombre, p.imagen, p."grupoEquivalenciaId" gid, g.nombre gnombre, g.imagen gimagen, m.id marcaid, m.nombre marca, m.imagen mimagen, c.nombre categoria,
                    p."costoUsd", p.precio6, p.precio7, p."porcentajeIva" iva, p.presentacion, p."unidadesPorCaja" upc, p."cajasPorBulto" cpb, p."unidadesPorBulto" upb,
                    d.estado dato, d.referencia, d.notas,
                    ap.estado ap_estado, ap.puntaje ap_puntaje, ap.fuente ap_fuente, ap.pagina ap_pagina, ag.estado ag_estado, ag.puntaje ag_puntaje, ag.fuente ag_fuente, ag.pagina ag_pagina
@@ -71,7 +71,7 @@ export async function GET(request) {
               LEFT JOIN "ImagenAuditoria" ag ON ag.tipo = 'grupo' AND ag."refId" = p."grupoEquivalenciaId"
              ORDER BY p.codigo`);
 
-        // Una ficha por producto base; las marcas -01, -02... comparten ficha
+        // Una ficha por producto base; las marcas -01, -02... comparten ficha (y pueden traer marcas distintas)
         const porBase = new Map();
         for (const f of filas) {
             const foto = fotoDe(f);
@@ -79,9 +79,10 @@ export async function GET(request) {
             const fotoPend = foto.estado === 'PENDIENTE' || foto.estado === 'FALTA';
             if (!datoPend && !fotoPend && !(filtro === 'sin-foto' && foto.estado === 'OMITIDA')) continue;
             const b = baseDe(f.codigo);
-            if (!porBase.has(b)) porBase.set(b, { base: b, rep: f, foto, variantes: [], idsDatos: [] });
+            if (!porBase.has(b)) porBase.set(b, { base: b, rep: f, foto, variantes: [], idsDatos: [], marcas: new Map() });
             const x = porBase.get(b);
             x.variantes.push({ id: f.id, codigo: f.codigo, marca: f.marca });
+            if (f.marcaid) x.marcas.set(f.marcaid, { id: f.marcaid, nombre: f.marca, imagen: f.mimagen });
             if (datoPend) x.idsDatos.push(f.id);
         }
         const fichas = [...porBase.values()].map((x) => {
@@ -90,11 +91,14 @@ export async function GET(request) {
         });
 
         const [[m]] = [await consulta(`SELECT (SELECT count(*)::int FROM "DatoAuditoria" WHERE estado = 'APROBADO') aprobados,
-            (SELECT count(*)::int FROM "Marcas" mm WHERE mm.imagen IS NULL AND NOT EXISTS (SELECT 1 FROM "ImagenAuditoria" i WHERE i.tipo = 'marca' AND i."refId" = mm.id AND i.estado = 'OMITIDA')) marcas_sin_logo`)].map((r) => r[0]);
+            (SELECT count(*)::int FROM "Marcas" mm WHERE mm.imagen IS NULL AND NOT EXISTS (SELECT 1 FROM "ImagenAuditoria" i WHERE i.tipo = 'marca' AND i."refId" = mm.id AND i.estado = 'OMITIDA')) marcas_sin_logo,
+            (SELECT avg((precio7 - precio6) / precio6) FROM "Productos" WHERE precio6 > 0 AND precio7 > 0) margen_p7`)].map((r) => r[0]);
         const conteo = {
             fichas: fichas.length, aprobados: m.aprobados, marcasSinLogo: m.marcas_sin_logo,
             dudosos: fichas.filter((x) => x.peso >= 2).length, fotosPorRevisar: fichas.filter((x) => x.foto.estado === 'PENDIENTE').length, fotosFaltan: fichas.filter((x) => x.foto.estado === 'FALTA').length,
             datosPendientes: fichas.filter((x) => x.idsDatos.length).length,
+            // Cuánto más alto suele ponerse el precio 7 (detal) sobre el 6 (mayor): sirve para sugerir un precio 7 donde falta
+            margenP7: m.margen_p7 === null ? null : Number(m.margen_p7),
         };
         Object.keys(PESO).forEach((k) => { conteo[k] = fichas.filter((x) => x.alertas.includes(k)).length; });
 
@@ -126,6 +130,9 @@ export async function GET(request) {
             items: elegidas.map((x) => ({
                 clave: x.base, tipo: 'producto', base: x.base, id: x.rep.id, codigo: x.rep.codigo, nombre: x.rep.nombre, categoria: x.rep.categoria,
                 marcas: x.variantes.map((v) => v.marca).filter(Boolean), variantes: x.variantes, idsDatos: x.idsDatos, foto: x.foto, marcaImagen: url(x.rep.mimagen),
+                // Foto del grupo de equivalencia y de cada marca de las variantes: se pueden ver y cambiar aparte de la foto "efectiva" de arriba
+                grupo: x.rep.gid ? { id: x.rep.gid, nombre: x.rep.gnombre, url: url(x.rep.gimagen) } : null,
+                marcasInfo: [...x.marcas.values()].map((mm) => ({ id: mm.id, nombre: mm.nombre, url: url(mm.imagen) })),
                 datos: x.idsDatos.length ? { costoUsd: num(x.rep.costoUsd), precio6: num(x.rep.precio6), precio7: num(x.rep.precio7), porcentajeIva: num(x.rep.iva), presentacion: x.rep.presentacion, unidadesPorCaja: x.rep.upc, cajasPorBulto: x.rep.cpb, unidadesPorBulto: x.rep.upb } : null,
                 referencia: x.rep.referencia, notas: x.rep.notas || [], alertas: x.alertas,
             })),
@@ -148,6 +155,7 @@ export async function POST(request) {
         if (lista.length > 60) return NextResponse.json({ error: 'Datos no válidos' }, { status: 400 });
         const uid = Number(acceso.sesion.id) || null;
 
+        let pendiente = false;
         if (lista.length) {
             if (accion === 'GUARDAR') {
                 const limpios = Object.fromEntries(Object.entries(cambios || {}).filter(([k]) => CAMPOS_EDITABLES.includes(k)));
@@ -160,7 +168,13 @@ export async function POST(request) {
                 if (r.error) return NextResponse.json({ error: r.error }, { status: r.status || 400 });
                 if (r.errores?.length) return NextResponse.json({ error: r.errores[0].error }, { status: 400 });
             } else if (accion !== 'APROBAR') return NextResponse.json({ error: 'Acción no válida' }, { status: 400 });
-            await consulta(`UPDATE "DatoAuditoria" SET estado = 'APROBADO', "revisadoPor" = :uid, "revisadoEn" = NOW() WHERE "productoId" IN (:ids)`, { ids: lista, uid });
+            // Si aún falta algo bloqueante (costo, precio 7...) no se cierra la ficha: queda PENDIENTE y reaparece
+            // más adelante (después de las que nunca se han revisado), en vez de perderse por "aprobada" a medias.
+            const [[fresca]] = await consulta(`SELECT "costoUsd" costo, precio6, precio7 FROM "Productos" WHERE id = :id`, { id: lista[0] });
+            const costoF = num(fresca?.costo), p6F = num(fresca?.precio6), p7F = num(fresca?.precio7);
+            pendiente = costoF <= 0 || p7F <= 0 || (p7F > 0 && p6F > 0 && p7F < p6F) || (costoF > 0 && p6F > 0 && p6F < costoF);
+            await consulta(`UPDATE "DatoAuditoria" SET estado = :estado, "revisadoPor" = :uid, "revisadoEn" = NOW() WHERE "productoId" IN (:ids)`,
+                { estado: pendiente ? 'PENDIENTE' : 'APROBADO', ids: lista, uid });
         }
 
         if (foto && ['producto', 'grupo', 'marca'].includes(foto.tipo) && ['APROBADA', 'OMITIDA'].includes(foto.estado)) {
@@ -171,7 +185,7 @@ export async function POST(request) {
             await consulta(`INSERT INTO "ImagenAuditoria" (tipo, "refId", estado, "revisadoPor", "revisadoEn") VALUES (:tipo, :id, :estado, :uid, NOW())
                 ON CONFLICT (tipo, "refId") DO UPDATE SET estado = :estado, "revisadoPor" = :uid, "revisadoEn" = NOW()`, { tipo: foto.tipo, id: Number(foto.id), estado: foto.estado, uid });
         }
-        return NextResponse.json({ ok: true });
+        return NextResponse.json({ ok: true, pendiente });
     } catch (error) {
         console.error('Auditoría (acción):', error);
         return NextResponse.json({ error: 'No se pudo guardar' }, { status: 500 });

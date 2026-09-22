@@ -30,7 +30,7 @@ export const CAMPOS = {
     presentacion: { tipo: 'enum', valores: PRESENTACIONES.map((p) => p.value) },
     unidadesPorCaja: { tipo: 'entero', min: 1, max: 100000, nullable: true },
     cajasPorBulto: { tipo: 'entero', min: 1, max: 100000, nullable: true },
-    unidadesPorBulto: { tipo: 'entero', min: 1, max: 10000000 },
+    unidadesPorBulto: { tipo: 'entero', min: 1, max: 10000000, nullable: true }, // vacío = no viene en bulto, solo en la presentación individual (o en caja, si tiene)
     categoriaId: { tipo: 'fk', requerido: true },
     marcaId: { tipo: 'fk', requerido: true },
     grupoEquivalenciaId: { tipo: 'fk', nullable: true },
@@ -119,9 +119,10 @@ export function validarCampo(campo, crudo, specs = CAMPOS) {
 // Cómo se vende el insumo médico:
 //   · Con CAJA:   la caja trae M unidades y el bulto N cajas        -> unidadesPorBulto = N x M
 //   · Sin cajas:  el bulto trae directamente K unidades             -> unidadesPorBulto = K
+//   · Sin bulto:  no hay una presentación de bulto, solo la individual (o la caja, si tiene) -> unidadesPorBulto = NULL
 // `presentacion` es lo que es UNA unidad (unidad, par, paquete x2, paquete x4): en ella se cuenta el stock y están el costo y los precios.
 // La caja es independiente: una jeringa se vende por unidad al detal y a la vez viene en cajas de 100 y bultos de 30 cajas.
-// `unidadesPorBulto` es SIEMPRE el total de unidades del bulto; `cajasPorBulto` solo existe si hay cajas.
+// `unidadesPorBulto` es SIEMPRE el total de unidades del bulto (o NULL si no viene en bulto); `cajasPorBulto` solo existe si hay cajas.
 // ---------------------------------------------------------------------------------------------
 const UNIDADES_FIJAS = { unidad: 1, par: 2, ...Object.fromEntries(PAQUETES.map((n) => [`paqx${n}`, n])), cx100: 100, cx200: 200, metro: 1, rollo: 1 };
 
