@@ -22,6 +22,7 @@ const db = {
     NotaFiscal: require('./facturacion/NotaFiscal'),
     NotaFiscalDetalle: require('./facturacion/NotaFiscalDetalle'),
     Cliente: require('./Cliente'),
+    Presupuesto: require('./Presupuesto'),
     Tag: require('./inventario/Tag'),
     Categoria: require('./inventario/Categoria'),
     MenuPermission: require('./MenuPermission'),

@@ -1,11 +1,14 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { ActionIcon, Alert, Box, Button, Checkbox, Container, Group, NumberInput, Paper, SegmentedControl, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
+import { ActionIcon, Alert, Box, Button, Checkbox, Container, Group, NumberInput, Paper, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
+import { useQuery } from '@tanstack/react-query';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import FacturaFormaLibre from '@/app/superuser/ventas/imprimir/[id]/FacturaFormaLibre';
 import { calcularFactura, REGLAS } from '@/app/constants/facturacion';
 import { fechaCaracas } from '@/app/constants/hora';
+
+const fetchJson = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error('No se pudo cargar'); return r.json(); };
 
 const fmtFecha = (v) => (v ? `${String(v).slice(8, 10)}/${String(v).slice(5, 7)}/${String(v).slice(0, 4)}` : '');
 const renglonNuevo = () => ({ descripcion: '', cantidad: 1, precio: 0, iva: true });
@@ -19,8 +22,16 @@ export default function VistaPreviaNota() {
     const [tipo, setTipo] = useState('DEBITO');
     const [moneda, setMoneda] = useState('BS');
     const [tasa, setTasa] = useState(tasaInicial);
+    const [clienteId, setClienteId] = useState(null);
     const [cliente, setCliente] = useState({ nombre: '', identificacion: '', direccion: '' });
+    const [numeroNota, setNumeroNota] = useState('');
     const [facturaAfectada, setFacturaAfectada] = useState('');
+    const { data: clientes } = useQuery({ queryKey: ['clientes-vista-previa-nota'], queryFn: () => fetchJson('/api/clientes') });
+    const elegirCliente = (id) => {
+        setClienteId(id);
+        const c = clientes?.find((x) => x.id.toString() === id);
+        if (c) setCliente({ nombre: c.nombre || '', identificacion: c.identificacion || '', direccion: c.direccion || '' });
+    };
     const [fechaFactura, setFechaFactura] = useState('');
     const [motivo, setMotivo] = useState('');
     const [renglones, setRenglones] = useState([{ descripcion: 'Nota de débito correspondiente a diferencial cambiario', cantidad: 1, precio: 1000, iva: true }]);
@@ -33,18 +44,18 @@ export default function VistaPreviaNota() {
         try {
             const calc = calcularFactura({ renglones: validos.map((r) => ({ precioUnitario: Number(r.precio), cantidad: Math.floor(Number(r.cantidad)), aplicaIva: r.iva, porcentajeIva: r.iva ? REGLAS.alicuotaGeneral : 0 })) });
             return {
-                numeroDocumento: '—', numeroControl: '', moneda, tasaCambio: Number(tasa) || 1, montoIva: calc.montoIva, totalFinal: calc.totalFinal,
+                numeroDocumento: numeroNota || '—', numeroControl: '', moneda, tasaCambio: Number(tasa) || 1, montoIva: calc.montoIva, totalFinal: calc.totalFinal,
                 condicionPago: 'Contado', fechaVencimiento: null, createdAt: `${fechaCaracas()}T16:00:00Z`, cliente,
                 detalles: validos.map((r, i) => ({ producto: { codigo: '', nombre: String(r.descripcion).slice(0, 200) }, precioUnitario: Number(r.precio), cantidad: Math.floor(Number(r.cantidad)), subtotal: calc.renglones[i].monto, aplicaIva: r.iva })),
             };
         } catch { return null; }
-    }, [renglones, moneda, tasa, cliente]);
+    }, [renglones, moneda, tasa, cliente, numeroNota]);
 
     return (
         <Container size="lg" py="md">
             <Title order={2} c="white" mb="xs">Vista previa de nota de crédito o débito</Title>
             <Alert color="blue" variant="light" mb="md">
-                Esto es solo una vista previa: <b>no se guarda</b>, no usa ningún número de nota ni de control y no afecta los libros. Sirve para revisar cómo quedará la nota antes de emitirla desde la factura.
+                Esto es solo una vista previa: <b>no se guarda</b>, no consume ningún número de nota ni de control y no afecta los libros. El número que escribas abajo es solo para verlo en la hoja; el de verdad se asigna al emitirla desde la factura.
             </Alert>
 
             <Paper withBorder p="md" radius="md" bg="white" mb="md">
@@ -53,10 +64,14 @@ export default function VistaPreviaNota() {
                         <SegmentedControl value={tipo} onChange={setTipo} data={[{ value: 'DEBITO', label: 'Nota de débito' }, { value: 'CREDITO', label: 'Nota de crédito' }]} />
                         <SegmentedControl value={moneda} onChange={setMoneda} data={[{ value: 'BS', label: 'Bolívares' }, { value: 'USD', label: 'Dólares' }]} />
                     </Group>
+                    <Select label="Cliente registrado (opcional: rellena los campos de abajo)" placeholder="Buscar…" searchable clearable
+                        data={clientes?.map((c) => ({ value: c.id.toString(), label: `${c.nombre} (${c.identificacion})` })) || []}
+                        value={clienteId} onChange={elegirCliente} />
                     <SimpleGrid cols={{ base: 1, sm: 3 }}>
                         <TextInput label="Cliente" value={cliente.nombre} onChange={(e) => setCliente({ ...cliente, nombre: e.currentTarget.value })} />
                         <TextInput label="RIF / Cédula" value={cliente.identificacion} onChange={(e) => setCliente({ ...cliente, identificacion: e.currentTarget.value })} />
                         <TextInput label="Domicilio fiscal" value={cliente.direccion} onChange={(e) => setCliente({ ...cliente, direccion: e.currentTarget.value })} />
+                        <TextInput label="N° de esta nota" placeholder="NC-00001 / ND-00001" value={numeroNota} onChange={(e) => setNumeroNota(e.currentTarget.value)} />
                         <TextInput label="Factura que afecta (número)" placeholder="F-00012" value={facturaAfectada} onChange={(e) => setFacturaAfectada(e.currentTarget.value)} />
                         <TextInput label="Fecha de esa factura" type="date" value={fechaFactura} onChange={(e) => setFechaFactura(e.currentTarget.value)} />
                         {moneda === 'USD' && <NumberInput label="Tasa (Bs por dólar)" value={tasa} onChange={setTasa} min={0} decimalScale={2} />}

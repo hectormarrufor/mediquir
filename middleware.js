@@ -39,6 +39,8 @@ const VENDEDOR_API = [
     ['POST', /^\/api\/proveedores$/],
     ['GET', /^\/api\/clientes(\/[^/]+)?$/],
     ['POST', /^\/api\/clientes$/],
+    ['GET', /^\/api\/presupuestos(\/[^/]+)?$/],   // cotizaciones: no son un documento fiscal, cualquier vendedor puede hacerlas
+    ['POST', /^\/api\/presupuestos$/],
     ['GET', /^\/api\/ventas$/],
     ['POST', /^\/api\/ventas$/],
     ['GET', /^\/api\/ventas\/[^/]+$/],
@@ -58,6 +60,7 @@ const VENDEDOR_API = [
 const VENDEDOR_PAGINAS = [
     /^\/superuser$/, /^\/superuser\/ventas(\/.*)?$/, /^\/superuser\/compras$/,
     /^\/superuser\/inventario\/consulta$/, /^\/superuser\/clientes(\/nuevo)?$/, /^\/superuser\/notificaciones$/,
+    /^\/superuser\/presupuestos(\/.*)?$/,
 ];
 
 const json = (mensaje, status) => NextResponse.json({ error: mensaje }, { status });
