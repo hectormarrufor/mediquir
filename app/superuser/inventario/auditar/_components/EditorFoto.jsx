@@ -11,7 +11,8 @@ const kb = (b) => `${Math.round(b.size / 1024)} kB`;
 
 // Pone una foto nueva a un grupo, producto suelto o marca: se toma con la cámara (o se elige un archivo), se mejora en el
 // navegador (sin fondo / ajustada, ~100 kB), se compara con la original y se guarda en Blob.
-export default function EditorFoto({ item, opened, onClose, onGuardar }) {
+// Con `soloProcesar` no sube nada: le entrega el archivo ya mejorado a onGuardar(file) (para un producto que aún no existe).
+export default function EditorFoto({ item, opened, onClose, onGuardar, soloProcesar = false }) {
     const camara = useRef(null);
     const archivo = useRef(null);
     const [fase, setFase] = useState('elegir'); // elegir | procesando | resultado | guardando
@@ -62,8 +63,13 @@ export default function EditorFoto({ item, opened, onClose, onGuardar }) {
         setFase('guardando');
         try {
             const blob = eleccion === 'quitado' ? res.quitado : res.simple;
+            const archivo = new File([blob], 'foto.jpg', { type: 'image/jpeg' });
+            if (soloProcesar) {
+                await onGuardar(archivo);
+                return;
+            }
             const prefijo = item.tipo === 'grupo' ? `grupo_${item.id}` : item.tipo === 'marca' ? `marca_${item.id}` : `producto_${item.id}`;
-            const nombre = await subirImagen(new File([blob], 'foto.jpg', { type: 'image/jpeg' }), prefijo);
+            const nombre = await subirImagen(archivo, prefijo);
             await onGuardar(nombre);
             notifications.show({ color: 'teal', message: 'Foto guardada' });
         } catch (err) {

@@ -12,6 +12,7 @@ import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
 import { IconDeviceFloppy, IconArrowLeft, IconPlus, IconCalculator } from '@tabler/icons-react';
 import ImageDropzone from '@/app/components/ImageDropzone';
+import FotoProducto from '@/app/components/admin/FotoProducto';
 import { capitalizarPalabras } from '@/app/handlers/formatters';
 import { PRESENTACIONES } from '@/app/constants/inventarioCampos';
 
@@ -471,7 +472,7 @@ export default function ProductoForm({ productId = null }) {
                     {/* SECCIÓN 4: FOTO DEL PRODUCTO */}
                     <Paper withBorder shadow="sm" p="xl" radius="md" bg="white">
                         <Title order={4} mb="md" c="gray.7">4. Imagen del Insumo</Title>
-                        <ImageDropzone label="Subir o Fotografiar Producto" form={form} fieldPath="imagen" />
+                        <FotoProducto form={form} nombre={form.values.nombre} marca={marcas?.find((m) => m.id.toString() === form.values.marcaId)?.nombre} />
                     </Paper>
 
                     {/* BOTONES DE ACCIÓN */}
