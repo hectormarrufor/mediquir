@@ -68,6 +68,10 @@ const FacturaCompra = sequelize.define('FacturaCompra', {
     montoExento: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
     alicuotaIva: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 16 },
     tipoTransaccion: { type: DataTypes.STRING(2), allowNull: false, defaultValue: '01' },
+    // Gasto (servicio, flete, alquiler...): documento de compra sin mercancía, no mueve inventario. Entra al libro de compras si es factura.
+    esGasto: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    descripcionGasto: { type: DataTypes.STRING(200), allowNull: true },
+    categoriaGastoId: { type: DataTypes.INTEGER, allowNull: true },
 }, {
     tableName: 'FacturasCompras',
     timestamps: true

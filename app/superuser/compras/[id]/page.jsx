@@ -42,6 +42,7 @@ export default function DetalleCompraPage() {
                     <Button variant="subtle" leftSection={<IconArrowLeft size={16} />} onClick={() => router.push('/superuser/compras')}>Compras</Button>
                     <Title order={2} c="white">{esFactura ? 'Factura' : 'Nota de entrega'} {c.numeroDocumento}</Title>
                     <Badge size="lg" color={esFactura ? 'blue' : 'gray'} variant="light">{esFactura ? 'Factura' : 'Nota de entrega'}</Badge>
+                    {c.esGasto && <Badge size="lg" color="teal" variant="light">Gasto</Badge>}
                 </Group>
                 {ret && <Button color="green" leftSection={<IconReceiptTax size={18} />} onClick={() => router.push(`/superuser/compras/${c.id}/retencion`)}>Comprobante de retención</Button>}
             </Group>
@@ -59,6 +60,13 @@ export default function DetalleCompraPage() {
                     </Paper>
 
                     <Paper withBorder radius="lg" p="md" bg="white">
+                        {c.esGasto ? (
+                            <>
+                                <Title order={5} c="navy.9" mb="xs">Gasto</Title>
+                                <Text fw={700}>{c.descripcionGasto}</Text>
+                                <Text size="xs" c="dimmed">No afecta el inventario.</Text>
+                            </>
+                        ) : <>
                         <Title order={5} c="navy.9" mb="xs">Productos que entraron al inventario</Title>
                         <Table.ScrollContainer minWidth={420}>
                             <Table verticalSpacing="xs" fz="sm">
@@ -74,6 +82,7 @@ export default function DetalleCompraPage() {
                                 </Table.Tbody>
                             </Table>
                         </Table.ScrollContainer>
+                        </>}
                     </Paper>
                 </Grid.Col>
 

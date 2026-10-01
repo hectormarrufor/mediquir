@@ -1,17 +1,20 @@
 'use client';
 
 import React, { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { 
     Box, Title, Paper, Table, Badge, Group, Text, 
     TextInput, Select, ScrollArea, Button, Stack 
 } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
-import { IconSearch, IconReceipt2, IconArrowRight, IconCalendarEvent, IconBuildingStore } from '@tabler/icons-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { IconSearch, IconReceipt2, IconCoins, IconArrowRight, IconCalendarEvent, IconBuildingStore } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import PrecioVisual from '@/app/components/ui/PrecioVisual';
 import dayjs from 'dayjs';
 import NotaCompraModal from './NotaCompraModal';
 import { fechaCaracas } from '@/app/constants/hora';
+
+const CompraModal = dynamic(() => import('@/app/components/admin/CompraModal'), { ssr: false });
 
 export default function ComprasDashboardPage() {
     const router = useRouter();
@@ -21,6 +24,14 @@ export default function ComprasDashboardPage() {
     const [fechaFin, setFechaFin] = useState(getTodayYMD());
     const [search, setSearch] = useState('');
     const [notaDe, setNotaDe] = useState(null); // factura de compra a la que se le registra una nota del proveedor
+    const [gastoAbierto, setGastoAbierto] = useState(false); // registrar un gasto (no afecta el inventario)
+
+    // Tasa BCV vigente: la última del histórico
+    const { data: tasaBcv } = useQuery({
+        queryKey: ['tasa-bcv-compras'],
+        queryFn: async () => { const r = await (await fetch('/api/bcv/obtenerTodos')).json(); return Number(r?.data?.[r.data.length - 1]?.monto) || 0; },
+    });
+    const queryClient = useQueryClient();
 
     const { data: compras, isLoading } = useQuery({
         queryKey: ['historial-compras', fechaInicio, fechaFin],
@@ -53,9 +64,12 @@ export default function ComprasDashboardPage() {
                     <IconReceipt2 size={28} color="#1971C2" />
                     <Title order={2} c="blue.9">Historial de Facturas de Compra</Title>
                 </Group>
-                <Button color="blue" onClick={() => router.push('/superuser')}>
-                    Volver al Dashboard
-                </Button>
+                <Group gap="xs">
+                    <Button color="teal" leftSection={<IconCoins size={18} />} onClick={() => setGastoAbierto(true)} disabled={!tasaBcv}>Registrar gasto</Button>
+                    <Button color="blue" onClick={() => router.push('/superuser')}>
+                        Volver al Dashboard
+                    </Button>
+                </Group>
             </Group>
 
             {/* FILTROS DE FECHA */}
@@ -118,6 +132,8 @@ export default function ComprasDashboardPage() {
                                             <Table.Td fw={700}>
                                                 {compra.tipoDocumento === 'FACTURA' ? 'Factura: ' : 'Nota: '} 
                                                 {compra.numeroDocumento}
+                                                {compra.esGasto && <Badge ml={6} size="xs" color="teal" variant="light">Gasto</Badge>}
+                                                {compra.esGasto && compra.descripcionGasto && <Text size="xs" c="dimmed" fw={400}>{compra.descripcionGasto}</Text>}
                                             </Table.Td>
                                             <Table.Td>
                                                 <Text fw={600} size="sm">{compra.proveedor?.nombre}</Text>
@@ -160,6 +176,7 @@ export default function ComprasDashboardPage() {
                 </ScrollArea>
             </Paper>
 
+            {gastoAbierto && <CompraModal opened={gastoAbierto} iniciarComoGasto onClose={() => { setGastoAbierto(false); queryClient.invalidateQueries({ queryKey: ['historial-compras'] }); }} tasaBcv={tasaBcv || 0} />}
             {notaDe && <NotaCompraModal opened onClose={() => setNotaDe(null)} compra={notaDe} />}
         </Box>
     );

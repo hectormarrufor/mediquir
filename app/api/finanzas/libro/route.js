@@ -137,7 +137,7 @@ async function libroVentas(q) {
         // Notas de crédito y de débito que emitió la empresa a sus clientes
         q(`SELECT n."tipo", n."numeroDocumento" AS numero, n."numeroControl" AS control, n."fecha", n."moneda"::text AS moneda, n."tasaCambio"::float AS tasa,
                 n."totalFinal"::float AS total, n."montoIva"::float AS iva, n."baseImponible"::float AS base, n."alicuotaIva"::float AS alicuota,
-                c."identificacion" AS rif, c."nombre", v."numeroDocumento" AS afectada
+                c."identificacion" AS rif, c."nombre", COALESCE(NULLIF((SELECT string_agg(e->>'numeroDocumento', ', ') FROM jsonb_array_elements(n."facturasAfectadas") e), ''), v."numeroDocumento") AS afectada
            FROM "NotasFiscales" n LEFT JOIN "Clientes" c ON c."id" = n."clienteId" LEFT JOIN "Ventas" v ON v."id" = n."ventaId"
            WHERE n."origen" = 'VENTA' AND n."estado" = 'EMITIDA' AND n."fecha" BETWEEN :desde AND :hasta ORDER BY n."fecha", n."createdAt"`),
     ]);

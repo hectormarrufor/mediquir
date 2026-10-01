@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Checkbox, Group, Loader, Modal, NumberInput, Select, Stack, Switch, Table, Text, TextInput, Textarea } from '@mantine/core';
+import { Alert, Button, Checkbox, Group, Loader, Modal, MultiSelect, NumberInput, Select, Stack, Switch, Table, Text, TextInput, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import { IconAlertTriangle, IconPlus, IconTrash } from '@tabler/icons-react';
@@ -14,6 +14,7 @@ const MOTIVOS = {
 };
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
+const fmtFecha = (v) => (v ? `${String(v).slice(8, 10)}/${String(v).slice(5, 7)}/${String(v).slice(0, 4)}` : '');
 const LIBRE = () => ({ clave: Math.random().toString(36).slice(2), descripcion: '', precioUnitario: '', aplicaIva: true });
 
 async function pedirJson(url, opciones) {
@@ -43,12 +44,13 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
     const [motivo, setMotivo] = useState(MOTIVOS[tipo][0]);
     const [detalle, setDetalle] = useState('');
     const [devuelve, setDevuelve] = useState(false);
+    const [otras, setOtras] = useState([]); // otras facturas del cliente que también afecta la nota de débito
     const [enviando, setEnviando] = useState(false);
     const [error, setError] = useState(null);
 
     useEffect(() => {
         if (!opened) return;
-        setCantidades({}); setLibres(esCredito ? [] : [LIBRE()]); setMotivo(MOTIVOS[tipo][0]); setDetalle(''); setDevuelve(false); setError(null);
+        setCantidades({}); setLibres(esCredito ? [] : [LIBRE()]); setMotivo(MOTIVOS[tipo][0]); setDetalle(''); setDevuelve(false); setOtras([]); setError(null);
     }, [opened, tipo, esCredito]);
 
     const lineas = useMemo(() => {
@@ -75,7 +77,7 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
             const r = await pedirJson(`/api/ventas/${factura.id}/notas`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    tipo, motivo: motivoFinal, devuelveInventario: esCredito && hayDevolucion && devuelve,
+                    tipo, motivo: motivoFinal, devuelveInventario: esCredito && hayDevolucion && devuelve, otrasFacturasIds: esCredito ? [] : otras,
                     renglones: lineas.map((l) => (l.ventaDetalleId ? { ventaDetalleId: l.ventaDetalleId, cantidad: l.cantidad } : { descripcion: l.descripcion, cantidad: 1, precioUnitario: l.precioUnitario, aplicaIva: l.aplicaIva })),
                 }),
             });
@@ -135,6 +137,13 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
                         ))}
                         <Button size="compact-sm" variant="light" leftSection={<IconPlus size={14} />} w="fit-content" onClick={() => setLibres((ls) => [...ls, LIBRE()])}>Agregar concepto</Button>
                     </Stack>
+
+                    {!esCredito && (data?.otrasFacturas?.length > 0) && (
+                        <MultiSelect label="También afecta a otras facturas de este cliente (opcional)" placeholder="Elige las facturas" searchable clearable nothingFoundMessage="Sin resultados"
+                            description="La nota sale con la lista de facturas; la deuda se suma a la factura desde la que la emites."
+                            data={data.otrasFacturas.map((f) => ({ value: f.ventaId, label: `${f.numeroDocumento} · ${fmtFecha(f.fecha)} · ${f.moneda === 'BS' ? 'Bs' : '$'}${nf(f.totalFinal)}` }))}
+                            value={otras} onChange={setOtras} />
+                    )}
 
                     <Group grow align="flex-start">
                         <Select label="Motivo" data={MOTIVOS[tipo]} value={motivo} onChange={(v) => setMotivo(v || MOTIVOS[tipo][0])} allowDeselect={false} />

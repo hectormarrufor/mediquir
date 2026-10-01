@@ -20,7 +20,7 @@ export async function GET(request) {
         if (FECHA.test(p.get('hasta') || '')) { donde.push('n.fecha <= :hasta'); rep.hasta = p.get('hasta'); }
         const q = String(p.get('q') || '').trim().toLowerCase();
         if (q) {
-            donde.push(`(lower(n."numeroDocumento") LIKE :q OR lower(COALESCE(c.nombre, pr.nombre, '')) LIKE :q OR lower(COALESCE(v."numeroDocumento", f."numeroDocumento", '')) LIKE :q)`);
+            donde.push(`(lower(n."numeroDocumento") LIKE :q OR lower(COALESCE(c.nombre, pr.nombre, '')) LIKE :q OR lower(COALESCE(v."numeroDocumento", f."numeroDocumento", '')) LIKE :q OR lower(n."facturasAfectadas"::text) LIKE :q)`);
             rep.q = `%${q}%`;
         }
 
@@ -28,7 +28,7 @@ export async function GET(request) {
             `SELECT n.id, n.tipo, n.origen, n."numeroDocumento", n."numeroControl", n.fecha::text AS fecha, n.estado, n.moneda, n."tasaCambio"::float AS "tasaCambio",
                 n."totalFinal"::float AS total, n."montoIva"::float AS iva, n.motivo, n."ventaId", n."facturaCompraId",
                 n."saldoAFavorUsd"::float AS "saldoAFavorUsd", n."reintegradoUsd"::float AS "reintegradoUsd",
-                COALESCE(c.nombre, pr.nombre) AS contraparte, COALESCE(v."numeroDocumento", f."numeroDocumento") AS "facturaAfectada"
+                COALESCE(c.nombre, pr.nombre) AS contraparte, COALESCE(NULLIF((SELECT string_agg(e->>'numeroDocumento', ', ') FROM jsonb_array_elements(n."facturasAfectadas") e), ''), v."numeroDocumento", f."numeroDocumento") AS "facturaAfectada"
              FROM "NotasFiscales" n
              LEFT JOIN "Clientes" c ON c.id = n."clienteId" LEFT JOIN "Proveedores" pr ON pr.id = n."proveedorId"
              LEFT JOIN "Ventas" v ON v.id = n."ventaId" LEFT JOIN "FacturasCompras" f ON f.id = n."facturaCompraId"

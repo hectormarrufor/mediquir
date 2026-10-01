@@ -86,18 +86,28 @@ export async function POST(request) {
             fechaRecepcion,
             montoExento: montoExentoCliente,
             porcentajeRetencion: porcentajeRetencionCliente,
-            aplicarRetencion
+            aplicarRetencion,
+            esGasto: esGastoCliente,
+            descripcionGasto: descripcionGastoCliente,
+            categoriaGastoId: categoriaGastoCliente
         } = body;
+        const esGasto = esGastoCliente === true;
 
         // Un vendedor registra la compra (stock y costo) pero NO cambia precios de venta
         if (esVend && Array.isArray(detalles)) detalles.forEach((d) => { d.aceptarCambioPrecio = false; });
 
-        if (!detalles || detalles.length === 0) {
+        // Un gasto no lleva productos (no toca el inventario): lleva una descripción, una categoría y el monto
+        const descripcionGasto = String(descripcionGastoCliente || '').trim().slice(0, 200);
+        if (esGasto) {
+            if (descripcionGasto.length < 3) return NextResponse.json({ error: 'Describe en qué fue el gasto' }, { status: 400 });
+            if (!(Number(subtotal) > 0)) return NextResponse.json({ error: 'El gasto necesita un monto mayor a 0' }, { status: 400 });
+        } else if (!detalles || detalles.length === 0) {
             return NextResponse.json({ error: 'La compra no tiene productos' }, { status: 400 });
         }
+        const lineas = esGasto ? [] : detalles;
 
         // No se compra ni se vende a granel: toda cantidad es un entero positivo
-        const cantidadInvalida = detalles.find((item) => !Number.isInteger(Number(item.cantidad)) || Number(item.cantidad) < 1);
+        const cantidadInvalida = lineas.find((item) => !Number.isInteger(Number(item.cantidad)) || Number(item.cantidad) < 1);
         if (cantidadInvalida) {
             return NextResponse.json({ error: 'Las cantidades deben ser números enteros mayores a 0' }, { status: 400 });
         }
@@ -110,8 +120,9 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Tipo de documento inválido: una compra es una factura o una nota de entrega' }, { status: 400 });
         }
         const esFactura = tipoDocumento === 'FACTURA';
-        const montoIva = esFactura ? Math.max(0, Number(montoIvaCliente) || 0) : 0;
-        const montoExento = esFactura ? Math.max(0, Number(montoExentoCliente) || 0) : 0;
+        const montoExento = esFactura ? Math.min(Math.max(0, Number(montoExentoCliente) || 0), Number(subtotal) || 0) : 0;
+        // En un gasto el IVA lo calcula el servidor: es el de la alícuota general sobre lo que no es exento
+        const montoIva = esFactura ? (esGasto ? Math.round(((Number(subtotal) || 0) - montoExento) * CONFIG_FISCAL.alicuotaGeneral) / 100 : Math.max(0, Number(montoIvaCliente) || 0)) : 0;
         const numeroControl = esFactura ? numeroControlCliente : null;
         const totalFinal = Math.round((Number(subtotal || 0) + montoIva) * 100) / 100;
         const porcentajeRetencion = [75, 100].includes(Number(porcentajeRetencionCliente)) ? Number(porcentajeRetencionCliente) : CONFIG_FISCAL.porcentajeRetencionCompras;
@@ -126,7 +137,7 @@ export async function POST(request) {
         const simulacionResultados = [];
 
         // --- FASE 1: SIMULACIÓN DE COSTOS PONDERADOS ---
-        for (const item of detalles) {
+        for (const item of lineas) {
             // Aseguramos buscar por el ID correcto independientemente de cómo venga en el objeto
             const prodId = item.productoId || item.id;
             const producto = await Producto.findByPk(prodId);
@@ -190,6 +201,13 @@ export async function POST(request) {
         const t = await sequelize.transaction();
 
         try {
+            // Categoría con la que se contabiliza el gasto (debe ser una categoría de gastos)
+            let categoriaGasto = null;
+            if (esGasto) {
+                categoriaGasto = await CategoriaFinanciera.findByPk(Number(categoriaGastoCliente) || 0, { transaction: t });
+                if (!categoriaGasto || categoriaGasto.tipo !== 'GASTO') throw new ErrorCompra('Elige la categoría del gasto', 400);
+            }
+
             let idProveedorFinal = proveedorId;
             if (!idProveedorFinal && nuevoProveedor) {
                 const provCreado = await Proveedor.create({
@@ -235,7 +253,8 @@ export async function POST(request) {
                 numeroControl: String(numeroControl || '').trim().slice(0, 30) || null,
                 fechaRecepcion: fechaRecepcion || fechaFactura || fechaCaracas(),
                 montoExento: Number(montoExento) || 0,
-                alicuotaIva: 16
+                alicuotaIva: 16,
+                esGasto, descripcionGasto: esGasto ? descripcionGasto : null, categoriaGastoId: esGasto ? categoriaGasto.id : null
             }, { transaction: t });
 
             // Comprobante de retención de IVA (la empresa le retiene al proveedor). Quedan guardados en bolívares para el libro de compras.
@@ -257,7 +276,7 @@ export async function POST(request) {
             }
 
             // Recorremos los detalles y cruzamos con los resultados de la simulación mediante el ID
-            for (const item of detalles) {
+            for (const item of lineas) {
                 const pId = item.productoId || item.id;
                 const sim = simulacionResultados.find(s => s.productoId === pId);
                 if (!sim) continue;
@@ -291,7 +310,7 @@ export async function POST(request) {
             const montoGastoNeto = Number(totalFinal) - (Number(montoRetencion) || 0);
 
             if (condicionPago === 'Contado') {
-                let catCompras = await CategoriaFinanciera.findOne({ where: { nombre: 'Compras de Mercancía' }, transaction: t });
+                let catCompras = categoriaGasto || await CategoriaFinanciera.findOne({ where: { nombre: 'Compras de Mercancía' }, transaction: t });
                 if (!catCompras) catCompras = await CategoriaFinanciera.create({ nombre: 'Compras de Mercancía', tipo: 'GASTO' }, { transaction: t });
 
                 const mUsdGasto = moneda === 'USD' ? montoGastoNeto : montoGastoNeto / Number(tasaCambio);
@@ -305,7 +324,7 @@ export async function POST(request) {
                     montoUsd: Number(mUsdGasto.toFixed(2)),
                     tasaBcvAplicada: Number(tasaCambio),
                     montoVes: Number(mBsGasto.toFixed(2)),
-                    descripcion: `Pago ${tipoDocumento} Nro: ${numeroDocumento}`,
+                    descripcion: esGasto ? `Pago de gasto (${descripcionGasto}) ${tipoDocumento} Nro: ${numeroDocumento}` : `Pago ${tipoDocumento} Nro: ${numeroDocumento}`,
                     categoriaId: catCompras.id,
                     facturaCompraId: nuevaFacturaCompra.id
                 }, { transaction: t });
@@ -336,7 +355,7 @@ export async function POST(request) {
                     console.error('No se pudo avisar de la compra:', e.message);
                 }
             }
-            return NextResponse.json({ success: true, message: 'Compra registrada con éxito.', comprobanteRetencion });
+            return NextResponse.json({ success: true, message: esGasto ? 'Gasto registrado con éxito.' : 'Compra registrada con éxito.', comprobanteRetencion });
 
         } catch (innerError) {
             if (!t.finished) await t.rollback();

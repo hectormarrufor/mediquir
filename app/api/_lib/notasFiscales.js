@@ -15,7 +15,7 @@ import { hoyCaracas, recalcularCobro } from './retencionesVenta.js';
 import { fechaCaracas } from '../../constants/hora.js';
 
 const {
-    sequelize, NotaFiscal, NotaFiscalDetalle, VentaDetalle, Producto, Abono, CuentaPorCobrar, CuentaPorPagar, Correlativo,
+    sequelize, NotaFiscal, NotaFiscalDetalle, Venta, VentaDetalle, Producto, Abono, CuentaPorCobrar, CuentaPorPagar, Correlativo,
     MovimientoFinanciero, CategoriaFinanciera, Cliente,
 } = db;
 
@@ -26,6 +26,9 @@ export class ErrorNota extends Error {
 export const PREFIJO = { CREDITO: 'NC', DEBITO: 'ND' };
 export const ETIQUETA = { CREDITO: 'Nota de crédito', DEBITO: 'Nota de débito' };
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
+// Dato de una factura tal como se guarda en la nota (facturasAfectadas)
+const datosFactura = (v) => ({ ventaId: v.id, numeroDocumento: v.numeroDocumento, fecha: fechaCaracas(v.fechaEmision || v.createdAt) });
 
 const aUsdDoc = (monto, moneda, tasa) => (moneda === 'BS' ? aDolares(Number(monto), Number(tasa) || 1) : r2(monto));
 const aBsDoc = (monto, moneda, tasa) => (moneda === 'BS' ? r2(monto) : aBolivares(Number(monto), Number(tasa) || 1));
@@ -74,6 +77,17 @@ export async function notasDeVenta(venta, transaction) {
     };
 }
 
+// Otras facturas del mismo cliente que una nota de débito también puede afectar (la nota de crédito es de una sola factura)
+export async function otrasFacturasDelCliente(venta, transaction) {
+    if (!venta.clienteId) return [];
+    const { Op } = db.Sequelize;
+    const ventas = await Venta.findAll({
+        where: { clienteId: venta.clienteId, tipoDocumento: 'FACTURA', statusDespacho: { [Op.ne]: 'Cancelado' }, id: { [Op.ne]: venta.id } },
+        attributes: ['id', 'numeroDocumento', 'createdAt', 'fechaEmision', 'totalFinal', 'moneda'], order: [['createdAt', 'DESC']], limit: 100, transaction,
+    });
+    return ventas.map((v) => ({ ...datosFactura(v), totalFinal: Number(v.totalFinal), moneda: v.moneda }));
+}
+
 // ------------------------------------------------------------------ emisión (ventas)
 /**
  * Emite una nota de crédito o de débito sobre una factura de venta.
@@ -81,8 +95,9 @@ export async function notasDeVenta(venta, transaction) {
  * @param {'CREDITO'|'DEBITO'} p.tipo
  * @param {Array}  p.renglones    Crédito: [{ ventaDetalleId, cantidad }] (devolución de un renglón) y/o conceptos libres.
  *                                Concepto libre (crédito o débito): [{ descripcion, precioUnitario, cantidad?, aplicaIva }]
+ * @param {string[]} p.otrasFacturasIds  Solo nota de débito: otras facturas del mismo cliente que también afecta (la deuda se suma a la factura principal, `venta`)
  */
-export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario = false, usuarioId = null, transaction: t }) {
+export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario = false, otrasFacturasIds = [], usuarioId = null, transaction: t }) {
     if (!PREFIJO[tipo]) throw new ErrorNota('Tipo de nota no válido');
     if (venta.tipoDocumento !== 'FACTURA') throw new ErrorNota('Las notas de crédito y de débito solo se emiten sobre facturas', 409);
     if (venta.statusDespacho === 'Cancelado') throw new ErrorNota('La factura está anulada', 409);
@@ -90,6 +105,22 @@ export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelve
     if (motivoTxt.length < 5) throw new ErrorNota('Explica el motivo de la nota (mínimo 5 caracteres)');
     if (!Array.isArray(renglones) || renglones.length === 0) throw new ErrorNota('La nota no tiene renglones');
     if (tipo === 'DEBITO' && !venta.clienteId) throw new ErrorNota('Una nota de débito necesita que la factura tenga cliente', 409);
+
+    // Facturas que afecta: la principal y, en la nota de débito, otras del mismo cliente
+    const facturasAfectadas = [datosFactura(venta)];
+    const ids = [...new Set((Array.isArray(otrasFacturasIds) ? otrasFacturasIds : []).map(String))].filter((x) => x !== venta.id);
+    if (ids.length) {
+        if (tipo !== 'DEBITO') throw new ErrorNota('La nota de crédito afecta a una sola factura');
+        if (ids.length > 30) throw new ErrorNota('Una nota de débito admite hasta 30 facturas adicionales');
+        const otras = await Venta.findAll({ where: { id: ids }, transaction: t });
+        if (otras.length !== ids.length) throw new ErrorNota('Una de las facturas elegidas no existe', 404);
+        for (const o of otras) {
+            if (o.tipoDocumento !== 'FACTURA' || o.statusDespacho === 'Cancelado') throw new ErrorNota(`La factura ${o.numeroDocumento} no se puede afectar (no es una factura vigente)`, 409);
+            if (o.clienteId !== venta.clienteId) throw new ErrorNota(`La factura ${o.numeroDocumento} es de otro cliente`, 409);
+        }
+        otras.sort((a, b) => new Date(a.fechaEmision || a.createdAt) - new Date(b.fechaEmision || b.createdAt));
+        facturasAfectadas.push(...otras.map(datosFactura));
+    }
 
     const detallesFactura = await VentaDetalle.findAll({
         where: { ventaId: venta.id }, include: [{ model: Producto, as: 'producto', attributes: ['nombre', 'porcentajeIva'] }], transaction: t,
@@ -143,7 +174,7 @@ export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelve
         tipo, origen: 'VENTA', numeroDocumento: numero, fecha: hoyCaracas(), ventaId: venta.id, clienteId: venta.clienteId,
         moneda, tasaCambio: tasa, subtotal: factura.subtotal, baseImponible: factura.baseImponible, montoExento: factura.exento,
         montoIva: factura.montoIva, alicuotaIva: REGLAS.alicuotaGeneral, totalFinal: factura.totalFinal, motivo: motivoTxt,
-        devuelveInventario: Boolean(devuelveInventario) && tipo === 'CREDITO', registradoPorId: usuarioId,
+        devuelveInventario: Boolean(devuelveInventario) && tipo === 'CREDITO', facturasAfectadas, registradoPorId: usuarioId,
     }, { transaction: t });
     await NotaFiscalDetalle.bulkCreate(lineas.map((l, i) => ({
         notaId: nota.id, ventaDetalleId: l.ventaDetalleId, productoId: l.productoId, descripcion: l.descripcion, cantidad: l.cantidad,
@@ -409,7 +440,7 @@ export async function emitirNotaDiferencial({ venta, tasaHoy, usdSolicitado, usu
     const nota = await NotaFiscal.create({
         tipo: 'DEBITO', origen: 'VENTA', numeroDocumento: numero, fecha: hoyCaracas(), ventaId: venta.id, clienteId: venta.clienteId,
         moneda: 'BS', tasaCambio: c.tasaHoy, subtotal: r2(c.baseImponible + c.exento), baseImponible: c.baseImponible, montoExento: c.exento,
-        montoIva: c.iva, alicuotaIva: REGLAS.alicuotaGeneral, totalFinal: c.total, motivo: texto, esDiferencial: true, diferencialUsd: c.usd, registradoPorId: usuarioId,
+        montoIva: c.iva, alicuotaIva: REGLAS.alicuotaGeneral, totalFinal: c.total, motivo: texto, esDiferencial: true, diferencialUsd: c.usd, facturasAfectadas: [datosFactura(venta)], registradoPorId: usuarioId,
     }, { transaction: t });
     const renglones = [];
     if (c.baseImponible > 0) renglones.push({ monto: c.baseImponible, aplicaIva: true });

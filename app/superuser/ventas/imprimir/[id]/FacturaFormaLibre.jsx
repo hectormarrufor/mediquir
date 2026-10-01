@@ -26,7 +26,8 @@ const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-VE', { timeZone: 'A
 
 // titulo: 'Factura' (por defecto) o 'Nota de Crédito' / 'Nota de Débito'. Para una nota, `referencia` (en lugar de "ORDEN DE COMPRA") indica la factura
 // que afecta y `condicionTexto` reemplaza las condiciones de pago; `sinVence` oculta la fecha de vencimiento.
-export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factura', referencia = null, etiquetaCondicion = 'Condiciones de la Transacción', condicionTexto = null, sinVence = false, onReasignarControl = null, vistaPrevia = false, onToggleGuia = null }) {
+// `lineasExtra`: textos libres que salen como filas de descripción después de los artículos (facturas que afecta la nota, tasa BCV, etc.).
+export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factura', referencia = null, etiquetaCondicion = 'Condiciones de la Transacción', condicionTexto = null, sinVence = false, lineasExtra = [], onReasignarControl = null, vistaPrevia = false, onToggleGuia = null }) {
     const tasa = Number(venta.tasaCambio) || 1;
     const esBs = venta.moneda === 'BS';
     const aBs = (v) => (esBs ? Number(Number(v).toFixed(2)) : aBolivares(Number(v), tasa));
@@ -44,7 +45,8 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
 
     const dias = venta.fechaVencimiento ? Math.max(0, Math.round((new Date(venta.fechaVencimiento) - new Date(venta.fechaEmision || venta.createdAt)) / 86400000)) : 0;
     const condicion = condicionTexto || (venta.condicionPago === 'Credito' ? `CREDITO a ${dias} Días` : 'CONTADO');
-    const demasiados = detalles.length > CONFIG_FISCAL.maxRenglonesFactura;
+    const totalFilas = detalles.length + lineasExtra.length;
+    const demasiados = totalFilas > CONFIG_FISCAL.maxRenglonesFactura;
 
     return (
         <div className="fl-envoltura">
@@ -58,7 +60,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                         : <a href={guia ? '?' : '?guia=1'}>{guia ? 'Ocultar guía' : 'Ver guía sobre la forma'}</a>}
                 </span>
             </div>
-            {demasiados && <div className="fl-aviso">Esta factura tiene {detalles.length} renglones y la forma libre admite {CONFIG_FISCAL.maxRenglonesFactura}: los que sobran se saldrán de la hoja.</div>}
+            {demasiados && <div className="fl-aviso">Esta hoja tiene {totalFilas} renglones y la forma libre admite {CONFIG_FISCAL.maxRenglonesFactura}: los que sobran se saldrán de la hoja.</div>}
 
             <div id="print-section" className="fl-hoja">
                 {guia && <img className={vistaPrevia ? 'fl-guia fl-guia-imprime' : 'fl-guia'} src="/tenants/mediquir/forma-libre.png" alt="" />}
@@ -73,7 +75,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                 {/* Datos del documento */}
                 <div className="fl-doc">
                     <div className="fl-titulo"><span className="fl-azul" style={titulo.length > 8 ? { fontSize: '11px' } : undefined}>{titulo}</span><span className="fl-numero">{venta.numeroDocumento}</span></div>
-                    <div className="fl-oc">{referencia || 'ORDEN DE COMPRA'}</div>
+                    <div className="fl-oc">{referencia ?? 'ORDEN DE COMPRA'}</div>
                     <div className="fl-fechas"><span>Emisión: <b>{fecha(venta.fechaEmision || venta.createdAt)}</b></span>{!sinVence && <span>Vence: <b>{fecha(venta.fechaVencimiento || venta.fechaEmision || venta.createdAt)}</b></span>}</div>
                     <div className="fl-cond">
                         <div><div className="fl-cond-t">{etiquetaCondicion}</div><div className="fl-cond-v">{condicion}</div></div>
@@ -93,6 +95,9 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                                 <td style={{ textAlign: 'center' }}>{fmt(d.cantidad)}</td>
                                 <td style={{ textAlign: 'right' }}>{fmt(aBs(d.subtotal))}</td>
                             </tr>
+                        ))}
+                        {lineasExtra.map((texto, i) => (
+                            <tr key={`extra-${i}`}><td colSpan={5} className="fl-extra">{texto}</td></tr>
                         ))}
                     </tbody>
                 </table>
@@ -149,6 +154,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                 .fl-tabla th { height: ${ZONAS.altoEncabezado}in; border-top: 1.6px solid #000; border-bottom: 1.6px solid #000; font-size: 7.6px; font-weight: 800; padding: 0 3px; }
                 .fl-tabla td { height: ${ZONAS.altoFila}in; padding: 0 3px; font-size: 7.6px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 .fl-nombre { text-overflow: ellipsis; }
+                .fl-extra { font-weight: 700; font-style: italic; }
 
                 .fl-son { left: ${ZONAS.margenIzq}in; top: ${ZONAS.lineaSon}in; width: ${ZONAS.anchoUtil}in; font-size: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 .fl-totales { left: ${ZONAS.margenIzq}in; top: ${ZONAS.inicioTotales}in; width: ${ZONAS.anchoUtil}in; display: grid; grid-template-columns: 2.6in 2.5in 2.24in; border: 1.4px solid #000; }

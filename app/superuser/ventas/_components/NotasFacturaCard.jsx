@@ -52,6 +52,7 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
                                     {n.estado === 'ANULADA' && <Badge size="xs" color="gray">Anulada</Badge>}
                                 </Group>
                                 <Text size="xs" c="dimmed" lineClamp={2}>{fmtFecha(n.fecha)} · {n.motivo}</Text>
+                                {n.facturasAfectadas?.length > 1 && <Text size="xs" c="dimmed">Afecta a: {n.facturasAfectadas.map((f) => f.numeroDocumento).join(', ')}</Text>}
                                 {!n.numeroControl && n.estado === 'EMITIDA' && <Text size="xs" c="dimmed">Sin imprimir: el número de control se asigna al imprimirla</Text>}
                                 {Number(n.saldoAFavorUsd) - Number(n.reintegradoUsd) > 0.005 && n.estado === 'EMITIDA' && (
                                     <Text size="xs" c="teal.8">Por reintegrar al cliente: ${nf(Number(n.saldoAFavorUsd) - Number(n.reintegradoUsd))}</Text>

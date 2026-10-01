@@ -1,23 +1,23 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActionIcon, Alert, Box, Button, Checkbox, Container, Group, NumberInput, Paper, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import FacturaFormaLibre from '@/app/superuser/ventas/imprimir/[id]/FacturaFormaLibre';
 import { calcularFactura, REGLAS } from '@/app/constants/facturacion';
 import { fechaCaracas } from '@/app/constants/hora';
+import { lineasTasaBcv, partirTexto } from '@/app/constants/notasTexto';
 
 const fetchJson = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error('No se pudo cargar'); return r.json(); };
 
-const fmtFecha = (v) => (v ? `${String(v).slice(8, 10)}/${String(v).slice(5, 7)}/${String(v).slice(0, 4)}` : '');
 const renglonNuevo = () => ({ descripcion: '', cantidad: 1, precio: 0, iva: true });
 
 // VISTA PREVIA de una nota de crédito o de débito sobre la forma libre. Es solo una pantalla: no guarda nada, no toma ningún correlativo
 // (ni de nota ni de control), no toca la contabilidad ni los libros, y la hoja lleva la marca "VISTA PREVIA" aunque se imprima.
 // Sirve para revisar cómo quedará la nota antes de emitirla de verdad (desde el detalle de la factura).
 export default function VistaPreviaNota() {
-    const tasaInicial = typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get('tasa')) || 1 : 1;
+    const tasaInicial = typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get('tasa')) || 0 : 0;
     const [guia, setGuia] = useState(false); // muestra la forma libre preimpresa debajo para ver cómo cae la nota
     const [tipo, setTipo] = useState('DEBITO');
     const [moneda, setMoneda] = useState('BS');
@@ -26,13 +26,18 @@ export default function VistaPreviaNota() {
     const [cliente, setCliente] = useState({ nombre: '', identificacion: '', direccion: '' });
     const [numeroNota, setNumeroNota] = useState('');
     const [facturaAfectada, setFacturaAfectada] = useState('');
+    // La tasa BCV vigente se trae sola (si no viene en la dirección) para que el cálculo en bolívares y dólares sea el real
+    const { data: historicoBcv } = useQuery({ queryKey: ['bcv-vista-previa-nota'], enabled: !tasaInicial, queryFn: () => fetchJson('/api/bcv/obtenerTodos') });
+    useEffect(() => {
+        const ultima = historicoBcv?.data?.[historicoBcv.data.length - 1];
+        if (!tasaInicial && Number(ultima?.monto) > 0) setTasa(Number(ultima.monto));
+    }, [historicoBcv, tasaInicial]);
     const { data: clientes } = useQuery({ queryKey: ['clientes-vista-previa-nota'], queryFn: () => fetchJson('/api/clientes') });
     const elegirCliente = (id) => {
         setClienteId(id);
         const c = clientes?.find((x) => x.id.toString() === id);
         if (c) setCliente({ nombre: c.nombre || '', identificacion: c.identificacion || '', direccion: c.direccion || '' });
     };
-    const [fechaFactura, setFechaFactura] = useState('');
     const [motivo, setMotivo] = useState('');
     const [renglones, setRenglones] = useState([{ descripcion: 'Nota de débito correspondiente a diferencial cambiario', cantidad: 1, precio: 1000, iva: true }]);
 
@@ -50,6 +55,13 @@ export default function VistaPreviaNota() {
             };
         } catch { return null; }
     }, [renglones, moneda, tasa, cliente, numeroNota]);
+
+    // Filas de descripción bajo los renglones: facturas que afecta y, si está en dólares, el párrafo de la tasa BCV
+    const lineasExtra = useMemo(() => {
+        const afectadas = tipo === 'DEBITO' ? facturaAfectada.split(',').map((x) => x.trim()).filter(Boolean) : [facturaAfectada.trim()].filter(Boolean);
+        const cab = afectadas.length > 1 ? 'AFECTA LAS FACTURAS' : 'AFECTA LA FACTURA';
+        return [...(afectadas.length ? partirTexto(`${cab} ${afectadas.join(', ')}`) : partirTexto(`${cab} ________ DEL __/__/____`)), ...lineasTasaBcv({ moneda, tasaCambio: tasa, totalFinal: documento?.totalFinal })];
+    }, [tipo, facturaAfectada, moneda, tasa, documento]);
 
     return (
         <Container size="lg" py="md">
@@ -72,9 +84,8 @@ export default function VistaPreviaNota() {
                         <TextInput label="RIF / Cédula" value={cliente.identificacion} onChange={(e) => setCliente({ ...cliente, identificacion: e.currentTarget.value })} />
                         <TextInput label="Domicilio fiscal" value={cliente.direccion} onChange={(e) => setCliente({ ...cliente, direccion: e.currentTarget.value })} />
                         <TextInput label="N° de esta nota" placeholder="NC-00001 / ND-00001" value={numeroNota} onChange={(e) => setNumeroNota(e.currentTarget.value)} />
-                        <TextInput label="Factura que afecta (número)" placeholder="F-00012" value={facturaAfectada} onChange={(e) => setFacturaAfectada(e.currentTarget.value)} />
-                        <TextInput label="Fecha de esa factura" type="date" value={fechaFactura} onChange={(e) => setFechaFactura(e.currentTarget.value)} />
-                        {moneda === 'USD' && <NumberInput label="Tasa (Bs por dólar)" value={tasa} onChange={setTasa} min={0} decimalScale={2} />}
+                        <TextInput label={tipo === 'DEBITO' ? 'Facturas que afecta (con su fecha, separadas por coma)' : 'Factura que afecta (con su fecha)'} placeholder="F-00012 del 01/09/2026, F-00013 del 05/09/2026" value={facturaAfectada} onChange={(e) => setFacturaAfectada(e.currentTarget.value)} />
+                        <NumberInput label="Tasa BCV (Bs por dólar)" description={moneda === 'USD' ? 'Sale en el párrafo de la nota' : 'Para la columna en dólares'} value={tasa} onChange={setTasa} min={0} decimalScale={2} />
                     </SimpleGrid>
                     <TextInput label="Motivo (sale en la casilla de condiciones)" value={motivo} onChange={(e) => setMotivo(e.currentTarget.value)} />
 
@@ -96,7 +107,8 @@ export default function VistaPreviaNota() {
                 <FacturaFormaLibre
                     venta={documento}
                     titulo={tipo === 'CREDITO' ? 'Nota de Crédito' : 'Nota de Débito'}
-                    referencia={`AFECTA FACTURA ${facturaAfectada || '________'} DEL ${fmtFecha(fechaFactura) || '__/__/____'}`}
+                    referencia=""
+                    lineasExtra={lineasExtra}
                     etiquetaCondicion="Motivo"
                     condicionTexto={String(motivo || '').slice(0, 38)}
                     sinVence

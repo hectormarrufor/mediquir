@@ -106,7 +106,7 @@ export async function GET(request, { params }) {
                     include: [{
                         model: Producto,
                         as: 'producto',
-                        attributes: ['nombre', 'codigo', 'imagen', 'stockAlmacen'],
+                        attributes: ['nombre', 'codigo', 'imagen', 'stockAlmacen', 'porcentajeIva'],
                         include: [{ model: Marca, as: 'marca', attributes: ['nombre', 'imagen'] }, {model: GrupoEquivalencia, as: 'grupoEquivalencia', attributes: ['nombre', 'imagen']}]
                     }]
                 },

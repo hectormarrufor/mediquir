@@ -20,7 +20,7 @@ import { buscarProductos } from '@/app/helpers/busquedaProductos';
 import { fechaCaracas } from '@/app/constants/hora';
 import { PreguntarNumero, useNumeracion } from '@/app/superuser/_components/NumeracionFiscal';
 
-export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
+export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoGasto = false }) {
     const { userId } = useAuth();
     const queryClient = useQueryClient();
     const isMobile = useMediaQuery('(max-width: 768px)');
@@ -30,6 +30,11 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [modoNuevoProveedor, setModoNuevoProveedor] = useState(false);
+
+    // Gasto (servicio, flete, alquiler...): documento de compra sin productos; no toca el inventario y, si es factura, entra al libro de compras
+    const [esGasto, setEsGasto] = useState(iniciarComoGasto);
+    const [gasto, setGasto] = useState({ descripcion: '', categoriaId: null, base: 0, exento: 0 });
+    useEffect(() => { if (opened) setEsGasto(iniciarComoGasto); }, [opened, iniciarComoGasto]);
 
     // Estados para la Fase de Simulación y Prompt de Aceptación
     const [modalSimulacionAbierto, setModalSimulacionAbierto] = useState(false);
@@ -44,6 +49,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
 
     const { data: productos } = useQuery({ queryKey: ['productos-compra'], queryFn: () => fetchSelect('/api/productos') });
     const { data: proveedores } = useQuery({ queryKey: ['proveedores-compra'], queryFn: () => fetchSelect('/api/proveedores') });
+    const { data: categoriasGasto } = useQuery({ queryKey: ['categorias-gasto'], enabled: opened && esGasto, queryFn: async () => (await fetchSelect('/api/finanzas/categorias')).filter?.((c) => c.tipo === 'GASTO' && c.nombre !== 'Compras de Mercancía') || [] });
     const { data: numeracion } = useNumeracion(opened); // el comprobante de retención sigue su propio correlativo
 
     const formCompra = useForm({
@@ -170,6 +176,14 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
         }
     });
 
+    if (esGasto) {
+        const base = Math.max(0, Number(gasto.base) || 0);
+        const exento = Math.max(0, Number(gasto.exento) || 0);
+        subtotal = base + exento;
+        montoExento = esFactura ? exento : 0;
+        montoIva = esFactura ? Math.round(base * CONFIG_FISCAL.alicuotaGeneral) / 100 : 0;
+    }
+
     let montoRetencion = 0;
     if (formCompra.values.aplicarRetencion && esFactura && montoIva > 0) {
         montoRetencion = montoIva * (formCompra.values.porcentajeRetencion / 100);
@@ -225,6 +239,16 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
         }
     };
 
+    // El gasto no pasa por la auditoría de costos (no hay productos): se valida y se registra directo
+    const handleRegistrarGasto = () => {
+        if (!formCompra.values.numeroDocumento) return notifications.show({ message: 'Indica el número de factura o recibo', color: 'red' });
+        if (!formCompra.values.proveedorId && !modoNuevoProveedor) return notifications.show({ message: 'Selecciona o crea un proveedor', color: 'red' });
+        if (String(gasto.descripcion).trim().length < 3) return notifications.show({ message: 'Describe en qué fue el gasto', color: 'red' });
+        if (!gasto.categoriaId) return notifications.show({ message: 'Elige la categoría del gasto', color: 'red' });
+        if (!(subtotal > 0)) return notifications.show({ message: 'Indica el monto del gasto', color: 'red' });
+        return handleEjecutarCompraFinal();
+    };
+
     const handleEjecutarCompraFinal = async () => {
         setIsSubmitting(true);
         try {
@@ -244,7 +268,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                 subtotal, montoIva, montoRetencion, totalFinal,
                 numeroControl: esFactura ? formCompra.values.numeroControl : null, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion, aplicarRetencion: Boolean(formCompra.values.aplicarRetencion),
                 registradoPorId: userId,
-                detalles: carritoCompra
+                esGasto, descripcionGasto: esGasto ? gasto.descripcion : null, categoriaGastoId: esGasto ? Number(gasto.categoriaId) : null,
+                detalles: esGasto ? [] : carritoCompra
             };
 
             const res = await fetch('/api/compras', {
@@ -259,9 +284,10 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                 throw new Error(data.error || 'Error al registrar la compra');
             }
 
-            notifications.show({ title: 'Éxito', message: `Factura registrada, inventario y costos actualizados.${data.comprobanteRetencion ? ` Comprobante de retención de IVA: ${data.comprobanteRetencion}` : ''}`, color: 'green', autoClose: 9000 });
+            notifications.show({ title: 'Éxito', message: `${esGasto ? 'Gasto registrado (no afecta el inventario).' : 'Factura registrada, inventario y costos actualizados.'}${data.comprobanteRetencion ? ` Comprobante de retención de IVA: ${data.comprobanteRetencion}` : ''}`, color: 'green', autoClose: 9000 });
             queryClient.invalidateQueries(['productos-compra']);
             setCarritoCompra([]);
+            setGasto({ descripcion: '', categoriaId: null, base: 0, exento: 0 });
             setModalSimulacionAbierto(false);
             onClose();
 
@@ -277,16 +303,16 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
     return (
         <>
             {/* 🔥 MODAL DE COMPRA AMPLIADO A FULLSCREEN 🔥 */}
-            <Modal opened={opened} onClose={onClose} fullScreen title={<Title order={isMobile ? 5 : 2} c="blue.9" tt={isMobile ? 'none' : undefined}>{isMobile ? 'Registrar compra' : 'Registrar Factura / Nota de Compra (Proveedor)'}</Title>}
+            <Modal opened={opened} onClose={onClose} fullScreen title={<Title order={isMobile ? 5 : 2} c="blue.9" tt={isMobile ? 'none' : undefined}>{esGasto ? 'Registrar gasto' : (isMobile ? 'Registrar compra' : 'Registrar Factura / Nota de Compra (Proveedor)')}</Title>}
                 styles={isMobile ? { content: { padding: 0 }, header: { padding: '8px 12px', minHeight: 44, background: '#fff', zIndex: 30 }, body: { padding: '0 4px' } } : undefined}>
                 
                 <Box p={isMobile ? 4 : 'md'} maw={1600} mx="auto">
-                    <Alert icon={<IconShieldCheck size={isMobile ? 16 : 20} />} title="Declaración de Responsabilidad de Recepción" color="red" variant="light" mb={isMobile ? 6 : 'md'} p={isMobile ? 'xs' : undefined} styles={isMobile ? { title: { fontSize: 12, textTransform: 'none' }, message: { fontSize: 11, lineHeight: 1.3 } } : undefined}>
+                    {!esGasto && <Alert icon={<IconShieldCheck size={isMobile ? 16 : 20} />} title="Declaración de Responsabilidad de Recepción" color="red" variant="light" mb={isMobile ? 6 : 'md'} p={isMobile ? 'xs' : undefined} styles={isMobile ? { title: { fontSize: 12, textTransform: 'none' }, message: { fontSize: 11, lineHeight: 1.3 } } : undefined}>
                         Al registrar y firmar esta factura, certifica bajo su estricta responsabilidad que la mercancía física ingresada al almacén ha sido contada y validada.
-                    </Alert>
+                    </Alert>}
 
                     <Grid gutter="lg">
-                        <Grid.Col span={{ base: 12, md: 5 }}>
+                        {!esGasto && <Grid.Col span={{ base: 12, md: 5 }}>
                             <Paper withBorder p={isMobile ? 'xs' : 'md'} radius="md" h={isMobile ? 260 : '78vh'} style={{ display: 'flex', flexDirection: 'column' }}>
                                 <TextInput size={isMobile ? 'sm' : 'md'} placeholder="Buscar producto por nombre o SKU..." mb={isMobile ? 6 : 'md'} value={busquedaProd} onChange={(e) => setBusquedaProd(e.currentTarget.value)} data-autofocus />
                                 <ScrollArea style={{ flex: 1 }} type="auto">
@@ -309,11 +335,14 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                     </Stack>
                                 </ScrollArea>
                             </Paper>
-                        </Grid.Col>
+                        </Grid.Col>}
 
-                        <Grid.Col span={{ base: 12, md: 7 }}>
+                        <Grid.Col span={{ base: 12, md: esGasto ? 12 : 7 }}>
                             <Paper withBorder p={isMobile ? 'xs' : 'lg'} radius="md" h={isMobile ? 'auto' : '78vh'} style={{ display: 'flex', flexDirection: 'column' }}>
                                 
+                                <SegmentedControl mb={isMobile ? 6 : 'md'} fullWidth value={esGasto ? 'gasto' : 'mercancia'} onChange={(v) => setEsGasto(v === 'gasto')}
+                                    data={[{ value: 'mercancia', label: 'Compra de mercancía (inventario)' }, { value: 'gasto', label: 'Gasto (no afecta el inventario)' }]} />
+
                                 <Group grow mb={isMobile ? 6 : 'md'} gap={isMobile ? 6 : 'md'} align="flex-start">
                                     <Select 
                                         size={isMobile ? 'sm' : 'md'}
@@ -336,7 +365,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                 </Group>
                                 {esFactura && isMobile && <TextInput size="sm" mb={6} label="Nro. de control" placeholder="Ej: 00-009497" {...formCompra.getInputProps('numeroControl')} />}
 
-                                {!esFactura && <Alert color="gray" variant="light" mb="md" p="xs"><Text size="xs">La nota de entrega no es un documento fiscal: se registra sin IVA, sin retención y sin número de control, y no entra al libro de compras. El inventario y el costo se actualizan igual.</Text></Alert>}
+                                {!esFactura && <Alert color="gray" variant="light" mb="md" p="xs"><Text size="xs">La nota de entrega no es un documento fiscal: se registra sin IVA, sin retención y sin número de control, y no entra al libro de compras. {esGasto ? 'Al ser un gasto, no mueve el inventario.' : 'El inventario y el costo se actualizan igual.'}</Text></Alert>}
 
                                 <Group grow mb={isMobile ? 6 : 'md'} gap={isMobile ? 6 : 'md'} align="flex-start">
                                     <TextInput size="md" type="date" label="Fecha de Factura" withAsterisk {...formCompra.getInputProps('fechaFactura')} />
@@ -350,7 +379,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                     <Select size={isMobile ? 'sm' : 'md'} label="Moneda" data={['USD', 'BS']} w={150} {...formCompra.getInputProps('moneda')} />
                                     {esFactura && (
                                         <Group>
-                                            <Checkbox label={<Text fw={600} size="md">Retener IVA (agente de retención)</Text>} description="Se emite el comprobante con su correlativo" {...formCompra.getInputProps('aplicarRetencion', { type: 'checkbox' })} />
+                                            <Checkbox label={<Text fw={600} size="md">Retener IVA (agente de retención)</Text>} description="Desmárcalo para omitir la retención en esta compra; si se retiene, se emite el comprobante con su correlativo" {...formCompra.getInputProps('aplicarRetencion', { type: 'checkbox' })} />
                                             {formCompra.values.aplicarRetencion && (
                                                 <Select size="md" data={[{value: '75', label: '75%'}, {value: '100', label: '100%'}]} w={110} {...formCompra.getInputProps('porcentajeRetencion')} />
                                             )}
@@ -358,7 +387,22 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                     )}
                                 </Group>
 
-                                {isMobile ? (
+                                {esGasto ? (
+                                    <Stack gap="sm" mb="md">
+                                        <TextInput size={isMobile ? 'sm' : 'md'} label="¿En qué fue el gasto?" placeholder="Ej: Flete de Maracaibo, alquiler del galpón, reparación del montacargas" withAsterisk maxLength={200}
+                                            value={gasto.descripcion} onChange={(e) => setGasto({ ...gasto, descripcion: e.currentTarget.value })} />
+                                        <Select size={isMobile ? 'sm' : 'md'} label="Categoría del gasto" placeholder="Elige la categoría" searchable withAsterisk
+                                            data={(categoriasGasto || []).map((c) => ({ value: String(c.id), label: c.nombre }))}
+                                            value={gasto.categoriaId} onChange={(v) => setGasto({ ...gasto, categoriaId: v })}
+                                            nothingFoundMessage="No hay categorías de gasto: créalas en Finanzas" />
+                                        <Group grow align="flex-start">
+                                            <NumberInput size={isMobile ? 'sm' : 'md'} label="Monto con IVA (base imponible)" description={esFactura ? `Se le suma el IVA ${CONFIG_FISCAL.alicuotaGeneral}%` : 'La nota de entrega no lleva IVA'} min={0} decimalScale={2} hideControls
+                                                value={gasto.base} onChange={(v) => setGasto({ ...gasto, base: v })} />
+                                            <NumberInput size={isMobile ? 'sm' : 'md'} label="Monto exento (sin IVA)" min={0} decimalScale={2} hideControls
+                                                value={gasto.exento} onChange={(v) => setGasto({ ...gasto, exento: v })} />
+                                        </Group>
+                                    </Stack>
+                                ) : isMobile ? (
                                     <Stack gap={6} mb="sm">
                                         {carritoCompra.length === 0 && <Text size="sm" c="dimmed" ta="center" py="md">Toca un producto de la lista para agregarlo.</Text>}
                                         {carritoCompra.map(item => {
@@ -478,8 +522,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                             <Text size="xs" c="dimmed">Subtotal <PrecioVisual valor={subtotal} simbolo={formCompra.values.moneda === 'BS' ? 'Bs' : '$'} size="xs" />{esFactura && <> · IVA <PrecioVisual valor={montoIva} simbolo={formCompra.values.moneda === 'BS' ? 'Bs' : '$'} size="xs" /></>}{montoRetencion > 0 && <Text span size="xs" c="red" fw={700}> · Ret. −<PrecioVisual valor={montoRetencion} simbolo={formCompra.values.moneda === 'BS' ? 'Bs' : '$'} size="xs" /></Text>}</Text>
                                             <Text fw={900} size="lg" c="blue.9" style={{ whiteSpace: 'nowrap' }}><PrecioVisual valor={totalFinal} simbolo={formCompra.values.moneda === 'BS' ? 'Bs' : '$'} size="lg" fw={900} c="blue.9" /></Text>
                                         </Group>
-                                        <Button fullWidth size="md" color="green.8" tt="none" leftSection={<IconCheck size={20} />} onClick={handleLanzarSimulacion} loading={isSubmitting} disabled={carritoCompra.length === 0 || faltaNumeracionRet}>
-                                            Analizar compra y costos
+                                        <Button fullWidth size="md" color="green.8" tt="none" leftSection={<IconCheck size={20} />} onClick={esGasto ? handleRegistrarGasto : handleLanzarSimulacion} loading={isSubmitting} disabled={(esGasto ? !(subtotal > 0) : carritoCompra.length === 0) || faltaNumeracionRet}>
+                                            {esGasto ? 'Registrar gasto' : 'Analizar compra y costos'}
                                         </Button>
                                     </Box>
                                 ) : (
@@ -492,8 +536,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1 }) {
                                         <Text fw={900} size="xl" c="blue.9">Total: <PrecioVisual valor={totalFinal} simbolo={formCompra.values.moneda === 'BS' ? 'Bs' : '$'} size="xl" fw={900} c="blue.9" /></Text>
                                     </Stack>
 
-                                    <Button size="lg" color="green.8" leftSection={<IconCheck size={22} />} onClick={handleLanzarSimulacion} loading={isSubmitting} disabled={carritoCompra.length === 0 || faltaNumeracionRet}>
-                                        Analizar Compra y Costos
+                                    <Button size="lg" color="green.8" leftSection={<IconCheck size={22} />} onClick={esGasto ? handleRegistrarGasto : handleLanzarSimulacion} loading={isSubmitting} disabled={(esGasto ? !(subtotal > 0) : carritoCompra.length === 0) || faltaNumeracionRet}>
+                                        {esGasto ? 'Registrar Gasto' : 'Analizar Compra y Costos'}
                                     </Button>
                                 </Group>
                                 )}

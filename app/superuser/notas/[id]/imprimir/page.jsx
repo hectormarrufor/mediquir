@@ -5,9 +5,9 @@ import { useParams } from 'next/navigation';
 import FacturaFormaLibre from '@/app/superuser/ventas/imprimir/[id]/FacturaFormaLibre';
 import ControlFiscalPaso from '@/app/superuser/ventas/_components/ControlFiscalPaso';
 import { useControlFiscal } from '@/app/superuser/ventas/_lib/useControlFiscal';
+import { fechaCaracas } from '@/app/constants/hora';
 import { useAuth } from '@/hooks/useAuth';
-
-const fmtFecha = (v) => (v ? `${String(v).slice(8, 10)}/${String(v).slice(5, 7)}/${String(v).slice(0, 4)}` : '');
+import { lineasFacturasAfectadas, lineasTasaBcv } from '@/app/constants/notasTexto';
 
 // Nota de crédito o de débito impresa sobre la misma forma libre preimpresa que las facturas.
 // Al imprimirla se le asigna el número de control (el correlativo de la forma libre, compartido con las facturas).
@@ -49,6 +49,8 @@ export default function ImprimirNota() {
         cliente: nota.cliente,
         detalles: (nota.detalles || []).map((d) => ({ producto: { codigo: '', nombre: d.descripcion }, precioUnitario: d.precioUnitario, cantidad: d.cantidad, subtotal: d.subtotal, aplicaIva: d.aplicaIva })),
     };
+    // Facturas que afecta (las notas anteriores a las "varias facturas" solo tienen la principal)
+    const facturas = nota.facturasAfectadas?.length ? nota.facturasAfectadas : [{ numeroDocumento: nota.venta?.numeroDocumento, fecha: fechaCaracas(nota.venta?.createdAt) }];
     const reasignar = rolUsuario === 'admin' && !guia
         ? () => { if (window.confirm('¿La forma libre se dañó? Se toma el siguiente número de control y el actual queda sin usar.')) ctl.asignar(true); }
         : null;
@@ -58,7 +60,8 @@ export default function ImprimirNota() {
             venta={documento}
             guia={guia}
             titulo={esCredito ? 'Nota de Crédito' : 'Nota de Débito'}
-            referencia={`AFECTA FACTURA ${nota.venta?.numeroDocumento || ''} DEL ${fmtFecha(String(nota.venta?.createdAt || '').slice(0, 10))}`}
+            referencia=""
+            lineasExtra={[...lineasFacturasAfectadas(facturas), ...lineasTasaBcv(nota)]}
             etiquetaCondicion="Motivo"
             condicionTexto={String(nota.motivo || '').slice(0, 38)}
             sinVence

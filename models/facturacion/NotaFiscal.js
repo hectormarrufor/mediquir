@@ -37,6 +37,8 @@ const NotaFiscal = sequelize.define('NotaFiscal', {
     // Nota de débito por diferencial cambiario (tasa del pago menos tasa de la factura) y los dólares de la factura que cubre
     esDiferencial: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     diferencialUsd: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
+    // Facturas que afecta la nota: [{ ventaId, numeroDocumento, fecha }]. La nota de débito puede afectar a varias; la de crédito, a una sola.
+    facturasAfectadas: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
     anuladaAt: { type: DataTypes.DATE, allowNull: true },
     registradoPorId: { type: DataTypes.INTEGER, allowNull: true },
 }, { tableName: 'NotasFiscales', timestamps: true });

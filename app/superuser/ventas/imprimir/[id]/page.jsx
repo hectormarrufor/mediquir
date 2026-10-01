@@ -62,16 +62,22 @@ export default function ImprimirRecibo() {
     const totalBs = venta.moneda === 'BS' ? Number(venta.totalFinal) : Number(venta.totalFinal) * Number(venta.tasaCambio);
     const totalUsd = venta.moneda === 'USD' ? Number(venta.totalFinal) : Number(venta.totalFinal) / Number(venta.tasaCambio);
     
-    const ivaBs = venta.moneda === 'BS' ? Number(venta.montoIva) : Number(venta.montoIva) * Number(venta.tasaCambio);
-    const ivaUsd = venta.moneda === 'USD' ? Number(venta.montoIva) : Number(venta.montoIva) / Number(venta.tasaCambio);
+    // La nota de entrega SÍ lleva IVA, pero el cliente solo paga la base imponible: el IVA se muestra como referencia (no se cobra ni entra a libros)
+    const ivaReferencial = esNotaEntrega
+        ? Math.round((venta.detalles || []).reduce((a, d) => a + Number(d.subtotal) * (d.aplicaIva === false || d.isFicticio ? 0 : Number(d.producto?.porcentajeIva ?? 16)) / 100, 0) * 100) / 100
+        : 0;
+    const ivaDoc = esNotaEntrega ? ivaReferencial : Number(venta.montoIva);
+    const ivaBs = venta.moneda === 'BS' ? ivaDoc : ivaDoc * Number(venta.tasaCambio);
+    const ivaUsd = venta.moneda === 'USD' ? ivaDoc : ivaDoc / Number(venta.tasaCambio);
 
     // Recibo de venta (V-) de la tienda: desglosa el IVA cobrado, pero NO es un documento fiscal
-    const conIva = Number(venta.montoIva) > 0;
+    const conIva = ivaDoc > 0;
     const fleteBs = venta.moneda === 'BS' ? Number(venta.costoFlete || 0) : Number(venta.costoFlete || 0) * Number(venta.tasaCambio);
     const fleteUsd = venta.moneda === 'USD' ? Number(venta.costoFlete || 0) : Number(venta.costoFlete || 0) / Number(venta.tasaCambio);
-    const baseBs = totalBs - ivaBs - fleteBs;
-    const baseUsd = totalUsd - ivaUsd - fleteUsd;
-    const noFiscal = venta.tipoDocumento === 'VENTA_RAPIDA';
+    // En la nota de entrega el total ya es la base (el IVA no se suma)
+    const baseBs = totalBs - (esNotaEntrega ? 0 : ivaBs) - fleteBs;
+    const baseUsd = totalUsd - (esNotaEntrega ? 0 : ivaUsd) - fleteUsd;
+    const noFiscal = venta.tipoDocumento === 'VENTA_RAPIDA' || esNotaEntrega;
 
     const formatoNumero = (num) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
     const fechaEmision = formatearFecha(venta.fechaEmision || venta.createdAt);
@@ -118,7 +124,7 @@ export default function ImprimirRecibo() {
                     
                     <div className="doc-box">
                         <h2 className="doc-title">{tituloDocumento}</h2>
-                        {noFiscal && <div className="label-red text-center" style={{ fontSize: '0.7rem', fontWeight: 700 }}>COMPROBANTE NO FISCAL</div>}
+                        {noFiscal && <div className="label-red text-center" style={{ fontSize: '0.7rem', fontWeight: 700 }}>{esNotaEntrega ? 'DOCUMENTO NO FISCAL' : 'COMPROBANTE NO FISCAL'}</div>}
                         <h1 className="doc-number">{venta.numeroDocumento}</h1>
                         <table className="doc-meta">
                             <tbody>
@@ -171,7 +177,7 @@ export default function ImprimirRecibo() {
                                 <td className="total-cell border-right text-center">
                                     {conIva ? (
                                         <>
-                                            <span className="label-red">TOTAL IMPUESTO: 16%</span><br/>
+                                            <span className="label-red">{esNotaEntrega ? 'IVA 16% (REFERENCIAL, NO SE COBRA):' : 'TOTAL IMPUESTO: 16%'}</span><br/>
                                             <div className="monto-split">
                                                 <strong>{formatoNumero(ivaBs)} <span className="label-red">Bs.</span></strong>
                                                 <strong>{formatoNumero(ivaUsd)} <span className="label-red">USD</span></strong>
@@ -224,7 +230,7 @@ export default function ImprimirRecibo() {
                         <span className="text-black">{numeroALetras(totalBs)}</span>
                     </div>
 
-                    {noFiscal && <div className="label-red text-center" style={{ fontWeight: 700, letterSpacing: 1 }}>COMPROBANTE NO FISCAL</div>}
+                    {noFiscal && <div className="label-red text-center" style={{ fontWeight: 700, letterSpacing: 1 }}>{esNotaEntrega ? 'DOCUMENTO NO FISCAL' : 'COMPROBANTE NO FISCAL'}</div>}
                     <div className="original-label label-red text-center">ORIGINAL - CLIENTE</div>
 
                     {esFactura && (
