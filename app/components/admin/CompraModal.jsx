@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useDeferredValue, memo } from 'react';
 import { 
     Modal, Button, Group, Title, TextInput, NumberInput, 
     Select, Paper, Stack, Grid, Table, ActionIcon,
@@ -19,6 +19,27 @@ import { useAuth } from '@/hooks/useAuth';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
 import { fechaCaracas } from '@/app/constants/hora';
 import { PreguntarNumero, useNumeracion } from '@/app/superuser/_components/NumeracionFiscal';
+
+const MAX_LISTA = 60; // renderizar el catálogo completo (600+ productos) en cada cambio del formulario era lo que volvía lenta la pantalla
+
+const FilaProducto = memo(function FilaProducto({ prod, isMobile, onAgregar }) {
+    return (
+        <Paper p="sm" withBorder radius="sm" style={{ cursor: 'pointer' }} onClick={() => onAgregar(prod)}>
+            <Group justify="space-between" wrap="nowrap">
+                <Box style={{ minWidth: 0, flex: 1 }}>
+                    <Text fw={600} size={isMobile ? 'sm' : 'md'} lineClamp={isMobile ? 2 : 1}>{prod.nombre}</Text>
+                    {prod.marca?.nombre && <Text size={isMobile ? 'xs' : 'sm'} fw={700} c="grape.7">Marca: {prod.marca.nombre}</Text>}
+                    <Text size={isMobile ? 'xs' : 'sm'} c="dimmed">SKU: {prod.codigo} | Stock: {prod.stockAlmacen}</Text>
+                </Box>
+                {prod.costoUsd !== undefined && (
+                    <Badge color="blue" size={isMobile ? 'md' : 'lg'} variant="light" tt="none" style={{ flexShrink: 0 }}>
+                        {isMobile ? '' : 'Costo: '}<PrecioVisual valor={prod.costoUsd} simbolo="$" size="sm" />
+                    </Badge>
+                )}
+            </Group>
+        </Paper>
+    );
+});
 
 export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoGasto = false }) {
     const { userId } = useAuth();
@@ -47,7 +68,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         return res.json();
     };
 
-    const { data: productos } = useQuery({ queryKey: ['productos-compra'], queryFn: () => fetchSelect('/api/productos') });
+    const { data: productos } = useQuery({ queryKey: ['productos-compra'], staleTime: 60_000, queryFn: () => fetchSelect('/api/productos') });
     const { data: proveedores } = useQuery({ queryKey: ['proveedores-compra'], queryFn: () => fetchSelect('/api/proveedores') });
     const { data: categoriasGasto } = useQuery({ queryKey: ['categorias-gasto'], enabled: opened && esGasto, queryFn: async () => (await fetchSelect('/api/finanzas/categorias')).filter?.((c) => c.tipo === 'GASTO' && c.nombre !== 'Compras de Mercancía') || [] });
     const { data: numeracion } = useNumeracion(opened); // el comprobante de retención sigue su propio correlativo
@@ -116,6 +137,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 id: prod.id,
                 codigo: prod.codigo,
                 nombre: prod.nombre,
+                marca: prod.marca?.nombre || '',
                 costoAnterior: costoUnidad,
                 undPorCaja: Number(prod.unidadesPorCaja) || 0,
                 undPorBulto: Number(prod.unidadesPorBulto) || 0,
@@ -298,7 +320,10 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         }
     };
 
-    const productosFiltrados = buscarProductos(productos, busquedaProd);
+    const busquedaDiferida = useDeferredValue(busquedaProd);
+    const coincidencias = useMemo(() => buscarProductos(productos, busquedaDiferida), [productos, busquedaDiferida]);
+    const productosFiltrados = useMemo(() => coincidencias.slice(0, MAX_LISTA), [coincidencias]);
+    const hayMas = coincidencias.length > MAX_LISTA;
 
     return (
         <>
@@ -317,21 +342,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                 <TextInput size={isMobile ? 'sm' : 'md'} placeholder="Buscar producto por nombre o SKU..." mb={isMobile ? 6 : 'md'} value={busquedaProd} onChange={(e) => setBusquedaProd(e.currentTarget.value)} data-autofocus />
                                 <ScrollArea style={{ flex: 1 }} type="auto">
                                     <Stack gap="xs">
-                                        {productosFiltrados.map(prod => (
-                                            <Paper key={prod.id} p="sm" withBorder radius="sm" style={{ cursor: 'pointer' }} onClick={() => agregarAlCarritoCompra(prod)}>
-                                                <Group justify="space-between" wrap="nowrap">
-                                                    <Box style={{ minWidth: 0, flex: 1 }}>
-                                                        <Text fw={600} size={isMobile ? 'sm' : 'md'} lineClamp={isMobile ? 2 : 1}>{prod.nombre}</Text>
-                                                        <Text size={isMobile ? 'xs' : 'sm'} c="dimmed">SKU: {prod.codigo} | Stock: {prod.stockAlmacen}</Text>
-                                                    </Box>
-                                                    {prod.costoUsd !== undefined && (
-                                                        <Badge color="blue" size={isMobile ? 'md' : 'lg'} variant="light" tt="none" style={{ flexShrink: 0 }}>
-                                                            {isMobile ? '' : 'Costo: '}<PrecioVisual valor={prod.costoUsd} simbolo="$" size="sm" />
-                                                        </Badge>
-                                                    )}
-                                                </Group>
-                                            </Paper>
-                                        ))}
+                                        {productosFiltrados.map(prod => <FilaProducto key={prod.id} prod={prod} isMobile={isMobile} onAgregar={agregarAlCarritoCompra} />)}
+                                        {hayMas && <Text size="xs" c="dimmed" ta="center">Mostrando {MAX_LISTA} de {coincidencias.length}: escribe para afinar la búsqueda.</Text>}
                                     </Stack>
                                 </ScrollArea>
                             </Paper>
@@ -413,7 +425,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                                     <Group justify="space-between" wrap="nowrap" align="flex-start" mb={4}>
                                                         <Box style={{ minWidth: 0, flex: 1 }}>
                                                             <Text fw={700} size="sm" lineClamp={2} lh={1.25}>{item.nombre}</Text>
-                                                            <Text size="xs" c="dimmed">SKU: {item.codigo} · costo ant. <PrecioVisual valor={item.costoAnterior} simbolo="$" size="xs" c="dimmed" /></Text>
+                                                            <Text size="xs" c="dimmed">{item.marca ? `${item.marca} · ` : ''}SKU: {item.codigo} · costo ant. <PrecioVisual valor={item.costoAnterior} simbolo="$" size="xs" c="dimmed" /></Text>
                                                         </Box>
                                                         <ActionIcon color="red" variant="subtle" size="md" onClick={() => eliminarItem(item.id)}><IconTrash size={18}/></ActionIcon>
                                                     </Group>
@@ -464,7 +476,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                                     <Table.Tr key={item.id}>
                                                         <Table.Td>
                                                             <Text fw={600} size="md">{item.nombre}</Text>
-                                                            <Text size="xs" c="dimmed">SKU: {item.codigo}</Text>
+                                                            <Text size="xs" c="dimmed">{item.marca ? `Marca: ${item.marca} · ` : ''}SKU: {item.codigo}</Text>
                                                         </Table.Td>
                                                         <Table.Td ta="center">
                                                             <Stack gap={6} align="center">

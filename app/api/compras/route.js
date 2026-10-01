@@ -137,10 +137,14 @@ export async function POST(request) {
         const simulacionResultados = [];
 
         // --- FASE 1: SIMULACIÓN DE COSTOS PONDERADOS ---
+        // Una sola consulta para todos los productos (antes era una por línea, y otra más por línea al registrar)
+        const idsProductos = [...new Set(lineas.map((item) => Number(item.productoId || item.id)).filter(Boolean))];
+        const productosPorId = new Map(
+            (idsProductos.length ? await Producto.findAll({ where: { id: idsProductos } }) : []).map((p) => [p.id, p])
+        );
         for (const item of lineas) {
-            // Aseguramos buscar por el ID correcto independientemente de cómo venga en el objeto
-            const prodId = item.productoId || item.id;
-            const producto = await Producto.findByPk(prodId);
+            const prodId = Number(item.productoId || item.id);
+            const producto = productosPorId.get(prodId);
             if (!producto) continue;
 
             const stockActual = Number(producto.stockAlmacen) || 0;
@@ -276,12 +280,17 @@ export async function POST(request) {
             }
 
             // Recorremos los detalles y cruzamos con los resultados de la simulación mediante el ID
+            const simPorId = new Map(simulacionResultados.map((s) => [s.productoId, s]));
+            const productosTx = new Map(
+                (idsProductos.length ? await Producto.findAll({ where: { id: idsProductos }, transaction: t }) : []).map((p) => [p.id, p])
+            );
+            const entradas = [];
             for (const item of lineas) {
-                const pId = item.productoId || item.id;
-                const sim = simulacionResultados.find(s => s.productoId === pId);
+                const pId = Number(item.productoId || item.id);
+                const sim = simPorId.get(pId);
                 if (!sim) continue;
 
-                const producto = await Producto.findByPk(pId, { transaction: t });
+                const producto = productosTx.get(pId);
                 if (!producto) continue;
 
                 producto.stockAlmacen = Number(producto.stockAlmacen || 0) + Number(item.cantidad);
@@ -295,7 +304,7 @@ export async function POST(request) {
 
                 await producto.save({ transaction: t });
 
-                await EntradaInventario.create({
+                entradas.push({
                     facturaCompraId: nuevaFacturaCompra.id,
                     productoId: producto.id,
                     proveedorId: idProveedorFinal,
@@ -304,8 +313,9 @@ export async function POST(request) {
                     justificacion: `Compra ${tipoDocumento} Nro: ${numeroDocumento}`,
                     estado: 'Recibida',
                     registradoPorId: registradoPorId || null
-                }, { transaction: t });
+                });
             }
+            if (entradas.length) await EntradaInventario.bulkCreate(entradas, { transaction: t });
 
             const montoGastoNeto = Number(totalFinal) - (Number(montoRetencion) || 0);
 
