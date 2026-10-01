@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { 
     Modal, Button, Group, Title, TextInput, NumberInput, 
     Select, Paper, Stack, Grid, Table, ActionIcon, 
@@ -366,7 +366,13 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
         }
     };
 
-    const productosFiltrados = buscarProductos(productos, busquedaProducto);
+    // La búsqueda difusa recorre todo el catálogo: se calcula solo cuando cambia el texto, no en cada cambio del formulario o del carrito
+    const busquedaDiferida = useDeferredValue(busquedaProducto);
+    const productosFiltrados = useMemo(() => buscarProductos(productos, busquedaDiferida).slice(0, 20), [productos, busquedaDiferida]);
+    const opcionesClientes = useMemo(
+        () => clientes?.map(c => ({ value: c.id.toString(), label: `${c.nombre} (${tipoVenta === 'MAYOR' ? 'RIF' : 'C.I./RIF'}: ${c.identificacion})` })) || [],
+        [clientes, tipoVenta]
+    );
 
     const tituloDocumento = tipoDocumentoActual === 'FACTURA' ? 'Factura' : (tipoDocumentoActual === 'NOTA DE ENTREGA' ? 'Nota de Entrega' : 'Recibo de Venta');
     
@@ -430,7 +436,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
 
                             <ScrollArea style={{ flex: 1, maxHeight: isMobile ? 240 : 'none' }} type="auto">
                                 <Stack gap={isMobile ? 4 : 'xs'}>
-                                    {productosFiltrados.slice(0, 20).map(prod => {
+                                    {productosFiltrados.map(prod => {
                                         const infoPreview = calcularPrecioInfo(prod, formVenta.values.tipoPrecio);
                                         const imgFinal = getImageUrl(prod.imagen) || getImageUrl(prod.marca?.imagen);
 
@@ -515,7 +521,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                         searchable
                                         clearable={tipoVenta !== 'MAYOR'}
                                         nothingFoundMessage="No hay coincidencias: crea uno con el botón +"
-                                        data={clientes?.map(c => ({ value: c.id.toString(), label: `${c.nombre} (${tipoVenta === 'MAYOR' ? 'RIF' : 'C.I./RIF'}: ${c.identificacion})` })) || []}
+                                        data={opcionesClientes}
                                         {...formVenta.getInputProps('clienteId')}
                                     />
                                     <Button variant="light" color="grape" onClick={() => setModalCrearCliente(true)} px="xs" title="Crear cliente nuevo">

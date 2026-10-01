@@ -320,6 +320,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         }
     };
 
+    const opcionesProveedores = useMemo(() => proveedores?.map(p => ({ value: String(p.id), label: `${p.nombre} (RIF: ${p.identificacion})` })) || [], [proveedores]);
     const busquedaDiferida = useDeferredValue(busquedaProd);
     const coincidencias = useMemo(() => buscarProductos(productos, busquedaDiferida), [productos, busquedaDiferida]);
     const productosFiltrados = useMemo(() => coincidencias.slice(0, MAX_LISTA), [coincidencias]);
@@ -359,7 +360,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                     <Select 
                                         size={isMobile ? 'sm' : 'md'}
                                         label="Proveedor" placeholder="Seleccione proveedor..." searchable
-                                        data={proveedores?.map(p => ({ value: String(p.id), label: `${p.nombre} (RIF: ${p.identificacion})` })) || []}
+                                        data={opcionesProveedores}
                                         {...formCompra.getInputProps('proveedorId')}
                                     />
                                     <Button size={isMobile ? 'xs' : 'md'} variant="light" color="grape" mt={isMobile ? 26 : 24} style={{ flex: '0 0 auto' }} tt="none" onClick={() => setModalCrearProv(true)}>+ Nuevo Proveedor</Button>
