@@ -10,7 +10,7 @@ import React, { Suspense, useEffect } from 'react';
 import { AppShell, createTheme, MantineProvider, Center, Loader, Overlay } from '@mantine/core';
 import { useDisclosure, useHeadroom, useMediaQuery } from '@mantine/hooks';
 import { Notifications } from '@mantine/notifications';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { theme as themeConfig, cssVariablesResolver } from '../theme';
 import { AuthProvider } from '@/hooks/useAuth';
 import NavBar from './NavBar';
@@ -43,6 +43,9 @@ function LoadingFallback() {
 export default function ClientLayout({ children }) {
   const [opened, { toggle }] = useDisclosure();
   const router = useRouter();
+  const pathname = usePathname();
+  // La portada y el login arrancan en el borde: la imagen sube detrás del header flotante (sin franja blanca arriba)
+  const sinReserva = pathname === '/' || pathname === '/login';
   const pinned = useHeadroom({ fixedAt: 120 });
   const isMobile = useMediaQuery('(max-width: 48em)');
 
@@ -78,7 +81,7 @@ export default function ClientLayout({ children }) {
                   <AppShell
                     header={{ height: { base: 60, sm: 70 }, collapsed: !pinned }}
                     navbar={{
-                      width: 300,
+                      width: 320,
                       breakpoint: 'sm',
                       collapsed: { desktop: true, mobile: !opened },
                     }}
@@ -99,11 +102,13 @@ export default function ClientLayout({ children }) {
                       />
                     )}
 
-                    <AppShell.Navbar p="md" withBorder={false} className={navClasses.drawer}>
-                      <NavBar router={router} close={toggle} opened={opened} />
+                    <AppShell.Navbar p={0} withBorder={false} className={navClasses.drawerShell}>
+                      <div className={navClasses.drawer}>
+                        <NavBar router={router} close={toggle} opened={opened} />
+                      </div>
                     </AppShell.Navbar>
 
-                    <AppShell.Main px={0} pb={0} pt={{ base: 60, sm: 70 }}>
+                    <AppShell.Main px={0} pb={0} pt={sinReserva ? 0 : { base: 60, sm: 70 }}>
                       <AppBackground />
                       {children}
                     </AppShell.Main>

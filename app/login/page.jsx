@@ -1,7 +1,8 @@
 "use client"
 import React, { useEffect, useState } from 'react'
 import { useForm } from '@mantine/form';
-import { TextInput, PasswordInput, Paper, Title, Container, Button, Group, Image } from '@mantine/core'
+import { TextInput, PasswordInput, Paper, Text, Button, Group } from '@mantine/core'
+import estilos from './login.module.css';
 import { useRouter } from 'next/navigation';
 import { crearUsuario, iniciarSesion } from '../ApiFunctions/userServices';
 import { notifications } from '@mantine/notifications';
@@ -83,22 +84,24 @@ const page = () => {
   };
 
   return (
-    <>
-      <Container size={420} my={50}   >
-        <Title
-          align="center"
-          pt={150}
-          style={{ fontFamily: 'Greycliff CF, sans-serif', fontWeight: 900 }}
-        >
-          Bienvenido/a
-        </Title>
+    <div className={estilos.escena}>
+      {/* El mismo video de la portada, a pantalla completa, con un velo navy para que el formulario se lea */}
+      <video className={estilos.video} autoPlay muted loop playsInline preload="metadata" poster="/tenants/mediquir/hero-1-lg.jpg" aria-hidden="true">
+        <source src="/tenants/mediquir/hero-video.mp4" type="video/mp4" />
+      </video>
+      <div className={estilos.velo} />
 
-        <Paper shadow="md" p={30} mt={30} radius="md">
+      <div className={estilos.caja}>
+        <Text className={estilos.rotulo}>Acceso al sistema</Text>
+        <div role="heading" aria-level={1} className={estilos.titulo}>Bienvenido/a</div>
+
+        <Paper variant="oscura" p={28} mt="lg" radius="lg">
           <form onSubmit={form.onSubmit(handleSubmit)}>
             <TextInput
               label="Usuario"
               placeholder="escribe tu usuario"
               required
+              size="md"
               autoCapitalize="none"
               {...form.getInputProps('user')}
             />
@@ -108,14 +111,15 @@ const page = () => {
               placeholder="Ingresa tu contraseña"
               required
               mt="md"
+              size="md"
               {...form.getInputProps('password')}
             />
 
-            <Group position="apart" mt="lg">
-              <Button type="submit" fullWidth>
+            <Group mt="xl">
+              <Button type="submit" fullWidth size="md">
                 Iniciar Sesion
               </Button>
-              {!hayAdmin && <Button fullWidth onClick={async () => {
+              {!hayAdmin && <Button fullWidth size="md" onClick={async () => {
                 try {
                   await crearUsuario(defaultUser)
                   notifications.show({ title: "usuario creado" })
@@ -126,14 +130,11 @@ const page = () => {
               }}>
                 Registrar
               </Button>}
-              {/* {isAuthenticated && <Button fullWidth onClick={() => cerrarSesion(router.push, checkAuth)}>
-                Close session
-              </Button>} */}
             </Group>
           </form>
         </Paper>
-      </Container>
-    </>
+      </div>
+    </div>
   )
 }
 

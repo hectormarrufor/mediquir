@@ -60,7 +60,7 @@ export default function HeroSection({ searchQuery, onSearch }) {
     const scrollToCatalog = () => document.getElementById('productos-section')?.scrollIntoView({ behavior: 'smooth' });
 
     return (
-        <Box className={classes.hero} pos="relative" mih={{ base: 440, sm: 616, md: 704 }} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <Box className={classes.hero} pos="relative" mih={{ base: 520, sm: 660, md: 744 }} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             {/* FONDO */}
             <Box pos="absolute" inset={0} style={{ zIndex: 0, backgroundColor: 'var(--mantine-color-navy-9)' }}>
                 {usaVideo ? (
@@ -96,7 +96,7 @@ export default function HeroSection({ searchQuery, onSearch }) {
             <Box className={classes.heroGlow} />
 
             <Container
-                fluid w="100%" pos="relative" px={{ base: 18, sm: 36, lg: 72 }} py={{ base: 32, md: 80 }}
+                fluid w="100%" pos="relative" px={{ base: 18, sm: 36, lg: 72 }} pt={{ base: 84, md: 120 }} pb={{ base: 32, md: 80 }}
                 style={{ zIndex: 3, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}
             >
                 <Box maw={640}>
@@ -122,7 +122,7 @@ export default function HeroSection({ searchQuery, onSearch }) {
                         </Text>
                     </Text>
 
-                    <Paper p={4} radius="xl" shadow="xl" mb="md" maw={520} bg="white" withBorder={false}>
+                    <Paper variant="plano" p={4} radius="xl" shadow="xl" mb="md" maw={520} bg="white" withBorder={false}>
                         <form onSubmit={handleSubmit}>
                             <Flex gap="xs" align="center" pl="md">
                                 <TextInput

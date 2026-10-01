@@ -2,21 +2,44 @@
    Paleta: navy var(--mantine-color-navy-9), azul var(--mantine-color-brand-6), cian var(--mantine-color-sky-3), acento naranja var(--mantine-color-accent-6). */
 
 /* ---------- HEADER ---------- */
+/* El AppShell.Header conserva su alto (así el headroom lo esconde igual) pero va transparente:
+   lo que se ve es la barra interior, flotando con margen y bordes redondeados, a juego con las superficies de vidrio. */
 .header {
-    background: linear-gradient(180deg, rgba(6, 16, 38, 0.74) 0%, rgba(10, 26, 58, 0.58) 100%);
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    pointer-events: none;
+}
+
+.barra {
+    position: relative;
+    pointer-events: auto;
+    height: 52px;
+    margin: 8px 10px 0;
+    border-radius: 18px;
+    background:
+        radial-gradient(60% 140% at 0% 0%, alpha(var(--mantine-color-brand-5), 0.3), transparent 62%),
+        linear-gradient(180deg, rgba(6, 16, 38, 0.8) 0%, rgba(10, 26, 58, 0.66) 100%);
     -webkit-backdrop-filter: blur(18px) saturate(170%);
     backdrop-filter: blur(18px) saturate(170%);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 14px 34px -14px rgba(2, 8, 23, 0.6);
     transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 
+@media (min-width: 48em) {
+    .barra {
+        height: 60px;
+        margin: 8px 16px 0;
+    }
+}
+
 /* Filo luminoso inferior */
-.header::after {
+.barra::after {
     content: '';
     position: absolute;
-    left: 0;
-    right: 0;
+    left: 22px;
+    right: 22px;
     bottom: -1px;
     height: 1px;
     background: linear-gradient(90deg, transparent 0%, alpha(var(--mantine-color-sky-3), 0.75) 28%, alpha(var(--mantine-color-accent-6), 0.6) 72%, transparent 100%);
@@ -25,12 +48,14 @@
 }
 
 /* Al hacer scroll: más opaco y con sombra para separar del contenido */
-.header[data-scrolled] {
-    background: linear-gradient(180deg, rgba(5, 13, 31, 0.9) 0%, rgba(8, 21, 48, 0.82) 100%);
-    box-shadow: 0 12px 40px rgba(2, 8, 23, 0.38);
+.barra[data-scrolled] {
+    background:
+        radial-gradient(60% 140% at 0% 0%, alpha(var(--mantine-color-brand-5), 0.24), transparent 62%),
+        linear-gradient(180deg, rgba(5, 13, 31, 0.94) 0%, rgba(8, 21, 48, 0.9) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 40px -14px rgba(2, 8, 23, 0.7);
 }
 
-.header[data-scrolled]::after {
+.barra[data-scrolled]::after {
     opacity: 0.9;
 }
 
@@ -168,21 +193,34 @@
 }
 
 /* ---------- MENÚ LATERAL MÓVIL ---------- */
+/* El Navbar de AppShell va transparente y sin borde; el panel de vidrio flota dentro, con margen (así al cerrarse sale entero de la pantalla) */
+.drawerShell {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 6px 10px 10px;
+}
+
 .drawer {
+    height: 100%;
+    padding: 14px 12px;
+    border-radius: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 24px 60px -20px rgba(2, 8, 23, 0.8);
+    overflow: hidden;
     background:
         radial-gradient(420px 260px at 0% 0%, alpha(var(--mantine-color-brand-5), 0.42), transparent 62%),
         radial-gradient(380px 260px at 100% 100%, alpha(var(--mantine-color-accent-6), 0.16), transparent 62%),
         linear-gradient(180deg, #071630 0%, #0a1a3a 100%);
     -webkit-backdrop-filter: blur(20px);
     backdrop-filter: blur(20px);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
     color: #fff;
 }
 
 .drawerBody {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
     height: 100%;
     overflow-y: auto;
 }
@@ -212,7 +250,8 @@
     align-items: center;
     gap: 14px;
     width: 100%;
-    padding: 10px 12px;
+    min-height: 52px; /* alto cómodo para el dedo */
+    padding: 7px 12px;
     border-radius: 16px;
     color: rgba(255, 255, 255, 0.86);
     font-weight: 600;

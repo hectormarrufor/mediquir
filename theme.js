@@ -1,5 +1,6 @@
 // theme.js
 import { createTheme, rem } from '@mantine/core';
+import superficies from './app/superficies.module.css';
 
 export const theme = createTheme({
   scale: 1,
@@ -67,30 +68,16 @@ export const theme = createTheme({
       }
     },
 
-    // 🔥 PAPER LIMPIO: Sin hacks de GPU ni overflow escondido que rompa el scroll
+    // Superficies "cristal" (app/superficies.module.css): el fondo, borde y sombra viven en la hoja (no en línea),
+    // así un bg="…" o style de la página sigue mandando. Sin overflow ni hacks de GPU que rompan el scroll.
     Paper: {
-      defaultProps: { p: 'md', radius: 'md', shadow: 'sm' },
-      styles: {
-        root: {
-          backgroundColor: 'var(--mantine-color-white)',
-          border: '1px solid var(--mantine-color-petrolGray-2)',
-          transition: 'box-shadow 0.2s ease',
-        }
-      }
+      defaultProps: { p: 'md', radius: 'md' },
+      classNames: { root: superficies.superficie },
     },
 
     Card: {
       defaultProps: { p: 'lg', radius: 'lg' },
-      styles: {
-        root: {
-          backgroundColor: 'var(--mantine-color-white)',
-          borderTop: '3px solid var(--mantine-color-brand-6)',
-          borderLeft: '1px solid var(--mantine-color-petrolGray-2)',
-          borderRight: '1px solid var(--mantine-color-petrolGray-2)',
-          borderBottom: '1px solid var(--mantine-color-petrolGray-2)',
-          boxShadow: 'var(--mantine-shadow-sm)',
-        }
-      }
+      classNames: { root: superficies.superficie },
     },
 
     // Los enlaces usaban el color primario (mostaza) y casi no se leían sobre blanco

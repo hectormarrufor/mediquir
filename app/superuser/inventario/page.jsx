@@ -12,13 +12,13 @@ export default function InventarioDashboardPage() {
     const isMobile = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
 
     return (
-        <Stack justify="center" align="center" h="100vh" bg="gray.0">
+        <Stack justify="center" align="center" h="100vh">
             <Card
                 shadow="xl"
                 padding="xl"
                 radius="md"
                 withBorder
-                style={{ width: '100%', maxWidth: 800, backgroundColor: 'white' }}
+                style={{ width: '100%', maxWidth: 800 }}
             >
                 <Title order={2} ta="center" mb="lg" c="dark.8">
                     Módulo de Inventario y Anatomía

@@ -29,8 +29,8 @@ export default function SiteHeader({ opened, toggle }) {
     const activeSection = useScrollSpy(SPY_IDS, pathname === '/' && showPublicLinks);
 
     return (
-        <AppShell.Header className={classes.header} data-scrolled={scrolled || undefined}>
-            <Group h="100%" px={{ base: 'sm', sm: 'xl' }} justify="space-between" wrap="nowrap">
+        <AppShell.Header className={classes.header}>
+            <Group className={classes.barra} data-scrolled={scrolled || undefined} px={{ base: 'sm', sm: 'lg' }} justify="space-between" wrap="nowrap">
                 <UnstyledButton onClick={() => router.push('/')} aria-label={`Ir al inicio de ${tenant.name}`}>
                     <BrandLogo />
                 </UnstyledButton>
