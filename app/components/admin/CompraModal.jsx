@@ -125,6 +125,11 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         }
     });
 
+    // Moneda de la factura: el costo del producto SIEMPRE se guarda en dólares; si la factura llega en bolívares se convierte con la tasa BCV del día
+    const tasa = Number(tasaBcv) || 0;
+    const esBs = formCompra.values.moneda === 'BS';
+    const aMon = (usd) => (esBs ? (Number(usd) || 0) * tasa : Number(usd) || 0);
+
     const formNuevoProv = useForm({
         initialValues: {
             identificacion: '',
@@ -180,7 +185,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 empaqueOriginal: { undPorCaja: Number(prod.unidadesPorCaja) || 0, cajasPorBulto: Number(prod.cajasPorBulto) || 0, undPorBulto: Number(prod.unidadesPorBulto) || 0 },
                 unidadCompra: 'unidad',
                 cantidadCompra: 1,
-                precioCompra: costoUnidad,
+                precioCompra: Number(aMon(costoUnidad).toFixed(4)),
                 porcentajeIva: Number(prod.porcentajeIva) || 16,
                 aceptarCambioPrecio: true
             })]);
@@ -230,6 +235,16 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             }
             return recalcular(n);
         }));
+    };
+
+    // Al cambiar la moneda de la factura se reconvierten los precios ya escritos y el monto del gasto
+    const cambiarMoneda = (nueva) => {
+        if (!nueva || nueva === formCompra.values.moneda) return;
+        if (nueva === 'BS' && !(tasa > 0)) return notifications.show({ title: 'Sin tasa BCV', message: 'No hay una tasa BCV vigente para convertir a bolívares.', color: 'red' });
+        const k = nueva === 'BS' ? tasa : 1 / tasa;
+        setCarritoCompra(carritoCompra.map(i => recalcular({ ...i, precioCompra: Number(((Number(i.precioCompra) || 0) * k).toFixed(4)) })));
+        setGasto({ ...gasto, base: Number(((Number(gasto.base) || 0) * k).toFixed(2)), exento: Number(((Number(gasto.exento) || 0) * k).toFixed(2)) });
+        formCompra.setFieldValue('moneda', nueva);
     };
 
     const actualizarPrecioCompra = (id, nuevoPrecio) => {
@@ -394,7 +409,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
 
     const sim = formCompra.values.moneda === 'BS' ? 'Bs' : '$';
     const accionRegistrar = esGasto ? handleRegistrarGasto : handleLanzarSimulacion;
-    const registroBloqueado = (esGasto ? !(subtotal > 0) : carritoCompra.length === 0) || faltaNumeracionRet;
+    const registroBloqueado = (esGasto ? !(subtotal > 0) : carritoCompra.length === 0) || faltaNumeracionRet || (esBs && !(tasa > 0));
     const labelBoton = esGasto ? 'Registrar gasto' : 'Analizar compra y costos';
 
     // ---- Declaración de responsabilidad (una línea en escritorio) ----
@@ -479,8 +494,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                         <NumberInput size="sm" label="Días de crédito" min={1} withAsterisk {...formCompra.getInputProps('diasCredito')} />
                     </Grid.Col>
                 )}
-                <Grid.Col span={{ base: 6, md: 1 }}>
-                    <Select size="sm" label="Moneda" allowDeselect={false} data={['USD', 'BS']} {...formCompra.getInputProps('moneda')} />
+                <Grid.Col span={{ base: 6, md: 2 }}>
+                    <Select size="sm" label="Moneda" allowDeselect={false} data={[{ value: 'USD', label: 'USD ($)' }, { value: 'BS', label: 'Bs' }]} {...formCompra.getInputProps('moneda')} onChange={cambiarMoneda} />
                 </Grid.Col>
                 {esFactura && (
                     <Grid.Col span={{ base: 12, md: 'auto' }}>
@@ -493,6 +508,11 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                     </Grid.Col>
                 )}
             </Grid>
+            {esBs && (
+                <Alert color="blue" variant="light" mt="xs" py={6} px="sm">
+                    <Text size="xs">{tasa > 0 ? <>Factura en <b>bolívares</b>. Tasa BCV de hoy: <b>Bs {tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</b> por dólar. Escribe los precios tal como vienen en la factura (Bs); el costo del producto se guarda en dólares y aquí ves el costo actual y el de esta factura en ambas monedas.</> : <b>No hay tasa BCV vigente: no se puede registrar una factura en bolívares.</b>}</Text>
+                </Alert>
+            )}
             {!esFactura && <Text size="xs" c="dimmed" mt="xs">La nota de entrega no es un documento fiscal: se registra sin IVA, sin retención y sin número de control, y no entra al libro de compras. {esGasto ? 'Al ser un gasto, no mueve el inventario.' : 'El inventario y el costo se actualizan igual.'}</Text>}
         </Box>
     );
@@ -520,14 +540,15 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         <Stack gap={6} mb="sm">
             {carritoCompra.length === 0 && <Text size="sm" c="dimmed" ta="center" py="md">Toca un producto de la lista para agregarlo.</Text>}
             {carritoCompra.map(item => {
-                const diferencia = item.precioCompraUnitario - item.costoAnterior;
-                const variacionPorcentual = item.costoAnterior > 0 ? ((diferencia / item.costoAnterior) * 100).toFixed(1) : 100;
+                const costoAntMon = aMon(item.costoAnterior);
+                const diferencia = item.precioCompraUnitario - costoAntMon;
+                const variacionPorcentual = costoAntMon > 0 ? ((diferencia / costoAntMon) * 100).toFixed(1) : 100;
                 return (
                     <Paper key={item.id} withBorder p="xs" radius="md">
                         <Group justify="space-between" wrap="nowrap" align="flex-start" mb={4}>
                             <Box style={{ minWidth: 0, flex: 1 }}>
                                 <Text fw={700} size="sm" lineClamp={2} lh={1.25}>{item.nombre}</Text>
-                                <Text size="xs" c="dimmed">{item.marca ? `${item.marca} · ` : ''}SKU: {item.codigo} · costo ant. <PrecioVisual valor={item.costoAnterior} simbolo="$" size="xs" c="dimmed" /></Text>
+                                <Text size="xs" c="dimmed">{item.marca ? `${item.marca} · ` : ''}SKU: {item.codigo} · costo ant. <PrecioVisual valor={item.costoAnterior} simbolo="$" size="xs" c="dimmed" />{esBs && <> · <PrecioVisual valor={costoAntMon} simbolo="Bs" size="xs" c="dimmed" /></>}</Text>
                             </Box>
                             <ActionIcon color="red" variant="subtle" size="md" onClick={() => eliminarItem(item.id)}><IconTrash size={18}/></ActionIcon>
                         </Group>
@@ -546,12 +567,13 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                 <ActionIcon size="lg" variant="light" onClick={() => cambiarCantidad(item.id, 1)}><IconPlus size={16}/></ActionIcon>
                             </Group>
                             <Box style={{ flex: 1, minWidth: 0 }}>
-                                <NumberInput value={item.precioCompra} onChange={(val) => actualizarPrecioCompra(item.id, val)} decimalScale={4} size="sm" leftSection="$" />
+                                <NumberInput value={item.precioCompra} onChange={(val) => actualizarPrecioCompra(item.id, val)} decimalScale={4} size="sm" leftSection={esBs ? 'Bs' : '$'} leftSectionWidth={esBs ? 36 : undefined} />
                             </Box>
                         </Group>
                         <EditorEmpaque item={item} onCambiar={(c, v) => cambiarEmpaque(item.id, c, v)} />
                         <Text size="xs" c="dimmed" mt={4}>
                             por {item.unidadCompra}{item.unidadCompra !== 'unidad' ? ` = ${item.cantidad.toLocaleString('es-VE')} und · ${item.precioCompraUnitario.toFixed(4)} c/u` : ''}
+                            {esBs && tasa > 0 && ` · ≈ $${(item.precioCompraUnitario / tasa).toFixed(4)} c/u`}
                             {diferencia !== 0 && <Text span size="xs" fw={700} c={diferencia > 0 ? 'red' : 'teal'}> · {diferencia > 0 ? `▲ +${variacionPorcentual}%` : `▼ ${variacionPorcentual}%`}</Text>}
                         </Text>
                     </Paper>
@@ -568,7 +590,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                     <Table.Tr>
                         <Table.Th>Producto</Table.Th>
                         <Table.Th>¿Qué recibes?</Table.Th>
-                        <Table.Th>Costo ant./und</Table.Th>
+                        <Table.Th>Costo actual / und</Table.Th>
                         <Table.Th>Precio de compra</Table.Th>
                         <Table.Th ta="right">Subtotal</Table.Th>
                         <Table.Th w={44}></Table.Th>
@@ -579,8 +601,9 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                         <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" ta="center" py={60}>Aún no hay productos. Elige uno de la lista de la izquierda para agregarlo.</Text></Table.Td></Table.Tr>
                     )}
                     {carritoCompra.map(item => {
-                        const diferencia = item.precioCompraUnitario - item.costoAnterior;
-                        const variacionPorcentual = item.costoAnterior > 0 ? ((diferencia / item.costoAnterior) * 100).toFixed(1) : 100;
+                        const costoAntMon = aMon(item.costoAnterior);
+                const diferencia = item.precioCompraUnitario - costoAntMon;
+                        const variacionPorcentual = costoAntMon > 0 ? ((diferencia / costoAntMon) * 100).toFixed(1) : 100;
                         return (
                             <Table.Tr key={item.id}>
                                 <Table.Td style={{ maxWidth: 260 }}>
@@ -606,11 +629,15 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                         <EditorEmpaque item={item} onCambiar={(c, v) => cambiarEmpaque(item.id, c, v)} />
                                     </Stack>
                                 </Table.Td>
-                                <Table.Td><PrecioVisual valor={item.costoAnterior} simbolo="$" size="sm" c="dimmed" /></Table.Td>
                                 <Table.Td>
-                                    <NumberInput value={item.precioCompra} onChange={(val) => actualizarPrecioCompra(item.id, val)} decimalScale={4} w={120} size="sm" />
+                                    <PrecioVisual valor={item.costoAnterior} simbolo="$" size="sm" c="dimmed" />
+                                    {esBs && <PrecioVisual valor={costoAntMon} simbolo="Bs" size="sm" c="dimmed" />}
+                                </Table.Td>
+                                <Table.Td>
+                                    <NumberInput value={item.precioCompra} onChange={(val) => actualizarPrecioCompra(item.id, val)} decimalScale={4} w={esBs ? 150 : 120} size="sm" leftSection={esBs ? 'Bs' : '$'} leftSectionWidth={esBs ? 36 : undefined} />
                                     <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
                                         por {item.unidadCompra}{item.unidadCompra !== 'unidad' ? ` → ${item.precioCompraUnitario.toFixed(4)} c/u` : ''}
+                                        {esBs && tasa > 0 && ` · ≈ $${(item.precioCompraUnitario / tasa).toFixed(4)} c/u`}
                                         {diferencia !== 0 && <Text span size="xs" fw={700} c={diferencia > 0 ? 'red' : 'teal'}> · {diferencia > 0 ? `▲ +${variacionPorcentual}%` : `▼ ${variacionPorcentual}%`}</Text>}
                                     </Text>
                                 </Table.Td>
@@ -773,8 +800,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                                 </Table.Td>
                                                 {!soloRegistro && <>
                                                 <Table.Td ta="center">
-                                                    <Text size="sm" c="dimmed">Ant: ${sim.costoActual}</Text>
-                                                    <Text size="md" fw={700} c="teal">Nuevo: ${sim.nuevoCostoPonderado}</Text>
+                                                    <Text size="sm" c="dimmed">Ant: ${sim.costoActual}{esBs && ` · Bs ${(sim.costoActual * tasa).toFixed(2)}`}</Text>
+                                                    <Text size="md" fw={700} c="teal">Nuevo: ${sim.nuevoCostoPonderado}{esBs && ` · Bs ${(sim.nuevoCostoPonderado * tasa).toFixed(2)}`}</Text>
                                                 </Table.Td>
                                                 <Table.Td ta="center">
                                                     <Badge color={sim.porcentajeAumento >= 0 ? 'red' : 'teal'} size="lg" variant="filled">
@@ -783,9 +810,11 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                                 </Table.Td>
                                                 <Table.Td>
                                                     <Text size="md">${sim.precio6.actual} ➔ <Text span fw={700} c="blue" size="lg">${sim.precio6.nuevo}</Text></Text>
+                                                    {esBs && <Text size="xs" c="dimmed">Bs {(sim.precio6.actual * tasa).toFixed(2)} ➔ Bs {(sim.precio6.nuevo * tasa).toFixed(2)}</Text>}
                                                 </Table.Td>
                                                 <Table.Td>
                                                     <Text size="md">${sim.precio7.actual} ➔ <Text span fw={700} c="blue" size="lg">${sim.precio7.nuevo}</Text></Text>
+                                                    {esBs && <Text size="xs" c="dimmed">Bs {(sim.precio7.actual * tasa).toFixed(2)} ➔ Bs {(sim.precio7.nuevo * tasa).toFixed(2)}</Text>}
                                                 </Table.Td>
                                                 <Table.Td ta="center">
                                                     <Checkbox 
