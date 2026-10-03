@@ -342,6 +342,13 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                         Al registrar y firmar esta factura, certifica bajo su estricta responsabilidad que la mercancía física ingresada al almacén ha sido contada y validada.
                     </Alert>}
 
+                    {faltaNumeracionRet && (
+                        <Alert color="orange" variant="light" mb={isMobile ? 6 : 'md'} title="Antes de retener: ¿con qué número empiezan tus comprobantes?">
+                            <Text size="xs" mb="xs">Esta factura lleva retención de IVA y el comprobante sigue su propia numeración. Como ya emitiste comprobantes antes del sistema, indica con cuál empieza el próximo (una sola vez).</Text>
+                            <PreguntarNumero serie={serieRet} puedeEditar={numeracion.puedeEditar} compacto />
+                        </Alert>
+                    )}
+
                     <Grid gutter="lg">
                         {!esGasto && <Grid.Col span={{ base: 12, md: 5 }}>
                             <Paper withBorder p={isMobile ? 'xs' : 'md'} radius="md" h={isMobile ? 260 : '78vh'} style={{ display: 'flex', flexDirection: 'column' }}>
@@ -526,13 +533,6 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                 )}
 
                                 {!isMobile && <Divider mb="md" />}
-
-                                {faltaNumeracionRet && (
-                                    <Alert color="orange" variant="light" mb="md" p="xs" title="Antes de retener: ¿con qué número empiezan tus comprobantes?">
-                                        <Text size="xs" mb="xs">Esta factura lleva retención de IVA y el comprobante sigue su propia numeración. Como ya emitiste comprobantes antes del sistema, indica con cuál empieza el próximo (una sola vez).</Text>
-                                        <PreguntarNumero serie={serieRet} puedeEditar={numeracion.puedeEditar} compacto />
-                                    </Alert>
-                                )}
 
                                 {isMobile ? (
                                     <Box style={{ position: 'sticky', bottom: 0, zIndex: 15, background: '#fff', margin: '6px -8px -8px', padding: '8px 12px calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -6px 16px rgba(0,0,0,0.12)', borderTop: '1px solid var(--mantine-color-gray-3)' }}>
