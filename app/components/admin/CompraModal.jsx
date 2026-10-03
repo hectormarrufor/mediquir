@@ -161,7 +161,12 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     };
 
     const actualizarCantidadCompra = (id, valor) => {
-        setCarritoCompra(carritoCompra.map(i => i.id === id ? recalcular({ ...i, cantidadCompra: Number(valor) || 0 }) : i));
+        setCarritoCompra(carritoCompra.map(i => i.id === id ? recalcular({ ...i, cantidadCompra: valor === '' ? '' : Number(valor) || 0 }) : i));
+    };
+
+    // Al salir del campo, una cantidad vacía o 0 vuelve a 1
+    const confirmarCantidadCompra = (id) => {
+        setCarritoCompra(carritoCompra.map(i => i.id === id && !(Number(i.cantidadCompra) >= 1) ? recalcular({ ...i, cantidadCompra: 1 }) : i));
     };
 
     // Al cambiar de unidad se conserva el costo por unidad y se recalcula el precio del bulto / la caja
@@ -441,7 +446,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                                     <Group gap={8} wrap="nowrap" align="flex-start">
                                                         <Group gap={4} wrap="nowrap">
                                                             <ActionIcon size="lg" variant="light" onClick={() => cambiarCantidad(item.id, -1)}><IconMinus size={16}/></ActionIcon>
-                                                            <NumberInput value={item.cantidadCompra} onChange={(v) => actualizarCantidadCompra(item.id, v)} min={1} allowDecimal={false} hideControls w={58} size="sm" styles={{ input: { textAlign: 'center', paddingInline: 4 } }} />
+                                                            <NumberInput value={item.cantidadCompra} onChange={(v) => actualizarCantidadCompra(item.id, v)} onBlur={() => confirmarCantidadCompra(item.id)} selectAllOnFocus inputMode="numeric" min={1} allowDecimal={false} allowNegative={false} hideControls w={70} size="sm" styles={{ input: { textAlign: 'center', paddingInline: 4 } }} />
                                                             <ActionIcon size="lg" variant="light" onClick={() => cambiarCantidad(item.id, 1)}><IconPlus size={16}/></ActionIcon>
                                                         </Group>
                                                         <Box style={{ flex: 1, minWidth: 0 }}>
@@ -491,7 +496,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                                                 />
                                                                 <Group gap={6} justify="center" wrap="nowrap">
                                                                     <ActionIcon size="sm" onClick={() => cambiarCantidad(item.id, -1)}><IconMinus size={14}/></ActionIcon>
-                                                                    <NumberInput value={item.cantidadCompra} onChange={(v) => actualizarCantidadCompra(item.id, v)} min={1} allowDecimal={false} hideControls w={80} size="xs" ta="center" />
+                                                                    <NumberInput value={item.cantidadCompra} onChange={(v) => actualizarCantidadCompra(item.id, v)} onBlur={() => confirmarCantidadCompra(item.id)} selectAllOnFocus inputMode="numeric" min={1} allowDecimal={false} allowNegative={false} hideControls w={80} size="xs" ta="center" />
                                                                     <ActionIcon size="sm" onClick={() => cambiarCantidad(item.id, 1)}><IconPlus size={14}/></ActionIcon>
                                                                 </Group>
                                                                 {item.unidadCompra !== 'unidad' && <Text size="xs" c="dimmed">= {item.cantidad.toLocaleString('es-VE')} unidades</Text>}

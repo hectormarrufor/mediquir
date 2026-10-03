@@ -132,10 +132,10 @@ function NuevaTareaModal({ opened, onClose, yo, asignables, onCreada, textoInici
                 <TextInput label="¿Qué hay que hacer?" data-autofocus value={f.titulo} onChange={(e) => setF({ ...f, titulo: e.currentTarget.value })} maxLength={200} />
                 <Textarea label="Detalles (opcional)" autosize minRows={2} maxRows={6} maxLength={2000} value={f.descripcion} onChange={(e) => setF({ ...f, descripcion: e.currentTarget.value })} />
                 <SimpleGrid cols={2}>
-                    <Select label="Prioridad" data={PRIORIDADES} value={f.prioridad} allowDeselect={false} onChange={(v) => setF({ ...f, prioridad: v })} />
+                    <Select comboboxProps={{ zIndex: 500 }} label="Prioridad" data={PRIORIDADES} value={f.prioridad} allowDeselect={false} onChange={(v) => setF({ ...f, prioridad: v })} />
                     <DateInput label="Vence" clearable valueFormat="DD/MM/YYYY" placeholder="Sin fecha" value={f.fecha} onChange={(d) => setF({ ...f, fecha: d })} />
                 </SimpleGrid>
-                {yo.puedeAsignar && <Select label="Responsable" searchable allowDeselect={false} data={opciones} value={f.asignado} onChange={(v) => setF({ ...f, asignado: v })} />}
+                {yo.puedeAsignar && <Select comboboxProps={{ zIndex: 500 }} label="Responsable" searchable allowDeselect={false} data={opciones} value={f.asignado} onChange={(v) => setF({ ...f, asignado: v })} />}
                 <Textarea label="Pasos (uno por línea, opcional)" autosize minRows={2} maxRows={8} value={f.pasos} onChange={(e) => setF({ ...f, pasos: e.currentTarget.value })} placeholder={'Llamar al proveedor\nConfirmar precio\nEnviar orden'} />
                 <Group justify="flex-end"><Button variant="default" onClick={onClose}>Cancelar</Button><Button loading={guardando} onClick={crear}>Crear tarea</Button></Group>
             </Stack>
@@ -172,8 +172,8 @@ function ConfigAsignacion({ opened, onClose }) {
         <Modal opened={opened} onClose={onClose} title={<Text fw={800}>Quién puede asignar tareas</Text>} centered zIndex={400}>
             <Stack>
                 <Text size="sm" c="dimmed">Elige qué departamentos y puestos pueden asignar tareas a su propio departamento. Presidencia y administración siempre pueden asignar a cualquiera.</Text>
-                <MultiSelect label="Departamentos" data={departamentos} value={permisos.departamentos || []} onChange={(v) => setPermisos({ ...permisos, departamentos: v })} searchable clearable />
-                <MultiSelect label="Puestos" data={puestos} value={permisos.puestos || []} onChange={(v) => setPermisos({ ...permisos, puestos: v })} searchable clearable />
+                <MultiSelect comboboxProps={{ zIndex: 500 }} label="Departamentos" data={departamentos} value={permisos.departamentos || []} onChange={(v) => setPermisos({ ...permisos, departamentos: v })} searchable clearable />
+                <MultiSelect comboboxProps={{ zIndex: 500 }} label="Puestos" data={puestos} value={permisos.puestos || []} onChange={(v) => setPermisos({ ...permisos, puestos: v })} searchable clearable />
                 <Button loading={guardando} onClick={guardar}>Guardar</Button>
             </Stack>
         </Modal>
@@ -378,7 +378,7 @@ export default function TareasPanel() {
                         <Title order={4} c="navy.9" lh={1.1}>Tareas</Title>
                         <Text size="xs" c="dimmed">{hoy ? formatearFecha(hoy) : ''}{yo?.puedeAsignar ? ' · puedes asignar a tu equipo' : ''}</Text>
                     </Box>
-                    {yo?.userId === 1 && <ActionIcon variant="subtle" color="blue" onClick={() => setModalConfig(true)} aria-label="Quién puede asignar tareas"><IconSettings size={18} /></ActionIcon>}
+                    {(yo?.userId === 1 || yo?.esAdmin) && <ActionIcon variant="subtle" color="blue" onClick={() => setModalConfig(true)} aria-label="Quién puede asignar tareas"><IconSettings size={18} /></ActionIcon>}
                 </Group>
                 <Group gap="xs">
                     {resumen.vencidas > 0 && <Badge color="red" variant="filled" size="lg" onClick={() => setVista('dia')} style={{ cursor: 'pointer' }}>{resumen.vencidas} vencida{resumen.vencidas === 1 ? '' : 's'}</Badge>}

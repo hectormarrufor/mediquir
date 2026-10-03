@@ -137,12 +137,12 @@ export default function TareaDrawer({ tarea, yo, hoy, asignables, opened, onClos
 
                 {/* Datos */}
                 <Group grow align="flex-start">
-                    <Select label="Prioridad" data={PRIORIDADES} value={tarea.prioridad} disabled={!puedeGestionar} allowDeselect={false} onChange={(prioridad) => prioridad && guardar({ prioridad })} />
+                    <Select comboboxProps={{ zIndex: 500 }} label="Prioridad" data={PRIORIDADES} value={tarea.prioridad} disabled={!puedeGestionar} allowDeselect={false} onChange={(prioridad) => prioridad && guardar({ prioridad })} />
                     <DateInput label="Vence" clearable disabled={!puedeGestionar} valueFormat="DD/MM/YYYY" placeholder="Sin fecha" value={aFecha(tarea.fechaVencimiento)}
                         onChange={(d) => guardar({ fechaVencimiento: aIso(d) })} />
                 </Group>
                 {puedeReasignar ? (
-                    <Select label="Responsable" searchable allowDeselect={false} data={opcionesResponsable} value={tarea.asignadoAId ? String(tarea.asignadoAId) : 'general'}
+                    <Select comboboxProps={{ zIndex: 500 }} label="Responsable" searchable allowDeselect={false} data={opcionesResponsable} value={tarea.asignadoAId ? String(tarea.asignadoAId) : 'general'}
                         onChange={(v) => v && guardar({ asignadoAId: v === 'general' ? null : Number(v) })} />
                 ) : (
                     <Text size="sm"><Text span c="dimmed">Responsable: </Text><b>{tarea.responsable?.nombre || 'Equipo (sin responsable)'}</b></Text>
