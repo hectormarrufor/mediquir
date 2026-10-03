@@ -497,7 +497,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 <Grid.Col span={{ base: 6, md: 2 }}>
                     <Select size="sm" label="Moneda" allowDeselect={false} data={[{ value: 'USD', label: 'USD ($)' }, { value: 'BS', label: 'Bs' }]} {...formCompra.getInputProps('moneda')} onChange={cambiarMoneda} />
                 </Grid.Col>
-                {esFactura && (
+                {esFactura && montoIva > 0 && (
                     <Grid.Col span={{ base: 12, md: 'auto' }}>
                         <Group gap="sm" wrap="nowrap" align="center" h={36}>
                             <Checkbox label={<Text fw={600} size="sm">Retener IVA</Text>} {...formCompra.getInputProps('aplicarRetencion', { type: 'checkbox' })} />
