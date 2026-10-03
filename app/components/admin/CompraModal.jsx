@@ -186,7 +186,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 unidadCompra: 'unidad',
                 cantidadCompra: 1,
                 precioCompra: Number(aMon(costoUnidad).toFixed(4)),
-                porcentajeIva: Number(prod.porcentajeIva) || 16,
+                porcentajeIva: prod.porcentajeIva === null || prod.porcentajeIva === undefined || prod.porcentajeIva === "" || Number.isNaN(Number(prod.porcentajeIva)) ? 16 : Number(prod.porcentajeIva), // 0 = exento: no se puede tratar como "sin dato"
                 aceptarCambioPrecio: true
             })]);
         }
