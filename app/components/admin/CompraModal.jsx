@@ -356,7 +356,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                         </Grid.Col>}
 
                         <Grid.Col span={{ base: 12, md: esGasto ? 12 : 7 }}>
-                            <Paper withBorder p={isMobile ? 'xs' : 'lg'} radius="md" h={isMobile ? 'auto' : '78vh'} style={{ display: 'flex', flexDirection: 'column' }}>
+                            <Paper withBorder p={isMobile ? 'xs' : 'lg'} radius="md" h={isMobile ? 'auto' : '78vh'} style={{ display: 'flex', flexDirection: 'column', overflowY: isMobile ? undefined : 'auto' }}>
                                 
                                 <SegmentedControl mb={isMobile ? 6 : 'md'} fullWidth value={esGasto ? 'gasto' : 'mercancia'} onChange={(v) => setEsGasto(v === 'gasto')}
                                     data={[{ value: 'mercancia', label: 'Compra de mercancía (inventario)' }, { value: 'gasto', label: 'Gasto (no afecta el inventario)' }]} />
@@ -462,7 +462,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                         })}
                                     </Stack>
                                 ) : (
-                                <ScrollArea style={{ flex: 1 }} type="auto" mb="md">
+                                <ScrollArea style={{ flex: 1 }} mih={320} type="auto" mb="md">
                                     <Table striped highlightOnHover verticalSpacing="md">
                                         <Table.Thead>
                                             <Table.Tr>
@@ -528,7 +528,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                 {!isMobile && <Divider mb="md" />}
 
                                 {faltaNumeracionRet && (
-                                    <Alert color="orange" variant="light" mb="md" title="Antes de retener: ¿con qué número empiezan tus comprobantes?">
+                                    <Alert color="orange" variant="light" mb="md" p="xs" title="Antes de retener: ¿con qué número empiezan tus comprobantes?">
                                         <Text size="xs" mb="xs">Esta factura lleva retención de IVA y el comprobante sigue su propia numeración. Como ya emitiste comprobantes antes del sistema, indica con cuál empieza el próximo (una sola vez).</Text>
                                         <PreguntarNumero serie={serieRet} puedeEditar={numeracion.puedeEditar} compacto />
                                     </Alert>
