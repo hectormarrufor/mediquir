@@ -42,7 +42,7 @@ const FilaProducto = memo(function FilaProducto({ prod, isMobile, onAgregar }) {
 });
 
 // Auditoría del empaque del producto: se corrige aquí lo que el proveedor trae realmente y se guarda en la ficha al registrar la compra
-const empaqueCambio = (item) => (Number(item.undPorCaja) || 0) !== (item.empaqueOriginal?.undPorCaja || 0) || (Number(item.cajasPorBulto) || 0) !== (item.empaqueOriginal?.cajasPorBulto || 0);
+const empaqueCambio = (item) => (Number(item.undPorCaja) || 0) !== (item.empaqueOriginal?.undPorCaja || 0) || (Number(item.cajasPorBulto) || 0) !== (item.empaqueOriginal?.cajasPorBulto || 0) || (Number(item.undPorBulto) || 0) !== (item.empaqueOriginal?.undPorBulto || 0);
 
 function EditorEmpaque({ item, onCambiar }) {
     const modificado = empaqueCambio(item);
@@ -59,8 +59,13 @@ function EditorEmpaque({ item, onCambiar }) {
                     <Text size="sm" fw={700}>Empaque de {item.nombre}</Text>
                     <NumberInput size="sm" label="Unidades por caja" description={original.undPorCaja ? `En la ficha: ${original.undPorCaja}` : 'En la ficha: sin caja'} min={0} allowDecimal={false} allowNegative={false} hideControls selectAllOnFocus
                         value={item.undPorCaja || ''} onChange={(v) => onCambiar('undPorCaja', v)} />
-                    <NumberInput size="sm" label="Cajas por bulto" description={original.cajasPorBulto ? `En la ficha: ${original.cajasPorBulto}` : 'En la ficha: sin bulto'} min={0} allowDecimal={false} allowNegative={false} hideControls selectAllOnFocus disabled={!item.undPorCaja}
-                        value={item.cajasPorBulto || ''} onChange={(v) => onCambiar('cajasPorBulto', v)} />
+                    {item.undPorCaja ? (
+                        <NumberInput size="sm" label="Cajas por bulto" description={original.cajasPorBulto ? `En la ficha: ${original.cajasPorBulto}` : 'En la ficha: sin bulto'} min={0} allowDecimal={false} allowNegative={false} hideControls selectAllOnFocus
+                            value={item.cajasPorBulto || ''} onChange={(v) => onCambiar('cajasPorBulto', v)} />
+                    ) : (
+                        <NumberInput size="sm" label="Unidades por bulto" description={`Producto sin caja: el bulto trae las unidades sueltas. En la ficha: ${original.undPorBulto > 1 ? original.undPorBulto : 'sin bulto'}`} min={0} allowDecimal={false} allowNegative={false} hideControls selectAllOnFocus
+                            value={item.undPorBulto || ''} onChange={(v) => onCambiar('undPorBulto', v)} />
+                    )}
                     <Text size="xs" c="dimmed">
                         {item.undPorCaja ? `1 caja = ${item.undPorCaja} und` : 'Sin caja'}{item.undPorBulto > 1 ? ` · 1 bulto = ${item.undPorBulto.toLocaleString('es-VE')} und` : ''}
                     </Text>
@@ -172,7 +177,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 undPorCaja: Number(prod.unidadesPorCaja) || 0,
                 undPorBulto: Number(prod.unidadesPorBulto) || 0,
                 cajasPorBulto: Number(prod.cajasPorBulto) || 0,
-                empaqueOriginal: { undPorCaja: Number(prod.unidadesPorCaja) || 0, cajasPorBulto: Number(prod.cajasPorBulto) || 0 },
+                empaqueOriginal: { undPorCaja: Number(prod.unidadesPorCaja) || 0, cajasPorBulto: Number(prod.cajasPorBulto) || 0, undPorBulto: Number(prod.unidadesPorBulto) || 0 },
                 unidadCompra: 'unidad',
                 cantidadCompra: 1,
                 precioCompra: costoUnidad,
@@ -218,7 +223,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             const n = { ...i, [campo]: v };
             if (campo === 'undPorCaja' && v && !i.undPorCaja && !i.cajasPorBulto && i.undPorBulto > 1 && i.undPorBulto % v === 0) n.cajasPorBulto = i.undPorBulto / v; // el bulto ya existía: se reparte en cajas
             if (!n.undPorCaja) n.cajasPorBulto = 0;
-            n.undPorBulto = n.undPorCaja ? (n.cajasPorBulto ? n.cajasPorBulto * n.undPorCaja : 0) : i.undPorBulto;
+            if (n.undPorCaja) n.undPorBulto = n.cajasPorBulto ? n.cajasPorBulto * n.undPorCaja : 0; // sin caja el total del bulto se escribe directo
             // si la presentación elegida deja de existir, se vuelve a unidades conservando el costo por unidad
             if ((n.unidadCompra === 'caja' && !n.undPorCaja) || (n.unidadCompra === 'bulto' && !(n.undPorBulto > 1))) {
                 return recalcular({ ...n, unidadCompra: 'unidad', cantidadCompra: 1, precioCompra: i.precioCompraUnitario });
@@ -331,7 +336,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             // Primero se guarda el empaque corregido en la ficha: si falla, no se registra la compra con unidades dudosas
             if (!esGasto) {
                 for (const item of carritoCompra.filter(empaqueCambio)) {
-                    const r = await fetch(`/api/productos/${item.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unidadesPorCaja: item.undPorCaja || null, cajasPorBulto: item.cajasPorBulto || null }) });
+                    const r = await fetch(`/api/productos/${item.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item.undPorCaja ? { unidadesPorCaja: item.undPorCaja, cajasPorBulto: item.cajasPorBulto || null } : { unidadesPorCaja: null, cajasPorBulto: null, unidadesPorBulto: item.undPorBulto > 1 ? item.undPorBulto : null }) });
                     if (!r.ok) throw new Error(`No se pudo guardar el empaque de ${item.nombre}: ${(await r.json().catch(() => null))?.error || 'error del servidor'}`);
                 }
             }
