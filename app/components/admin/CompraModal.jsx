@@ -4,13 +4,13 @@ import React, { useState, useEffect, useMemo, useDeferredValue, memo } from 'rea
 import { 
     Modal, Button, Group, Title, TextInput, NumberInput, 
     Select, Paper, Stack, Grid, Table, ActionIcon,
-    Text, Divider, Badge, Checkbox, Box, ScrollArea, Alert, SegmentedControl
+    Text, Divider, Badge, Checkbox, Box, ScrollArea, Alert, SegmentedControl, ThemeIcon
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useMediaQuery } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
-    IconTrash, IconPlus, IconMinus, IconCheck, IconShieldCheck, IconAlertTriangle 
+    IconTrash, IconPlus, IconMinus, IconCheck, IconShieldCheck, IconAlertTriangle, IconReceiptTax
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
@@ -343,10 +343,20 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                     </Alert>}
 
                     {faltaNumeracionRet && (
-                        <Alert color="orange" variant="light" mb={isMobile ? 6 : 'md'} title="Antes de retener: ¿con qué número empiezan tus comprobantes?">
-                            <Text size="xs" mb="xs">Esta factura lleva retención de IVA y el comprobante sigue su propia numeración. Como ya emitiste comprobantes antes del sistema, indica con cuál empieza el próximo (una sola vez).</Text>
-                            <PreguntarNumero serie={serieRet} puedeEditar={numeracion.puedeEditar} compacto />
-                        </Alert>
+                        <Paper radius="md" mb={isMobile ? 6 : 'md'} p={isMobile ? 'sm' : 'md'}
+                            style={{ background: 'linear-gradient(135deg, var(--mantine-color-orange-0), #fff 70%)', border: '1px solid var(--mantine-color-orange-3)', borderLeft: '5px solid var(--mantine-color-orange-6)' }}>
+                            <Group align="flex-start" wrap={isMobile ? 'wrap' : 'nowrap'} gap="md">
+                                <ThemeIcon size={isMobile ? 34 : 44} radius="xl" color="orange" variant="light" style={{ flex: '0 0 auto' }}><IconReceiptTax size={isMobile ? 20 : 26} /></ThemeIcon>
+                                <Box style={{ flex: 1, minWidth: 0 }}>
+                                    <Group gap="xs" mb={2}>
+                                        <Text fw={800} size={isMobile ? 'sm' : 'md'}>Primer comprobante de retención de IVA</Text>
+                                        <Badge color="orange" variant="light" size="sm">Una sola vez</Badge>
+                                    </Group>
+                                    <Text size="sm" c="dimmed" mb="sm">Esta factura retiene IVA y su comprobante lleva su propio correlativo. Indica con qué número sale el próximo{serieRet.periodo ? <> (empieza por <b>{serieRet.periodo}</b>)</> : null}; luego el sistema lo lleva solo.</Text>
+                                    <PreguntarNumero serie={serieRet} puedeEditar={numeracion.puedeEditar} enLinea />
+                                </Box>
+                            </Group>
+                        </Paper>
                     )}
 
                     <Grid gutter="lg">

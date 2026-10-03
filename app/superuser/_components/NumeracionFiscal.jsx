@@ -36,7 +36,7 @@ function vistaPrevia(serie, texto) {
  * Pregunta con qué número sale el PRÓXIMO documento de una serie y lo guarda (solo un administrador puede).
  * `serie`: un elemento de /api/numeracion. `onListo` se llama al guardar.
  */
-export function PreguntarNumero({ serie, puedeEditar, onListo, compacto = false }) {
+export function PreguntarNumero({ serie, puedeEditar, onListo, compacto = false, enLinea = false }) {
     const queryClient = useQueryClient();
     const [texto, setTexto] = useState('');
     const [guardando, setGuardando] = useState(false);
@@ -61,6 +61,22 @@ export function PreguntarNumero({ serie, puedeEditar, onListo, compacto = false 
 
     if (!puedeEditar) {
         return <Alert color="orange" icon={<IconAlertTriangle size={18} />} title={`Falta configurar: ${serie.etiqueta}`}>Un administrador debe indicar con qué número empieza esta numeración antes de continuar.</Alert>;
+    }
+    if (enLinea) {
+        // Una sola fila: campo + vista previa + botón (en pantallas angostas se apilan)
+        return (
+            <Stack gap={6}>
+                <Group gap="sm" align="flex-start" wrap="wrap">
+                    <TextInput
+                        style={{ flex: '1 1 260px' }} placeholder={`Ej: ${serie.ejemplo}`} value={texto} onChange={(e) => setTexto(e.currentTarget.value)} data-autofocus
+                        aria-label={serie.pregunta} onKeyDown={(e) => { if (e.key === 'Enter' && previa && !guardando) guardar(); }}
+                        description={previa ? <>Saldrá como <b>{previa}</b></> : serie.ultimoUsado ? `El último usado es ${serie.ultimoUsado}` : undefined}
+                        error={error || undefined}
+                    />
+                    <Button onClick={guardar} loading={guardando} disabled={!previa} color="orange">Guardar y continuar</Button>
+                </Group>
+            </Stack>
+        );
     }
     return (
         <Stack gap="xs">
