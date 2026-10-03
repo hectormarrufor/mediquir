@@ -4,13 +4,13 @@ import React, { useState, useEffect, useMemo, useDeferredValue, memo } from 'rea
 import { 
     Modal, Button, Group, Title, TextInput, NumberInput, 
     Select, Paper, Stack, Grid, Table, ActionIcon,
-    Text, Divider, Badge, Checkbox, Box, ScrollArea, Alert, SegmentedControl, ThemeIcon
+    Text, Divider, Badge, Checkbox, Box, ScrollArea, Alert, SegmentedControl, ThemeIcon, Popover
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useMediaQuery } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
-    IconTrash, IconPlus, IconMinus, IconCheck, IconShieldCheck, IconAlertTriangle, IconReceiptTax
+    IconTrash, IconPlus, IconMinus, IconCheck, IconShieldCheck, IconAlertTriangle, IconReceiptTax, IconPackage
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
@@ -40,6 +40,36 @@ const FilaProducto = memo(function FilaProducto({ prod, isMobile, onAgregar }) {
         </Paper>
     );
 });
+
+// Auditoría del empaque del producto: se corrige aquí lo que el proveedor trae realmente y se guarda en la ficha al registrar la compra
+const empaqueCambio = (item) => (Number(item.undPorCaja) || 0) !== (item.empaqueOriginal?.undPorCaja || 0) || (Number(item.cajasPorBulto) || 0) !== (item.empaqueOriginal?.cajasPorBulto || 0);
+
+function EditorEmpaque({ item, onCambiar }) {
+    const modificado = empaqueCambio(item);
+    const original = item.empaqueOriginal || {};
+    return (
+        <Popover width={300} position="bottom-start" shadow="md" withArrow trapFocus>
+            <Popover.Target>
+                <Button size="compact-xs" variant={modificado ? 'filled' : 'subtle'} color={modificado ? 'orange' : 'gray'} tt="none" leftSection={<IconPackage size={14} />}>
+                    {modificado ? 'Empaque modificado' : 'Auditar empaque'}
+                </Button>
+            </Popover.Target>
+            <Popover.Dropdown>
+                <Stack gap="xs">
+                    <Text size="sm" fw={700}>Empaque de {item.nombre}</Text>
+                    <NumberInput size="sm" label="Unidades por caja" description={original.undPorCaja ? `En la ficha: ${original.undPorCaja}` : 'En la ficha: sin caja'} min={0} allowDecimal={false} allowNegative={false} hideControls selectAllOnFocus
+                        value={item.undPorCaja || ''} onChange={(v) => onCambiar('undPorCaja', v)} />
+                    <NumberInput size="sm" label="Cajas por bulto" description={original.cajasPorBulto ? `En la ficha: ${original.cajasPorBulto}` : 'En la ficha: sin bulto'} min={0} allowDecimal={false} allowNegative={false} hideControls selectAllOnFocus disabled={!item.undPorCaja}
+                        value={item.cajasPorBulto || ''} onChange={(v) => onCambiar('cajasPorBulto', v)} />
+                    <Text size="xs" c="dimmed">
+                        {item.undPorCaja ? `1 caja = ${item.undPorCaja} und` : 'Sin caja'}{item.undPorBulto > 1 ? ` · 1 bulto = ${item.undPorBulto.toLocaleString('es-VE')} und` : ''}
+                    </Text>
+                    {modificado && <Alert color="orange" variant="light" p="xs"><Text size="xs">Al registrar la compra se guardará este empaque en la ficha del producto.</Text></Alert>}
+                </Stack>
+            </Popover.Dropdown>
+        </Popover>
+    );
+}
 
 export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoGasto = false }) {
     const { userId } = useAuth();
@@ -141,6 +171,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 costoAnterior: costoUnidad,
                 undPorCaja: Number(prod.unidadesPorCaja) || 0,
                 undPorBulto: Number(prod.unidadesPorBulto) || 0,
+                cajasPorBulto: Number(prod.cajasPorBulto) || 0,
+                empaqueOriginal: { undPorCaja: Number(prod.unidadesPorCaja) || 0, cajasPorBulto: Number(prod.cajasPorBulto) || 0 },
                 unidadCompra: 'unidad',
                 cantidadCompra: 1,
                 precioCompra: costoUnidad,
@@ -175,6 +207,23 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             if (i.id !== id) return i;
             const nuevo = { ...i, unidadCompra: unidad, cantidadCompra: 1 };
             return recalcular({ ...nuevo, precioCompra: i.precioCompraUnitario * factorDe(nuevo) });
+        }));
+    };
+
+    // Corrige cuántas unidades trae la caja y cuántas cajas el bulto (el total del bulto se calcula, igual que en la ficha)
+    const cambiarEmpaque = (id, campo, valor) => {
+        setCarritoCompra(carritoCompra.map(i => {
+            if (i.id !== id) return i;
+            const v = Math.max(0, Math.floor(Number(valor)) || 0);
+            const n = { ...i, [campo]: v };
+            if (campo === 'undPorCaja' && v && !i.undPorCaja && !i.cajasPorBulto && i.undPorBulto > 1 && i.undPorBulto % v === 0) n.cajasPorBulto = i.undPorBulto / v; // el bulto ya existía: se reparte en cajas
+            if (!n.undPorCaja) n.cajasPorBulto = 0;
+            n.undPorBulto = n.undPorCaja ? (n.cajasPorBulto ? n.cajasPorBulto * n.undPorCaja : 0) : i.undPorBulto;
+            // si la presentación elegida deja de existir, se vuelve a unidades conservando el costo por unidad
+            if ((n.unidadCompra === 'caja' && !n.undPorCaja) || (n.unidadCompra === 'bulto' && !(n.undPorBulto > 1))) {
+                return recalcular({ ...n, unidadCompra: 'unidad', cantidadCompra: 1, precioCompra: i.precioCompraUnitario });
+            }
+            return recalcular(n);
         }));
     };
 
@@ -279,6 +328,13 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     const handleEjecutarCompraFinal = async () => {
         setIsSubmitting(true);
         try {
+            // Primero se guarda el empaque corregido en la ficha: si falla, no se registra la compra con unidades dudosas
+            if (!esGasto) {
+                for (const item of carritoCompra.filter(empaqueCambio)) {
+                    const r = await fetch(`/api/productos/${item.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unidadesPorCaja: item.undPorCaja || null, cajasPorBulto: item.cajasPorBulto || null }) });
+                    if (!r.ok) throw new Error(`No se pudo guardar el empaque de ${item.nombre}: ${(await r.json().catch(() => null))?.error || 'error del servidor'}`);
+                }
+            }
             const payload = {
                 simular: false,
                 proveedorId: modoNuevoProveedor ? null : Number(formCompra.values.proveedorId),
@@ -488,6 +544,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                 <NumberInput value={item.precioCompra} onChange={(val) => actualizarPrecioCompra(item.id, val)} decimalScale={4} size="sm" leftSection="$" />
                             </Box>
                         </Group>
+                        <EditorEmpaque item={item} onCambiar={(c, v) => cambiarEmpaque(item.id, c, v)} />
                         <Text size="xs" c="dimmed" mt={4}>
                             por {item.unidadCompra}{item.unidadCompra !== 'unidad' ? ` = ${item.cantidad.toLocaleString('es-VE')} und · ${item.precioCompraUnitario.toFixed(4)} c/u` : ''}
                             {diferencia !== 0 && <Text span size="xs" fw={700} c={diferencia > 0 ? 'red' : 'teal'}> · {diferencia > 0 ? `▲ +${variacionPorcentual}%` : `▼ ${variacionPorcentual}%`}</Text>}
@@ -526,7 +583,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                     <Text size="xs" c="dimmed">{item.marca ? `${item.marca} · ` : ''}SKU: {item.codigo}</Text>
                                 </Table.Td>
                                 <Table.Td>
-                                    <Stack gap={4}>
+                                    <Stack gap={4} align="flex-start">
                                         <SegmentedControl
                                             size="xs" value={item.unidadCompra} onChange={(v) => cambiarUnidadCompra(item.id, v)}
                                             data={[
@@ -541,6 +598,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                             <ActionIcon size="md" variant="light" onClick={() => cambiarCantidad(item.id, 1)}><IconPlus size={14}/></ActionIcon>
                                             {item.unidadCompra !== 'unidad' && <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>= {item.cantidad.toLocaleString('es-VE')} und</Text>}
                                         </Group>
+                                        <EditorEmpaque item={item} onCambiar={(c, v) => cambiarEmpaque(item.id, c, v)} />
                                     </Stack>
                                 </Table.Td>
                                 <Table.Td><PrecioVisual valor={item.costoAnterior} simbolo="$" size="sm" c="dimmed" /></Table.Td>
