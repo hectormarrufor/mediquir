@@ -3,6 +3,7 @@ import { GrupoEquivalencia } from '@/models';
 import { CAMPOS_GRUPO, validarCampo } from '@/app/constants/inventarioCampos';
 import { requerirStaff, puedeEditarInventario } from '../../_lib';
 import { cargarGrupos } from '../../_grupos';
+import { borrarBlob, borrarSiReemplazado } from '@/app/lib/blob';
 
 // PATCH /api/inventario/grupos/:id   { cambios: { nombre?, stockMinimoGlobal?, imagen? } }
 // Edita la fila "padre" de un grupo de equivalencia: su nombre, su foto y el stock mínimo del grupo.
@@ -28,7 +29,9 @@ export async function PATCH(request, { params }) {
         if (!grupo) return NextResponse.json({ error: 'Grupo no encontrado' }, { status: 404 });
 
         try {
+            const imagenAnterior = grupo.imagen;
             await grupo.update(valores);
+            await borrarSiReemplazado(imagenAnterior, valores.imagen);
         } catch (err) {
             if (err.name === 'SequelizeUniqueConstraintError') return NextResponse.json({ error: 'Ya existe otro grupo con ese nombre' }, { status: 409 });
             throw err;

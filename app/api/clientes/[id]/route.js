@@ -5,6 +5,7 @@ import { rolDe } from '@/app/constants/roles';
 import { requerirStaff } from '../../inventario/_lib';
 import { creditoDeCliente } from '../../b2b/_lib';
 import { filtrarCambiosCliente } from '@/app/constants/clienteCampos';
+import { borrarBlob, borrarSiReemplazado } from '@/app/lib/blob';
 
 const USD = `(CASE WHEN "moneda" = 'BS' THEN "totalFinal" / NULLIF("tasaCambio", 0) ELSE "totalFinal" END)`;
 
@@ -67,7 +68,9 @@ export async function PUT(req, { params }) {
             return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
         }
 
+        const imagenAnterior = cliente.imagen;
         await cliente.update(cambios);
+        await borrarSiReemplazado(imagenAnterior, cambios.imagen);
 
         return NextResponse.json({ message: 'Cliente actualizado exitosamente', cliente }, { status: 200 });
     } catch (error) {
@@ -95,7 +98,9 @@ export async function DELETE(req, { params }) {
             return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
         }
 
+        const imagenCliente = cliente.imagen;
         await cliente.destroy();
+        await borrarBlob(imagenCliente);
 
         return NextResponse.json({ message: 'Cliente eliminado exitosamente' }, { status: 200 });
     } catch (error) {

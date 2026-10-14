@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { del } from '@vercel/blob';
 import { GrupoEquivalencia } from '@/models';
 import { requerirStaff } from '@/app/api/inventario/_lib';
+import { borrarBlob } from '@/app/lib/blob';
 
 const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
 
@@ -47,7 +48,9 @@ export async function DELETE(req, { params }) {
         const grupo = await GrupoEquivalencia.findByPk(id);
         if (!grupo) throw new Error('Grupo no encontrado');
 
+        const imagenGrupo = grupo.imagen;
         await grupo.destroy();
+        await borrarBlob(imagenGrupo);
         return NextResponse.json({ message: 'Grupo eliminado' }, { status: 200 });
     } catch (error) {
         return NextResponse.json({ error: 'No se puede eliminar porque tiene productos asociados' }, { status: 500 });

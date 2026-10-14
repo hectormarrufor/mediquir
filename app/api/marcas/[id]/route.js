@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { del } from '@vercel/blob';
 import { Marca } from '@/models';
 import { requerirStaff } from '@/app/api/inventario/_lib';
+import { borrarBlob } from '@/app/lib/blob';
 
 const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
 
@@ -46,7 +47,9 @@ export async function DELETE(req, { params }) {
         const marca = await Marca.findByPk(id);
         if (!marca) throw new Error('Marca no encontrada');
 
+        const imagenMarca = marca.imagen;
         await marca.destroy();
+        await borrarBlob(imagenMarca);
         return NextResponse.json({ message: 'Marca eliminada' }, { status: 200 });
     } catch (error) {
         return NextResponse.json({ error: 'No se puede eliminar porque tiene productos asociados' }, { status: 500 });

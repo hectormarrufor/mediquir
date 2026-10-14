@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { DocumentoEmpleado } from "@/models";
+import { borrarBlob, borrarSiReemplazado } from '@/app/lib/blob';
 
 export async function POST(req) {
     try {
@@ -41,7 +42,9 @@ export async function POST(req) {
             if (body.imagen !== undefined && body.imagen !== null) camposActualizar.imagen = body.imagen;
             
             // Actualizamos registro
+            const imagenAnterior = documentoExistente.imagen;
             resultado = await documentoExistente.update(camposActualizar);
+            await borrarSiReemplazado(imagenAnterior, camposActualizar.imagen);
             
             // Opcional: Borrar la imagen anterior de Vercel Blob si cambió y quieres ahorrar espacio
             // (Requiere lógica extra de borrado de blob)
@@ -64,7 +67,9 @@ export async function DELETE(req) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     try {
+        const doc = await DocumentoEmpleado.findByPk(id, { attributes: ['imagen'] });
         await DocumentoEmpleado.destroy({ where: { id } });
+        await borrarBlob(doc?.imagen);
         return NextResponse.json({ success: true });
     } catch (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });

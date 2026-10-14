@@ -4,6 +4,7 @@ import { Producto, Categoria, Marca, GrupoEquivalencia, Tag } from '@/models';
 import sequelize from '@/sequelize';
 import { requerirStaff } from '@/app/api/inventario/_lib';
 import { resolverEmpaque } from '@/app/constants/inventarioCampos';
+import { borrarBlob } from '@/app/lib/blob';
 
 const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
 
@@ -118,7 +119,9 @@ export async function DELETE(req, { params }) {
         const producto = await Producto.findByPk(id);
         if (!producto) throw new Error('Producto no encontrado');
 
+        const imagenProducto = producto.imagen;
         await producto.destroy();
+        await borrarBlob(imagenProducto);
         return NextResponse.json({ message: 'Producto eliminado' }, { status: 200 });
     } catch (error) {
         console.error("Error al eliminar producto:", error);

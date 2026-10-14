@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import db from '../../../../../models';
 import sequelize from '@/sequelize';
 import { requerirAdmin, limpiar } from '../../_lib';
+import { borrarBlob, borrarSiReemplazado } from '@/app/lib/blob';
 
 
 export async function GET(request, { params }) {
@@ -33,6 +34,7 @@ export async function PUT(request, { params }) {
 
   try {
     // 1. Actualizar datos básicos del empleado
+    const imagenAnterior = (await db.Empleado.findByPk(id, { attributes: ['imagen'], transaction: t }))?.imagen;
     await db.Empleado.update(
       {
         nombre: body.nombre,
@@ -70,6 +72,7 @@ export async function PUT(request, { params }) {
 
     // 4. Confirmar transacción
     await t.commit();
+    await borrarSiReemplazado(imagenAnterior, body.imagen);
 
     return NextResponse.json({ message: 'Empleado actualizado con puestos' });
   } catch (error) {
@@ -150,8 +153,10 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ message: 'Tiene documentos cargados. Márcalo como "Retirado" en lugar de eliminarlo.' }, { status: 409 });
     }
     await db.EmpleadoPuesto.destroy({ where: { empleadoId: id }, transaction: t });
+    const imagenEmpleado = empleado.imagen;
     await empleado.destroy({ transaction: t });
     await t.commit();
+    await borrarBlob(imagenEmpleado);
     return NextResponse.json({ message: 'Empleado eliminado correctamente' });
   } catch (error) {
     if (!t.finished) await t.rollback();
