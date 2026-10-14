@@ -786,7 +786,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                 <TextInput size="md" label="Dirección Fiscal" placeholder="Ej: Av. Principal, Local 4..." {...formNuevoCliente.getInputProps('direccion')} />
                                 <Group grow>
                                     <Checkbox label="Contribuyente Especial" size="md" mt={8} {...formNuevoCliente.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })} />
-                                    <Select size="md" label="Retención Default" data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} {...formNuevoCliente.getInputProps('retencionIvaPorDefecto', { transform: (v) => Number(v) })} />
+                                    <Select size="md" label="Retención Default" data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} value={String(formNuevoCliente.values.retencionIvaPorDefecto)} onChange={(v) => formNuevoCliente.setFieldValue('retencionIvaPorDefecto', Number(v) === 100 ? 100 : 75)} allowDeselect={false} />
                                 </Group>
                                 <TextInput size="md" label="Notas Adicionales" placeholder="(Opcional)" {...formNuevoCliente.getInputProps('notas')} />
                             </>

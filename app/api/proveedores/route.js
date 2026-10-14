@@ -42,7 +42,7 @@ export async function POST(request) {
             email: email || null,
             direccion: direccion || null,
             esContribuyenteEspecial: esContribuyenteEspecial || false,
-            retencionIvaPorDefecto: Number(retencionIvaPorDefecto) || 75,
+            retencionIvaPorDefecto: Number(retencionIvaPorDefecto) === 100 ? 100 : 75,
             notas: notas || null,
             activo: true
         });

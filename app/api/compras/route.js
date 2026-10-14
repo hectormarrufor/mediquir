@@ -221,7 +221,7 @@ export async function POST(request) {
                     email: nuevoProveedor.email,
                     direccion: nuevoProveedor.direccion,
                     esContribuyenteEspecial: nuevoProveedor.esContribuyenteEspecial || false,
-                    retencionIvaPorDefecto: nuevoProveedor.retencionIvaPorDefecto || 75,
+                    retencionIvaPorDefecto: Number(nuevoProveedor.retencionIvaPorDefecto) === 100 ? 100 : 75,
                     notas: nuevoProveedor.notas
                 }, { transaction: t });
                 idProveedorFinal = provCreado.id;

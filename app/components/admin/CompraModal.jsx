@@ -247,8 +247,9 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         formCompra.setFieldValue('moneda', nueva);
     };
 
+    // Se guarda lo que escribe la persona tal cual ("12." o "12.5"): convertirlo a número al teclear se comía el punto decimal
     const actualizarPrecioCompra = (id, nuevoPrecio) => {
-        setCarritoCompra(carritoCompra.map(i => i.id === id ? recalcular({ ...i, precioCompra: Number(nuevoPrecio) || 0 }) : i));
+        setCarritoCompra(carritoCompra.map(i => i.id === id ? recalcular({ ...i, precioCompra: nuevoPrecio }) : i));
     };
 
     const toggleAceptarCambioItem = (id) => {
@@ -753,7 +754,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                             <TextInput size={isMobile ? 'sm' : 'md'} label="Dirección" {...formNuevoProv.getInputProps('direccion')} />
                             <Group grow>
                                 <Checkbox label="Contribuyente Especial" size="md" mt={8} {...formNuevoProv.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })} />
-                                <Select size={isMobile ? 'sm' : 'md'} label="Retención Default" data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} {...formNuevoProv.getInputProps('retencionIvaPorDefecto', { transform: (v) => Number(v) })} />
+                                <Select size={isMobile ? 'sm' : 'md'} label="Retención Default" data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} value={String(formNuevoProv.values.retencionIvaPorDefecto)} onChange={(v) => formNuevoProv.setFieldValue('retencionIvaPorDefecto', Number(v) === 100 ? 100 : 75)} allowDeselect={false} />
                             </Group>
                             <Button size="md" type="submit" color="grape" mt="md">Guardar Proveedor</Button>
                         </Stack>
