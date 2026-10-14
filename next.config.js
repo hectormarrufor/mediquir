@@ -61,8 +61,8 @@ const nextConfig = {
   async headers() {
     const privado = [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }];
     return [
-      // Los nombres de archivo son únicos (foto nueva = URL nueva), así que se pueden guardar un año
-      { source: '/blob/:path*', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, s-maxage=31536000, immutable' }] },
+      // El navegador revalida con el CDN (barato) y el CDN guarda 1 día: un archivo reemplazado con el mismo nombre se ve en máx. 1 día (o al instante purgando el CDN)
+      { source: '/blob/:path*', headers: [{ key: 'Cache-Control', value: 'public, max-age=0, must-revalidate, s-maxage=86400' }] },
       { source: '/superuser/:path*', headers: privado },
       { source: '/b2b/:path*', headers: privado },
       { source: '/login', headers: privado },
