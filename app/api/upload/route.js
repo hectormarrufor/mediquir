@@ -23,7 +23,7 @@ export async function POST(request) {
     const blob = await put(filename, request.body, {
       access: 'public',
       allowOverwrite: true, // Permitir sobrescribir archivos con el mismo nombre
-      cacheControlMaxAge: 60 * 60 * 24, // 1 día: un archivo reemplazado con el mismo nombre se actualiza en máx. 1 día
+      cacheControlMaxAge: 60 * 60 * 24 * 365, // 1 año: las subidas llevan nombre único
     });
 
     console.log(`[API UPLOAD] Éxito: Archivo subido a la URL: ${blob.url}`);
