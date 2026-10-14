@@ -87,7 +87,7 @@ export function EmpleadoForm({ initialData = null }) {
         notifications.show({ id: 'uploading-image', title: 'Subiendo imagen...', message: 'Por favor espera.', loading: true });
         const imagenFile = values.imagen;
         const fileExtension = imagenFile.name.split('.').pop();
-        const uniqueFilename = `${values.cedula}.${fileExtension}`;
+        const uniqueFilename = `${values.cedula}-${Date.now()}.${fileExtension}`;
 
         const response = await fetch(`/api/upload?filename=${encodeURIComponent(uniqueFilename)}`, {
           method: 'POST',

@@ -177,7 +177,7 @@ export default function DocumentosManager({ empleadoId, documentos = [], puestos
                 notifications.show({ id: 'uploading-image', title: 'Subiendo imagen...', message: 'Por favor espera.', loading: true });
                 const imagenFile = values.imagen;
                 const fileExtension = imagenFile.name.split('.').pop();
-                const uniqueFilename = `${empleadoId}${values.tipo.replace(/\s+/g, '_')}${values.gradoLicencia || ""}.${fileExtension}`;
+                const uniqueFilename = `${empleadoId}${values.tipo.replace(/\s+/g, '_')}${values.gradoLicencia || ""}-${Date.now()}.${fileExtension}`;
 
                 const response = await fetch(`/api/upload?filename=${encodeURIComponent(uniqueFilename)}`, {
                     method: 'POST',
@@ -186,7 +186,7 @@ export default function DocumentosManager({ empleadoId, documentos = [], puestos
 
                 if (!response.ok) console.log('Falló la subida de la imagen. Probablemente ya exista una con ese nombre.');
                 const newBlob = await response.json();
-                payload.imagen = `${empleadoId}${values.tipo.replace(/\s+/g, '_')}${values.gradoLicencia || ""}.${fileExtension}`;
+                payload.imagen = uniqueFilename;
                 notifications.update({ id: 'uploading-image', title: 'Éxito', message: 'Imagen subida.', color: 'green' });
             }
 

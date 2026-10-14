@@ -52,7 +52,7 @@ export default function NuevoCliente() {
                 const imagenFile = values.imagen;
                 const fileExtension = imagenFile.name.split('.').pop();
                 // Usamos la identificación (RIF/CI) para nombrar el archivo de forma única
-                const uniqueFilename = `cliente_${values.identificacion.replace(/[^a-z0-9]/gi, '_')}.${fileExtension}`;
+                const uniqueFilename = `cliente_${values.identificacion.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.${fileExtension}`;
 
                 const response = await fetch(`/api/upload?filename=${encodeURIComponent(uniqueFilename)}`, {
                     method: 'POST',
