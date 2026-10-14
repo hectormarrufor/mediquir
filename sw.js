@@ -1,5 +1,21 @@
 import { precacheAndRoute } from 'workbox-precaching';
+import { registerRoute } from 'workbox-routing';
+import { CacheFirst } from 'workbox-strategies';
+import { ExpirationPlugin } from 'workbox-expiration';
+import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 precacheAndRoute(self.__WB_MANIFEST || []);
+
+// Imágenes del Vercel Blob: se guardan en el dispositivo y no se vuelven a pedir (cada petición cuenta como operación)
+registerRoute(
+  ({ url, request }) => request.destination === 'image' && url.hostname.endsWith('.public.blob.vercel-storage.com'),
+  new CacheFirst({
+    cacheName: 'blob-imagenes',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 90 }),
+    ],
+  })
+);
 
 console.log('[SW personalizado] cargado');
 

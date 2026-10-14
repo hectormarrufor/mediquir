@@ -23,6 +23,7 @@ export async function POST(request) {
     const blob = await put(filename, request.body, {
       access: 'public',
       allowOverwrite: true, // Permitir sobrescribir archivos con el mismo nombre
+      cacheControlMaxAge: 60 * 60 * 24 * 365, // 1 año en navegador y CDN (por defecto es 1 mes)
     });
 
     console.log(`[API UPLOAD] Éxito: Archivo subido a la URL: ${blob.url}`);
