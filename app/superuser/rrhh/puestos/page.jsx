@@ -13,7 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import HojaGrid from '../_components/HojaGrid';
 import Kpis from '../_components/Kpis';
 
-const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 const KEY = ['rrhh', 'puestos'];
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 

@@ -72,7 +72,7 @@ const MobileClienteCard = ({ cliente, actions, onClick }) => {
         <Group justify="space-between" wrap="nowrap">
           <Group gap="xs">
             <Avatar 
-              src={cliente.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${cliente.imagen}` : null} 
+              src={cliente.imagen ? `${process.env.NEXT_PUBLIC_IMG_BASE}/${cliente.imagen}` : null} 
               radius="xl" size="md" color="blue"
             >
               {!cliente.imagen && (cliente.nombre ? cliente.nombre.charAt(0) : cliente.identificacion.charAt(0))}
@@ -147,7 +147,7 @@ export default function ClientesTable() {
       accessorKey: 'imagen', header: "", size: 80, enableColumnFilter: false,
       Cell: ({ cell, row }) => (
         <Avatar 
-          src={cell.getValue() ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${cell.getValue()}?v=${process.env.NEXT_PUBLIC_APP_VERSION}` : null} 
+          src={cell.getValue() ? `${process.env.NEXT_PUBLIC_IMG_BASE}/${cell.getValue()}` : null} 
           radius="xl" size="md" color="blue"
         >
             {!cell.getValue() && (row.original.nombre ? row.original.nombre.charAt(0) : row.original.identificacion.charAt(0))}

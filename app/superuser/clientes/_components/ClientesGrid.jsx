@@ -11,7 +11,7 @@ import { OPCIONES, textoEdicion } from './columnasClientes';
 import FotoClienteModal from './FotoClienteModal';
 import { telefonoWhatsapp } from './AccesoModal';
 
-const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 const KEY = ['clientes', 'resumen'];
 const limitar = (n, min, max) => Math.max(min, Math.min(max, n));
 const cls = (...c) => c.filter(Boolean).join(' ');

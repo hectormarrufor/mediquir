@@ -28,7 +28,7 @@ export default function SalidasInventarioPage() {
     const getImageUrl = (path) => {
         if (!path) return null;
         if (path.startsWith('http')) return path;
-        return `${process.env.NEXT_PUBLIC_BLOB_BASE_URL || ''}/${path.replace(/^\/+/, '')}`;
+        return `${process.env.NEXT_PUBLIC_IMG_BASE || ''}/${path.replace(/^\/+/, '')}`;
     };
 
     // Colores dinámicos para los estados

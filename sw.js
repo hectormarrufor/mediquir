@@ -7,7 +7,7 @@ precacheAndRoute(self.__WB_MANIFEST || []);
 
 // Imágenes del Vercel Blob: se guardan en el dispositivo y no se vuelven a pedir (cada petición cuenta como operación)
 registerRoute(
-  ({ url, request }) => request.destination === 'image' && url.hostname.endsWith('.public.blob.vercel-storage.com'),
+  ({ url, request }) => request.destination === 'image' && (url.pathname.startsWith('/blob/') || url.hostname.endsWith('.public.blob.vercel-storage.com')),
   new CacheFirst({
     cacheName: 'blob-imagenes',
     plugins: [

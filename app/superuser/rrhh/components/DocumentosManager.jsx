@@ -283,7 +283,7 @@ export default function DocumentosManager({ empleadoId, documentos = [], puestos
                                 <Box bg="gray.1" style={{ borderRadius: 8, overflow: 'hidden', height: 120, position: 'relative' }} mb="sm">
                                     <Stack align="center" justify="center" h="100%">
                                         {doc.imagen ? (
-                                            <Image src={process.env.NEXT_PUBLIC_BLOB_BASE_URL + "/" + doc.imagen + `?v=${process.env.NEXT_PUBLIC_APP_VERSION}` } fit="contain" h="100%" w="100%" alt="Doc" />
+                                            <Image src={process.env.NEXT_PUBLIC_IMG_BASE + "/" + doc.imagen + `` } fit="contain" h="100%" w="100%" alt="Doc" />
                                         ) : (
                                             <>
                                                 {getIcon(doc.tipo)}

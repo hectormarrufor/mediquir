@@ -59,7 +59,7 @@ const LayoutMenu = ({ router }) => {
                     <Menu.Target>
                         <UnstyledButton className={`${classes.pill} ${classes.pillUser}`} aria-label="Menú de cuenta">
                             <Avatar
-                                src={imagen ? `${imagen}/?v=${process.env.NEXT_PUBLIC_APP_VERSION}` : null}
+                                src={imagen ? imagen : null}
                                 alt={nombre}
                                 radius="xl"
                                 size={32}

@@ -5,7 +5,7 @@ import { Box, Button, Group, Image, Stack, Text } from '@mantine/core';
 import { IconPhotoEdit, IconPhotoOff, IconTrash } from '@tabler/icons-react';
 import EditorFoto from '@/app/superuser/inventario/auditar/_components/EditorFoto';
 
-const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 
 // Foto del producto en el formulario: sube/arrastra/pega una imagen o búscala en Google (mismo editor de la auditoría).
 // El valor es el nombre ya guardado (string) o un File recién mejorado que el formulario sube al guardar.

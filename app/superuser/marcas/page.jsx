@@ -108,7 +108,7 @@ export default function GestionMarcas() {
                         {marcas?.map((marca) => (
                             <Table.Tr key={marca.id}>
                                 <Table.Td>
-                                    <Avatar src={marca.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${marca.imagen}` : null} color="grape" radius="sm">
+                                    <Avatar src={marca.imagen ? `${process.env.NEXT_PUBLIC_IMG_BASE}/${marca.imagen}` : null} color="grape" radius="sm">
                                         {marca.nombre.charAt(0)}
                                     </Avatar>
                                 </Table.Td>

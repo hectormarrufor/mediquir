@@ -41,9 +41,8 @@ export default function ImageDropzone({ label, form, fieldPath }) {
         if (typeof currentValue === 'string' && currentValue.startsWith('http')) {
             setPreview(currentValue);
         } else if (typeof currentValue === "string") {
-            const baseUrl = process.env.NEXT_PUBLIC_BLOB_BASE_URL || '';
-            const version = process.env.NEXT_PUBLIC_APP_VERSION || Date.now();
-            setPreview(`${baseUrl}/${currentValue}?v=${version}`);
+            const baseUrl = process.env.NEXT_PUBLIC_IMG_BASE || '';
+            setPreview(`${baseUrl}/${currentValue}`);
         }
     }, [currentValue]);
     

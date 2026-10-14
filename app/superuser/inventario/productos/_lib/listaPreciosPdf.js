@@ -156,7 +156,7 @@ export function construirPdf({ jsPDF, autoTable, datos, imagenes, logo, incluirP
 // ---------------------------------------------------------------------------------------------
 // Parte del navegador
 // ---------------------------------------------------------------------------------------------
-const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 
 // Descarga una imagen, la reduce (el PDF no necesita más de ~150 px) y la devuelve como JPEG en base64
 async function miniatura(url, lado = 150) {

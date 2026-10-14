@@ -142,7 +142,7 @@ export default function DotacionReportPage() {
                                     <Table.Tr key={emp.id}>
                                         <Table.Td>
                                             <Group gap="sm">
-                                                <Avatar src={emp.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${emp.imagen}` : null} radius="xl" size="sm" />
+                                                <Avatar src={emp.imagen ? `${process.env.NEXT_PUBLIC_IMG_BASE}/${emp.imagen}` : null} radius="xl" size="sm" />
                                                 <Text size="sm" fw={500}>{emp.nombre} {emp.apellido}</Text>
                                             </Group>
                                         </Table.Td>

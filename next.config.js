@@ -9,8 +9,16 @@ const withPWA = require('next-pwa')({
   swSrc: 'sw.js'
 });
 
+// Las fotos se piden a /blob/* (mismo dominio): el CDN de Vercel las guarda y el Blob casi no recibe peticiones.
+// La URL real del Blob sigue en NEXT_PUBLIC_BLOB_BASE_URL (se usa en el servidor para borrar).
+const BLOB_ORIGIN = (process.env.NEXT_PUBLIC_BLOB_BASE_URL || '').replace(/\/+$/, '');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  env: { NEXT_PUBLIC_IMG_BASE: BLOB_ORIGIN ? '/blob' : '' },
+  async rewrites() {
+    return BLOB_ORIGIN ? [{ source: '/blob/:path*', destination: `${BLOB_ORIGIN}/:path*` }] : [];
+  },
   reactStrictMode: true,
   // Permite levantar un segundo `next dev` (p. ej. para pruebas automáticas) con otra carpeta de build
   // y así no pisar la de tu servidor: NEXT_DIST_DIR=.next-test npx next dev -p 3010
@@ -53,6 +61,8 @@ const nextConfig = {
   async headers() {
     const privado = [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }];
     return [
+      // Los nombres de archivo son únicos (foto nueva = URL nueva), así que se pueden guardar un año
+      { source: '/blob/:path*', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, s-maxage=31536000, immutable' }] },
       { source: '/superuser/:path*', headers: privado },
       { source: '/b2b/:path*', headers: privado },
       { source: '/login', headers: privado },

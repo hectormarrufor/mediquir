@@ -51,7 +51,7 @@ export default function ClienteDashboard({ params }) {
                     
                     {/* Avatar superpuesto (Estilo Facebook) */}
                     <Avatar 
-                        src={cliente.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${cliente.imagen}` : null}
+                        src={cliente.imagen ? `${process.env.NEXT_PUBLIC_IMG_BASE}/${cliente.imagen}` : null}
                         size={140}
                         radius={140}
                         color="blue"

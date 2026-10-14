@@ -74,7 +74,7 @@ const NavBar = ({ router, close, opened }) => {
             {isAuthenticated && (
                 <Box className={classes.userCard} style={{ '--i': i++ }}>
                     <Avatar
-                        src={imagen ? `${imagen}/?v=${process.env.NEXT_PUBLIC_APP_VERSION}` : null}
+                        src={imagen ? imagen : null}
                         alt={nombre}
                         radius="xl"
                         size={46}

@@ -11,7 +11,7 @@ import { IconAlertCircle, IconBriefcase, IconBuilding, IconDotsVertical, IconEdi
 import { useAuth } from '@/hooks/useAuth';
 import Kpis from '../_components/Kpis';
 
-const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 const vigente = (e) => e.estado !== 'Retirado' && e.estado !== 'Inactivo';
 
 const pedir = async (url) => {

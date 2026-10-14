@@ -25,7 +25,7 @@ import EditUsuarioModal from './EditUsuarioModal';
 import RestablecerClaveModal from './_components/RestablecerClaveModal';
 import { AUSENTES, COLOR_ESTADO, COLUMNAS, ESTADOS, ETIQUETA_ESTADO, OPCIONALES, VISIBLES_POR_DEFECTO, aCsv, comparar, prepararEmpleado } from './_lib/columnas';
 
-const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 const KEY = ['rrhh', 'empleados'];
 
 async function cargarEmpleados() {

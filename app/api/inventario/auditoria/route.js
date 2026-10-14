@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 // Auditoría unificada: por cada producto base, su FOTO y sus DATOS (costo, precios, empaque) en una sola ficha.
 // La foto de un producto es (en este orden): la suya, la de su grupo de equivalencia o el logo de su marca.
 const CAMPOS_EDITABLES = ['nombre', 'costoUsd', 'precio6', 'precio7', 'porcentajeIva', 'presentacion', 'unidadesPorCaja', 'cajasPorBulto', 'unidadesPorBulto'];
-const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 const consulta = (sql, replacements) => sequelize.query(sql, { replacements });
 const num = (v) => (v === null || v === undefined ? 0 : Number(v));
 const baseDe = (codigo) => String(codigo).split('-')[0];

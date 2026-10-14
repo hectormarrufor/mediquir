@@ -2,7 +2,7 @@ import { precioVentaWeb } from '@/app/constants/facturacion';
 import { presentacionesDe } from '@/app/constants/presentaciones';
 // Utilidades compartidas por la landing (tarjeta, detalle, carrito y secciones).
 
-const BLOB_BASE = process.env.NEXT_PUBLIC_BLOB_BASE_URL || '';
+const BLOB_BASE = process.env.NEXT_PUBLIC_IMG_BASE || '';
 
 // Placeholder embebido: no depende de ningún archivo en /public y nunca da 404.
 export const PLACEHOLDER_IMG =

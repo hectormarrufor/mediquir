@@ -9,7 +9,7 @@ import { costoPorBulto, costoPorCaja, validarCampo } from '@/app/constants/inven
 import { estadoDe, formatearNumero } from '../_lib/columnas';
 import { imagenDe } from './renderCelda';
 
-const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 const COLOR = { agotado: 'red', bajo: 'orange', ok: 'teal' };
 const ETIQUETA = { agotado: 'Agotado', bajo: 'Bajo mínimo', ok: 'Óptimo' };
 

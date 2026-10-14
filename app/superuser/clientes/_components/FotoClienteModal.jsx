@@ -6,7 +6,7 @@ import { IconPhotoEdit, IconPhotoOff, IconUpload } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { subirImagen } from '../../inventario/productos/_hooks/useInventario';
 
-const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 
 // Ver y cambiar el logo o la foto de un cliente. `onCambiar(nombreArchivo | null)` guarda el cambio en la hoja.
 export default function FotoClienteModal({ cliente, puedeEditar, onCerrar, onCambiar }) {

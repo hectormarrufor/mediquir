@@ -88,7 +88,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
     const getImageUrl = (path) => {
         if (!path) return null;
         if (path.startsWith('http://') || path.startsWith('https://')) return path;
-        const base = process.env.NEXT_PUBLIC_BLOB_BASE_URL || '';
+        const base = process.env.NEXT_PUBLIC_IMG_BASE || '';
         const cleanPath = path.replace(/^\/+/, '');
         const cleanBase = base.replace(/\/+$/, '');
         return `${cleanBase}/${cleanPath}`;

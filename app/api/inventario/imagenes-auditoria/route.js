@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 
 const TABLAS = { producto: 'Productos', grupo: 'GruposEquivalencia', marca: 'Marcas' };
 const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+const IMG = process.env.NEXT_PUBLIC_IMG_BASE;
 const NOMBRE_VALIDO = /^[A-Za-z0-9_.\-]{3,120}\.(jpg|jpeg|png|webp)$/i;
 
 const consulta = (sql, replacements) => sequelize.query(sql, { replacements });
@@ -66,7 +67,7 @@ export async function GET(request) {
         }
         const puedeEditar = await puedeEditarInventario(acceso.sesion);
         return NextResponse.json({
-            items: items.map((i) => ({ ...i, puntaje: i.puntaje === null ? null : Number(i.puntaje), url: i.imagen ? `${BLOB}/${i.imagen}` : null })),
+            items: items.map((i) => ({ ...i, puntaje: i.puntaje === null ? null : Number(i.puntaje), url: i.imagen ? `${IMG}/${i.imagen}` : null })),
             conteo: Object.fromEntries(Object.entries(conteo).map(([k, v]) => [k, Number(v)])),
             puedeEditar,
         });

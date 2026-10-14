@@ -130,13 +130,13 @@ export default function DetallePedidoMayorPage() {
         const lista = [];
 
         if (producto.imagen) {
-            lista.push({ titulo: 'Imagen del Producto', url: `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${producto.imagen}` });
+            lista.push({ titulo: 'Imagen del Producto', url: `${process.env.NEXT_PUBLIC_IMG_BASE}/${producto.imagen}` });
         }
         if (producto.grupoEquivalencia?.imagen) {
-            lista.push({ titulo: 'Grupo de Equivalencia', url: `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${producto.grupoEquivalencia.imagen}` });
+            lista.push({ titulo: 'Grupo de Equivalencia', url: `${process.env.NEXT_PUBLIC_IMG_BASE}/${producto.grupoEquivalencia.imagen}` });
         }
         if (producto.marca?.imagen) {
-            lista.push({ titulo: `Marca: ${producto.marca.nombre || 'N/A'}`, url: `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${producto.marca.imagen}` });
+            lista.push({ titulo: `Marca: ${producto.marca.nombre || 'N/A'}`, url: `${process.env.NEXT_PUBLIC_IMG_BASE}/${producto.marca.imagen}` });
         }
 
         return lista;

@@ -5,7 +5,7 @@ import dayjs from 'dayjs';
 import { formatearNumero, margen, valorDe, valorInventario } from '../_lib/columnas';
 import classes from './grid.module.css';
 
-const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 const ETIQUETA = { agotado: 'Agotado', bajo: 'Bajo mínimo', ok: 'Óptimo' };
 const COLOR = { agotado: 'red', bajo: 'orange', ok: 'teal' };
 

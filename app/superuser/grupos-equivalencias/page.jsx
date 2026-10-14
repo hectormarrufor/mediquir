@@ -110,7 +110,7 @@ export default function GestionGrupos() {
                         {grupos?.map((grupo) => (
                             <Table.Tr key={grupo.id}>
                                 <Table.Td>
-                                    <Avatar src={grupo.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${grupo.imagen}` : null} color="teal" radius="sm">
+                                    <Avatar src={grupo.imagen ? `${process.env.NEXT_PUBLIC_IMG_BASE}/${grupo.imagen}` : null} color="teal" radius="sm">
                                         {grupo.nombre.charAt(0)}
                                     </Avatar>
                                 </Table.Td>

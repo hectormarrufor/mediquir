@@ -63,7 +63,7 @@ export async function POST(req) {
         const tokenPayload = {
             id: usuario.id,
             nombre: nombreUsuario,
-            imagen: `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${imagenUsuario}?v=${process.env.NEXT_PUBLIC_APP_VERSION}`,
+            imagen: `${process.env.NEXT_PUBLIC_IMG_BASE}/${imagenUsuario}`,
             isAdmin: usuario.isAdmin,
             clienteId: usuario.clienteId || null,
             empleadoId: usuario.empleadoId || null,

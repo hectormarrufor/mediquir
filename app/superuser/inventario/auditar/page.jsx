@@ -9,7 +9,7 @@ import { IconAlertTriangle, IconBrandGoogle, IconCamera, IconCheck, IconChevronL
 import { PRESENTACIONES, parseNumero } from '@/app/constants/inventarioCampos';
 import EditorFoto from './_components/EditorFoto';
 
-const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 const TEXTOS = {
     SIN_COSTO: ['Falta el costo', 'yellow'], SIN_P7: ['Falta el precio 7', 'red'], P7_MENOR_P6: ['El precio 7 es menor que el precio 6', 'red'],
     P6_MENOR_COSTO: ['El precio 6 es menor que el costo (se vendería perdiendo)', 'red'], POSIBLE_CAJA: ['Posible precio de CAJA puesto como precio por unidad', 'orange'],

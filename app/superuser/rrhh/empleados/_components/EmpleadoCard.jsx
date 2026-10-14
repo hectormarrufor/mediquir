@@ -7,7 +7,7 @@ import { normalizarWhatsApp } from '@/app/constants/contacto';
 import { formatearFecha } from '@/app/constants/hora';
 import { COLOR_ESTADO, ETIQUETA_ESTADO } from '../_lib/columnas';
 
-const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 
 // Tarjeta del empleado para el teléfono
 export default function EmpleadoCard({ e, acciones, onAbrir }) {

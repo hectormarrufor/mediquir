@@ -121,7 +121,7 @@ export default function Page({ params }) {
                         <Card.Section inheritPadding py="md" bg="gray.0">
                             <Stack align="center" gap="xs" pt="xl">
                                 <Avatar
-                                    src={empleado.imagen ? `${process.env.NEXT_PUBLIC_BLOB_BASE_URL}/${empleado.imagen}` : null}
+                                    src={empleado.imagen ? `${process.env.NEXT_PUBLIC_IMG_BASE}/${empleado.imagen}` : null}
                                     size={120} radius={120} color="blue"
                                     style={{ border: '4px solid white', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}
                                 >

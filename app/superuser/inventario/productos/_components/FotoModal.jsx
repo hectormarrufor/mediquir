@@ -5,7 +5,7 @@ import { Badge, Box, Button, Group, Image, Modal, Stack, Text } from '@mantine/c
 import { IconPhotoEdit, IconPhotoOff, IconUpload } from '@tabler/icons-react';
 import EditorFoto from '../../auditar/_components/EditorFoto';
 
-const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 
 // Ver y cambiar la foto de un producto o de un grupo. Si el producto no tiene foto propia se muestra
 // la de su marca (igual que en la tienda) y se puede subir una propia sin tocar la de la marca.

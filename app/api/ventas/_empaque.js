@@ -26,7 +26,7 @@ export function buscarVentaParaEmpaque(id, opciones = {}) {
 }
 
 // Las imágenes se guardan como nombre de archivo ("0899_1786496446230.jpg"): el navegador necesita la URL completa del Blob
-const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL || '';
+const BLOB = process.env.NEXT_PUBLIC_IMG_BASE || '';
 const aUrl = (ruta) => (!ruta ? null : (/^(https?:)?\/\//.test(ruta) || ruta.startsWith('data:')) ? ruta : `${BLOB}/${ruta}`);
 
 // Foto que guía al empacador: la del producto; si no tiene, la de su grupo de equivalencia; en última instancia la de la marca
