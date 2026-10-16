@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import PresupuestoImprimible from '../_components/PresupuestoImprimible';
 
 export default function VerPresupuesto() {
     const params = useParams();
+    const router = useRouter();
     const [presupuesto, setPresupuesto] = useState(null);
     const [error, setError] = useState('');
 
@@ -22,5 +23,12 @@ export default function VerPresupuesto() {
 
     if (error) return <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>{error}</div>;
     if (!presupuesto) return <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Cargando presupuesto…</div>;
-    return <PresupuestoImprimible presupuesto={presupuesto} />;
+    return (
+        <PresupuestoImprimible presupuesto={presupuesto} accionesExtra={(
+            <>
+                <button type="button" onClick={() => router.push('/superuser/presupuestos')}>Ver todos</button>
+                <button type="button" onClick={() => router.push('/superuser/presupuestos/nuevo')}>Nuevo</button>
+            </>
+        )} />
+    );
 }

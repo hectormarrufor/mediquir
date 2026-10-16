@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Badge, Box, Button, Group, Loader, Paper, Table, Text, Title } from '@mantine/core';
 import { IconChevronLeft, IconPlus } from '@tabler/icons-react';
 import { formatearFecha } from '@/app/constants/hora';
+import { ETIQUETA_TARIFA } from '@/app/api/presupuestos/_lib';
 
 const fetchJson = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error('No se pudo cargar'); return r.json(); };
 
@@ -21,7 +22,7 @@ export default function PresupuestosPage() {
                 <Title order={2} c="white">Presupuestos</Title>
                 <Button component={Link} href="/superuser/presupuestos/nuevo" leftSection={<IconPlus size={16} />}>Nuevo presupuesto</Button>
             </Group>
-            <Text size="sm" c="gray.4" mb="sm">Cotizaciones para clientes: no son documentos fiscales ni afectan la contabilidad o el inventario.</Text>
+            <Text size="sm" c="gray.4" mb="sm">Cotizaciones con IVA incluido, con o sin cliente: no son documentos fiscales ni afectan la contabilidad o el inventario. También puedes sacar uno desde la pantalla de venta (botón «Presupuesto»).</Text>
 
             <Paper withBorder radius="md" bg="white" p="xs">
                 {isLoading ? <Group justify="center" py="xl"><Loader /></Group> : !presupuestos?.length ? (
@@ -34,9 +35,9 @@ export default function PresupuestosPage() {
                                 {presupuestos.map((p) => (
                                     <Table.Tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => router.push(`/superuser/presupuestos/${p.id}`)}>
                                         <Table.Td><Text fw={700} size="sm">{p.numero}</Text></Table.Td>
-                                        <Table.Td>{p.cliente?.nombre || p.clienteNombre}</Table.Td>
+                                        <Table.Td>{p.cliente?.nombre || p.clienteNombre || <Text span size="sm" c="dimmed" fs="italic">Sin cliente</Text>}</Table.Td>
                                         <Table.Td>{formatearFecha(p.createdAt)}</Table.Td>
-                                        <Table.Td><Badge variant="light" tt="none">{p.tarifa === 'precio7' ? 'Detal (P7)' : 'Mayor (P6)'}</Badge></Table.Td>
+                                        <Table.Td><Badge variant="light" tt="none">{ETIQUETA_TARIFA[p.tarifa] || p.tarifa}</Badge></Table.Td>
                                         <Table.Td style={{ textAlign: 'right' }}>{Number(p.totalFinal).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Table.Td>
                                     </Table.Tr>
                                 ))}

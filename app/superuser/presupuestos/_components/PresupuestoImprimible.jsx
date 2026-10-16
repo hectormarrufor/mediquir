@@ -26,6 +26,9 @@ export default function PresupuestoImprimible({ presupuesto, vistaPrevia = false
     const creado = presupuesto.createdAt || new Date().toISOString();
     const vence = sumarDias(creado, presupuesto.validoDias ?? 15);
     const cliente = presupuesto.cliente || { nombre: presupuesto.clienteNombre, identificacion: presupuesto.clienteIdentificacion, direccion: presupuesto.clienteDireccion };
+    // Sin cliente: las líneas salen en blanco para llenarlas a mano
+    const sinCliente = !cliente?.nombre;
+    const dato = (v) => (sinCliente ? '' : (v || 'N/A'));
 
     return (
         <div className="pp-envoltura">
@@ -50,9 +53,9 @@ export default function PresupuestoImprimible({ presupuesto, vistaPrevia = false
 
                 <section className="pp-info">
                     <div className="pp-cliente">
-                        <div className="pp-linea"><span className="pp-rojo">CLIENTE:</span><span className="pp-valor">{cliente?.nombre || 'Cliente'}</span></div>
-                        <div className="pp-linea"><span className="pp-rojo">RIF / CÉDULA:</span><span className="pp-valor">{cliente?.identificacion || 'N/A'}</span></div>
-                        <div className="pp-linea"><span className="pp-rojo">DIRECCIÓN:</span><span className="pp-valor">{cliente?.direccion || 'N/A'}</span></div>
+                        <div className="pp-linea"><span className="pp-rojo">CLIENTE:</span><span className="pp-valor">{cliente?.nombre || ''}</span></div>
+                        <div className="pp-linea"><span className="pp-rojo">RIF / CÉDULA:</span><span className="pp-valor">{dato(cliente?.identificacion)}</span></div>
+                        <div className="pp-linea"><span className="pp-rojo">DIRECCIÓN:</span><span className="pp-valor">{dato(cliente?.direccion)}</span></div>
                     </div>
                     <div className="pp-doc">
                         <h2 className="pp-titulo">Presupuesto</h2>

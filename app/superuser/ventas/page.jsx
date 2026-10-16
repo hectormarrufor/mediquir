@@ -15,7 +15,7 @@ import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
 import {
     IconAlertTriangle, IconCash, IconChevronDown, IconChevronUp, IconCircleCheck, IconClockHour4, IconPackage, IconPlus, IconPrinter,
-    IconReceipt2, IconSearch, IconShoppingBag, IconTrash, IconTruckDelivery,
+    IconReceipt2, IconSearch, IconShoppingBag, IconTrash, IconTruckDelivery, IconFileInvoice,
 } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
@@ -180,7 +180,10 @@ export default function VentasDashboard() {
                         <Title order={2} c="white">Ventas y pedidos</Title>
                         <Text size="sm" c="gray.4">{esVendedor ? 'Tus ventas y los pedidos que te asignaron.' : 'Todo lo vendido: al detal, al mayor y online.'}{tasa ? ` · BCV ${tasa} Bs/$` : ''}</Text>
                     </Box>
-                    <Button size="md" color="accent.6" leftSection={<IconPlus size={18} />} onClick={() => setPosAbierto(true)}>Nueva venta o pedido</Button>
+                    <Group gap="xs">
+                        <Button size="md" variant="light" color="teal" leftSection={<IconFileInvoice size={18} />} onClick={() => router.push('/superuser/presupuestos')}>Presupuestos</Button>
+                        <Button size="md" color="accent.6" leftSection={<IconPlus size={18} />} onClick={() => setPosAbierto(true)}>Nueva venta o pedido</Button>
+                    </Group>
                 </Group>
 
                 <Group gap="sm" wrap="wrap">

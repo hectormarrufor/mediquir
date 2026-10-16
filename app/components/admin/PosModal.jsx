@@ -9,17 +9,18 @@ import {
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query'; // 🔥 AÑADIDO useQueryClient
 import { useMediaQuery } from '@mantine/hooks';
-import { 
-    IconTrash, IconPlus, IconMinus, IconExchange, 
+import { useRouter } from 'next/navigation';
+import {
+    IconTrash, IconPlus, IconMinus, IconExchange,
     IconPackage, IconReceiptTax, IconCheck, IconTag,
-    IconZoomIn, IconZoomOut, IconEdit, IconArrowBackUp
+    IconZoomIn, IconZoomOut, IconEdit, IconArrowBackUp, IconFileInvoice
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import PrecioVisual from '../ui/PrecioVisual'; 
 import { useAuth } from '@/hooks/useAuth';
 import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 import { numeroALetras } from '@/app/utils/numeroALetras';
-import { calcularFactura, aBolivares, aDolares, precioPorTarifa } from '@/app/constants/facturacion';
+import { calcularFactura, aBolivares, aDolares, precioPorTarifa, precioUnitario } from '@/app/constants/facturacion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
 import { presentacionesDe, presentacionDe } from '@/app/constants/presentaciones';
@@ -56,7 +57,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
     const [tipoVenta, setTipoVenta] = useState('DETAL'); 
     const [carrito, setCarrito] = useState([]);
     const [busquedaProducto, setBusquedaProducto] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false); 
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [guardandoPresupuesto, setGuardandoPresupuesto] = useState(false);
+    const router = useRouter();
     const [previewAbierto, setPreviewAbierto] = useState(false);
     
     const [modalFicticio, setModalFicticio] = useState(false);
@@ -308,6 +311,53 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
         
         setZoomPreview(true);
         setPreviewAbierto(true);
+    };
+
+    // Presupuesto con lo que hay en el carrito: no es documento fiscal, no usa correlativo ni toca inventario.
+    // El cliente es opcional y SIEMPRE cuenta el IVA de cada producto (aunque la venta esté marcada sin IVA).
+    // El presupuesto se guarda en $: un precio en Bs se pasa a $ con la tarifa equivalente (P4→P7, P5→P6) o a la tasa.
+    const guardarPresupuesto = async () => {
+        if (carrito.length === 0) return notifications.show({ message: 'El carrito está vacío', color: 'orange' });
+        if (esMonedaBs && !(tasaBcv > 0)) return notifications.show({ message: 'No hay tasa BCV para pasar los precios a dólares', color: 'red' });
+        const enUsd = (valor) => precioUnitario(valor / tasaBcv);
+        const precioEnUsd = (item) => {
+            if (item.simbolo !== 'Bs') return item.precio;
+            const equivalente = { precio4: 'precio7', precio5: 'precio6' }[formVenta.values.tipoPrecio];
+            const producto = !item.isFicticio && !item.precioManual && equivalente && productos?.find((p) => p.id === item.id);
+            return producto ? calcularPrecioInfo(producto, equivalente).precio : enUsd(item.precio);
+        };
+        const renglones = carrito.map((item) => ({
+            productoId: item.isFicticio ? null : item.id,
+            codigo: item.codigo,
+            nombre: !item.isFicticio && item.presentacion !== 'UNIDAD' ? `${item.nombre} (${item.cantidadPres} ${item.presentacionEtiqueta})` : item.nombre,
+            cantidad: item.cantidad, // siempre en unidades
+            precioUnitario: precioEnUsd(item),
+            aplicaIva: item.isFicticio ? Boolean(item.aplicaIva) : item.porcentajeIva > 0,
+            porcentajeIva: item.isFicticio ? undefined : item.porcentajeIva,
+        }));
+        if (costoFleteNum > 0) renglones.push({ codigo: '', nombre: 'Flete', cantidad: 1, precioUnitario: esMonedaBs ? enUsd(costoFleteNum) : costoFleteNum, aplicaIva: false });
+
+        setGuardandoPresupuesto(true);
+        try {
+            const res = await fetch('/api/presupuestos', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    clienteId: clienteSeleccionado?.id || null, clienteNombre: clienteSeleccionado?.nombre || '',
+                    tarifa: formVenta.values.tipoPrecio, tasaCambio: tasaBcv, renglones,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'No se pudo guardar el presupuesto');
+            notifications.show({ color: 'teal', title: 'Presupuesto guardado', message: data.numero });
+            setCarrito([]);
+            formVenta.reset();
+            onClose();
+            router.push(`/superuser/presupuestos/${data.id}`);
+        } catch (error) {
+            notifications.show({ title: 'Error', message: error.message, color: 'red' });
+        } finally {
+            setGuardandoPresupuesto(false);
+        }
     };
 
     const handleProcesarVenta = async () => {
@@ -732,9 +782,14 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                             </Group>
                                         </Stack>
 
-                                        <Button size="md" color="blue.8" leftSection={<IconReceiptTax size={20} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>
-                                            Revisar
-                                        </Button>
+                                        <Group gap="xs">
+                                            <Button size="md" variant="light" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0} title="Guarda el carrito como presupuesto (con IVA, cliente opcional) sin registrar la venta">
+                                                Presupuesto
+                                            </Button>
+                                            <Button size="md" color="blue.8" leftSection={<IconReceiptTax size={20} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>
+                                                Revisar
+                                            </Button>
+                                        </Group>
                                     </Group>
                                 </>
                             )}
@@ -748,7 +803,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                 <Text size="xs" c="dimmed" lh={1.2}>Subtotal <PrecioVisual valor={subtotal} simbolo={simboloMoneda} size="xs" c="dimmed" /> · IVA <PrecioVisual valor={montoIva} simbolo={simboloMoneda} size="xs" c="dimmed" />{costoFleteNum > 0 && <> · Flete <PrecioVisual valor={costoFleteNum} simbolo={simboloMoneda} size="xs" c="dimmed" /></>}</Text>
                                 <Group gap={6} wrap="nowrap"><Text fw={900} size="sm" c="blue.9">Total:</Text><PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="xl" fw={900} c="blue.9" /></Group>
                             </Box>
-                            <Button size="md" color="blue.8" leftSection={<IconReceiptTax size={20} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>Revisar</Button>
+                            <Group gap={6} wrap="nowrap">
+                                <ActionIcon size={42} variant="light" color="teal" onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0} aria-label="Guardar como presupuesto" title="Guardar como presupuesto"><IconFileInvoice size={22} /></ActionIcon>
+                                <Button size="md" color="blue.8" leftSection={<IconReceiptTax size={20} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>Revisar</Button>
+                            </Group>
                         </Group>
                     </Box>
                 )}

@@ -36,7 +36,7 @@ export default function NuevoPresupuesto() {
     const elegirCliente = (id) => {
         setClienteId(id);
         const c = clientes?.find((x) => x.id.toString() === id);
-        if (c) { setClienteNombre(c.nombre || ''); setClienteIdentificacion(c.identificacion || ''); setClienteDireccion(c.direccion || ''); }
+        setClienteNombre(c?.nombre || ''); setClienteIdentificacion(c?.identificacion || ''); setClienteDireccion(c?.direccion || '');
     };
 
     const agregarProducto = (producto) => {
@@ -71,14 +71,13 @@ export default function NuevoPresupuesto() {
             const calc = calcularFactura({ renglones: validos.map((r) => ({ precioUnitario: r.precioUnitario, cantidad: r.cantidad, aplicaIva: r.aplicaIva, porcentajeIva: r.porcentajeIva })) });
             return {
                 numero: 'Sin guardar', createdAt: new Date().toISOString(), validoDias, tasaCambio, subtotal: calc.subtotal, montoIva: calc.montoIva, totalFinal: calc.totalFinal, notas,
-                cliente: { nombre: clienteNombre || 'Cliente', identificacion: clienteIdentificacion, direccion: clienteDireccion },
+                cliente: { nombre: clienteNombre.trim(), identificacion: clienteIdentificacion, direccion: clienteDireccion },
                 renglones: validos.map((r, i) => ({ codigo: r.codigo, nombre: r.nombre, cantidad: calc.renglones[i].cantidad, precioUnitario: calc.renglones[i].precioUnitario, subtotal: calc.renglones[i].monto, aplicaIva: calc.renglones[i].aplicaIva })),
             };
         } catch { return null; }
     }, [renglones, tasaCambio, validoDias, notas, clienteNombre, clienteIdentificacion, clienteDireccion]);
 
     const guardar = async () => {
-        if (!clienteNombre.trim()) return notifications.show({ color: 'red', message: 'Escribe o selecciona el cliente' });
         if (!renglones.length) return notifications.show({ color: 'red', message: 'Agrega al menos un producto' });
         setGuardando(true);
         try {
@@ -100,7 +99,7 @@ export default function NuevoPresupuesto() {
 
             <Paper withBorder p="md" radius="md" bg="white" mb="md">
                 <Stack gap="sm">
-                    <Text fw={700} size="sm">Cliente</Text>
+                    <Text fw={700} size="sm">Cliente <Text span size="xs" c="dimmed" fw={400}>(opcional: si lo dejas vacío, sale con las líneas en blanco)</Text></Text>
                     <SimpleGrid cols={{ base: 1, sm: 2 }}>
                         <Select label="Buscar en mis clientes" placeholder="Selecciona…" searchable clearable
                             data={clientes?.map((c) => ({ value: c.id.toString(), label: `${c.nombre} (${c.identificacion})` })) || []}

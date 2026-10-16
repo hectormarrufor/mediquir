@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { Presupuesto, Cliente } from '@/models';
 import { requerirStaff } from '../inventario/_lib';
 import { calcularFactura, REGLAS } from '@/app/constants/facturacion';
-import { numeroDe } from './_lib';
+import { numeroDe, TARIFAS } from './_lib';
 
 const plano = (p) => ({ ...p.toJSON(), numero: numeroDe(p.id) });
 
@@ -32,10 +32,10 @@ export async function POST(request) {
         const renglonesCrudos = Array.isArray(body.renglones) ? body.renglones : [];
         const validos = renglonesCrudos.filter((r) => String(r.nombre || '').trim() && Number(r.precioUnitario) >= 0 && Number.isInteger(Number(r.cantidad)) && Number(r.cantidad) >= 1);
         if (!validos.length) return NextResponse.json({ error: 'El presupuesto necesita al menos un renglón válido' }, { status: 400 });
-        if (!String(body.clienteNombre || '').trim()) return NextResponse.json({ error: 'Falta el cliente' }, { status: 400 });
+        // El cliente es opcional: un presupuesto rápido puede salir sin cliente (se imprime con las líneas en blanco)
 
         const tasaCambio = Number(body.tasaCambio) > 0 ? Number(body.tasaCambio) : 1;
-        const tarifa = body.tarifa === 'precio7' ? 'precio7' : 'precio6';
+        const tarifa = TARIFAS.includes(body.tarifa) ? body.tarifa : 'precio6';
         const validoDias = Number.isInteger(Number(body.validoDias)) && Number(body.validoDias) > 0 ? Number(body.validoDias) : 15;
 
         // El servidor es la autoridad del cálculo: nunca se guardan los totales que manda el navegador
@@ -61,7 +61,7 @@ export async function POST(request) {
 
         const presupuesto = await Presupuesto.create({
             clienteId: cliente?.id || null,
-            clienteNombre: cliente?.nombre || String(body.clienteNombre).trim(),
+            clienteNombre: cliente?.nombre || String(body.clienteNombre || '').trim().slice(0, 255),
             clienteIdentificacion: (cliente?.identificacion ?? body.clienteIdentificacion) || null,
             clienteDireccion: (cliente?.direccion ?? body.clienteDireccion) || null,
             tarifa,
