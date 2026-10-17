@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { 
     Modal, Button, Group, Title, TextInput, NumberInput, 
     Select, Paper, Stack, Grid, Table, ActionIcon, 
-    Text, Divider, Badge, Checkbox, Box, ScrollArea, Avatar, ThemeIcon 
+    Text, Divider, Badge, Checkbox, Box, ScrollArea, Avatar, ThemeIcon, Textarea
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query'; // 🔥 AÑADIDO useQueryClient
@@ -52,7 +52,10 @@ function PrecioEditable({ valor, simbolo, editado, onCommit, onRestablecer }) {
     );
 }
 
-export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
+// modo="presupuesto": la misma pantalla de venta, pero solo para cotizar (no hay correlativo, pago ni inventario).
+// Un presupuesto siempre cuenta el IVA de cada producto y el cliente es opcional.
+export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' }) {
+    const esPresupuesto = modo === 'presupuesto';
     const queryClient = useQueryClient(); // 🔥 INSTANCIADO PARA INVALIDAR QUERIES
     const [tipoVenta, setTipoVenta] = useState('DETAL'); 
     const [carrito, setCarrito] = useState([]);
@@ -118,7 +121,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
             quienRetira: '',
             costoFlete: '',
             numeroDocumento: '',
-            numeroControl: ''
+            numeroControl: '',
+            validoDias: 15, // solo presupuesto
+            notas: ''       // solo presupuesto
         }
     });
 
@@ -289,7 +294,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
     }));
     const eliminarItem = (clave) => setCarrito(carrito.filter(item => item.clave !== clave));
 
-    const llevaIva = (item) => Boolean(formVenta.values.conIva) && (item.isFicticio ? Boolean(item.aplicaIva) : item.porcentajeIva > 0);
+    const conIva = esPresupuesto || Boolean(formVenta.values.conIva);
+    const llevaIva = (item) => conIva && (item.isFicticio ? Boolean(item.aplicaIva) : item.porcentajeIva > 0);
     const costoFleteNum = Number(formVenta.values.costoFlete) || 0;
     const factura = carrito.length
         ? calcularFactura({
@@ -318,7 +324,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
     // El presupuesto se guarda en $: un precio en Bs se pasa a $ con la tarifa equivalente (P4→P7, P5→P6) o a la tasa.
     const guardarPresupuesto = async () => {
         if (carrito.length === 0) return notifications.show({ message: 'El carrito está vacío', color: 'orange' });
-        if (esMonedaBs && !(tasaBcv > 0)) return notifications.show({ message: 'No hay tasa BCV para pasar los precios a dólares', color: 'red' });
+        // El presupuesto muestra también los montos en Bs a la tasa: sin tasa no se puede guardar
+        if (!(tasaBcv > 0)) return notifications.show({ message: 'Todavía no hay tasa BCV: espera un momento e intenta de nuevo', color: 'red' });
         const enUsd = (valor) => precioUnitario(valor / tasaBcv);
         const precioEnUsd = (item) => {
             if (item.simbolo !== 'Bs') return item.precio;
@@ -344,6 +351,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                 body: JSON.stringify({
                     clienteId: clienteSeleccionado?.id || null, clienteNombre: clienteSeleccionado?.nombre || '',
                     tarifa: formVenta.values.tipoPrecio, tasaCambio: tasaBcv, renglones,
+                    ...(esPresupuesto ? { validoDias: formVenta.values.validoDias, notas: formVenta.values.notas } : {}),
                 }),
             });
             const data = await res.json();
@@ -351,6 +359,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
             notifications.show({ color: 'teal', title: 'Presupuesto guardado', message: data.numero });
             setCarrito([]);
             formVenta.reset();
+            // En modo presupuesto esta pantalla ES la página de nuevo presupuesto (su onClose vuelve a la lista):
+            // se reemplaza por el presupuesto guardado. Desde una venta se cierra el POS y se abre el presupuesto.
+            if (esPresupuesto) return router.replace(`/superuser/presupuestos/${data.id}`);
             onClose();
             router.push(`/superuser/presupuestos/${data.id}`);
         } catch (error) {
@@ -449,7 +460,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
         <>
             <Modal 
                 opened={opened} onClose={onClose} size="95%" fullScreen={isMobile} 
-                title={<Title order={isMobile ? 5 : 3} c="blue.9" component="div">{isMobile ? 'Nueva venta (POS)' : 'Terminal POS - Nueva Venta'}</Title>} 
+                title={<Title order={isMobile ? 5 : 3} c="blue.9" component="div">{esPresupuesto ? 'Nuevo presupuesto' : (isMobile ? 'Nueva venta (POS)' : 'Terminal POS - Nueva Venta')}</Title>} 
                 centered
                 styles={{
                     inner: { padding: isMobile ? 0 : '16px' }, content: { borderRadius: isMobile ? 0 : '8px', ...(isMobile ? { padding: 0 } : {}) },
@@ -469,10 +480,12 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                 <Grid gutter={{ base: 4, md: 'md' }} m={0}>
                     <Grid.Col span={{ base: 12, md: 5 }} p={0} pr={{ md: 'md' }}>
                         <Paper withBorder p={{ base: 6, md: 'md' }} radius={{ base: 4, md: 'md' }} h={isMobile ? 'auto' : '75vh'} style={{ display: 'flex', flexDirection: 'column' }}>
-                            <Button.Group mb="sm">
-                                <Button fullWidth variant={tipoVenta === 'DETAL' ? 'filled' : 'light'} onClick={() => setTipoVenta('DETAL')}>Detal</Button>
-                                <Button fullWidth variant={tipoVenta === 'MAYOR' ? 'filled' : 'light'} color="grape" onClick={() => setTipoVenta('MAYOR')}>Mayor</Button>
-                            </Button.Group>
+                            {!esPresupuesto && (
+                                <Button.Group mb="sm">
+                                    <Button fullWidth variant={tipoVenta === 'DETAL' ? 'filled' : 'light'} onClick={() => setTipoVenta('DETAL')}>Detal</Button>
+                                    <Button fullWidth variant={tipoVenta === 'MAYOR' ? 'filled' : 'light'} color="grape" onClick={() => setTipoVenta('MAYOR')}>Mayor</Button>
+                                </Button.Group>
+                            )}
 
                             <Group wrap="nowrap" mb="sm" gap="xs">
                                 <TextInput style={{ flex: 1 }} placeholder="Buscar producto..." value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.currentTarget.value)} data-autofocus />
@@ -533,6 +546,20 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                     <Grid.Col span={{ base: 12, md: 7 }} p={0}>
                         <Paper withBorder p={{ base: 6, md: 'md' }} radius={{ base: 4, md: 'md' }} h={isMobile ? 'auto' : '75vh'} style={{ display: 'flex', flexDirection: 'column' }}>
                             
+                            {esPresupuesto ? (
+                                <Paper p={{ base: 8, md: 'sm' }} mb="sm" bg="teal.0" radius="md" withBorder>
+                                    <Group justify="space-between" align="center" wrap="nowrap">
+                                        <Group gap="xs" wrap="nowrap">
+                                            <ThemeIcon size={isMobile ? 'md' : 'lg'} variant="light" color="teal"><IconFileInvoice size={isMobile ? 16 : 20} /></ThemeIcon>
+                                            <Box>
+                                                <Text size={isMobile ? 'md' : 'lg'} fw={800} c="teal.9">PRESUPUESTO</Text>
+                                                <Text size="xs" c="dimmed" lh={1.2}>Con IVA · no es documento fiscal ni toca el inventario</Text>
+                                            </Box>
+                                        </Group>
+                                        <NumberInput label="Válido (días)" size={isMobile ? 'xs' : 'sm'} w={isMobile ? 90 : 110} min={1} max={365} allowDecimal={false} {...formVenta.getInputProps('validoDias')} />
+                                    </Group>
+                                </Paper>
+                            ) : (
                             <Paper p={{ base: 8, md: 'sm' }} mb="sm" bg={tipoDocumentoActual === 'FACTURA' ? 'red.0' : 'gray.1'} radius="md" withBorder>
                                 <Group justify="space-between" align="center">
                                     <Group gap="xs">
@@ -559,6 +586,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                     <TextInput mt="xs" label="N° de control" placeholder="00-000000" size={isMobile ? 'xs' : 'sm'} {...formVenta.getInputProps('numeroControl')} />
                                 )}
                             </Paper>
+                            )}
 
                             <Group grow mb="sm" align="flex-end">
                                 {/* 🔥 SECCIÓN CLIENTE MODIFICADA CON BOTÓN DE AGREGAR 🔥 */}
@@ -583,20 +611,25 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                     data={[
                                         { value: 'precio7', label: 'P7 (Detal USD)' },
                                         { value: 'precio6', label: 'P6 (Mayor USD)' },
-                                        { value: 'precio4', label: 'P4 (P7 en Bs)' },
-                                        { value: 'precio5', label: 'P5 (P6 en Bs)' },
-                                        ...(esVendedor ? [] : [{ value: 'precio1', label: 'P1 (35% en Bs)' }]), // deriva del costo: solo administración
+                                        // El presupuesto se guarda en $ (y muestra el equivalente en Bs a la tasa): solo tarifas en $
+                                        ...(esPresupuesto ? [] : [
+                                            { value: 'precio4', label: 'P4 (P7 en Bs)' },
+                                            { value: 'precio5', label: 'P5 (P6 en Bs)' },
+                                            ...(esVendedor ? [] : [{ value: 'precio1', label: 'P1 (35% en Bs)' }]), // deriva del costo: solo administración
+                                        ]),
                                     ]}
                                     {...formVenta.getInputProps('tipoPrecio')}
                                 />
                             </Group>
 
-                            <Group mb="sm" justify="space-between">
-                                <Checkbox label={<Text fw={600} size="sm">IVA (16%)</Text>} {...formVenta.getInputProps('conIva', { type: 'checkbox' })} />
-                                {tipoVenta === 'MAYOR' && <Select size="xs" w={120} data={['Contado', 'Credito']} {...formVenta.getInputProps('condicionPago')} />}
-                            </Group>
+                            {!esPresupuesto && (
+                                <Group mb="sm" justify="space-between">
+                                    <Checkbox label={<Text fw={600} size="sm">IVA (16%)</Text>} {...formVenta.getInputProps('conIva', { type: 'checkbox' })} />
+                                    {tipoVenta === 'MAYOR' && <Select size="xs" w={120} data={['Contado', 'Credito']} {...formVenta.getInputProps('condicionPago')} />}
+                                </Group>
+                            )}
 
-                            {formVenta.values.condicionPago === 'Contado' && (
+                            {!esPresupuesto && formVenta.values.condicionPago === 'Contado' && (
                                 <Group mb="sm" grow>
                                     <Select 
                                         label="Método" 
@@ -624,7 +657,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                                     <Text fw={700} size="sm" lineClamp={2} lh={1.2}>{item.nombre}</Text>
                                                     <Group gap={4} mt={2}>
                                                         {item.tieneDescuento && <Badge size="xs" color="red" variant="filled">-{item.porcentajeDescuento}%</Badge>}
-                                                        {((item.isFicticio && !item.aplicaIva) || (!item.isFicticio && item.porcentajeIva === 0)) && formVenta.values.conIva && <Badge size="xs" color="gray" variant="light">EXENTO</Badge>}
+                                                        {((item.isFicticio && !item.aplicaIva) || (!item.isFicticio && item.porcentajeIva === 0)) && conIva && <Badge size="xs" color="gray" variant="light">EXENTO</Badge>}
                                                         {!item.isFicticio && item.presentacion !== 'UNIDAD' && <Badge size="xs" color="grape.7" variant="filled" tt="none">{item.presentacionEtiqueta} · {item.cantidad} und</Badge>}
                                                         {item.isFicticio && <Badge size="xs" color="grape" variant="light">Ficticio 1010</Badge>}
                                                     </Group>
@@ -647,7 +680,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                                     <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="md" fw={800} />
                                                 </Box>
                                             </Group>
-                                            {!item.isFicticio && (
+                                            {!item.isFicticio && !esPresupuesto && (
                                                 <Checkbox size="xs" mt={6} color="teal" label="Afectar inventario" checked={item.afectaInventario} onChange={(e) => toggleAfectaInventario(item.clave, e.currentTarget.checked)} />
                                             )}
                                         </Paper>
@@ -681,7 +714,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                                                     {item.tieneDescuento && (
                                                                         <Badge size="xs" color="red" variant="filled">-{item.porcentajeDescuento}%</Badge>
                                                                     )}
-                                                                    {((item.isFicticio && !item.aplicaIva) || (!item.isFicticio && item.porcentajeIva === 0)) && formVenta.values.conIva && (
+                                                                    {((item.isFicticio && !item.aplicaIva) || (!item.isFicticio && item.porcentajeIva === 0)) && conIva && (
                                                                         <Badge size="xs" color="gray" variant="light">EXENTO</Badge>
                                                                     )}
                                                                 </Group>
@@ -691,7 +724,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                                                 )}
                                                                 {item.isFicticio && <Text size="xs" c="dimmed">Código: 1010</Text>}
                                                                 
-                                                                {!item.isFicticio && (
+                                                                {!item.isFicticio && !esPresupuesto && (
                                                                     <Checkbox
                                                                         size="xs"
                                                                         mt={4}
@@ -749,7 +782,11 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                 </ScrollArea>
                             )}
 
-                            {tipoVenta === 'MAYOR' && (
+                            {esPresupuesto && (
+                                <Textarea mb="sm" label="Observaciones (opcional, salen en el presupuesto)" autosize minRows={1} maxRows={4} {...formVenta.getInputProps('notas')} />
+                            )}
+
+                            {!esPresupuesto && tipoVenta === 'MAYOR' && (
                                 <Group mb="sm" grow>
                                     <TextInput placeholder="(Opcional)" label="¿Chofer que retira?" {...formVenta.getInputProps('quienRetira')} />
                                     <NumberInput placeholder="(Opcional)" label={`Flete (${simboloMoneda})`} decimalScale={2} {...formVenta.getInputProps('costoFlete')} />
@@ -782,14 +819,20 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                                             </Group>
                                         </Stack>
 
-                                        <Group gap="xs">
-                                            <Button size="md" variant="light" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0} title="Guarda el carrito como presupuesto (con IVA, cliente opcional) sin registrar la venta">
-                                                Presupuesto
+                                        {esPresupuesto ? (
+                                            <Button size="md" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}>
+                                                Guardar presupuesto
                                             </Button>
-                                            <Button size="md" color="blue.8" leftSection={<IconReceiptTax size={20} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>
-                                                Revisar
-                                            </Button>
-                                        </Group>
+                                        ) : (
+                                            <Group gap="xs">
+                                                <Button size="md" variant="light" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0} title="Guarda el carrito como presupuesto (con IVA, cliente opcional) sin registrar la venta">
+                                                    Presupuesto
+                                                </Button>
+                                                <Button size="md" color="blue.8" leftSection={<IconReceiptTax size={20} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>
+                                                    Revisar
+                                                </Button>
+                                            </Group>
+                                        )}
                                     </Group>
                                 </>
                             )}
@@ -798,16 +841,19 @@ export default function PosModal({ opened, onClose, tasaBcv = 1 }) {
                 </Grid>
                 {isMobile && (
                     <Box style={{ position: 'sticky', bottom: 0, zIndex: 15, background: '#fff', margin: '6px -4px 0', padding: '8px 12px calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -6px 16px rgba(0,0,0,0.12)', borderTop: '1px solid #e9ecef' }}>
-                        <Group justify="space-between" align="center" wrap="nowrap" gap="xs">
-                            <Box style={{ minWidth: 0 }}>
-                                <Text size="xs" c="dimmed" lh={1.2}>Subtotal <PrecioVisual valor={subtotal} simbolo={simboloMoneda} size="xs" c="dimmed" /> · IVA <PrecioVisual valor={montoIva} simbolo={simboloMoneda} size="xs" c="dimmed" />{costoFleteNum > 0 && <> · Flete <PrecioVisual valor={costoFleteNum} simbolo={simboloMoneda} size="xs" c="dimmed" /></>}</Text>
-                                <Group gap={6} wrap="nowrap"><Text fw={900} size="sm" c="blue.9">Total:</Text><PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="xl" fw={900} c="blue.9" /></Group>
-                            </Box>
-                            <Group gap={6} wrap="nowrap">
-                                <ActionIcon size={42} variant="light" color="teal" onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0} aria-label="Guardar como presupuesto" title="Guardar como presupuesto"><IconFileInvoice size={22} /></ActionIcon>
-                                <Button size="md" color="blue.8" leftSection={<IconReceiptTax size={20} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>Revisar</Button>
-                            </Group>
+                        {/* Totales arriba y botones abajo a todo el ancho: en un teléfono no caben en una sola fila */}
+                        <Group justify="space-between" align="flex-end" wrap="nowrap" gap="xs" mb={8}>
+                            <Text size="xs" c="dimmed" lh={1.3} style={{ minWidth: 0 }}>Subtotal <PrecioVisual valor={subtotal} simbolo={simboloMoneda} size="xs" c="dimmed" /> · IVA <PrecioVisual valor={montoIva} simbolo={simboloMoneda} size="xs" c="dimmed" />{costoFleteNum > 0 && <> · Flete <PrecioVisual valor={costoFleteNum} simbolo={simboloMoneda} size="xs" c="dimmed" /></>}</Text>
+                            <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}><Text fw={900} size="sm" c="blue.9">Total:</Text><PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="xl" fw={900} c="blue.9" /></Group>
                         </Group>
+                        {esPresupuesto ? (
+                            <Button fullWidth size="md" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}>Guardar presupuesto</Button>
+                        ) : (
+                            <Group grow gap={8} wrap="nowrap">
+                                <Button size="md" px="xs" variant="outline" color="teal" leftSection={<IconFileInvoice size={18} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}>Presupuesto</Button>
+                                <Button size="md" px="xs" color="blue.8" leftSection={<IconReceiptTax size={18} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>Revisar venta</Button>
+                            </Group>
+                        )}
                     </Box>
                 )}
             </Modal>

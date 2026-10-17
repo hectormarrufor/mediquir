@@ -1,19 +1,30 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { Button, Group, Text } from '@mantine/core';
+import { IconPrinter } from '@tabler/icons-react';
 import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 import { aBolivares } from '@/app/constants/facturacion';
 
 // Presupuesto impreso en tamaño CARTA completo (no es la forma libre preimpresa: no es un documento fiscal).
 // Usa el mismo membrete y estilo visual que la Nota de Entrega, pero con su propio encabezado ("Presupuesto")
-// y un aviso de que es solo informativo. `presupuesto` puede venir de la base (ya guardado) o de una vista previa
-// armada en el navegador (sin guardar todavía): en ese caso pasa `vistaPrevia`.
+// y un aviso de que es solo informativo. `accionesExtra` son botones (Mantine) que se agregan junto a «Imprimir».
+const HOJA_PX = 816; // 8.5in a 96 dpi
 const nf = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt = (v) => nf.format(Number(v) || 0);
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-VE', { timeZone: 'America/Caracas' }) : '');
 const sumarDias = (v, dias) => { const d = v ? new Date(v) : new Date(); d.setDate(d.getDate() + Number(dias || 0)); return d; };
 
-export default function PresupuestoImprimible({ presupuesto, vistaPrevia = false, accionesExtra = null }) {
+export default function PresupuestoImprimible({ presupuesto, accionesExtra = null }) {
+    // En un teléfono la hoja carta no cabe: se achica (zoom) al ancho de la pantalla. Al imprimir vuelve a tamaño real.
+    const [zoom, setZoom] = useState(1);
+    useEffect(() => {
+        const ajustar = () => setZoom(Math.min(1, (window.innerWidth - 16) / HOJA_PX));
+        ajustar();
+        window.addEventListener('resize', ajustar);
+        return () => window.removeEventListener('resize', ajustar);
+    }, []);
+
     if (!presupuesto) return null;
     const tasa = Number(presupuesto.tasaCambio) || 1;
     const renglones = presupuesto.renglones || [];
@@ -32,15 +43,15 @@ export default function PresupuestoImprimible({ presupuesto, vistaPrevia = false
 
     return (
         <div className="pp-envoltura">
-            <div className="pp-barra">
-                <span>Presupuesto {presupuesto.numero || ''}{vistaPrevia ? ' · VISTA PREVIA: aún no se ha guardado' : ''}</span>
-                <span>
-                    <button type="button" onClick={() => window.print()}>Imprimir</button>
+            <Group className="pp-barra" justify="space-between" gap="xs">
+                <Text c="white" fw={700} size="sm">Presupuesto {presupuesto.numero || ''}</Text>
+                <Group gap="xs" className="pp-acciones">
                     {accionesExtra}
-                </span>
-            </div>
+                    <Button size="sm" color="teal" leftSection={<IconPrinter size={16} />} onClick={() => window.print()}>Imprimir</Button>
+                </Group>
+            </Group>
 
-            <div id="pp-print-section" className="pp-hoja">
+            <div id="pp-print-section" className="pp-hoja" style={{ '--pp-zoom': zoom }}>
                 <header className="pp-header">
                     <img src={MEMBRETE_MEDIQUIR.logo} alt="Logo" className="pp-logo" />
                     <div className="pp-membrete">
@@ -98,11 +109,14 @@ export default function PresupuestoImprimible({ presupuesto, vistaPrevia = false
 
             <style dangerouslySetInnerHTML={{ __html: `
                 * { box-sizing: border-box; }
-                .pp-envoltura { background: #525659; min-height: 100vh; padding: 12px; font-family: Arial, Helvetica, sans-serif; overflow: auto; }
-                .pp-barra { max-width: 8.5in; margin: 0 auto 8px; display: flex; justify-content: space-between; gap: 10px; color: #fff; font-size: 12px; }
-                .pp-barra button { padding: 4px 14px; font-weight: 700; cursor: pointer; margin-left: 8px; }
+                .pp-envoltura { background: #525659; min-height: 100vh; padding: 12px 8px; font-family: Arial, Helvetica, sans-serif; overflow-x: hidden; }
+                .pp-barra { max-width: 8.5in; margin: 0 auto 10px; position: sticky; top: 0; z-index: 5; background: #525659; padding: 6px 0; }
+                @media (max-width: 600px) {
+                    .pp-acciones { width: 100%; }
+                    .pp-acciones > * { flex: 1 1 0; padding-inline: 6px; }
+                }
 
-                .pp-hoja { width: 8.5in; min-height: 11in; height: max-content; margin: 0 auto; background: #fff; color: #000; padding: 0.35in 0.4in; font-size: 11px; box-shadow: 0 0 10px rgba(0,0,0,.5); display: flex; flex-direction: column; }
+                .pp-hoja { width: 8.5in; min-height: 11in; height: max-content; margin: 0 auto; background: #fff; color: #000; padding: 0.35in 0.4in; font-size: 11px; box-shadow: 0 0 10px rgba(0,0,0,.5); display: flex; flex-direction: column; zoom: var(--pp-zoom, 1); }
                 .pp-rojo { color: #d32f2f !important; font-weight: 700; }
 
                 .pp-header { display: grid; grid-template-columns: 25% 75%; align-items: center; border-bottom: 2px solid #ccc; padding-bottom: 6px; margin-bottom: 8px; }
@@ -139,15 +153,13 @@ export default function PresupuestoImprimible({ presupuesto, vistaPrevia = false
                 .pp-gran-usd { font-size: 10px; font-weight: 700; color: #444; }
                 .pp-aviso { font-size: 8.5px; color: #555; text-align: center; }
 
-                @media (max-width: 8.9in) { .pp-hoja { transform: scale(.85); transform-origin: top left; } }
-
                 @media print {
                     @page { size: letter portrait; margin: 0 !important; }
                     html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
                     body * { visibility: hidden !important; }
                     #pp-print-section, #pp-print-section * { visibility: visible !important; }
                     .pp-envoltura { padding: 0 !important; background: transparent !important; min-height: 0; }
-                    #pp-print-section { position: absolute !important; left: 0 !important; top: 0 !important; margin: 0 !important; box-shadow: none !important; transform: none !important; width: 8.5in !important; }
+                    #pp-print-section { position: absolute !important; left: 0 !important; top: 0 !important; margin: 0 !important; box-shadow: none !important; zoom: 1 !important; width: 8.5in !important; }
                     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                 }
             ` }} />

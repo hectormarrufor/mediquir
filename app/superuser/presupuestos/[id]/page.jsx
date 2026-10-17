@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { Button } from '@mantine/core';
+import { IconList, IconPlus } from '@tabler/icons-react';
 import PresupuestoImprimible from '../_components/PresupuestoImprimible';
 
 export default function VerPresupuesto() {
@@ -26,8 +28,8 @@ export default function VerPresupuesto() {
     return (
         <PresupuestoImprimible presupuesto={presupuesto} accionesExtra={(
             <>
-                <button type="button" onClick={() => router.push('/superuser/presupuestos')}>Ver todos</button>
-                <button type="button" onClick={() => router.push('/superuser/presupuestos/nuevo')}>Nuevo</button>
+                <Button size="sm" variant="white" color="dark" leftSection={<IconList size={16} />} onClick={() => router.push('/superuser/presupuestos')}>Ver todos</Button>
+                <Button size="sm" variant="white" color="teal" leftSection={<IconPlus size={16} />} onClick={() => router.push('/superuser/presupuestos/nuevo')}>Nuevo</Button>
             </>
         )} />
     );
