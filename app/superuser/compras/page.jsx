@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
-    Box, Title, Paper, Table, Badge, Group, Text, TextInput, Button, SimpleGrid, UnstyledButton, SegmentedControl, Checkbox, Alert, Stack
+    Box, Title, Paper, Table, Badge, Group, Text, TextInput, Button, SimpleGrid, UnstyledButton, Checkbox, Stack
 } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconSearch, IconReceipt2, IconCoins, IconArrowRight, IconCalendarEvent, IconPlus, IconCash, IconAlertTriangle, IconReceiptTax, IconFileInvoice } from '@tabler/icons-react';
@@ -173,12 +173,14 @@ export default function ComprasDashboardPage() {
             </Group>
 
             {!esVendedor && (
-                <SimpleGrid cols={{ base: 1, sm: 3 }} mb="md">
+                // Una sola forma de cambiar de vista: estas tarjetas (antes una barra de filtros repetía lo mismo)
+                <SimpleGrid cols={{ base: 2, md: 4 }} mb="md">
                     <Indicador icono={IconCash} color="red" etiqueta="Por pagar" valor={porPagar.length} activo={vista === 'por_pagar'} onClick={() => cambiarVista('por_pagar')}
                         sub={porPagar.length ? [deudaPor('USD') > 0 && `$ ${fmt(deudaPor('USD'))}`, deudaPor('BS') > 0 && `Bs ${fmt(deudaPor('BS'))}`].filter(Boolean).join(' + ') : 'Nada pendiente'} />
                     <Indicador icono={IconAlertTriangle} color="orange" etiqueta="Falta retener" valor={faltaRetener.length} activo={vista === 'falta_retener'} onClick={() => cambiarVista('falta_retener')}
                         sub={faltaRetener.length ? 'Se retienen al pagarlas' : 'Todo al día'} />
-                    <Indicador icono={IconReceiptTax} color="teal" etiqueta="Retenciones del periodo" valor={comprobantes.length} activo={vista === 'retenciones'} onClick={() => cambiarVista('retenciones')}
+                    <Indicador icono={IconReceipt2} color="blue" etiqueta="Todas" valor={(compras || []).length} activo={vista === 'periodo'} onClick={() => cambiarVista('periodo')} sub="Las del periodo" />
+                    <Indicador icono={IconReceiptTax} color="teal" etiqueta="Comprobantes" valor={comprobantes.length} activo={vista === 'retenciones'} onClick={() => cambiarVista('retenciones')}
                         sub={`Bs ${fmt(comprobantes.reduce((a, c) => a + c.retenidoBs, 0))} retenido`} />
                 </SimpleGrid>
             )}
@@ -186,14 +188,6 @@ export default function ComprasDashboardPage() {
             {/* FILTROS */}
             <Paper p="sm" mb="md" withBorder radius="md" bg="blue.0">
                 <Stack gap="xs">
-                    {!esVendedor && (
-                        <SegmentedControl value={vista} onChange={cambiarVista} data={[
-                            { value: 'periodo', label: 'Del periodo' },
-                            { value: 'por_pagar', label: `Por pagar (${porPagar.length})` },
-                            { value: 'falta_retener', label: `Falta retener (${faltaRetener.length})` },
-                            { value: 'retenciones', label: 'Retenciones' },
-                        ]} />
-                    )}
                     <Group justify="space-between" wrap="wrap" align="flex-end" gap="sm">
                         <Group gap="sm" align="center" style={{ flex: '1 1 260px' }}>
                             <IconCalendarEvent size={20} color="#1971C2" />
@@ -211,9 +205,7 @@ export default function ComprasDashboardPage() {
             </Paper>
 
             {conCasillas && lista.length > 0 && (
-                <Alert color="orange" variant="white" mb="md" p="xs">
-                    <Text size="sm">Marca las facturas de un proveedor y toca <b>Pagar y retener</b>: sale el comprobante con el siguiente número y se registra el pago del total menos lo retenido, todo de una vez. Con <b>Pagar</b> o <b>Retener</b> haces una sola factura.</Text>
-                </Alert>
+                <Text size="sm" c="gray.3" mb="sm">Toca <b>Pagar</b> o <b>Retener</b> en una factura, o marca varias de un proveedor para hacerlas juntas (un solo comprobante y un solo pago).</Text>
             )}
 
             {vista === 'retenciones' ? (
