@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActionIcon, Alert, Box, Button, Divider, Grid, Group, Image, Modal, NumberInput, Paper, SegmentedControl, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -12,6 +12,18 @@ import { aBolivares, montoRenglon } from '@/app/constants/facturacion';
 import { getMainImage, PLACEHOLDER_IMG } from '@/app/components/landing/productUtils';
 import { presentacionDe, unidadesDe, useB2BCart } from '../_lib/B2BCartContext';
 import { fmtBs, fmtPrecio, fmtUsd, pedirJson } from '../_lib/formato';
+
+// Cantidad editable: borrar el número para escribir otro ya no saca el producto del pedido (para quitarlo está la papelera).
+// Se guarda cada vez que hay un número válido; si se deja vacío, al salir del campo vuelve a la cantidad que tenía.
+function CantidadInput({ cantidad, onCambiar, etiqueta }) {
+    const [texto, setTexto] = useState(cantidad);
+    useEffect(() => { setTexto(cantidad); }, [cantidad]);
+    return (
+        <NumberInput value={texto} min={1} max={9999} allowDecimal={false} allowNegative={false} clampBehavior="strict" w={90} size="xs" ml="auto" aria-label={etiqueta}
+            onChange={(v) => { setTexto(v); if (Number(v) >= 1) onCambiar(v); }}
+            onBlur={() => { if (!(Number(texto) >= 1)) setTexto(cantidad); }} />
+    );
+}
 
 function Fila({ item, tasa }) {
     const { fijarCantidad, quitar } = useB2BCart();
@@ -37,7 +49,7 @@ function Fila({ item, tasa }) {
                 <Text size="xs" c="dimmed">{montoPresentacion !== null ? `por ${pres.singular} (${fmtPrecio(producto.precio)} c/u)` : `por ${pres.singular}`}</Text>
             </Table.Td>
             <Table.Td>
-                <NumberInput value={cantidad} onChange={(v) => fijarCantidad(producto, v, presentacion)} min={1} max={9999} allowDecimal={false} allowNegative={false} clampBehavior="strict" w={90} size="xs" ml="auto" aria-label={`Cantidad de ${pres.plural}`} />
+                <CantidadInput cantidad={cantidad} onCambiar={(v) => fijarCantidad(producto, v, presentacion)} etiqueta={`Cantidad de ${pres.plural}`} />
                 <Text size="xs" c="dimmed" ta="right" mt={2}>{cantidad === 1 ? pres.singular : pres.plural}</Text>
             </Table.Td>
             <Table.Td ta="right">
@@ -116,7 +128,7 @@ export default function B2BCarrito() {
                             <Table.Tbody>{items.map((i) => <Fila key={`${i.producto.id}:${i.presentacion}`} item={i} tasa={tasa} />)}</Table.Tbody>
                         </Table>
                     </Table.ScrollContainer>
-                    <Button variant="subtle" color="red" size="xs" mt="sm" onClick={vaciar}>Vaciar pedido</Button>
+                    <Button variant="subtle" color="red" size="xs" mt="sm" onClick={() => { if (window.confirm('¿Sacar todos los productos del pedido?')) vaciar(); }}>Vaciar pedido</Button>
                 </Paper>
                 </Grid.Col>
 

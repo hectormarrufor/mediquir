@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import {
-    Box, Title, Paper, Group, Text, Badge, Grid, Stack, Divider,
+    Box, Title, Paper, Group, Text, Badge, Grid, Stack, Divider, Alert,
     Table, Stepper, Button, Select, TextInput, NumberInput, Modal, Tabs
 } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
@@ -36,6 +36,8 @@ export default function DetallePedidoMayorPage() {
     const [modalEmpacar, setModalEmpacar] = useState(false);
     const [modalDespacho, setModalDespacho] = useState(false);
     const [modalAbono, setModalAbono] = useState(false);
+    const [modalCobroTienda, setModalCobroTienda] = useState(false);
+    const [cobroTienda, setCobroTienda] = useState({ metodoPago: 'Efectivo ($)', referencia: '' });
     const [modalFactura, setModalFactura] = useState(false);
     const [modalNotaAFactura, setModalNotaAFactura] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,8 +84,13 @@ export default function DetallePedidoMayorPage() {
     const cuentaPorCobrar = Array.isArray(pedido.cuentaPorCobrar) ? (pedido.cuentaPorCobrar[0] || null) : (pedido.cuentaPorCobrar || null);
     const esCredito = pedido.condicionPago === 'Credito';
     const monedaCuenta = cuentaPorCobrar?.moneda || pedido.moneda;
-    const saldoCuenta = Number(cuentaPorCobrar?.saldoPendiente) || 0;
     const pagado = pedido.statusPago === 'Pagado';
+    // Pedido de contado todavía sin cobrar (B2B de contado o compra de la tienda para pagar al retirar): no tiene cuenta por cobrar,
+    // pero se le puede registrar el pago (antes no había cómo y quedaba como deuda para siempre)
+    const cobrableSinCuenta = !cuentaPorCobrar && !pagado && !cancelado && Boolean(pedido.clienteId)
+        && pedido.verificacionPago !== 'POR_VERIFICAR' && pedido.revisionStock !== 'PENDIENTE';
+    const abonadoDoc = (pedido.abonos || []).reduce((a, x) => a + Number(pedido.moneda === 'BS' ? x.montoVes : x.montoUsd), 0);
+    const saldoCuenta = cuentaPorCobrar ? (Number(cuentaPorCobrar.saldoPendiente) || 0) : (cobrableSinCuenta ? Math.max(0, Number((Number(pedido.totalFinal) - abonadoDoc).toFixed(2))) : 0);
     // Montos del documento en su moneda y su equivalente (con la tasa del documento)
     const tasaDoc = Number(pedido.tasaCambio) || 1;
     const equivalente = (v) => (pedido.moneda === 'BS' ? `$${aDolares(Number(v) || 0, tasaDoc).toFixed(2)}` : `Bs ${aBolivares(Number(v) || 0, tasaDoc).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
@@ -192,7 +199,7 @@ export default function DetallePedidoMayorPage() {
                 <Paper radius="xl" p={4} mb="md" w="fit-content" maw="100%" style={{ overflowX: 'auto' }}>
                 <Tabs.List style={{ flexWrap: 'nowrap' }}>
                     <Tabs.Tab value="logistica" leftSection={<IconPackage size={16} />}>Logística y resumen</Tabs.Tab>
-                    {(esCredito || cuentaPorCobrar) && !esVendedor && <Tabs.Tab value="cxc" leftSection={<IconCash size={16} />}>Estado de cuenta</Tabs.Tab>}
+                    {(esCredito || cuentaPorCobrar || cobrableSinCuenta) && !esVendedor && <Tabs.Tab value="cxc" leftSection={<IconCash size={16} />}>Estado de cuenta</Tabs.Tab>}
                     {!esVendedor && <Tabs.Tab value="finanzas" leftSection={<IconReportMoney size={16} />}>Movimientos</Tabs.Tab>}
                 </Tabs.List>
                 </Paper>
@@ -241,7 +248,7 @@ export default function DetallePedidoMayorPage() {
                                         </Button>
                                     )}
                                     {!esVendedor && pasoActual === 1 && (
-                                        <Button size="md" color="grape" leftSection={<IconTruck size={18} />} onClick={() => { formDespacho.setFieldValue('quienRetira', pedido.quienRetira || ''); setModalDespacho(true); }}>Registrar Chofer y Flete</Button>
+                                        <Button size="md" color="grape" leftSection={<IconTruck size={18} />} onClick={() => { formDespacho.setFieldValue('quienRetira', pedido.quienRetira || ''); setModalDespacho(true); }}>{pedido.tipoEntrega === 'pickup' ? 'Marcar como retirado' : 'Registrar despacho'}</Button>
                                     )}
                                 </Group>
                             </Paper>
@@ -427,13 +434,26 @@ export default function DetallePedidoMayorPage() {
                 {/* ============================================================== */}
                 {/* PESTAÑA 2: CUENTAS POR COBRAR Y ABONOS */}
                 {/* ============================================================== */}
-                {(esCredito || cuentaPorCobrar) && (
+                {(esCredito || cuentaPorCobrar || cobrableSinCuenta) && (
                     <Tabs.Panel value="cxc">
                         <Grid gutter="md">
                             <Grid.Col span={{ base: 12, md: 4 }}>
                                 <Paper withBorder p="md" radius="md" bg={saldoCuenta > 0 ? 'orange.0' : 'green.0'}>
                                     <Text fw={700} size="lg" mb="sm" c="navy.9">Estado de cuenta</Text>
-                                    {!cuentaPorCobrar ? (
+                                    {!cuentaPorCobrar && cobrableSinCuenta ? (
+                                        <>
+                                            <Text size="sm" mb="xs">{pedido.tipoVenta === 'ONLINE' ? 'Compra de la tienda reservada para pagar en el local.' : 'Pedido de contado pendiente de cobro.'}</Text>
+                                            <Group justify="space-between" mb="md">
+                                                <Text size="md" fw={700}>Por cobrar:</Text>
+                                                <PrecioVisual valor={saldoCuenta} simbolo={pedido.moneda} size="xl" fw={900} c="red.7" />
+                                            </Group>
+                                            {pedido.tipoVenta === 'ONLINE' ? (
+                                                <Button fullWidth color="green" leftSection={<IconCash size={18} />} onClick={() => { setCobroTienda({ metodoPago: 'Efectivo ($)', referencia: '' }); setModalCobroTienda(true); }}>Registrar cobro en tienda</Button>
+                                            ) : (
+                                                <Button fullWidth color="green" leftSection={<IconCash size={18} />} onClick={abrirAbono}>Registrar pago</Button>
+                                            )}
+                                        </>
+                                    ) : !cuentaPorCobrar ? (
                                         <Text size="sm" c="dimmed">Este pedido no tiene una cuenta por cobrar (por ejemplo, porque está en revisión de existencias o fue cancelado).</Text>
                                     ) : (
                                         <>
@@ -577,7 +597,10 @@ export default function DetallePedidoMayorPage() {
                 })}>
                     <Stack gap="md">
                         {pedido.tipoEntrega === 'pickup' ? (
-                            <Text size="sm">¿Confirmas que el cliente ha retirado su pedido en tienda? Esto cambiará el estado de despacho a <b>COMPLETADO</b>.</Text>
+                            <>
+                                <Text size="sm">¿Confirmas que el cliente ha retirado su pedido en tienda? Esto cambiará el estado de despacho a <b>COMPLETADO</b>.</Text>
+                                {!pagado && <Alert color="orange" variant="light" p="xs">Este pedido todavía no está pagado: registra el cobro en la pestaña <b>Estado de cuenta</b>.</Alert>}
+                            </>
                         ) : (
                             <>
                                 <TextInput label={esNacional ? 'Zoom: número de guía' : 'Chofer / Agencia de Delivery'} withAsterisk {...formDespacho.getInputProps('quienRetira')} />
@@ -600,6 +623,21 @@ export default function DetallePedidoMayorPage() {
                     <Text size="sm">El recibo <b>{pedido.numeroDocumento}</b> pasará a ser una <b>factura</b> con un número F- nuevo y fecha de emisión <b>de hoy</b>, y entrará al libro de ventas de este periodo.</Text>
                     <Text size="sm">El IVA ya cobrado dejará de contar como ingreso de la tienda y quedará reservado para pagar al SENIAT. Esta acción no se puede deshacer.</Text>
                     <Button loading={isSubmitting} fullWidth color="indigo" onClick={handleConvertirFactura}>Sí, convertir en factura</Button>
+                </Stack>
+            </Modal>
+
+            {/* Cobro en tienda de una compra web reservada (se cobra el total al retirar) */}
+            <Modal opened={modalCobroTienda} onClose={() => setModalCobroTienda(false)} title={<Title order={4} c="green.9">Registrar cobro en tienda</Title>} centered>
+                <Stack gap="md">
+                    <Text size="sm">El cliente paga el total de la compra <b>{pedido.numeroDocumento}</b>: <PrecioVisual valor={pedido.totalFinal} simbolo={pedido.moneda} size="sm" fw={800} /> (≈ {equivalente(pedido.totalFinal)} a la tasa del pedido).</Text>
+                    <Select label="¿Cómo pagó?" allowDeselect={false} data={['Efectivo ($)', 'Efectivo (Bs)', 'Pago Móvil', 'Punto de Venta', 'Transferencia', 'Zelle']}
+                        value={cobroTienda.metodoPago} onChange={(v) => setCobroTienda((c) => ({ ...c, metodoPago: v }))} />
+                    <TextInput label="Referencia (opcional)" placeholder="Número de la operación" value={cobroTienda.referencia} onChange={(e) => { const v = e.currentTarget.value; setCobroTienda((c) => ({ ...c, referencia: v })); }} />
+                    <Text size="xs" c="dimmed">El pedido queda pagado y el ingreso entra hoy a caja. Si el pago fue por Pago Móvil y llegó el aviso del banco, mejor vincúlalo desde Pagos recibidos.</Text>
+                    <Button loading={isSubmitting} color="green" leftSection={<IconCash size={18} />}
+                        onClick={() => handleAction('COBRAR_TIENDA', cobroTienda, setModalCobroTienda, 'Cobro registrado: el pedido quedó pagado.')}>
+                        Confirmar cobro
+                    </Button>
                 </Stack>
             </Modal>
 

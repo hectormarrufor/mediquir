@@ -22,6 +22,26 @@ async function categoria(nombre, transaction) {
 }
 
 /**
+ * Venta de contado que todavía no se ha cobrado (p. ej. un pedido B2B de contado): no tiene cuenta por cobrar y por eso no se le podía
+ * registrar ningún pago. Le crea una que vence hoy con lo que falta por pagar, para que el pago siga el camino normal de un abono
+ * (saldo, estado de pago e ingreso repartido con el IVA). Si ya tiene cuenta, la devuelve tal cual.
+ */
+export async function asegurarCuentaContado({ venta, transaction: t }) {
+    const existente = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, transaction: t, lock: t.LOCK.UPDATE });
+    if (existente) return existente;
+    if (venta.statusDespacho === 'Cancelado') throw new ErrorAbono('Esta venta está cancelada', 409);
+    if (venta.statusPago === 'Pagado') throw new ErrorAbono('Esta venta ya está pagada', 409);
+    if (!venta.clienteId) throw new ErrorAbono('La venta no tiene cliente: no se le puede llevar una cuenta', 409);
+    const abonos = await Abono.findAll({ where: { ventaId: venta.id }, attributes: ['montoUsd', 'montoVes'], transaction: t });
+    const abonado = abonos.reduce((a, x) => a + Number(venta.moneda === 'BS' ? x.montoVes : x.montoUsd), 0);
+    const total = Number(venta.totalFinal);
+    return CuentaPorCobrar.create({
+        clienteId: venta.clienteId, ventaId: venta.id, montoTotal: total, saldoPendiente: Math.max(0, r2(total - abonado)),
+        moneda: venta.moneda, tasaCambio: Number(venta.tasaCambio) || 1, fechaVencimiento: hoyCaracas(), estado: 'Pendiente',
+    }, { transaction: t });
+}
+
+/**
  * Registra un abono a la cuenta por cobrar de una venta, dentro de la transacción del llamador.
  *
  * - Baja el saldo de la cuenta (y la deja pagada, junto con la venta, si queda en cero).

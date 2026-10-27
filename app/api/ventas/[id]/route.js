@@ -13,13 +13,13 @@ import { crearYNotificar, notificarCabezas, notificarUsuario } from '@/app/handl
 import { RetencionIva } from '@/models';
 import { faltantesDeEmpaque, reiniciarEmpaque } from '../_empaque';
 import { borrarFotosSobrantes } from '../_fotosEmpaque';
-import { registrarAbono, ErrorAbono } from '../../_lib/abonos';
+import { registrarAbono, asegurarCuentaContado, ErrorAbono } from '../../_lib/abonos';
 import { recalcularCobro } from '../../_lib/retencionesVenta';
 import { eliminarVenta, borrarArchivosDeVenta } from '../_eliminar';
 import { convertirAFactura, convertirNotaEntregaAFactura, ErrorConversion } from '../../_lib/convertirFactura';
 import { tasaVigente } from '../../_lib/tasaBcv';
 import { avisarCliente } from '../../_lib/avisosCliente';
-import { confirmarPagoManual, cancelarPedidoTienda, ErrorPagoTienda } from '../../_lib/pagoTienda';
+import { confirmarPagoManual, cancelarPedidoTienda, asentarCobroTienda, ErrorPagoTienda } from '../../_lib/pagoTienda';
 import { fechaCaracas, desdeInputFechaHora } from '@/app/constants/hora';
 
 // Error de reglas de logística (permisos, estados) con su código HTTP
@@ -186,12 +186,12 @@ export async function PUT(request, { params }) {
         }
 
         const cerrada = ['Cancelado', 'Completado'].includes(venta.statusDespacho);
-        if (venta.revisionStock === 'PENDIENTE' && ['ASIGNAR', 'EMPACAR', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'DESPACHAR', 'ABONAR'].includes(accion)) {
+        if (venta.revisionStock === 'PENDIENTE' && ['ASIGNAR', 'EMPACAR', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'DESPACHAR', 'ABONAR', 'COBRAR_TIENDA'].includes(accion)) {
             throw new ErrorLogistica('Este pedido está en revisión de existencias: confírmalo (o ajústalo) antes de continuar', 409);
         }
 
         // Compra de la tienda con pago por verificar: no se prepara ni se despacha hasta confirmar que el dinero existe
-        if (venta.verificacionPago === 'POR_VERIFICAR' && ['ASIGNAR', 'EMPACAR', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'DESPACHAR', 'ABONAR'].includes(accion)) {
+        if (venta.verificacionPago === 'POR_VERIFICAR' && ['ASIGNAR', 'EMPACAR', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'DESPACHAR', 'ABONAR', 'COBRAR_TIENDA'].includes(accion)) {
             throw new ErrorLogistica('El pago de este pedido está por verificar: confírmalo en el banco (o recházalo) antes de continuar', 409);
         }
 
@@ -453,6 +453,23 @@ export async function PUT(request, { params }) {
         // ==========================================================
         // 🔥 ACCIÓN 3: ABONAR (Pagos parciales o totales de CxC)
         // ==========================================================
+        // ==========================================================
+        // 🏪 COBRAR_TIENDA: compra de la tienda reservada para pagar en el local (retiro sin pago online). Se cobra el total al retirar.
+        // Antes no había cómo marcarla pagada: quedaba como deuda para siempre y el ingreso nunca entraba a caja.
+        // ==========================================================
+        if (accion === 'COBRAR_TIENDA') {
+            if (venta.tipoVenta !== 'ONLINE') throw new ErrorLogistica('Solo las compras de la tienda se cobran así', 409);
+            if (venta.statusDespacho === 'Cancelado') throw new ErrorLogistica('Este pedido está cancelado', 409);
+            if (venta.statusPago === 'Pagado') throw new ErrorLogistica('Este pedido ya está pagado', 409);
+            const metodoPago = String(body.metodoPago || '').trim().slice(0, 40);
+            if (!metodoPago) throw new ErrorLogistica('Indica cómo pagó el cliente');
+            venta.statusPago = 'Pagado';
+            await venta.save({ transaction: t });
+            await asentarCobroTienda({ venta, referencia: String(body.referencia || '').trim().slice(0, 60) || null, metodoPago, detalle: 'cobrado en tienda', transaction: t });
+            await t.commit();
+            return NextResponse.json({ success: true, message: 'Cobro registrado: el pedido quedó pagado' });
+        }
+
         if (accion === 'ABONAR') {
             const { montoAbono, metodoPago, referencia, monedaAbono, tasaCambioAbono } = body;
 
@@ -460,6 +477,8 @@ export async function PUT(request, { params }) {
             // repartido entre "Ingreso por Cobranza" e "IVA Recaudado"
             let abonoRegistrado;
             try {
+                // Pedido de contado aún sin cobrar (p. ej. B2B): se le abre una cuenta que vence hoy y el pago sigue como un abono más
+                if (venta.tipoVenta !== 'ONLINE') await asegurarCuentaContado({ venta, transaction: t });
                 abonoRegistrado = await registrarAbono({
                     venta, monto: montoAbono, moneda: monedaAbono,
                     tasa: Number(tasaCambioAbono) > 0 ? Number(tasaCambioAbono) : Number(venta.tasaCambio),
