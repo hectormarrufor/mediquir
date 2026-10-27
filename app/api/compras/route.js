@@ -357,6 +357,28 @@ export async function POST(request) {
 
             await t.commit();
 
+            // Aprendizaje: los renglones que vinieron de la factura leída con IA y que la persona enlazó a un producto quedan
+            // recordados para este proveedor (la próxima factura los propone solos). Va fuera de la transacción: si la tabla
+            // aún no existe o algo falla, la compra ya quedó registrada igual.
+            const aprendidos = lineas.filter((item) => item.claveProveedor && Number(item.productoId || item.id) > 0);
+            for (const item of aprendidos) {
+                try {
+                    await sequelize.query(
+                        `INSERT INTO "ProductosProveedor" ("proveedorId", clave, descripcion, "productoId", "unidadCompra", usos, "createdAt", "updatedAt")
+                         VALUES (:proveedorId, :clave, :descripcion, :productoId, :unidadCompra, 1, NOW(), NOW())
+                         ON CONFLICT ("proveedorId", clave) DO UPDATE SET "productoId" = EXCLUDED."productoId", "unidadCompra" = EXCLUDED."unidadCompra",
+                            descripcion = EXCLUDED.descripcion, usos = "ProductosProveedor".usos + 1, "updatedAt" = NOW()`,
+                        { replacements: {
+                            proveedorId: idProveedorFinal, clave: String(item.claveProveedor).slice(0, 220), descripcion: String(item.descripcionProveedor || '').slice(0, 300) || null,
+                            productoId: Number(item.productoId || item.id), unidadCompra: ['unidad', 'caja', 'bulto'].includes(item.unidadCompra) ? item.unidadCompra : 'unidad',
+                        } },
+                    );
+                } catch (e) {
+                    if (e?.parent?.code !== '42P01') console.error('No se pudo recordar el renglón del proveedor:', e.message);
+                    break;
+                }
+            }
+
             // Si la compra la registró alguien que no es administrador, las cabezas se enteran
             if (rolDe(acceso.sesion) !== 'admin') {
                 try {

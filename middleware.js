@@ -50,6 +50,8 @@ const VENDEDOR_API = [
     ['GET', /^\/api\/compras$/],
     ['POST', /^\/api\/compras$/],
     ['GET', /^\/api\/finanzas\/categorias$/],      // al registrar un gasto en Compras elige la categoría (solo lectura)
+    ['POST', /^\/api\/ocr\/factura$/],             // leer con IA la factura del proveedor para proponer el formulario de compras
+    ['GET', /^\/api\/compras\/equivalencias$/],    // productos ya enlazados a los renglones de ese proveedor
     ['GET', /^\/api\/vendedor\/[^/]+$/],
     ['GET', /^\/api\/inventario\/lista-precios$/],
     // Tareas: cada quien ve y gestiona las suyas (la ruta valida por sesión quién puede qué)

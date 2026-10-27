@@ -4,14 +4,16 @@ import React, { useState, useEffect, useMemo, useDeferredValue, memo } from 'rea
 import { 
     Modal, Button, Group, Title, TextInput, NumberInput, 
     Select, Paper, Stack, Grid, Table, ActionIcon,
-    Text, Divider, Badge, Checkbox, Box, ScrollArea, Alert, SegmentedControl, ThemeIcon, Popover
+    Text, Divider, Badge, Checkbox, Box, ScrollArea, Alert, SegmentedControl, ThemeIcon, Popover, FileButton
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useMediaQuery } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
-    IconTrash, IconPlus, IconMinus, IconCheck, IconShieldCheck, IconAlertTriangle, IconReceiptTax, IconPackage
+    IconTrash, IconPlus, IconMinus, IconCheck, IconShieldCheck, IconAlertTriangle, IconReceiptTax, IconPackage, IconSparkles, IconExternalLink
 } from '@tabler/icons-react';
+import imageCompression from 'browser-image-compression';
+import { RevisionRenglonesIA, CuadreFactura, prepararRenglones, normRif, r2, URL_SENIAT_RIF } from './LecturaFacturaIA';
 import { notifications } from '@mantine/notifications';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import PrecioVisual from '../ui/PrecioVisual';
@@ -77,7 +79,7 @@ function EditorEmpaque({ item, onCambiar }) {
 }
 
 export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoGasto = false }) {
-    const { userId } = useAuth();
+    const { userId, esVendedor } = useAuth();
     const queryClient = useQueryClient();
     const isMobile = useMediaQuery('(max-width: 768px)');
     
@@ -91,6 +93,12 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     const [esGasto, setEsGasto] = useState(iniciarComoGasto);
     const [gasto, setGasto] = useState({ descripcion: '', categoriaId: null, base: 0, exento: 0 });
     useEffect(() => { if (opened) setEsGasto(iniciarComoGasto); }, [opened, iniciarComoGasto]);
+
+    // Lectura de la factura con IA: lo impreso (para el cuadre al céntimo), avisos y la ventana de revisión de renglones
+    const [analizando, setAnalizando] = useState(false);
+    const [lectura, setLectura] = useState(null); // { impreso, avisos, renglones, proveedorNombre, simbolo }
+    const [revision, setRevision] = useState(null); // renglones preparados para revisar (null = ventana cerrada)
+    const [ivaAjustado, setIvaAjustado] = useState(null); // IVA tal como viene impreso, si difiere por céntimos del calculado
 
     // Estados para la Fase de Simulación y Prompt de Aceptación
     const [modalSimulacionAbierto, setModalSimulacionAbierto] = useState(false);
@@ -167,28 +175,172 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     // Un vendedor registra la compra pero no ve costos ni cambia precios: el servidor le devuelve la simulación sin esos datos
     const soloRegistro = Boolean(datosSimulacion?.[0]?.soloRegistro);
 
+    // Monto de un renglón como lo imprime el proveedor: precio de lo que se compra (unidad, caja o bulto) × cantidad, a céntimos
+    const montoLinea = (item) => r2((Number(item.precioCompra) || 0) * (Number(item.cantidadCompra) || 0));
+
+    // El IVA ajustado al impreso deja de valer si cambian los renglones o el tipo de documento
+    useEffect(() => { setIvaAjustado(null); }, [carritoCompra, formCompra.values.tipoDocumento]);
+
+    // Renglón nuevo de la compra a partir de la ficha del producto (por unidad, al costo actual)
+    const nuevoItem = (prod) => {
+        const costoUnidad = Number(prod.costoUsd) || 0;
+        return {
+            id: prod.id,
+            codigo: prod.codigo,
+            nombre: prod.nombre,
+            marca: prod.marca?.nombre || '',
+            costoAnterior: costoUnidad,
+            undPorCaja: Number(prod.unidadesPorCaja) || 0,
+            undPorBulto: Number(prod.unidadesPorBulto) || 0,
+            cajasPorBulto: Number(prod.cajasPorBulto) || 0,
+            empaqueOriginal: { undPorCaja: Number(prod.unidadesPorCaja) || 0, cajasPorBulto: Number(prod.cajasPorBulto) || 0, undPorBulto: Number(prod.unidadesPorBulto) || 0 },
+            unidadCompra: 'unidad',
+            cantidadCompra: 1,
+            precioCompra: Number(aMon(costoUnidad).toFixed(4)),
+            porcentajeIva: prod.porcentajeIva === null || prod.porcentajeIva === undefined || prod.porcentajeIva === "" || Number.isNaN(Number(prod.porcentajeIva)) ? 16 : Number(prod.porcentajeIva), // 0 = exento: no se puede tratar como "sin dato"
+            aceptarCambioPrecio: true
+        };
+    };
+
+    // ---- Factura leída con IA ----
+    // Pasa a la compra los renglones que la persona confirmó en la revisión: producto elegido, presentación (unidad, caja o bulto)
+    // con sus unidades (si difieren de la ficha quedan como "empaque modificado" y se guardan en la ficha al registrar) y el precio
+    // tal como viene en la factura. Cada renglón lleva su clave del proveedor para recordarlo en la próxima factura.
+    const agregarDesdeFactura = (filas) => {
+        const avisos = [];
+        let carrito = [...carritoCompra];
+        for (const f of filas) {
+            const prod = productos?.find((p) => Number(p.id) === Number(f.productoId));
+            if (!prod) continue;
+            let it = nuevoItem(prod);
+            const n = Number(f.contenido) || 0;
+            const cajasLeidas = Number(f.linea.cajasPorBulto) || 0;
+            if (f.unidadCompra === 'caja' && n > 1) {
+                it.undPorCaja = n;
+                if (it.cajasPorBulto) it.undPorBulto = it.cajasPorBulto * n;
+            } else if (f.unidadCompra === 'bulto' && n > 1) {
+                if (cajasLeidas > 1 && n % cajasLeidas === 0) { it.cajasPorBulto = cajasLeidas; it.undPorCaja = n / cajasLeidas; it.undPorBulto = n; }
+                else if (it.undPorCaja > 0 && n % it.undPorCaja === 0) { it.cajasPorBulto = n / it.undPorCaja; it.undPorBulto = n; }
+                else if (it.undPorCaja > 0) { it = { ...it, _bultoSinCuadrar: n }; } // la caja de la ficha no divide al bulto: se pasa a unidades
+                else { it.cajasPorBulto = 0; it.undPorBulto = n; } // producto sin caja: el bulto trae las unidades sueltas
+            }
+            let unidad = f.unidadCompra === 'caja' && it.undPorCaja > 0 ? 'caja' : f.unidadCompra === 'bulto' && it.undPorBulto > 1 && !it._bultoSinCuadrar ? 'bulto' : 'unidad';
+            let cantidad = Number(f.linea.cantidad) || 1;
+            let precio = Number(f.linea.precioUnitario) || 0;
+            // Si la presentación no se pudo aplicar pero se sabe cuántas unidades trae, se convierte a unidades sin cambiar el monto del renglón
+            const factorPedido = unidad === 'unidad' && f.unidadCompra !== 'unidad' && n > 1 ? n : 1;
+            if (factorPedido > 1) { cantidad *= factorPedido; precio /= factorPedido; avisos.push(`«${prod.nombre}»: se pasó a unidades (${n} por ${f.unidadCompra}) porque no cuadra con el empaque de la ficha.`); }
+            if (!Number.isInteger(cantidad)) { avisos.push(`«${prod.nombre}»: la cantidad ${cantidad} no es entera; se redondeó.`); cantidad = Math.max(1, Math.round(cantidad)); }
+            delete it._bultoSinCuadrar;
+            it = recalcular({ ...it, unidadCompra: unidad, cantidadCompra: cantidad, precioCompra: Number(precio.toFixed(6)), claveProveedor: f.clave, descripcionProveedor: f.linea.descripcion });
+
+            const previo = carrito.find((i) => i.id === it.id);
+            if (previo) {
+                // El mismo producto en dos renglones: se juntan en unidades con el precio promedio (el monto no cambia)
+                const unidades = previo.cantidad + it.cantidad;
+                const monto = previo.precioCompraUnitario * previo.cantidad + it.precioCompraUnitario * it.cantidad;
+                carrito = carrito.map((i) => (i.id === it.id ? recalcular({ ...previo, unidadCompra: 'unidad', cantidadCompra: unidades, precioCompra: Number((monto / unidades).toFixed(6)) }) : i));
+                avisos.push(`«${prod.nombre}» venía en más de un renglón: se juntó en ${unidades} unidades.`);
+            } else {
+                carrito.push(it);
+            }
+        }
+        setCarritoCompra(carrito);
+        setRevision(null);
+        if (avisos.length) setLectura((l) => (l ? { ...l, avisos: [...l.avisos, ...avisos] } : l));
+        notifications.show({ color: 'teal', title: 'Renglones pasados a la compra', message: 'Revisa cantidades, precios y el cuadre con la factura antes de registrar.' });
+    };
+
+    // Lee la foto o el PDF con IA y PROPONE: cabecera (proveedor por RIF, número, control, fecha, moneda) y renglones para revisar.
+    // Si el proveedor no está registrado se abre su ficha ya llenada, con acceso a la consulta de RIF del SENIAT para ver si se le retiene 75 % o 100 %.
+    const leerFactura = async (file) => {
+        if (!file) return;
+        setAnalizando(true);
+        const id = 'ocr-factura';
+        notifications.show({ id, title: 'Leyendo la factura con IA…', message: 'Número, proveedor, renglones, IVA y totales. Puede tardar unos segundos.', loading: true, autoClose: false });
+        try {
+            // El servidor no acepta archivos de más de ~4,5 MB: la foto del teléfono se comprime aquí (sigue legible para la IA)
+            let archivo = file;
+            if (file.type.startsWith('image/') && file.size > 1.5 * 1024 * 1024) {
+                archivo = await imageCompression(file, { maxSizeMB: 1.5, maxWidthOrHeight: 2400, useWebWorker: true });
+            }
+            if (archivo.size > 4 * 1024 * 1024) throw new Error('El archivo pesa más de 4 MB. Si es un PDF, envía solo la página de la factura o una foto.');
+            const fd = new FormData();
+            fd.append('file', archivo, file.name || 'factura');
+            const res = await fetch('/api/ocr/factura', { method: 'POST', body: fd });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'No se pudo leer la factura');
+            const avisos = [];
+
+            // Cabecera
+            setEsGasto(false);
+            formCompra.setFieldValue('tipoDocumento', d.tipoDocumento === 'NOTA_ENTREGA' ? 'NOTA_ENTREGA' : 'FACTURA');
+            if (d.numeroFactura) formCompra.setFieldValue('numeroDocumento', String(d.numeroFactura).slice(0, 50));
+            if (d.numeroControl && d.tipoDocumento !== 'NOTA_ENTREGA') formCompra.setFieldValue('numeroControl', String(d.numeroControl).slice(0, 30));
+            if (d.fechaEmision) {
+                if (d.fechaEmision <= fechaCaracas()) formCompra.setFieldValue('fechaFactura', d.fechaEmision);
+                else avisos.push(`La fecha leída (${d.fechaEmision.split('-').reverse().join('/')}) es posterior a hoy: revisa la fecha de la factura.`);
+            }
+            const monedaLeida = d.moneda === 'USD' ? 'USD' : 'BS';
+            if (monedaLeida !== formCompra.values.moneda) {
+                if (monedaLeida === 'BS' && !(tasa > 0)) avisos.push('La factura está en bolívares pero no hay tasa BCV vigente: no se puede registrar en Bs todavía.');
+                else if (carritoCompra.length) cambiarMoneda(monedaLeida);
+                else formCompra.setFieldValue('moneda', monedaLeida);
+            }
+            if (d.tasaBcv && tasa > 0 && Math.abs(Number(d.tasaBcv) - tasa) > 0.005) {
+                avisos.push(`La factura usa tasa ${d.tasaBcv}; el costo en dólares se calcula con la tasa BCV de hoy (${tasa}).`);
+            }
+
+            // Proveedor por RIF
+            const rif = normRif(d.proveedorRif);
+            const prov = rif ? (proveedores || []).find((p) => normRif(p.identificacion) === rif) : null;
+            let proveedorId = formCompra.values.proveedorId;
+            if (prov) {
+                if (proveedorId && String(proveedorId) !== String(prov.id)) avisos.push(`El RIF de la factura (${d.proveedorRif}) es de ${prov.nombre}, no del proveedor elegido: lo cambié.`);
+                proveedorId = String(prov.id);
+                formCompra.setFieldValue('proveedorId', proveedorId);
+                setModoNuevoProveedor(false);
+            } else if (d.proveedorNombre || d.proveedorRif) {
+                proveedorId = null;
+                formCompra.setFieldValue('proveedorId', null);
+                formNuevoProv.setValues({
+                    identificacion: d.proveedorRif || '', nombre: d.proveedorNombre || '', telefono: d.proveedorTelefono || '', email: d.proveedorEmail || '',
+                    direccion: d.proveedorDireccion || '', esContribuyenteEspecial: false, retencionIvaPorDefecto: 75, notas: '',
+                });
+                setModalCrearProv(true);
+                avisos.push(`El proveedor ${d.proveedorNombre || ''}${d.proveedorRif ? ` (${d.proveedorRif})` : ''} no está registrado: revisa sus datos, consulta su RIF en el SENIAT y guárdalo.`);
+            }
+
+            // Renglones: se proponen con lo aprendido de este proveedor (si ya lo conocemos) y candidatos por parecido
+            let equivalencias = [];
+            if (proveedorId) {
+                try { equivalencias = await (await fetch(`/api/compras/equivalencias?proveedorId=${proveedorId}`)).json(); } catch { equivalencias = []; }
+            }
+            const renglones = prepararRenglones(d.lineas || [], productos || [], Array.isArray(equivalencias) ? equivalencias : []);
+            const simbolo = monedaLeida === 'BS' ? 'Bs' : '$';
+            setLectura({
+                impreso: { baseImponible: d.baseImponible, montoExento: d.montoExento, montoIva: d.montoIva, total: d.total },
+                avisos, renglones: renglones.length, proveedorNombre: prov?.nombre || d.proveedorNombre || '', simbolo,
+                lineas: d.lineas || [], equivalencias: Array.isArray(equivalencias) ? equivalencias : [],
+            });
+            setIvaAjustado(null);
+            if (renglones.length) setRevision(renglones);
+            else avisos.push('No se leyeron renglones: agrégalos a mano.');
+            const aprendidos = renglones.filter((r) => r.origen === 'aprendido').length;
+            notifications.update({ id, title: 'Factura leída', message: `${renglones.length} renglón(es)${aprendidos ? `, ${aprendidos} ya enlazados con este proveedor` : ''}. Revisa y elige los productos.`, color: 'teal', loading: false, autoClose: 5000 });
+        } catch (e) {
+            notifications.update({ id, title: 'No se pudo leer la factura', message: `${e.message} Puedes llenarla a mano.`, color: 'red', loading: false, autoClose: 15000 });
+        } finally {
+            setAnalizando(false);
+        }
+    };
+
     const agregarAlCarritoCompra = (prod) => {
         const existe = carritoCompra.find(i => i.id === prod.id);
         if (existe) {
             setCarritoCompra(carritoCompra.map(i => i.id === prod.id ? recalcular({ ...i, cantidadCompra: i.cantidadCompra + 1 }) : i));
         } else {
-            const costoUnidad = Number(prod.costoUsd) || 0;
-            setCarritoCompra([...carritoCompra, recalcular({
-                id: prod.id,
-                codigo: prod.codigo,
-                nombre: prod.nombre,
-                marca: prod.marca?.nombre || '',
-                costoAnterior: costoUnidad,
-                undPorCaja: Number(prod.unidadesPorCaja) || 0,
-                undPorBulto: Number(prod.unidadesPorBulto) || 0,
-                cajasPorBulto: Number(prod.cajasPorBulto) || 0,
-                empaqueOriginal: { undPorCaja: Number(prod.unidadesPorCaja) || 0, cajasPorBulto: Number(prod.cajasPorBulto) || 0, undPorBulto: Number(prod.unidadesPorBulto) || 0 },
-                unidadCompra: 'unidad',
-                cantidadCompra: 1,
-                precioCompra: Number(aMon(costoUnidad).toFixed(4)),
-                porcentajeIva: prod.porcentajeIva === null || prod.porcentajeIva === undefined || prod.porcentajeIva === "" || Number.isNaN(Number(prod.porcentajeIva)) ? 16 : Number(prod.porcentajeIva), // 0 = exento: no se puede tratar como "sin dato"
-                aceptarCambioPrecio: true
-            })]);
+            setCarritoCompra([...carritoCompra, recalcular(nuevoItem(prod))]);
         }
     };
 
@@ -259,19 +411,29 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     const eliminarItem = (id) => setCarritoCompra(carritoCompra.filter(i => i.id !== id));
 
     const esFactura = formCompra.values.tipoDocumento === 'FACTURA';
+    // Misma regla que imprime el proveedor (y que usan las ventas): cada renglón = precio × cantidad redondeado a céntimos,
+    // y el IVA se calcula UNA vez sobre la base de cada alícuota. Antes se sumaban renglones sin redondear y el IVA renglón por
+    // renglón, y la base o el IVA podían quedar un céntimo distintos de la factura en papel (y del libro de compras).
     let subtotal = 0;
     let montoIva = 0;
     let montoExento = 0; // lo que no lleva IVA: va como exento en el libro de compras
+    const basesPorAlicuota = new Map();
 
     carritoCompra.forEach(item => {
-        const itemSub = item.precioCompraUnitario * item.cantidad;
+        const itemSub = montoLinea(item);
         subtotal += itemSub;
         if (esFactura && item.porcentajeIva > 0) {
-            montoIva += itemSub * (item.porcentajeIva / 100);
+            basesPorAlicuota.set(item.porcentajeIva, (basesPorAlicuota.get(item.porcentajeIva) || 0) + itemSub);
         } else {
             montoExento += itemSub;
         }
     });
+    subtotal = r2(subtotal);
+    montoExento = r2(montoExento);
+    montoIva = r2([...basesPorAlicuota.entries()].reduce((a, [pct, base]) => a + r2(r2(base) * pct / 100), 0));
+    const montoIvaCalculado = montoIva;
+    // El IVA impreso en la factura, si la persona eligió usarlo (solo difiere por céntimos de redondeo del proveedor)
+    if (!esGasto && esFactura && ivaAjustado !== null) montoIva = r2(ivaAjustado);
 
     if (esGasto) {
         const base = Math.max(0, Number(gasto.base) || 0);
@@ -283,10 +445,10 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
 
     let montoRetencion = 0;
     if (formCompra.values.aplicarRetencion && esFactura && montoIva > 0) {
-        montoRetencion = montoIva * (formCompra.values.porcentajeRetencion / 100);
+        montoRetencion = r2(montoIva * (formCompra.values.porcentajeRetencion / 100));
     }
 
-    const totalFinal = subtotal + montoIva;
+    const totalFinal = r2(subtotal + montoIva);
 
     // Comprobante de retención: si todavía no se dijo con qué número empieza la numeración, se pregunta antes de registrar
     const serieRet = numeracion?.series?.find((s) => s.clave === 'RET-COMPRA');
@@ -351,8 +513,9 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     const handleEjecutarCompraFinal = async () => {
         setIsSubmitting(true);
         try {
-            // Primero se guarda el empaque corregido en la ficha: si falla, no se registra la compra con unidades dudosas
-            if (!esGasto) {
+            // Primero se guarda el empaque corregido en la ficha: si falla, no se registra la compra con unidades dudosas.
+            // Un vendedor no edita fichas: su compra usa el empaque indicado para contar las unidades, pero la ficha queda igual.
+            if (!esGasto && !esVendedor) {
                 for (const item of carritoCompra.filter(empaqueCambio)) {
                     const r = await fetch(`/api/productos/${item.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item.undPorCaja ? { unidadesPorCaja: item.undPorCaja, cajasPorBulto: item.cajasPorBulto || null } : { unidadesPorCaja: null, cajasPorBulto: null, unidadesPorBulto: item.undPorBulto > 1 ? item.undPorBulto : null }) });
                     if (!r.ok) throw new Error(`No se pudo guardar el empaque de ${item.nombre}: ${(await r.json().catch(() => null))?.error || 'error del servidor'}`);
@@ -463,9 +626,19 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     // ---- Datos del documento (proveedor, factura, fecha, moneda, retención) ----
     const datosDocumento = (
         <Box style={{ flex: '0 0 auto' }}>
-            <Group justify="space-between" align="center" mb={isMobile ? 6 : 'xs'} wrap="nowrap">
-                <SegmentedControl size="xs" fullWidth={isMobile} style={isMobile ? { flex: 1 } : undefined} value={esGasto ? 'gasto' : 'mercancia'} onChange={(v) => setEsGasto(v === 'gasto')}
+            <Group justify="space-between" align="center" mb={isMobile ? 6 : 'xs'} wrap={isMobile ? 'wrap' : 'nowrap'} gap="xs">
+                <SegmentedControl size="xs" fullWidth={isMobile} style={isMobile ? { flex: '1 1 100%' } : undefined} value={esGasto ? 'gasto' : 'mercancia'} onChange={(v) => setEsGasto(v === 'gasto')}
                     data={[{ value: 'mercancia', label: isMobile ? 'Mercancía' : 'Compra de mercancía (inventario)' }, { value: 'gasto', label: isMobile ? 'Gasto' : 'Gasto (no afecta el inventario)' }]} />
+                {!esGasto && (
+                    // En el teléfono, "image/*" deja elegir entre la cámara y la galería
+                    <FileButton onChange={leerFactura} accept="image/*,application/pdf" disabled={analizando}>
+                        {(props) => (
+                            <Button {...props} size="xs" color="grape" variant="light" tt="none" loading={analizando} fullWidth={isMobile} leftSection={<IconSparkles size={16} />}>
+                                Leer factura con IA (foto o PDF)
+                            </Button>
+                        )}
+                    </FileButton>
+                )}
             </Group>
             <Grid gutter="xs" align="flex-end">
                 <Grid.Col span={{ base: 12, md: 5 }}>
@@ -518,6 +691,30 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 </Alert>
             )}
             {!esFactura && <Text size="xs" c="dimmed" mt="xs">La nota de entrega no es un documento fiscal: se registra sin IVA, sin retención y sin número de control, y no entra al libro de compras. {esGasto ? 'Al ser un gasto, no mueve el inventario.' : 'El inventario y el costo se actualizan igual.'}</Text>}
+            {lectura && !esGasto && (
+                <>
+                    {lectura.avisos.length > 0 && (
+                        <Alert mt="xs" p="xs" color="yellow" variant="light" icon={<IconAlertTriangle size={18} />} title="Revisa lo que leyó la IA"
+                            withCloseButton onClose={() => setLectura((l) => ({ ...l, avisos: [] }))}>
+                            <Stack gap={2}>{lectura.avisos.map((a, i) => <Text key={i} size="xs">{a}</Text>)}</Stack>
+                        </Alert>
+                    )}
+                    {carritoCompra.length > 0 && (
+                        <CuadreFactura
+                            impreso={lectura.impreso} simbolo={sim}
+                            calculado={{ base: r2(subtotal - montoExento), exento: montoExento, ivaCalculado: montoIvaCalculado, total: r2(subtotal + montoIvaCalculado) }}
+                            renglonesFactura={lectura.renglones} renglonesCompra={carritoCompra.length}
+                            ivaAjustado={ivaAjustado} onUsarIvaImpreso={() => setIvaAjustado(Number(lectura.impreso.montoIva))} onQuitarAjuste={() => setIvaAjustado(null)}
+                        />
+                    )}
+                    {revision === null && lectura.renglones > 0 && (
+                        <Button mt={6} size="compact-xs" variant="subtle" color="grape" leftSection={<IconSparkles size={14} />}
+                            onClick={() => setRevision(prepararRenglones(lectura.lineas || [], productos || [], lectura.equivalencias || []))}>
+                            Volver a ver los renglones leídos
+                        </Button>
+                    )}
+                </>
+            )}
         </Box>
     );
 
@@ -645,7 +842,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                         {diferencia !== 0 && <Text span size="xs" fw={700} c={diferencia > 0 ? 'red' : 'teal'}> · {diferencia > 0 ? `▲ +${variacionPorcentual}%` : `▼ ${variacionPorcentual}%`}</Text>}
                                     </Text>
                                 </Table.Td>
-                                <Table.Td ta="right"><PrecioVisual valor={item.precioCompraUnitario * item.cantidad} simbolo={sim} size="sm" fw={700} /></Table.Td>
+                                <Table.Td ta="right"><PrecioVisual valor={montoLinea(item)} simbolo={sim} size="sm" fw={700} /></Table.Td>
                                 <Table.Td><ActionIcon color="red" variant="subtle" size="lg" onClick={() => eliminarItem(item.id)}><IconTrash size={18}/></ActionIcon></Table.Td>
                             </Table.Tr>
                         );
@@ -730,6 +927,12 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                     </Box>
                 )}
 
+                {/* Renglones leídos de la factura: la persona elige el producto de cada uno antes de pasarlos a la compra */}
+                {revision && (
+                    <RevisionRenglonesIA opened onClose={() => setRevision(null)} renglonesIniciales={revision} productos={productos || []}
+                        simbolo={lectura?.simbolo || sim} proveedorNombre={lectura?.proveedorNombre} onConfirmar={agregarDesdeFactura} />
+                )}
+
                 {/* MODAL SECUNDARIO: CREAR PROVEEDOR EN CALIENTE */}
                 <Modal opened={modalCrearProv} onClose={() => setModalCrearProv(false)} size="lg" title={<Title order={3} c="grape">Registrar Nuevo Proveedor</Title>} centered zIndex={2000}>
                     <form onSubmit={formNuevoProv.onSubmit(async (values) => {
@@ -755,6 +958,18 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                             <TextInput size={isMobile ? 'sm' : 'md'} label="Teléfono" {...formNuevoProv.getInputProps('telefono')} />
                             <TextInput size={isMobile ? 'sm' : 'md'} label="Email" {...formNuevoProv.getInputProps('email')} />
                             <TextInput size={isMobile ? 'sm' : 'md'} label="Dirección" {...formNuevoProv.getInputProps('direccion')} />
+                            {/* El SENIAT dice si a este proveedor se le retiene el 75 % o el 100 % del IVA (su consulta tiene captcha: se abre aparte) */}
+                            <Alert color="blue" variant="light" p="xs" title="¿Se le retiene 75 % o 100 %?">
+                                <Text size="xs" mb={6}>Consulta el RIF en el portal del SENIAT: el resultado dice su porcentaje de retención de IVA y si es contribuyente especial. Al abrirlo se copia el RIF para que lo pegues.</Text>
+                                <Button size="xs" variant="white" leftSection={<IconExternalLink size={14} />}
+                                    onClick={() => {
+                                        const rif = normRif(formNuevoProv.values.identificacion);
+                                        if (rif) navigator.clipboard?.writeText(rif).catch(() => {});
+                                        window.open(URL_SENIAT_RIF, '_blank', 'noopener');
+                                    }}>
+                                    Consultar RIF en el SENIAT{normRif(formNuevoProv.values.identificacion) ? ` (${normRif(formNuevoProv.values.identificacion)})` : ''}
+                                </Button>
+                            </Alert>
                             <Group grow>
                                 <Checkbox label="Contribuyente Especial" size="md" mt={8} {...formNuevoProv.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })} />
                                 <Select size={isMobile ? 'sm' : 'md'} label="Retención Default" data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} value={String(formNuevoProv.values.retencionIvaPorDefecto)} onChange={(v) => formNuevoProv.setFieldValue('retencionIvaPorDefecto', Number(v) === 100 ? 100 : 75)} allowDeselect={false} />
