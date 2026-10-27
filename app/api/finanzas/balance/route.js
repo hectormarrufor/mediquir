@@ -57,15 +57,20 @@ export async function GET(request) {
             q(`SELECT
                 (SELECT COALESCE(SUM("stockAlmacen" * "costoUsd"), 0)::float FROM "Productos") AS inventario,
                 (SELECT COALESCE(SUM(CASE WHEN "moneda" = 'BS' THEN "saldoPendiente" / NULLIF("tasaCambio", 0) ELSE "saldoPendiente" END), 0)::float FROM "CuentasPorCobrar" WHERE "estado" <> 'Pagado')
-                 + (SELECT COALESCE(SUM(GREATEST(v."totalFinal" - COALESCE((SELECT SUM(a."montoUsd") FROM "Abonos" a WHERE a."ventaId" = v."id"), 0), 0)), 0)::float
-                    FROM "Ventas" v WHERE v."clienteId" IS NOT NULL AND v."statusPago" <> 'Pagado' AND v."statusDespacho" <> 'Cancelado' AND v."moneda" = 'USD'
+                 + (SELECT COALESCE(SUM(CASE WHEN v."moneda" = 'BS'
+                        THEN GREATEST(v."totalFinal" - COALESCE((SELECT SUM(a."montoVes") FROM "Abonos" a WHERE a."ventaId" = v."id"), 0), 0) / NULLIF(v."tasaCambio", 0)
+                        ELSE GREATEST(v."totalFinal" - COALESCE((SELECT SUM(a."montoUsd") FROM "Abonos" a WHERE a."ventaId" = v."id"), 0), 0) END), 0)::float
+                    FROM "Ventas" v WHERE v."clienteId" IS NOT NULL AND v."statusPago" <> 'Pagado' AND v."statusDespacho" <> 'Cancelado'
                       AND NOT EXISTS (SELECT 1 FROM "CuentasPorCobrar" x WHERE x."ventaId" = v."id")) AS "porCobrar",
                 (SELECT COALESCE(SUM(CASE WHEN "moneda" = 'BS' THEN "saldoPendiente" / NULLIF("tasaCambio", 0) ELSE "saldoPendiente" END), 0)::float FROM "CuentasPorPagar" WHERE "estado" <> 'Pagado') AS "porPagar",
                 (SELECT COALESCE(SUM(CASE WHEN m."tipo" = 'INGRESO' THEN m."montoUsd" ELSE -m."montoUsd" END), 0)::float
                     FROM "MovimientosFinancieros" m LEFT JOIN "CategoriasFinancieras" c ON c."id" = m."categoriaId" WHERE COALESCE(c."nombre", '') <> :catIva) AS "flujoAcumulado"`),
             q(`SELECT
                 (SELECT COALESCE(SUM(${IVA_VENTA_USD}), 0)::float FROM "Ventas" v WHERE v."tipoDocumento" = 'FACTURA' AND (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta AND v."statusDespacho" <> 'Cancelado') + ${NOTAS_USD('montoIva', 'VENTA')} AS debito,
-                (SELECT COALESCE(SUM(${IVA_COMPRA_USD}), 0)::float FROM "FacturasCompras" f WHERE f."tipoDocumento" = 'FACTURA' AND f."fechaFactura" BETWEEN :desde AND :hasta) + ${NOTAS_USD('montoIva', 'COMPRA')} AS credito,
+                -- mismo criterio que el libro de compras: la fecha de recepción manda (si no hay, la de la factura)
+                (SELECT COALESCE(SUM(${IVA_COMPRA_USD}), 0)::float FROM "FacturasCompras" f WHERE f."tipoDocumento" = 'FACTURA' AND COALESCE(f."fechaRecepcion", f."fechaFactura") BETWEEN :desde AND :hasta) + ${NOTAS_USD('montoIva', 'COMPRA')} AS credito,
+                -- IVA que retuvieron los clientes (comprobante confirmado): ya lo pagaron ellos al SENIAT, se descuenta como en el libro
+                (SELECT COALESCE(SUM(r."ivaRetenido" / NULLIF(r."tasaCambio", 0)), 0)::float FROM "RetencionesIva" r WHERE r."tipo" = 'VENTA' AND r."estado" = 'REGISTRADA' AND r."fecha" BETWEEN :desde AND :hasta) AS "retenidoClientes",
                 (SELECT COALESCE(SUM(${VENTA_USD}), 0)::float FROM "Ventas" v WHERE v."tipoDocumento" = 'FACTURA' AND (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta AND v."statusDespacho" <> 'Cancelado') + ${NOTAS_USD('totalFinal', 'VENTA')} AS facturado`),
         ]);
 
@@ -77,7 +82,7 @@ export async function GET(request) {
             ingresosPorCategoria: porCategoria.filter((c) => c.tipo === 'INGRESO'),
             porMetodo,
             posicion: { ...posicion, patrimonio: Number((posicion.inventario + posicion.porCobrar - posicion.porPagar).toFixed(2)) },
-            iva: { ...iva, aPagar: Number((iva.debito - iva.credito).toFixed(2)) },
+            iva: { ...iva, aPagar: Number((iva.debito - iva.credito - iva.retenidoClientes).toFixed(2)) },
         });
     } catch (error) {
         console.error('Balance:', error);

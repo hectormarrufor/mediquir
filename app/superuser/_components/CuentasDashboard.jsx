@@ -153,7 +153,7 @@ export default function CuentasDashboard({ tipo }) {
                                             return (
                                                 <Table.Tr key={`${c.origen}-${c.id}`}>
                                                     <Table.Td><Text fw={700} size="sm" lineClamp={1} maw={230}>{c.contraparte.nombre || c.contraparte.identificacion}</Text><Text size="xs" c="dimmed">{c.contraparte.identificacion}</Text></Table.Td>
-                                                    <Table.Td><Text size="sm" fw={600}>{c.documento || '—'}</Text>{c.origen === 'pedido' && <Badge size="xs" variant="light" color="gray">Pedido sin pagar</Badge>}</Table.Td>
+                                                    <Table.Td><Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>{c.documento || '—'}</Text>{c.origen === 'pedido' && <Badge size="xs" variant="light" color="gray">Pedido sin pagar</Badge>}</Table.Td>
                                                     <Table.Td><Text size="sm">{fmtFecha(c.emision)}</Text></Table.Td>
                                                     <Table.Td><Text size="sm">{fmtFecha(c.vence)}</Text><Badge size="sm" variant={c.estado === 'vencida' ? 'filled' : 'light'} color={ESTADO[c.estado].color}>{ESTADO[c.estado].etiqueta(c)}</Badge></Table.Td>
                                                     <Table.Td ta="right"><Text size="sm">{fmtUsd(c.total)}</Text></Table.Td>
@@ -161,8 +161,8 @@ export default function CuentasDashboard({ tipo }) {
                                                     <Table.Td>
                                                         <Group gap={4} wrap="nowrap" justify="flex-end">
                                                             {wa && <Tooltip label="Recordar por WhatsApp"><ActionIcon variant="subtle" color="green" component="a" href={wa} target="_blank"><IconBrandWhatsapp size={18} /></ActionIcon></Tooltip>}
-                                                            <Tooltip label={cobrar ? 'Ver documento y registrar abono' : 'Ver compras'}>
-                                                                <ActionIcon variant="light" color="navy.9" onClick={() => router.push(cobrar ? `/superuser/ventas/${c.docId}` : '/superuser/compras')}><IconArrowRight size={16} /></ActionIcon>
+                                                            <Tooltip label={cobrar ? 'Ver documento y registrar abono' : 'Ver compra y registrar pago'}>
+                                                                <ActionIcon variant="light" color="navy.9" aria-label={cobrar ? 'Ver documento' : 'Ver compra'} onClick={() => router.push(cobrar ? `/superuser/ventas/${c.docId}` : `/superuser/compras/${c.docId}`)}><IconArrowRight size={16} /></ActionIcon>
                                                             </Tooltip>
                                                         </Group>
                                                     </Table.Td>

@@ -414,7 +414,11 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
             if (!res.ok) throw new Error(data.error || 'Error al procesar la venta');
 
             notifications.show({ title: 'Éxito', message: `Venta registrada: ${data.numeroDocumento}`, color: 'green' });
-            
+            // El próximo número de documento y el stock cambiaron: la siguiente venta debe verlos al día
+            queryClient.invalidateQueries({ queryKey: ['correlativos-pos'] });
+            queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
+            queryClient.invalidateQueries({ queryKey: ['ventas'] });
+
             setCarrito([]);
             formVenta.reset();
             setPreviewAbierto(false);

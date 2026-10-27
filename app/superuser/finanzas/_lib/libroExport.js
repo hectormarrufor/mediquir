@@ -156,7 +156,6 @@ export async function descargarPdfLibro(tipo, datos, usuario = '') {
     const yMed = tabla(M + 90, 62, yInicio, { head: [`Resumen de ${info.nc}`, 'Monto', 'Cant.'], body: [[info.nc + ':', dinero(r.notasCredito.monto), String(r.notasCredito.cant)], [`IVA ${info.nc}:`, dinero(r.notasCredito.iva), '']], colStyles: { 1: { halign: 'right' }, 2: { halign: 'center', cellWidth: 12 } } });
     const yND = tabla(M + 90, 62, yMed + 3, { head: [`Resumen de ${info.nc.replace('C', 'D')}`, 'Monto', 'Cant.'], body: [[info.nc.replace('C', 'D') + ':', dinero(r.notasDebito?.monto || 0), String(r.notasDebito?.cant || 0)], [`IVA ${info.nc.replace('C', 'D')}:`, dinero(r.notasDebito?.iva || 0), '']], colStyles: { 1: { halign: 'right' }, 2: { halign: 'center', cellWidth: 12 } } });
     const yMed2 = tabla(M + 90, 62, yND + 3, { head: ['Resumen de anulaciones', 'Monto', 'Cant.'], body: [['Monto anulado:', dinero(r.anulaciones.monto), String(r.anulaciones.cant)], ['Impuesto anulado:', dinero(r.anulaciones.iva), '']], colStyles: { 1: { halign: 'right' }, 2: { halign: 'center', cellWidth: 12 } } });
-    void yMed2;
 
     // Solo la alícuota general (16 %); cualquier otra aparece únicamente si algún documento tuvo movimiento con ella
     const lista = [16, ...Object.keys(r.porAlicuota).map(Number).filter((a) => a !== 16 && (r.porAlicuota[a]?.base || r.porAlicuota[a]?.iva))];
@@ -167,9 +166,10 @@ export async function descargarPdfLibro(tipo, datos, usuario = '') {
         foot: ['Totales:', dinero(totBase), dinero(totIva), dinero(0), dinero(totIva)], colStyles: der });
     void yDer;
 
-    // Firmas
-    const yFirma = Math.max(doc.lastAutoTable.finalY, yIzq) + 20;
-    const yF = Math.min(yFirma, ALTO - 24);
+    // Firmas: debajo del cuadro más largo de las tres columnas (la del medio, con tres cuadros, suele ser la más alta).
+    // Si no caben en la página, van en una nueva en vez de encimarse sobre los cuadros.
+    let yF = Math.max(doc.lastAutoTable.finalY, yIzq, yMed2) + 20;
+    if (yF > ALTO - 24) { doc.addPage(); yF = 50; }
     doc.setLineWidth(0.2); doc.setFontSize(7); doc.setFont('helvetica', 'normal');
     doc.line(M + 100, yF, M + 150, yF); doc.text('Firma del contador', M + 125, yF + 3.5, { align: 'center' });
     doc.line(M + 165, yF, M + 215, yF); doc.text('Firma del auditor', M + 190, yF + 3.5, { align: 'center' });

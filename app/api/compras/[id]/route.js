@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import db from '@/models/index'; 
 import { requerirStaff } from '../../inventario/_lib';
 import { rolDe } from '@/app/constants/roles';
-const { sequelize, FacturaCompra, EntradaInventario, Producto, MovimientoFinanciero, CuentaPorPagar, Proveedor, RetencionIva, User, Empleado } = db;
+const { sequelize, FacturaCompra, EntradaInventario, Producto, MovimientoFinanciero, CuentaPorPagar, Proveedor, RetencionIva, User, Empleado, NotaFiscal, Correlativo } = db;
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -21,11 +21,23 @@ export async function GET(request, { params }) {
                 { model: User, as: 'registrador', attributes: ['id', 'user'], include: [{ model: Empleado, as: 'empleado', attributes: ['nombre', 'apellido'] }] },
             ],
         });
-        // Un vendedor solo ve las compras que él registró
-        if (!factura || (rolDe(acceso.sesion) === 'vendedor' && Number(factura.registradoPorId) !== Number(acceso.sesion.id))) {
+        // Un vendedor solo ve las compras que él registró (y sin los pagos ni la deuda con el proveedor)
+        const esVend = rolDe(acceso.sesion) === 'vendedor';
+        if (!factura || (esVend && Number(factura.registradoPorId) !== Number(acceso.sesion.id))) {
             return NextResponse.json({ error: 'Compra no encontrada' }, { status: 404 });
         }
-        return NextResponse.json(factura);
+        if (esVend) return NextResponse.json(factura);
+
+        // Cuenta por pagar (si fue a crédito) y los pagos asentados en caja para esta compra
+        const [cuentaPorPagar, pagos] = await Promise.all([
+            CuentaPorPagar.findOne({ where: { facturaCompraId: factura.id } }),
+            MovimientoFinanciero.findAll({
+                where: { facturaCompraId: factura.id, tipo: 'GASTO' },
+                attributes: ['id', 'fecha', 'metodoPago', 'referencia', 'montoUsd', 'montoVes', 'tasaBcvAplicada', 'descripcion'],
+                order: [['fecha', 'ASC'], ['id', 'ASC']],
+            }),
+        ]);
+        return NextResponse.json({ ...factura.toJSON(), cuentaPorPagar, pagos });
     } catch (error) {
         console.error('Detalle de compra:', error);
         return NextResponse.json({ error: 'No se pudo cargar la compra' }, { status: 500 });
@@ -80,9 +92,28 @@ export async function DELETE(request, { params }) {
             }
         }
 
+        // Una compra con notas de crédito o débito de su proveedor no se borra: la nota quedaría colgando en el libro de compras
+        const notas = await NotaFiscal.count({ where: { facturaCompraId: facturaAMatar.id, origen: 'COMPRA' }, transaction: t });
+        if (notas > 0) {
+            await t.rollback();
+            return NextResponse.json({ error: 'Esta compra tiene notas de crédito o débito registradas: elimínalas primero.' }, { status: 409 });
+        }
+
         // 4. Destruir dependencias financieras y registros asociados (Cascada controlada)
         await MovimientoFinanciero.destroy({ where: { facturaCompraId: facturaAMatar.id }, transaction: t });
         await CuentaPorPagar.destroy({ where: { facturaCompraId: facturaAMatar.id }, transaction: t });
+
+        // Su comprobante de retención de IVA también se va (antes quedaba huérfano en el libro de compras). Si era el último
+        // comprobante emitido, el correlativo retrocede para no dejar un hueco en la numeración.
+        const retenciones = await RetencionIva.findAll({ where: { facturaCompraId: facturaAMatar.id, tipo: 'COMPRA' }, transaction: t });
+        for (const r of retenciones) {
+            const secuencia = /^\d{14}$/.test(String(r.comprobante || '')) ? Number(String(r.comprobante).slice(-8)) : null;
+            await r.destroy({ transaction: t });
+            if (secuencia) {
+                const corr = await Correlativo.findOne({ where: { prefijo: 'RET-COMPRA' }, transaction: t, lock: t.LOCK.UPDATE });
+                if (corr && Number(corr.siguienteNumero) === secuencia + 1) await corr.update({ siguienteNumero: secuencia }, { transaction: t });
+            }
+        }
         await EntradaInventario.destroy({ where: { facturaCompraId: facturaAMatar.id }, transaction: t });
 
         // 5. Destruir la cabecera (FacturaCompra)

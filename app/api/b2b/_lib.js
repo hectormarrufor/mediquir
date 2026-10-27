@@ -41,8 +41,11 @@ export function saldoDeVenta(venta) {
         const saldo = Number(cxc.saldoPendiente) || 0;
         return cxc.moneda === 'BS' ? aDolares(saldo, cxc.tasaCambio) : saldo;
     }
-    const abonado = (venta.abonos || []).reduce((acc, a) => acc + (Number(a.montoUsd) || 0), 0);
-    return Math.max(0, Number((Number(venta.totalFinal) - abonado).toFixed(2)));
+    // Lo abonado se resta en la moneda del documento; el resultado siempre se expresa en USD
+    const enBs = venta.moneda === 'BS';
+    const abonado = (venta.abonos || []).reduce((acc, a) => acc + (Number(enBs ? a.montoVes : a.montoUsd) || 0), 0);
+    const saldo = Math.max(0, Number((Number(venta.totalFinal) - abonado).toFixed(2)));
+    return enBs ? aDolares(saldo, Number(venta.tasaCambio) || 1) : saldo;
 }
 
 // Situación de cobro de una venta: al día, por vencer, vencida o pagada

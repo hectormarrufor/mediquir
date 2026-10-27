@@ -85,15 +85,34 @@ export default function BalanceTab() {
     const hasta = listo ? dayjs(d2).format('YYYY-MM-DD') : null;
     const { data, isLoading, error } = useQuery({ queryKey: ['balance', desde, hasta], enabled: listo, queryFn: () => pedirJson(`/api/finanzas/balance?desde=${desde}&hasta=${hasta}`) });
 
+    // Hasta ~2 meses se grafica día por día; un rango más largo (p. ej. "Este año") se agrupa por mes.
+    // Antes se cortaba en 92 días y "Este año" solo mostraba enero a marzo.
+    const totalDias = listo ? dayjs(d2).diff(dayjs(d1), 'day') + 1 : 0;
+    const porMesEnGrafico = totalDias > 62;
     const serieDia = useMemo(() => {
         if (!listo) return [];
-        const porDia = new Map((data?.porDia || []).map((d) => [d.dia, d]));
-        const n = Math.min(dayjs(d2).diff(dayjs(d1), 'day') + 1, 92);
-        return Array.from({ length: n }, (_, i) => {
+        const filas = data?.porDia || [];
+        if (porMesEnGrafico) {
+            const porMes = new Map();
+            for (const f of filas) {
+                const m = f.dia.slice(0, 7);
+                const a = porMes.get(m) || { ingresos: 0, gastos: 0 };
+                a.ingresos += f.ingresos; a.gastos += f.gastos;
+                porMes.set(m, a);
+            }
+            const meses = [];
+            for (let m = dayjs(d1).startOf('month'); !m.isAfter(dayjs(d2), 'month'); m = m.add(1, 'month')) {
+                const a = porMes.get(m.format('YYYY-MM'));
+                meses.push({ dia: `${MESES[m.month()]} ${m.format('YY')}`, Ingresos: Number((a?.ingresos || 0).toFixed(2)), Gastos: Number((a?.gastos || 0).toFixed(2)) });
+            }
+            return meses;
+        }
+        const porDia = new Map(filas.map((d) => [d.dia, d]));
+        return Array.from({ length: totalDias }, (_, i) => {
             const dia = dayjs(d1).add(i, 'day'); const d = porDia.get(dia.format('YYYY-MM-DD'));
             return { dia: dia.format('DD/MM'), Ingresos: Number((d?.ingresos || 0).toFixed(2)), Gastos: Number((d?.gastos || 0).toFixed(2)) };
         });
-    }, [data, d1, d2, listo]);
+    }, [data, d1, d2, listo, totalDias, porMesEnGrafico]);
     const serieMes = (data?.mensual || []).map((m) => ({ mes: `${MESES[Number(m.mes.slice(5, 7)) - 1]} ${m.mes.slice(2, 4)}`, Ingresos: Number(m.ingresos.toFixed(2)), Gastos: Number(m.gastos.toFixed(2)) }));
 
     const k = data?.kpi; const p = data?.posicion; const iva = data?.iva;
@@ -119,12 +138,12 @@ export default function BalanceTab() {
                 <Indicador icono={IconBuildingWarehouse} color="blue" titulo="Inventario a costo" cargando={isLoading} valor={fmtUsd(p?.inventario)} detalle="Existencia x costo" />
                 <Indicador icono={IconUsers} color="orange" titulo="Por cobrar" cargando={isLoading} valor={fmtUsd(p?.porCobrar)} detalle="Lo que te deben hoy" />
                 <Indicador icono={IconWallet} color="red" titulo="Por pagar" cargando={isLoading} valor={fmtUsd(p?.porPagar)} detalle="Lo que debes hoy" />
-                <Indicador icono={IconReceiptTax} color="cyan" titulo="IVA del periodo" cargando={isLoading} valor={fmtUsd(Math.abs(iva?.aPagar || 0))} detalle={`${(iva?.aPagar || 0) >= 0 ? 'Por pagar' : 'A favor'} · débito ${fmtUsd(iva?.debito)} / crédito ${fmtUsd(iva?.credito)}`} />
+                <Indicador icono={IconReceiptTax} color="cyan" titulo="IVA del periodo" cargando={isLoading} valor={fmtUsd(Math.abs(iva?.aPagar || 0))} detalle={`${(iva?.aPagar || 0) >= 0 ? 'Por pagar' : 'A favor'} · débito ${fmtUsd(iva?.debito)} − crédito ${fmtUsd(iva?.credito)}${iva?.retenidoClientes > 0 ? ` − retenido ${fmtUsd(iva.retenidoClientes)}` : ''}`} />
             </SimpleGrid>
 
             <Grid gutter="lg">
                 <Grid.Col span={{ base: 12, lg: 7 }}>
-                    <Tarjeta titulo="Ingresos y gastos por día (USD)" cargando={isLoading}>
+                    <Tarjeta titulo={`Ingresos y gastos por ${porMesEnGrafico ? 'mes' : 'día'} (USD)`} cargando={isLoading}>
                         <LineChart h={240} data={serieDia} dataKey="dia" series={[{ name: 'Ingresos', color: 'teal.6' }, { name: 'Gastos', color: 'red.6' }]} curveType="monotone" withLegend valueFormatter={(v) => fmtUsd(v)} tickLine="none" />
                     </Tarjeta>
                 </Grid.Col>

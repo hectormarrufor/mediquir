@@ -19,7 +19,8 @@ const CONSULTAS = {
         FROM "CuentasPorCobrar" cc JOIN "Clientes" c ON c."id" = cc."clienteId" LEFT JOIN "Ventas" v ON v."id" = cc."ventaId"
         UNION ALL
         SELECT 'pedido', v."id"::text, v."id"::text, v."numeroDocumento", v."createdAt", NULL::date, v."totalFinal"::float,
-               GREATEST(v."totalFinal" - COALESCE((SELECT SUM(a."montoUsd") FROM "Abonos" a WHERE a."ventaId" = v."id"), 0), 0)::float,
+               -- lo abonado se resta en la moneda del documento (antes se restaban dólares a un total en bolívares)
+               GREATEST(v."totalFinal" - COALESCE((SELECT SUM(CASE WHEN v."moneda" = 'BS' THEN a."montoVes" ELSE a."montoUsd" END) FROM "Abonos" a WHERE a."ventaId" = v."id"), 0), 0)::float,
                v."moneda"::text, v."tasaCambio"::float, c."id", c."nombre", c."identificacion", c."telefono"
         FROM "Ventas" v JOIN "Clientes" c ON c."id" = v."clienteId"
         WHERE v."statusPago" <> 'Pagado' AND v."statusDespacho" <> 'Cancelado'

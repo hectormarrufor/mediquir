@@ -1,13 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
     Box, Title, Paper, Group, Text, Badge, Grid, Stack, Divider,
-    Table, Stepper, Button, Select, TextInput, NumberInput, Modal, Tabs, ScrollArea, ActionIcon
+    Table, Stepper, Button, Select, TextInput, NumberInput, Modal, Tabs
 } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from '@mantine/form';
+import { useMediaQuery } from '@mantine/hooks';
+import { aBolivares, aDolares } from '@/app/constants/facturacion';
+import { useTasaBcv } from '@/hooks/useTasaBcv';
 import {
     IconArrowLeft, IconPackage, IconTruck, IconCheck,
     IconUser, IconCurrencyDollar, IconReceiptTax, IconCash, IconListDetails, IconReportMoney, IconUsers
@@ -36,14 +39,9 @@ export default function DetallePedidoMayorPage() {
     const [modalFactura, setModalFactura] = useState(false);
     const [modalNotaAFactura, setModalNotaAFactura] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [precioBCV, setPrecioBCV] = useState(1);
-
-    // Obtener tasa BCV actual para los abonos
-    useEffect(() => {
-        fetch('/api/bcv').then(res => res.json()).then(data => {
-            if (data?.precio) setPrecioBCV(data.precio);
-        });
-    }, []);
+    const isMobile = useMediaQuery('(max-width: 48em)');
+    // Tasa BCV de hoy: con ella se convierte un abono hecho en otra moneda que la de la cuenta
+    const { tasa: precioBCV } = useTasaBcv();
 
     // 1. Fetch del pedido con TODA la data relacional (CxC, Abonos, Movimientos, Usuarios)
     const { data: pedido, isLoading, refetch } = useQuery({
@@ -73,14 +71,22 @@ export default function DetallePedidoMayorPage() {
     if (isLoading) return <Box p="md"><Text>Cargando panel 360° del pedido...</Text></Box>;
     if (!pedido) return <Box p="md"><Text c="red">Pedido no encontrado</Text></Box>;
 
+    const cancelado = pedido.statusDespacho === 'Cancelado';
     let pasoActual = 0;
-    if (pedido.statusDespacho === 'Empacado') pasoActual = 1;
-    if (pedido.statusDespacho === 'Completado' || pedido.statusDespacho === 'Despachado') pasoActual = 2;
+    if (pedido.statusDespacho === 'Empacado' || pedido.statusDespacho === 'Parcial') pasoActual = 1;
+    if (pedido.statusDespacho === 'Completado') pasoActual = 3; // los tres pasos quedan hechos
 
     // Compra de la tienda fuera de la zona de delivery: envío nacional por Zoom con cobro a destino (la tesorería no interviene)
     const esNacional = pedido.tipoVenta === 'ONLINE' && pedido.tipoEntrega === 'flete';
-    const cuentaPorCobrar = pedido.cuentaPorCobrar; // Asumiendo que tu backend lo incluye
+    // La cuenta por cobrar llega como arreglo (asociación hasMany): antes se leía como objeto y el saldo salía siempre en 0
+    const cuentaPorCobrar = Array.isArray(pedido.cuentaPorCobrar) ? (pedido.cuentaPorCobrar[0] || null) : (pedido.cuentaPorCobrar || null);
     const esCredito = pedido.condicionPago === 'Credito';
+    const monedaCuenta = cuentaPorCobrar?.moneda || pedido.moneda;
+    const saldoCuenta = Number(cuentaPorCobrar?.saldoPendiente) || 0;
+    const pagado = pedido.statusPago === 'Pagado';
+    // Montos del documento en su moneda y su equivalente (con la tasa del documento)
+    const tasaDoc = Number(pedido.tasaCambio) || 1;
+    const equivalente = (v) => (pedido.moneda === 'BS' ? `$${aDolares(Number(v) || 0, tasaDoc).toFixed(2)}` : `Bs ${aBolivares(Number(v) || 0, tasaDoc).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
     // --- HANDLERS ---
     const handleAction = async (accion, bodyData, modalSetter, successMsg) => {
@@ -112,7 +118,8 @@ export default function DetallePedidoMayorPage() {
 
     // 🔥 HANDLER DE ABONO A CUENTA POR COBRAR 🔥
     const handleRegistrarAbono = (values) => {
-        if (values.montoAbono <= 0) return notifications.show({ message: 'El monto debe ser mayor a 0', color: 'red' });
+        if (!(Number(values.montoAbono) > 0)) return notifications.show({ message: 'El monto debe ser mayor a 0', color: 'red' });
+        if (values.monedaAbono !== monedaCuenta && !(precioBCV > 0)) return notifications.show({ message: 'Todavía no hay tasa BCV para convertir el pago: espera un momento e intenta de nuevo', color: 'red' });
 
         handleAction('ABONAR', {
             montoAbono: values.montoAbono,
@@ -121,6 +128,12 @@ export default function DetallePedidoMayorPage() {
             monedaAbono: values.monedaAbono,
             tasaCambioAbono: precioBCV
         }, setModalAbono, 'Abono registrado y saldo actualizado.');
+    };
+
+    const abrirAbono = () => {
+        // Por defecto se propone pagar todo el saldo, en la moneda de la cuenta
+        formAbono.setValues({ montoAbono: saldoCuenta, metodoPago: 'Transferencia', referencia: '', monedaAbono: monedaCuenta });
+        setModalAbono(true);
     };
 
     const opcionesEmpleados = empleados?.map(e => ({ value: String(e.id), label: e.nombre })) || [];
@@ -146,11 +159,11 @@ export default function DetallePedidoMayorPage() {
     return (
         <Box p="md" maw={1400} mx="auto">
             {/* 👈 BLOQUE MODIFICADO EN LA CABECERA */}
-            <Group>
+            <Group mb="md" gap="sm">
                 <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={() => router.push('/superuser/ventas')}>
                     Volver
                 </Button>
-                <Title order={2} c="blue.9">Pedido: {pedido.numeroDocumento}</Title>
+                <Title order={isMobile ? 3 : 2} c="white">{pedido.tipoDocumento === 'FACTURA' ? 'Factura' : pedido.tipoDocumento === 'NOTA_ENTREGA' ? 'Nota de entrega' : 'Recibo'} {pedido.numeroDocumento}</Title>
                 {pedido.numeroDocumentoAnterior && <Badge size="lg" variant="outline" color="gray">Antes: {pedido.numeroDocumentoAnterior}</Badge>}
                 {rolUsuario === 'admin' && pedido.tipoDocumento === 'NOTA_ENTREGA' && pedido.condicionPago === 'Credito' && pedido.clienteId && pedido.statusDespacho !== 'Cancelado' && pedido.revisionStock !== 'PENDIENTE' && (
                     <Button size="xs" variant="light" color="indigo" leftSection={<IconReceiptTax size={16} />} onClick={() => setModalNotaAFactura(true)}>Pasar a factura</Button>
@@ -159,14 +172,14 @@ export default function DetallePedidoMayorPage() {
                     <Button size="xs" variant="light" color="indigo" leftSection={<IconReceiptTax size={16} />} onClick={() => setModalFactura(true)}>Convertir en factura</Button>
                 )}
 
-                {/* Status de Pago */}
-                <Badge size="lg" color={pedido.statusPago === 'PAGADO' ? 'green' : 'orange'}>
-                    Pago: {pedido.statusPago || 'PENDIENTE'}
+                {/* Estado de pago (los valores vienen como 'Pagado' / 'Pendiente': antes se comparaba en mayúsculas y siempre salía naranja) */}
+                <Badge size="lg" color={cancelado ? 'gray' : pagado ? 'green' : 'orange'}>
+                    Pago: {cancelado ? 'Anulado' : (pedido.statusPago || 'Pendiente')}
                 </Badge>
 
-                {/* Status de Despacho */}
-                <Badge size="lg" color={pedido.statusDespacho === 'COMPLETADO' ? 'blue' : 'yellow'}>
-                    Despacho: {pedido.statusDespacho || 'PENDIENTE'}
+                {/* Estado de despacho */}
+                <Badge size="lg" color={cancelado ? 'red' : pedido.statusDespacho === 'Completado' ? 'blue' : 'yellow'}>
+                    Despacho: {pedido.statusDespacho || 'Pendiente'}
                 </Badge>
 
                 {/* Tipo de Entrega */}
@@ -175,12 +188,14 @@ export default function DetallePedidoMayorPage() {
                 </Badge>
             </Group>
 
-            <Tabs defaultValue="logistica" color="blue">
-                <Tabs.List mb="md">
-                    <Tabs.Tab value="logistica" leftSection={<IconPackage size={16} />}>Logística y Resumen</Tabs.Tab>
-                    {esCredito && !esVendedor && <Tabs.Tab value="cxc" leftSection={<IconCash size={16} />}>Cuentas por Cobrar y Abonos</Tabs.Tab>}
-                    {!esVendedor && <Tabs.Tab value="finanzas" leftSection={<IconReportMoney size={16} />}>Movimientos Financieros</Tabs.Tab>}
+            <Tabs defaultValue="logistica" color="blue" variant="pills" radius="xl">
+                <Paper radius="xl" p={4} mb="md" w="fit-content" maw="100%" style={{ overflowX: 'auto' }}>
+                <Tabs.List style={{ flexWrap: 'nowrap' }}>
+                    <Tabs.Tab value="logistica" leftSection={<IconPackage size={16} />}>Logística y resumen</Tabs.Tab>
+                    {(esCredito || cuentaPorCobrar) && !esVendedor && <Tabs.Tab value="cxc" leftSection={<IconCash size={16} />}>Estado de cuenta</Tabs.Tab>}
+                    {!esVendedor && <Tabs.Tab value="finanzas" leftSection={<IconReportMoney size={16} />}>Movimientos</Tabs.Tab>}
                 </Tabs.List>
+                </Paper>
 
                 {/* ============================================================== */}
                 {/* PESTAÑA 1: LOGÍSTICA, CONTENIDO, PERSONAL Y CLIENTE */}
@@ -188,12 +203,16 @@ export default function DetallePedidoMayorPage() {
                 <Tabs.Panel value="logistica">
                     <Grid gutter="md">
                         <Grid.Col span={{ base: 12, md: 8 }}>
-                            <Paper withBorder p="xl" radius="md" bg="white" mb="md">
-                                <Stepper active={pasoActual} color="blue" breakpoint="sm">
-                                    <Stepper.Step label="Generado" description="Pedido facturado" icon={<IconReceiptTax size={18} />} />
-                                    <Stepper.Step label="Empacado" description="Stock descontado" icon={<IconPackage size={18} />} />
-                                    <Stepper.Step label="Despachado" description="Entregado al chofer" icon={<IconTruck size={18} />} />
-                                </Stepper>
+                            <Paper withBorder p={{ base: 'md', sm: 'xl' }} radius="md" bg="white" mb="md">
+                                {cancelado ? (
+                                    <Text ta="center" fw={700} c="red.7">Este pedido está cancelado: no se empaca ni se despacha.</Text>
+                                ) : (
+                                    <Stepper active={pasoActual} color="blue" size={isMobile ? 'sm' : 'md'} orientation={isMobile ? 'vertical' : 'horizontal'}>
+                                        <Stepper.Step label="Generado" description="Documento emitido" icon={<IconReceiptTax size={18} />} />
+                                        <Stepper.Step label="Empacado" description="Caja armada" icon={<IconPackage size={18} />} />
+                                        <Stepper.Step label={pedido.tipoEntrega === 'pickup' ? 'Retirado' : 'Despachado'} description={pedido.tipoEntrega === 'pickup' ? 'Entregado en tienda' : 'Entregado al transporte'} icon={<IconTruck size={18} />} />
+                                    </Stepper>
+                                )}
 
                                 {/* Firmas del personal asignado (el vendedor solo ve y firma lo suyo) */}
                                 {pedido.empacadorId && (
@@ -232,7 +251,8 @@ export default function DetallePedidoMayorPage() {
                             <EvidenciaEmpaque ventaId={pedido.id} puedeLiberar={!esVendedor} />
 
                             <Paper withBorder p="md" radius="md" bg="white">
-                                <Text fw={700} size="lg" mb="md">Contenido del Pedido</Text>
+                                <Text fw={700} size="lg" mb="md">Contenido del pedido</Text>
+                                <Table.ScrollContainer minWidth={620}>
                                 <Table striped highlightOnHover verticalSpacing="sm">
                                     <Table.Thead>
                                         <Table.Tr>
@@ -298,12 +318,23 @@ export default function DetallePedidoMayorPage() {
                                                     </Table.Td>
                                                     <Table.Td ta="center"><Text fw={900}>{d.cantidad}</Text>{d.presentacionPedida && d.presentacionPedida !== 'UNIDAD' && d.cantidadPresentacion && <Text size="xs" c="dimmed">{d.cantidadPresentacion} × {d.presentacionPedida === 'CAJA' ? 'Caja' : 'Bulto'} x{d.unidadesPorPresentacion}</Text>}</Table.Td>
                                                     <Table.Td ta="right"><PrecioVisual valor={d.precioUnitario} simbolo={pedido.moneda} size="sm" /></Table.Td>
-                                                    <Table.Td ta="right"><PrecioVisual valor={d.precioUnitario * d.cantidad} simbolo={pedido.moneda} size="sm" fw={700} /></Table.Td>
+                                                    <Table.Td ta="right"><PrecioVisual valor={d.subtotal ?? d.precioUnitario * d.cantidad} simbolo={pedido.moneda} size="sm" fw={700} />{!d.aplicaIva && pedido.tipoDocumento === 'FACTURA' && <Text size="xs" c="dimmed">(E)</Text>}</Table.Td>
                                                 </Table.Tr>
                                             );
                                         })}
                                     </Table.Tbody>
                                 </Table>
+                                </Table.ScrollContainer>
+
+                                {/* Totales del documento: lo que se cobra (y su equivalente con la tasa del documento) */}
+                                <Stack gap={4} mt="md" ml="auto" maw={360}>
+                                    <Group justify="space-between"><Text size="sm" c="dimmed">Subtotal</Text><PrecioVisual valor={pedido.subtotal} simbolo={pedido.moneda} size="sm" fw={600} /></Group>
+                                    {Number(pedido.montoIva) > 0 && <Group justify="space-between"><Text size="sm" c="dimmed">IVA</Text><PrecioVisual valor={pedido.montoIva} simbolo={pedido.moneda} size="sm" fw={600} /></Group>}
+                                    {Number(pedido.costoFlete) > 0 && <Group justify="space-between"><Text size="sm" c="dimmed">{pedido.tipoVenta === 'ONLINE' ? 'Delivery' : 'Flete'}</Text><PrecioVisual valor={pedido.costoFlete} simbolo={pedido.moneda} size="sm" fw={600} /></Group>}
+                                    <Divider />
+                                    <Group justify="space-between"><Text fw={800}>Total</Text><PrecioVisual valor={pedido.totalFinal} simbolo={pedido.moneda} size="lg" fw={900} c="blue.9" /></Group>
+                                    <Text size="xs" c="dimmed" ta="right">≈ {equivalente(pedido.totalFinal)} · tasa {tasaDoc} Bs/$</Text>
+                                </Stack>
                             </Paper>
                         </Grid.Col>
 
@@ -396,57 +427,72 @@ export default function DetallePedidoMayorPage() {
                 {/* ============================================================== */}
                 {/* PESTAÑA 2: CUENTAS POR COBRAR Y ABONOS */}
                 {/* ============================================================== */}
-                {esCredito && (
+                {(esCredito || cuentaPorCobrar) && (
                     <Tabs.Panel value="cxc">
                         <Grid gutter="md">
                             <Grid.Col span={{ base: 12, md: 4 }}>
-                                <Paper withBorder p="md" radius="md" bg="green.0">
-                                    <Text fw={700} size="lg" mb="sm" c="green.9">Estado de Cuenta</Text>
-                                    <Group justify="space-between" mb={8}>
-                                        <Text size="sm">Deuda Inicial:</Text>
-                                        <PrecioVisual valor={cuentaPorCobrar?.montoTotal || pedido.totalFinal} simbolo={pedido.moneda} size="md" />
-                                    </Group>
-                                    <Group justify="space-between" mb={8}>
-                                        <Text size="sm">Vencimiento:</Text>
-                                        <Text size="sm" fw={600}>{cuentaPorCobrar?.fechaVencimiento || 'N/A'}</Text>
-                                    </Group>
-                                    <Divider my="sm" />
-                                    <Group justify="space-between" mb="md">
-                                        <Text size="md" fw={700}>Saldo Pendiente:</Text>
-                                        <PrecioVisual valor={cuentaPorCobrar?.saldoPendiente || 0} simbolo={pedido.moneda} size="xl" fw={900} c="red.7" />
-                                    </Group>
-                                    <Button fullWidth color="green" disabled={cuentaPorCobrar?.saldoPendiente <= 0} onClick={() => setModalAbono(true)} leftSection={<IconCash size={18} />}>
-                                        Registrar Nuevo Abono
-                                    </Button>
+                                <Paper withBorder p="md" radius="md" bg={saldoCuenta > 0 ? 'orange.0' : 'green.0'}>
+                                    <Text fw={700} size="lg" mb="sm" c="navy.9">Estado de cuenta</Text>
+                                    {!cuentaPorCobrar ? (
+                                        <Text size="sm" c="dimmed">Este pedido no tiene una cuenta por cobrar (por ejemplo, porque está en revisión de existencias o fue cancelado).</Text>
+                                    ) : (
+                                        <>
+                                            <Group justify="space-between" mb={8}>
+                                                <Text size="sm">Monto de la deuda:</Text>
+                                                <PrecioVisual valor={cuentaPorCobrar.montoTotal} simbolo={monedaCuenta} size="md" />
+                                            </Group>
+                                            <Group justify="space-between" mb={8}>
+                                                <Text size="sm">Abonado (incluye retención):</Text>
+                                                <PrecioVisual valor={Math.max(0, Number(cuentaPorCobrar.montoTotal) - saldoCuenta)} simbolo={monedaCuenta} size="md" c="green.8" />
+                                            </Group>
+                                            <Group justify="space-between" mb={8}>
+                                                <Text size="sm">Vencimiento:</Text>
+                                                <Text size="sm" fw={600}>{formatearFecha(cuentaPorCobrar.fechaVencimiento) || '—'}</Text>
+                                            </Group>
+                                            <Divider my="sm" />
+                                            <Group justify="space-between" mb="md">
+                                                <Text size="md" fw={700}>Saldo pendiente:</Text>
+                                                <PrecioVisual valor={saldoCuenta} simbolo={monedaCuenta} size="xl" fw={900} c={saldoCuenta > 0 ? 'red.7' : 'green.8'} />
+                                            </Group>
+                                            {saldoCuenta > 0 && precioBCV > 0 && <Text size="xs" c="dimmed" ta="right" mt={-10} mb="sm">≈ {monedaCuenta === 'USD' ? `Bs ${aBolivares(saldoCuenta, precioBCV).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `$${aDolares(saldoCuenta, precioBCV).toFixed(2)}`} a la tasa de hoy</Text>}
+                                            <Button fullWidth color="green" disabled={saldoCuenta <= 0 || cancelado} onClick={abrirAbono} leftSection={<IconCash size={18} />}>
+                                                {saldoCuenta > 0 ? 'Registrar abono' : 'Cuenta pagada'}
+                                            </Button>
+                                        </>
+                                    )}
                                 </Paper>
                             </Grid.Col>
                             <Grid.Col span={{ base: 12, md: 8 }}>
                                 <Paper withBorder p="md" radius="md">
-                                    <Text fw={700} mb="md">Historial de Abonos (Pagos)</Text>
+                                    <Text fw={700} mb="md">Historial de abonos (pagos)</Text>
+                                    <Table.ScrollContainer minWidth={560}>
                                     <Table striped>
                                         <Table.Thead>
                                             <Table.Tr>
                                                 <Table.Th>Fecha</Table.Th>
                                                 <Table.Th>Método</Table.Th>
                                                 <Table.Th>Referencia</Table.Th>
-                                                <Table.Th ta="right">Monto Abonado</Table.Th>
+                                                <Table.Th ta="right">Monto ($)</Table.Th>
+                                                <Table.Th ta="right">Monto (Bs)</Table.Th>
                                             </Table.Tr>
                                         </Table.Thead>
                                         <Table.Tbody>
-                                            {pedido.abonos?.length === 0 ? (
-                                                <Table.Tr><Table.Td colSpan={4} ta="center">No hay abonos registrados.</Table.Td></Table.Tr>
+                                            {!pedido.abonos?.length ? (
+                                                <Table.Tr><Table.Td colSpan={5} ta="center">No hay abonos registrados.</Table.Td></Table.Tr>
                                             ) : (
-                                                pedido.abonos?.map(abono => (
+                                                [...pedido.abonos].sort((a, b) => String(a.fechaPago).localeCompare(String(b.fechaPago)) || a.id - b.id).map(abono => (
                                                     <Table.Tr key={abono.id}>
-                                                        <Table.Td>{formatearFecha(abono.fecha)}</Table.Td>
-                                                        <Table.Td>{abono.metodoPago}</Table.Td>
+                                                        <Table.Td>{formatearFecha(abono.fechaPago)}</Table.Td>
+                                                        <Table.Td>{abono.metodoPago === 'Retención IVA' ? <Badge size="sm" variant="light" color="grape">Retención IVA</Badge> : abono.metodoPago}</Table.Td>
                                                         <Table.Td>{abono.referencia || 'S/N'}</Table.Td>
-                                                        <Table.Td ta="right"><PrecioVisual valor={abono.monto} simbolo={abono.moneda} size="sm" fw={700} c="green.7" /></Table.Td>
+                                                        <Table.Td ta="right"><PrecioVisual valor={abono.montoUsd} simbolo="$" size="sm" fw={700} c="green.7" /></Table.Td>
+                                                        <Table.Td ta="right"><PrecioVisual valor={abono.montoVes} simbolo="Bs" size="sm" fw={600} c="dimmed" /></Table.Td>
                                                     </Table.Tr>
                                                 ))
                                             )}
                                         </Table.Tbody>
                                     </Table>
+                                    </Table.ScrollContainer>
                                 </Paper>
                             </Grid.Col>
                         </Grid>
@@ -458,7 +504,8 @@ export default function DetallePedidoMayorPage() {
                 {/* ============================================================== */}
                 <Tabs.Panel value="finanzas">
                     <Paper withBorder p="md" radius="md">
-                        <Text fw={700} mb="md">Libro Mayor Asociado a este Pedido</Text>
+                        <Text fw={700} mb="md">Movimientos de caja de este pedido</Text>
+                        <Table.ScrollContainer minWidth={720}>
                         <Table striped highlightOnHover>
                             <Table.Thead>
                                 <Table.Tr>
@@ -471,7 +518,7 @@ export default function DetallePedidoMayorPage() {
                                 </Table.Tr>
                             </Table.Thead>
                             <Table.Tbody>
-                                {pedido.movimientos?.length === 0 ? (
+                                {!pedido.movimientos?.length ? (
                                     <Table.Tr><Table.Td colSpan={6} ta="center">No hay movimientos financieros.</Table.Td></Table.Tr>
                                 ) : (
                                     pedido.movimientos?.map(mov => (
@@ -489,6 +536,7 @@ export default function DetallePedidoMayorPage() {
                                 )}
                             </Table.Tbody>
                         </Table>
+                        </Table.ScrollContainer>
                     </Paper>
                 </Tabs.Panel>
 
@@ -559,16 +607,16 @@ export default function DetallePedidoMayorPage() {
             <Modal opened={modalAbono} onClose={() => setModalAbono(false)} title={<Title order={4} c="green.9">Registrar Pago / Abono</Title>} centered>
                 <form onSubmit={formAbono.onSubmit(handleRegistrarAbono)}>
                     <Stack gap="md">
-                        <Text size="sm" c="dimmed" mb="-sm">Saldo Pendiente actual: <PrecioVisual valor={cuentaPorCobrar?.saldoPendiente} simbolo={pedido.moneda} size="sm" fw={700} /></Text>
+                        <Text size="sm" c="dimmed" mb="-sm">Saldo pendiente actual: <PrecioVisual valor={saldoCuenta} simbolo={monedaCuenta} size="sm" fw={700} /></Text>
 
                         <Group grow>
-                            <NumberInput label="Monto a Abonar" decimalScale={2} withAsterisk {...formAbono.getInputProps('montoAbono')} />
-                            <Select label="Moneda de Pago" data={['USD', 'BS']} withAsterisk {...formAbono.getInputProps('monedaAbono')} />
+                            <NumberInput label="Monto a abonar" decimalScale={2} min={0} withAsterisk {...formAbono.getInputProps('montoAbono')} />
+                            <Select label="Moneda del pago" data={['USD', 'BS']} allowDeselect={false} withAsterisk {...formAbono.getInputProps('monedaAbono')} />
                         </Group>
-                        {formAbono.values.monedaAbono === 'BS' && pedido.moneda === 'USD' && (
-                            <Text size="xs" c="orange">Se usará la tasa BCV actual de {precioBCV} Bs. para homologar el pago a USD.</Text>
+                        {formAbono.values.monedaAbono !== monedaCuenta && (
+                            <Text size="xs" c="orange.8">Se convierte con la tasa BCV de hoy ({precioBCV || '…'} Bs/$){precioBCV > 0 && Number(formAbono.values.montoAbono) > 0 ? `: equivale a ${monedaCuenta === 'USD' ? `$${aDolares(Number(formAbono.values.montoAbono), precioBCV).toFixed(2)}` : `Bs ${aBolivares(Number(formAbono.values.montoAbono), precioBCV).toFixed(2)}`}` : ''}.</Text>
                         )}
-                        <Select label="Método de Pago" data={['Transferencia', 'Efectivo', 'Pago Móvil', 'Zelle']} withAsterisk {...formAbono.getInputProps('metodoPago')} />
+                        <Select label="Método de pago" data={['Transferencia', 'Pago Móvil', 'Efectivo', 'Zelle', 'Punto de Venta']} allowDeselect={false} withAsterisk {...formAbono.getInputProps('metodoPago')} />
                         <TextInput label="Referencia (Opcional)" placeholder="Nro de recibo o transferencia" {...formAbono.getInputProps('referencia')} />
 
                         <Button loading={isSubmitting} type="submit" fullWidth color="green" mt="md" leftSection={<IconCash size={18} />}>

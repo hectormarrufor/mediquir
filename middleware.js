@@ -49,6 +49,7 @@ const VENDEDOR_API = [
     ['POST', /^\/api\/ventas\/[^/]+\/empaque(\/foto)?$/],
     ['GET', /^\/api\/compras$/],
     ['POST', /^\/api\/compras$/],
+    ['GET', /^\/api\/finanzas\/categorias$/],      // al registrar un gasto en Compras elige la categoría (solo lectura)
     ['GET', /^\/api\/vendedor\/[^/]+$/],
     ['GET', /^\/api\/inventario\/lista-precios$/],
     // Tareas: cada quien ve y gestiona las suyas (la ruta valida por sesión quién puede qué)

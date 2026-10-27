@@ -117,6 +117,8 @@ export async function POST(request) {
             return NextResponse.json({ error: 'El carrito está vacío' }, { status: 400 });
         }
         if (!['MAYOR', 'DETAL'].includes(tipoVenta)) throw new ErrorNegocio('Tipo de venta inválido');
+        if (!['FACTURA', 'NOTA_ENTREGA', 'VENTA_RAPIDA'].includes(tipoDocumento)) throw new ErrorNegocio('Tipo de documento inválido');
+        if (!['Contado', 'Credito'].includes(condicionPago)) throw new ErrorNegocio('Condición de pago inválida');
         if (tipoDocumento === 'FACTURA' && detalles.length > CONFIG_FISCAL.maxRenglonesFactura) {
             throw new ErrorNegocio(`Una factura admite hasta ${CONFIG_FISCAL.maxRenglonesFactura} renglones (la forma libre no da para más). Divide la venta en dos facturas.`);
         }
@@ -178,9 +180,11 @@ export async function POST(request) {
         );
         const siguienteLibre = Math.max(corr.siguienteNumero, Number(maximo) + 1);
 
+        // El número escrito a mano siempre queda con el prefijo del documento ("123" -> "F-00123"): sin prefijo no lo
+        // encontraban la numeración fiscal ni el correlativo, y una factura podía quedar con el prefijo de otro documento
         const numeroExtraido = parseInt(String(numeroDocumentoManual || '').replace(/\D/g, ''), 10);
-        let numeroDocumento = numeroDocumentoManual || '';
         let numeroBase = (!isNaN(numeroExtraido) && numeroExtraido > 0) ? numeroExtraido : siguienteLibre;
+        let numeroDocumento = numeroDocumentoManual ? `${prefijo}-${String(numeroBase).padStart(corr.cerosRelleno || 5, '0')}` : '';
         if (!numeroDocumento || await Venta.findOne({ where: { numeroDocumento }, attributes: ['id'], transaction: t })) {
             numeroBase = siguienteLibre;
             numeroDocumento = `${prefijo}-${String(numeroBase).padStart(corr.cerosRelleno || 5, '0')}`;
@@ -273,7 +277,7 @@ export async function POST(request) {
             // El flete también lo cobra la empresa: forma parte del ingreso
             const ingreso = Number((factura.subtotal + factura.flete).toFixed(2));
             await MovimientoFinanciero.create({
-                tipo: 'INGRESO', fecha: fechaCaracas(), metodoPago, referencia,
+                tipo: 'INGRESO', fecha: fechaCaracas(), metodoPago: metodoPago || 'No especificado', referencia,
                 montoUsd: aUsd(ingreso), tasaBcvAplicada: tasaCambio, montoVes: aBs(ingreso),
                 descripcion: `Venta ${numeroDocumento} (Subtotal${factura.flete > 0 ? ' + flete' : ''})`, categoriaId: catVentas.id, ventaId: nuevaVenta.id,
             }, { transaction: t });
@@ -283,7 +287,7 @@ export async function POST(request) {
                 if (!catIva) catIva = await CategoriaFinanciera.create({ nombre: 'IVA Recaudado', tipo: 'INGRESO' }, { transaction: t });
 
                 await MovimientoFinanciero.create({
-                    tipo: 'INGRESO', fecha: fechaCaracas(), metodoPago, referencia,
+                    tipo: 'INGRESO', fecha: fechaCaracas(), metodoPago: metodoPago || 'No especificado', referencia,
                     montoUsd: aUsd(factura.montoIva), tasaBcvAplicada: tasaCambio, montoVes: aBs(factura.montoIva),
                     descripcion: `IVA de Venta ${numeroDocumento} (Impuesto SENIAT)`, categoriaId: catIva.id, ventaId: nuevaVenta.id,
                 }, { transaction: t });
