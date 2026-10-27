@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generarConFallback } from '@/app/helpers/geminiConFallback.mjs';
 import db from '@/models';
 import crypto from 'crypto';
 
@@ -57,10 +57,6 @@ export async function POST(request) {
         // ---------------------------------------------------------
         console.log(`[AI-LIVE] Generando nuevo resumen para ${fechaKey}...`);
 
-        const apiKey = process.env.GOOGLE_API_KEY;
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
         const prompt = `
         Actúa como Supervisor de Operaciones de transporte pesado.
         Resume estas actividades diarias de personal en planta en una frase corta, profesional y en pasado (máximo 15 palabras).
@@ -68,9 +64,9 @@ export async function POST(request) {
         ${observaciones.join("\n")}
         `;
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const textoIA = response.text().replace(/\*/g, '').trim();
+        // Si se agota la cuota gratuita de un modelo se prueba con el siguiente (mismo mecanismo que la lectura de facturas)
+        const { texto } = await generarConFallback(prompt);
+        const textoIA = texto.replace(/\*/g, '').trim();
 
         // ---------------------------------------------------------
         // 6. GUARDAR O ACTUALIZAR (UPSERT)
