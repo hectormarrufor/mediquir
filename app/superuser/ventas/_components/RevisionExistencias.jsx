@@ -47,7 +47,7 @@ export default function RevisionExistencias({ pedido, onCambio }) {
                     El cliente pidió más de lo que hay en almacén. Confirma si puedes conseguir las cantidades en 1 o pocos días; si no, reduce o quita el renglón (el IVA, el total y la retención se recalculan solos).
                     Hasta que confirmes, el cliente no paga ni hace la retención y el pedido no se puede asignar ni empacar.
                 </Text>
-                <Table verticalSpacing={4} fz="sm">
+                <Table.ScrollContainer minWidth={520}><Table verticalSpacing={4} fz="sm">
                     <Table.Thead><Table.Tr><Table.Th>Producto</Table.Th><Table.Th ta="right">Piden</Table.Th><Table.Th ta="right">En almacén</Table.Th><Table.Th ta="right">Falta</Table.Th><Table.Th ta="right">Ajustar</Table.Th></Table.Tr></Table.Thead>
                     <Table.Tbody>
                         {detalles.map((d) => {
@@ -74,7 +74,7 @@ export default function RevisionExistencias({ pedido, onCambio }) {
                             );
                         })}
                     </Table.Tbody>
-                </Table>
+                </Table></Table.ScrollContainer>
                 <Group justify="space-between" wrap="wrap">
                     <Text size="sm" fw={700}>Total actual del pedido: ${usd.format(Number(pedido.totalFinal) || 0)}</Text>
                     <Button color="teal" loading={ocupado} leftSection={<IconCheck size={16} />} onClick={() => enviar({ accion: 'CONFIRMAR' }, 'Pedido confirmado: se avisó al cliente')}>

@@ -96,7 +96,7 @@ export default function GestionGrupos() {
             <Title order={2} c="white" mb="xl">Grupos de equivalencia</Title>
             
             <Paper withBorder radius="md" p="md" bg="white">
-                <Table striped highlightOnHover verticalSpacing="sm">
+                <Table.ScrollContainer minWidth={720}><Table striped highlightOnHover verticalSpacing="sm">
                     <Table.Thead bg="teal.0">
                         <Table.Tr>
                             <Table.Th w={60}>Imagen</Table.Th>
@@ -126,7 +126,7 @@ export default function GestionGrupos() {
                             </Table.Tr>
                         ))}
                     </Table.Tbody>
-                </Table>
+                </Table></Table.ScrollContainer>
             </Paper>
 
             <Modal opened={modalEdit} onClose={() => setModalEdit(false)} title={<Title order={4}>Editar Grupo</Title>} centered>

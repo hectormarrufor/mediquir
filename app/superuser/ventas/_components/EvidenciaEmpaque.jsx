@@ -79,7 +79,7 @@ export default function EvidenciaEmpaque({ ventaId, puedeLiberar }) {
                         ))}
                     </Alert>
                 )}
-                <Table verticalSpacing={4} fz="sm">
+                <Table.ScrollContainer minWidth={560}><Table verticalSpacing={4} fz="sm">
                     <Table.Thead><Table.Tr><Table.Th>Producto</Table.Th><Table.Th ta="right">Pedido</Table.Th><Table.Th ta="right">Empacó</Table.Th><Table.Th>Comprobado por</Table.Th><Table.Th>Hora</Table.Th></Table.Tr></Table.Thead>
                     <Table.Tbody>
                         {items.map((i) => (
@@ -92,7 +92,7 @@ export default function EvidenciaEmpaque({ ventaId, puedeLiberar }) {
                             </Table.Tr>
                         ))}
                     </Table.Tbody>
-                </Table>
+                </Table></Table.ScrollContainer>
                 {venta.fotosVencidasAt && (
                     <Text size="xs" c="dimmed">Fotos vencidas: se borraron el {hora(venta.fotosVencidasAt)} al cumplirse el plazo de conservación tras el despacho.</Text>
                 )}

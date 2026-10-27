@@ -106,7 +106,7 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
                     </Text>
 
                     {esCredito && (
-                        <Table verticalSpacing={4} fz="sm">
+                        <Table.ScrollContainer minWidth={560}><Table verticalSpacing={4} fz="sm">
                             <Table.Thead><Table.Tr><Table.Th>Producto de la factura</Table.Th><Table.Th ta="right">Precio</Table.Th><Table.Th ta="right">Facturado</Table.Th><Table.Th ta="right">Por acreditar</Table.Th><Table.Th w={110}>A acreditar</Table.Th></Table.Tr></Table.Thead>
                             <Table.Tbody>
                                 {(data?.renglones || []).map((r) => (
@@ -122,7 +122,7 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
                                     </Table.Tr>
                                 ))}
                             </Table.Tbody>
-                        </Table>
+                        </Table></Table.ScrollContainer>
                     )}
 
                     <Stack gap="xs">

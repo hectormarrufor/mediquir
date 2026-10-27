@@ -96,7 +96,7 @@ export default function GestionMarcas() {
             <Title order={2} c="white" mb="xl">Gestión de Marcas</Title>
             
             <Paper withBorder radius="md" p="md" bg="white">
-                <Table striped highlightOnHover verticalSpacing="sm">
+                <Table.ScrollContainer minWidth={560}><Table striped highlightOnHover verticalSpacing="sm">
                     <Table.Thead bg="grape.0">
                         <Table.Tr>
                             <Table.Th w={60}>Logo</Table.Th>
@@ -122,7 +122,7 @@ export default function GestionMarcas() {
                             </Table.Tr>
                         ))}
                     </Table.Tbody>
-                </Table>
+                </Table></Table.ScrollContainer>
             </Paper>
 
             <Modal opened={modalEdit} onClose={() => setModalEdit(false)} title={<Title order={4}>Editar Marca</Title>} centered>
