@@ -134,7 +134,10 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     });
 
     // Moneda de la factura: el costo del producto SIEMPRE se guarda en dólares; si la factura llega en bolívares se convierte con la tasa BCV del día
-    const tasa = Number(tasaBcv) || 0;
+    // Tasa de esta factura: la BCV de hoy, salvo que la factura traiga la suya impresa (la IA la propone) o la persona la escriba.
+    // Con ella se pasan los bolívares a dólares para el costo y queda guardada en la compra (el libro convierte con la tasa del documento).
+    const [tasaFactura, setTasaFactura] = useState(null);
+    const tasa = Number(tasaFactura) > 0 ? Number(tasaFactura) : (Number(tasaBcv) || 0);
     const esBs = formCompra.values.moneda === 'BS';
     const aMon = (usd) => (esBs ? (Number(usd) || 0) * tasa : Number(usd) || 0);
 
@@ -283,12 +286,15 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             }
             const monedaLeida = d.moneda === 'USD' ? 'USD' : 'BS';
             if (monedaLeida !== formCompra.values.moneda) {
-                if (monedaLeida === 'BS' && !(tasa > 0)) avisos.push('La factura está en bolívares pero no hay tasa BCV vigente: no se puede registrar en Bs todavía.');
+                if (monedaLeida === 'BS' && !(tasa > 0 || Number(d.tasaBcv) > 0)) avisos.push('La factura está en bolívares pero no hay tasa BCV vigente: no se puede registrar en Bs todavía.');
                 else if (carritoCompra.length) cambiarMoneda(monedaLeida);
                 else formCompra.setFieldValue('moneda', monedaLeida);
             }
-            if (d.tasaBcv && tasa > 0 && Math.abs(Number(d.tasaBcv) - tasa) > 0.005) {
-                avisos.push(`La factura usa tasa ${d.tasaBcv}; el costo en dólares se calcula con la tasa BCV de hoy (${tasa}).`);
+            // La factura trae su propia tasa: se propone para esta compra (el proveedor fijó sus dólares con ella). Se ve y se cambia arriba.
+            if (Number(d.tasaBcv) > 0) {
+                const tasaHoy = Number(tasaBcv) || 0;
+                setTasaFactura(Number(d.tasaBcv));
+                if (Math.abs(Number(d.tasaBcv) - tasaHoy) > 0.005) avisos.push(`Se usa la tasa impresa en la factura (${d.tasaBcv}) para pasar los precios a dólares${tasaHoy ? `; la BCV de hoy es ${tasaHoy}` : ''}. Puedes cambiarla en "Tasa de la factura".`);
             }
 
             // Proveedor por RIF
@@ -319,7 +325,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             const renglones = prepararRenglones(d.lineas || [], productos || [], Array.isArray(equivalencias) ? equivalencias : []);
             const simbolo = monedaLeida === 'BS' ? 'Bs' : '$';
             setLectura({
-                impreso: { baseImponible: d.baseImponible, montoExento: d.montoExento, montoIva: d.montoIva, total: d.total },
+                impreso: { baseImponible: d.baseImponible, montoExento: d.montoExento, montoIva: d.montoIva, total: d.total, totalUsd: d.totalUsd },
                 avisos, renglones: renglones.length, proveedorNombre: prov?.nombre || d.proveedorNombre || '', simbolo,
                 lineas: d.lineas || [], equivalencias: Array.isArray(equivalencias) ? equivalencias : [],
             });
@@ -473,7 +479,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 condicionPago: formCompra.values.condicionPago,
                 diasCredito: formCompra.values.diasCredito,
                 moneda: formCompra.values.moneda,
-                tasaCambio: tasaBcv,
+                tasaCambio: tasa,
                 subtotal, montoIva, montoRetencion, totalFinal,
                 numeroControl: esFactura ? formCompra.values.numeroControl : null, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion, aplicarRetencion: Boolean(formCompra.values.aplicarRetencion),
                 detalles: carritoCompra
@@ -531,7 +537,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 condicionPago: formCompra.values.condicionPago,
                 diasCredito: formCompra.values.diasCredito,
                 moneda: formCompra.values.moneda,
-                tasaCambio: tasaBcv,
+                tasaCambio: tasa,
                 metodoPago: formCompra.values.metodoPago,
                 referencia: formCompra.values.referencia,
                 subtotal, montoIva, montoRetencion, totalFinal,
@@ -674,6 +680,13 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 <Grid.Col span={{ base: 6, md: 2 }}>
                     <Select size="sm" label="Moneda" allowDeselect={false} data={[{ value: 'USD', label: 'USD ($)' }, { value: 'BS', label: 'Bs' }]} {...formCompra.getInputProps('moneda')} onChange={cambiarMoneda} />
                 </Grid.Col>
+                <Grid.Col span={{ base: 6, md: 2 }}>
+                    <NumberInput size="sm" label="Tasa de la factura" min={0} decimalScale={4} hideControls
+                        value={tasaFactura ?? (Number(tasaBcv) || '')} onChange={(v) => setTasaFactura(Number(v) > 0 ? Number(v) : null)}
+                        description={tasaFactura && Math.abs(tasaFactura - (Number(tasaBcv) || 0)) > 0.005
+                            ? <Text span size="xs">BCV hoy {tasaBcv} · <Text span size="xs" c="blue" style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setTasaFactura(null)}>usar la de hoy</Text></Text>
+                            : 'BCV de hoy, o la que imprima la factura'} />
+                </Grid.Col>
                 {esFactura && montoIva > 0 && (
                     <Grid.Col span={{ base: 12, md: 'auto' }}>
                         <Group gap="sm" wrap="nowrap" align="center" h={36}>
@@ -687,7 +700,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             </Grid>
             {esBs && (
                 <Alert color="blue" variant="light" mt="xs" py={6} px="sm">
-                    <Text size="xs">{tasa > 0 ? <>Factura en <b>bolívares</b>. Tasa BCV de hoy: <b>Bs {tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</b> por dólar. Escribe los precios tal como vienen en la factura (Bs); el costo del producto se guarda en dólares y aquí ves el costo actual y el de esta factura en ambas monedas.</> : <b>No hay tasa BCV vigente: no se puede registrar una factura en bolívares.</b>}</Text>
+                    <Text size="xs">{tasa > 0 ? <>Factura en <b>bolívares</b>. Tasa {tasaFactura ? 'de la factura' : 'BCV de hoy'}: <b>Bs {tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</b> por dólar. Escribe los precios tal como vienen en la factura (Bs); el costo del producto se guarda en dólares y aquí ves el costo actual y el de esta factura en ambas monedas.</> : <b>No hay tasa BCV vigente: no se puede registrar una factura en bolívares.</b>}</Text>
                 </Alert>
             )}
             {!esFactura && <Text size="xs" c="dimmed" mt="xs">La nota de entrega no es un documento fiscal: se registra sin IVA, sin retención y sin número de control, y no entra al libro de compras. {esGasto ? 'Al ser un gasto, no mueve el inventario.' : 'El inventario y el costo se actualizan igual.'}</Text>}
@@ -701,8 +714,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                     )}
                     {carritoCompra.length > 0 && (
                         <CuadreFactura
-                            impreso={lectura.impreso} simbolo={sim}
-                            calculado={{ base: r2(subtotal - montoExento), exento: montoExento, ivaCalculado: montoIvaCalculado, total: r2(subtotal + montoIvaCalculado) }}
+                            impreso={lectura.impreso} simbolo={sim} tasa={tasa}
+                            calculado={{ base: r2(subtotal - montoExento), exento: montoExento, ivaCalculado: montoIvaCalculado, total: r2(subtotal + montoIva) }}
                             renglonesFactura={lectura.renglones} renglonesCompra={carritoCompra.length}
                             ivaAjustado={ivaAjustado} onUsarIvaImpreso={() => setIvaAjustado(Number(lectura.impreso.montoIva))} onQuitarAjuste={() => setIvaAjustado(null)}
                         />

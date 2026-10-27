@@ -52,14 +52,26 @@ export function prepararRenglones(lineas, productos, equivalencias) {
     return (lineas || []).map((l, i) => {
         const clave = claveRenglonProveedor(l);
         const aprendido = clave ? porClave.get(clave) : null;
-        const producto = aprendido ? porId.get(Number(aprendido.productoId)) : null;
+        let producto = aprendido ? porId.get(Number(aprendido.productoId)) : null;
+        let origen = producto ? 'aprendido' : null;
+        let unidadPorCodigo = null;
+        // Algunos proveedores imprimen el código de barras del artículo (8 a 14 dígitos): si un producto lo tiene cargado, se propone
+        const codigo = String(l.codigo || '').trim();
+        if (!producto && /^\d{8,14}$/.test(codigo)) {
+            for (const p of productos || []) {
+                if (String(p.codigoBarras || '') === codigo) { producto = p; unidadPorCodigo = 'unidad'; break; }
+                if (String(p.codigoBarrasCaja || '') === codigo) { producto = p; unidadPorCodigo = 'caja'; break; }
+                if (String(p.codigoBarrasBulto || '') === codigo) { producto = p; unidadPorCodigo = 'bulto'; break; }
+            }
+            if (producto) origen = 'barras';
+        }
         const candidatos = reordenar(buscarProductos(productos, limpiarParaBuscar(l.descripcion)).slice(0, 15), l.descripcion).slice(0, 3).map((p) => Number(p.id));
         return {
             idx: i, clave, linea: l,
             productoId: producto ? Number(producto.id) : null,
-            origen: producto ? 'aprendido' : null,
+            origen,
             candidatos,
-            unidadCompra: (producto && aprendido.unidadCompra) || PRESENTACION_IA[l.unidadVenta] || 'unidad',
+            unidadCompra: (origen === 'aprendido' && aprendido.unidadCompra) || unidadPorCodigo || PRESENTACION_IA[l.unidadVenta] || 'unidad',
             contenido: Number(l.unidadesPorPresentacion) > 1 ? Math.round(Number(l.unidadesPorPresentacion)) : null,
             incluir: true,
         };
@@ -106,6 +118,7 @@ function FilaRenglon({ fila, productos, opciones, porId, simbolo, onCambiar }) {
                 data={opciones} value={fila.productoId ? String(fila.productoId) : null}
                 onChange={(v) => onCambiar({ productoId: v ? Number(v) : null, origen: v ? 'elegido' : null })} />
             {fila.origen === 'aprendido' && <Text size="xs" c="teal.8" mt={2}>✓ Ya enlazado antes con este proveedor (puedes cambiarlo)</Text>}
+            {fila.origen === 'barras' && <Text size="xs" c="teal.8" mt={2}>✓ El código de la factura es el código de barras de este producto (puedes cambiarlo)</Text>}
             {!producto && fila.candidatos.length > 0 && (
                 <Group gap={4} mt={6}>
                     <Text size="xs" c="dimmed">¿Es alguno de estos?</Text>
@@ -190,7 +203,7 @@ export function RevisionRenglonesIA({ opened, onClose, renglonesIniciales, produ
  * Cuadre con lo impreso en la factura (el SENIAT exige que base, IVA y total coincidan al céntimo).
  * `impreso`: lo que leyó la IA · `calculado`: lo que da la compra con sus renglones.
  */
-export function CuadreFactura({ impreso, calculado, simbolo, renglonesFactura, renglonesCompra, ivaAjustado, onUsarIvaImpreso, onQuitarAjuste }) {
+export function CuadreFactura({ impreso, calculado, simbolo, tasa, renglonesFactura, renglonesCompra, ivaAjustado, onUsarIvaImpreso, onQuitarAjuste }) {
     const filas = [
         ['Base imponible', impreso.baseImponible, calculado.base],
         ['Exento', impreso.montoExento, calculado.exento],
@@ -212,6 +225,10 @@ export function CuadreFactura({ impreso, calculado, simbolo, renglonesFactura, r
                         {nombre}: factura {simbolo} {fmt(imp)} · compra {simbolo} {fmt(calc)}{dif(imp, calc) > 0.005 ? ` (diferencia ${fmt(dif(imp, calc))})` : ' ✓'}
                     </Text>
                 ))}
+                {/* Solo de referencia: el proveedor también imprime el total en dólares; el documento fiscal es el de bolívares */}
+                {simbolo === 'Bs' && Number(impreso.totalUsd) > 0 && tasa > 0 && (
+                    <Text size="xs" c="dimmed">En dólares: factura $ {fmt(impreso.totalUsd)} · compra a la tasa {fmt(tasa)}: $ {fmt(calculado.total / tasa)}</Text>
+                )}
                 {ivaAjustado !== null && <Text size="xs" fw={700}>IVA ajustado al impreso: {simbolo} {fmt(ivaAjustado)} <Button size="compact-xs" variant="subtle" onClick={onQuitarAjuste}>Quitar ajuste</Button></Text>}
                 {ivaAjustado === null && soloCentimosIva && (
                     <Group gap={6} mt={2}>
