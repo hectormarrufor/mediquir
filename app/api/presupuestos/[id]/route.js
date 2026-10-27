@@ -8,7 +8,10 @@ export async function GET(request, { params }) {
     if (acceso.error) return acceso.error;
     try {
         const { id } = await params;
-        const presupuesto = await Presupuesto.findByPk(id, {
+        // Un enlace mal copiado ("P-000012" o texto) daba error 500: el id es un número
+        const n = Number(String(id).replace(/^P-/i, ''));
+        if (!Number.isInteger(n) || n < 1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+        const presupuesto = await Presupuesto.findByPk(n, {
             include: [{ model: Cliente, as: 'cliente', attributes: ['id', 'nombre', 'identificacion', 'direccion'] }],
         });
         if (!presupuesto) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });

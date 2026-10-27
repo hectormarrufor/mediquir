@@ -70,7 +70,7 @@ export async function GET(request) {
                 await notificarCabezas({
                     title: `🔴 CxP: ${doc.estadoTiempo}`,
                     body: `Debemos a ${doc.proveedor} (Fact: ${doc.documento})\nSaldo: ${doc.monto} ${doc.moneda}`,
-                    url: `/superuser/finanzas/cxp`,
+                    url: `/superuser/cxp`,
                     tag: `cxp-${doc.id}-${Date.now()}`
                 });
             }
@@ -86,7 +86,7 @@ export async function GET(request) {
                 await notificarCabezas({
                     title: `🟢 CxC: ${doc.estadoTiempo}`,
                     body: `Cobrar a ${doc.cliente} (Doc: ${doc.documento})\nSaldo: ${doc.monto} ${doc.moneda}`,
-                    url: `/superuser/finanzas/cxc`,
+                    url: `/superuser/cxc`,
                     tag: `cxc-${doc.id}-${Date.now()}`
                 });
             }

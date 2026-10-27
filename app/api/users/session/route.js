@@ -24,6 +24,11 @@ export async function GET(request) {
       ] // Ejemplo si necesitas incluir relaciones
     });
 
+    // Usuario borrado: la sesión deja de valer (antes reventaba al leer sus datos y caía en "Token inválido" por accidente)
+    if (!usuarioDb) {
+      return Response.json({ error: 'Usuario revocado' }, { status: 401 });
+    }
+
     if (usuarioDb.cliente?.id) {
       console.log(`\x1b[44m [DEBUG] Usuario es cliente con ID: ${usuarioDb.cliente.id} \x1b[0m`);
     }
@@ -33,7 +38,7 @@ export async function GET(request) {
       await notificarCabezas({
         title: 'Alerta de Seguridad',
         body: `Usuario ${usuarioDb.empleado?.nombre} ${usuarioDb.empleado?.apellido} intentó acceder pero está BORRADO o INACTIVO.`,
-        url: 'superuser/rrhh/empleados/' + usuarioDb.empleado?.id // Link directo a la lista de empleados para revisión rápida
+        url: '/superuser/rrhh/empleados/' + usuarioDb.empleado?.id // Link directo a la lista de empleados para revisión rápida
       })
          console.log(`\x1b[41m [SECURITY] Usuario ID ${decoded.id} intentó entrar pero está BORRADO o INACTIVO \x1b[0m`);
          // Opcional: Podrías borrar la cookie aquí mismo para limpiar
