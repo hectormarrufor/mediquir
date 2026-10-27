@@ -5,10 +5,19 @@ import { generarConFallback } from "../../helpers/geminiConFallback.mjs";
 
 const PROMPT_FACTURA = `
   Analiza esta imagen o PDF de una FACTURA (o nota de entrega) de compra emitida por un proveedor en Venezuela.
-  Es un distribuidor de insumos médicos, quirúrgicos u odontológicos.
+  Es un distribuidor de insumos médicos, quirúrgicos u odontológicos. EL CLIENTE es "MATERIALES Y EQUIPOS QUIRURGICOS MEDIQUIR, C.A."
+  (RIF J-30487649-1): sus datos aparecen en la factura pero NO son del proveedor.
 
-  Extrae estos datos. Los números deben ir como números planos con punto decimal (en Venezuela se escribe
-  "1.234,56": eso es 1234.56). Si un dato no se ve, devuélvelo null; no lo inventes.
+  FORMATO DE LOS NÚMEROS: cada factura usa el suyo. Unas escriben "1.234,56" (punto de miles, coma decimal) y otras "1,234.56"
+  (coma de miles, punto decimal). Deduce el formato de ESTA factura: el separador decimal es el que va seguido de exactamente 2
+  dígitos al final del número, y cantidad × precio unitario debe dar el monto del renglón. Ejemplos: "31,802.04" = 31802.04;
+  "31.802,04" = 31802.04; "105.078,00" = 105078; "6,00" = 6. Devuelve todos los números planos con punto decimal y sin separador de miles.
+  Si un dato no se ve, devuélvelo null; no lo inventes.
+
+  MONEDA: muchas facturas imprimen los montos en dólares Y en bolívares (dos columnas de precio, o "MONTO EN DIVISAS" y "MONTO EN BS").
+  Los montos FISCALES son los de BOLÍVARES: úsalos SIEMPRE para precioUnitario, totalLinea, base, exento, IVA y total, y responde
+  moneda "VES", aunque la cabecera diga "Moneda: US$". Solo si la factura NO trae ningún monto en bolívares usa los dólares y moneda "USD".
+  Los montos en dólares, si están, van aparte en precioUnitarioUsd y totalUsd.
 
   1. tipoDocumento: "FACTURA" si dice factura (lleva número de control e IVA), "NOTA_ENTREGA" si es nota de entrega, presupuesto u orden sin valor fiscal.
   2. numeroFactura: el "Nº de factura" (sin ceros de más ni prefijos como "Nro").
@@ -18,8 +27,8 @@ const PROMPT_FACTURA = `
   4. fechaEmision: fecha de emisión en formato YYYY-MM-DD.
   5. proveedorNombre y proveedorRif: razón social y RIF de quien EMITE la factura (el vendedor, NO el cliente), RIF en formato J-12345678-9.
      También proveedorTelefono, proveedorEmail y proveedorDireccion (dirección fiscal completa en una sola línea) si se ven; si no, null.
-  6. moneda: "VES" si los precios y totales impresos están en bolívares (lo más común), "USD" si están en dólares.
-  7. tasaBcv: la tasa de cambio BCV en bolívares por dólar SOLO si la factura la indica (por ejemplo "Tasa BCV: 36,50"); si no, null.
+  6. moneda: "VES" si la factura trae montos en bolívares (ver MONEDA arriba); "USD" solo si todo está en dólares.
+  7. tasaBcv: la tasa de cambio en bolívares por dólar SOLO si la factura la indica ("Tasa: 883,39", "Tasa de cambio según BCV", "Tasa BCV"); si no, null.
   8. lineas: TODOS los renglones facturados, uno por cada fila de la tabla de artículos, sin omitir ninguno (incluso la primera fila).
      Antes de responder verifica que la suma de cantidad × precioUnitario de tus renglones coincida con el subtotal de la factura;
      si no coincide, revisa si te falta alguna fila. Cada renglón lleva:
@@ -32,16 +41,19 @@ const PROMPT_FACTURA = `
        - unidadesPorPresentacion: cuántas unidades trae UNA caja o UN bulto según la descripción o la columna de unidad
          (por ejemplo "CAJA X 100" -> 100, "C/50" -> 50, "BULTO 10 CAJAS X 100" -> 1000), o null si no lo dice.
        - cajasPorBulto: si el renglón es un bulto y dice cuántas cajas trae (por ejemplo "BULTO 10 CAJAS"), ese número; si no, null.
-       - precioUnitario: precio de UNA unidad de la cantidad facturada (de una caja si se vende por caja), SIN IVA, en la moneda de la factura.
+       - precioUnitario: precio de UNA unidad de la cantidad facturada (de una caja si se vende por caja), SIN IVA, en la moneda de la factura
+         (bolívares si los hay). Si el renglón tiene descuento, el precio ya descontado (monto del renglón ÷ cantidad).
+       - precioUnitarioUsd: el precio unitario en dólares si la factura también lo imprime; si no, null.
        - exento: true si ese renglón NO lleva IVA (marca "(E)", "E", "Exento", alícuota 0%); false si lleva IVA.
-       - totalLinea: el monto total de esa fila tal como está impreso (cantidad × precio), o null si la fila no lo trae.
+       - totalLinea: el monto total de esa fila tal como está impreso (cantidad × precio), en la moneda de la factura, o null si la fila no lo trae.
      Copia los precios EXACTAMENTE como están impresos, con todos sus decimales; no redondees ni recalcules nada. Todo debe
      cuadrar al céntimo porque es un documento fiscal (SENIAT).
   9. montoExento: monto total exento o no sujeto a IVA (o null).
   10. baseImponible: base imponible sobre la que se calcula el IVA (o null).
   11. porcentajeIva: alícuota del IVA (normalmente 16) o null.
   12. montoIva: monto del IVA (o null).
-  13. total: total a pagar de la factura, en la moneda de la factura.
+  13. total: total a pagar de la factura, en la moneda de la factura (bolívares si los hay).
+  14. totalUsd: el total en dólares si la factura también lo imprime; si no, null.
 
   Responde SOLO este JSON válido:
   {
@@ -57,12 +69,14 @@ const PROMPT_FACTURA = `
     "moneda": "VES" | "USD",
     "tasaBcv": number | null,
     "lineas": [ { "codigo": "string" | null, "descripcion": "string", "cantidad": number, "unidadVenta": "CAJA" | "BULTO" | "UNIDAD" | null,
-                  "unidadesPorPresentacion": number | null, "cajasPorBulto": number | null, "precioUnitario": number, "exento": boolean, "totalLinea": number | null } ],
+                  "unidadesPorPresentacion": number | null, "cajasPorBulto": number | null, "precioUnitario": number, "precioUnitarioUsd": number | null,
+                  "exento": boolean, "totalLinea": number | null } ],
     "montoExento": number | null,
     "baseImponible": number | null,
     "porcentajeIva": number | null,
     "montoIva": number | null,
-    "total": number | null
+    "total": number | null,
+    "totalUsd": number | null
   }
 `;
 
@@ -88,6 +102,7 @@ export async function analizarFactura(buffer, mimeType) {
             unidadesPorPresentacion: numero(l?.unidadesPorPresentacion),
             cajasPorBulto: numero(l?.cajasPorBulto),
             precioUnitario: numero(l?.precioUnitario),
+            precioUnitarioUsd: numero(l?.precioUnitarioUsd),
             exento: Boolean(l?.exento),
             totalLinea: numero(l?.totalLinea),
         }))
@@ -110,6 +125,7 @@ export async function analizarFactura(buffer, mimeType) {
         porcentajeIva: numero(d.porcentajeIva),
         montoIva: numero(d.montoIva),
         total: numero(d.total),
+        totalUsd: numero(d.totalUsd),
         modelo,
     };
 }
