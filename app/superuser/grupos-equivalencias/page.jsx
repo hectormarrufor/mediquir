@@ -93,7 +93,7 @@ export default function GestionGrupos() {
 
     return (
         <Box p="md" maw={1000} mx="auto">
-            <Title order={2} c="teal.9" mb="xl">Gestión de Grupos de Equivalencia</Title>
+            <Title order={2} c="white" mb="xl">Grupos de equivalencia</Title>
             
             <Paper withBorder radius="md" p="md" bg="white">
                 <Table striped highlightOnHover verticalSpacing="sm">

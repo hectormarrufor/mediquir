@@ -95,7 +95,7 @@ export default function EditarEmpleadoPage({ params }) {
             <IconChevronLeft size={24} />
         </ActionIcon>
         <div>
-            <Title order={2}>Editar Empleado</Title>
+            <Title order={2} c="white">Editar empleado</Title>
             <Text c="dimmed" size="sm">Modificar información personal y laboral</Text>
         </div>
       </Group>

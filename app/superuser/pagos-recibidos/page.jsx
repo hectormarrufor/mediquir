@@ -136,8 +136,8 @@ export default function PagosRecibidosPage() {
         <Container size="xl" py="lg">
             <Group justify="space-between" mb="xl">
                 <Group>
-                    <IconDeviceMobileMessage size={32} color="#1971C2" />
-                    <Title order={2} c="blue.9">Historial de Pagos Móviles</Title>
+                    <IconDeviceMobileMessage size={32} color="#74c0fc" />
+                    <Title order={2} c="white">Historial de pagos móviles</Title>
                 </Group>
                 <Tooltip label="Actualizar tabla">
                     <ActionIcon variant="light" color="blue" size="lg" radius="md" onClick={() => refetch()}>

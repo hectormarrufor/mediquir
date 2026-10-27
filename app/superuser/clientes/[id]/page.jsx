@@ -4,11 +4,80 @@ import React, { use } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
     Box, Paper, Title, Text, Avatar, Group, Badge, Grid, 
-    Tabs, Table, Stack, Center, Loader, ActionIcon, Card 
+    Tabs, Table, Stack, Center, Loader, ActionIcon, Card, Button
 } from '@mantine/core';
 import { useRouter } from 'next/navigation';
-import { IconArrowLeft, IconEdit, IconReceipt2, IconAlertCircle, IconMapPin, IconPhone, IconMail } from '@tabler/icons-react';
+import { IconArrowLeft, IconEdit, IconReceipt2, IconAlertCircle, IconMapPin, IconPhone, IconMail, IconCash, IconBrandWhatsapp } from '@tabler/icons-react';
 import dayjs from 'dayjs';
+import { formatearFecha } from '@/app/constants/hora';
+import { telefonoWhatsapp } from '../_components/AccesoModal';
+
+const fmtUsd = (v) => `$${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0)}`;
+const COLOR_COBRO = { vencido: 'red', pendiente: 'orange', pagado: 'teal', anulado: 'gray' };
+
+// Estado de cuenta del cliente: lo que debe documento por documento y sus últimos pagos
+function EstadoCuenta({ cliente, router }) {
+    const ec = cliente.estadoCuenta || { pendientes: [], pagos: [], total: 0 };
+    const vencido = ec.pendientes.filter((p) => p.estado === 'vencido').reduce((a, p) => a + p.saldo, 0);
+    const wa = telefonoWhatsapp(cliente.telefono);
+    const textoWa = `Hola ${cliente.nombre || ''}, te escribimos de Mediquir. Tu saldo pendiente es de ${fmtUsd(ec.total)}: ${ec.pendientes.map((p) => `${p.numero} (${fmtUsd(p.saldo)}${p.vence ? `, vence ${formatearFecha(p.vence)}` : ''})`).join('; ')}. ¡Gracias!`;
+    return (
+        <Grid gutter="md">
+            <Grid.Col span={{ base: 12, md: 7 }}>
+                <Paper withBorder radius="md" p="md" bg="white">
+                    <Group justify="space-between" mb="sm" wrap="wrap">
+                        <Box>
+                            <Text fw={800} c="navy.9">Documentos con saldo</Text>
+                            <Text size="sm" c="dimmed">Total pendiente <b>{fmtUsd(ec.total)}</b>{vencido > 0 ? ` · vencido ${fmtUsd(vencido)}` : ''}</Text>
+                        </Box>
+                        {wa && ec.pendientes.length > 0 && (
+                            <Button size="xs" color="green" variant="light" leftSection={<IconBrandWhatsapp size={16} />} component="a" href={`https://wa.me/${wa}?text=${encodeURIComponent(textoWa)}`} target="_blank">Enviar estado de cuenta</Button>
+                        )}
+                    </Group>
+                    {!ec.pendientes.length ? <Text c="dimmed" size="sm" py="md">Este cliente no debe nada.</Text> : (
+                        <Table.ScrollContainer minWidth={520}>
+                            <Table highlightOnHover verticalSpacing="xs">
+                                <Table.Thead><Table.Tr><Table.Th>Documento</Table.Th><Table.Th>Emisión</Table.Th><Table.Th>Vence</Table.Th><Table.Th ta="right">Total</Table.Th><Table.Th ta="right">Saldo</Table.Th></Table.Tr></Table.Thead>
+                                <Table.Tbody>
+                                    {ec.pendientes.map((p) => (
+                                        <Table.Tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => router.push(`/superuser/ventas/${p.id}`)}>
+                                            <Table.Td fw={700}>{p.numero}</Table.Td>
+                                            <Table.Td>{formatearFecha(p.fecha)}</Table.Td>
+                                            <Table.Td><Text size="sm">{formatearFecha(p.vence) || '—'}</Text><Badge size="xs" variant="light" color={COLOR_COBRO[p.estado] || 'gray'}>{p.etiqueta}</Badge></Table.Td>
+                                            <Table.Td ta="right">{fmtUsd(p.total)}</Table.Td>
+                                            <Table.Td ta="right" fw={800} c={p.estado === 'vencido' ? 'red.7' : undefined}>{fmtUsd(p.saldo)}</Table.Td>
+                                        </Table.Tr>
+                                    ))}
+                                </Table.Tbody>
+                            </Table>
+                        </Table.ScrollContainer>
+                    )}
+                </Paper>
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, md: 5 }}>
+                <Paper withBorder radius="md" p="md" bg="white">
+                    <Text fw={800} c="navy.9" mb="sm">Últimos pagos</Text>
+                    {!ec.pagos.length ? <Text c="dimmed" size="sm">Sin pagos registrados.</Text> : (
+                        <Stack gap={8}>
+                            {ec.pagos.map((p) => (
+                                <Group key={p.id} justify="space-between" wrap="nowrap" align="flex-start">
+                                    <Box style={{ minWidth: 0 }}>
+                                        <Text size="sm" fw={600}>{formatearFecha(p.fecha)} · {p.metodo}</Text>
+                                        <Text size="xs" c="dimmed" lineClamp={1}>{p.documento}{p.referencia ? ` · Ref ${p.referencia}` : ''}</Text>
+                                    </Box>
+                                    <Box ta="right" style={{ flexShrink: 0 }}>
+                                        <Text size="sm" fw={700} c="green.8">{fmtUsd(p.montoUsd)}</Text>
+                                        <Text size="xs" c="dimmed">Bs {Number(p.montoVes || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+                                    </Box>
+                                </Group>
+                            ))}
+                        </Stack>
+                    )}
+                </Paper>
+            </Grid.Col>
+        </Grid>
+    );
+}
 
 export default function ClienteDashboard({ params }) {
     const router = useRouter();
@@ -92,10 +161,15 @@ export default function ClienteDashboard({ params }) {
 
             {/* PESTAÑAS (TABS) */}
             <Tabs defaultValue="resumen" variant="outline" radius="md">
-                <Tabs.List bg="white">
-                    <Tabs.Tab value="resumen" leftSection={<IconReceipt2 size={16} />}>Resumen Financiero</Tabs.Tab>
-                    <Tabs.Tab value="historial" leftSection={<IconAlertCircle size={16} />}>Historial de Pedidos</Tabs.Tab>
+                <Tabs.List bg="white" style={{ borderRadius: 8 }}>
+                    <Tabs.Tab value="resumen" leftSection={<IconReceipt2 size={16} />}>Resumen</Tabs.Tab>
+                    <Tabs.Tab value="cuenta" leftSection={<IconCash size={16} />}>Estado de cuenta</Tabs.Tab>
+                    <Tabs.Tab value="historial" leftSection={<IconAlertCircle size={16} />}>Últimos pedidos</Tabs.Tab>
                 </Tabs.List>
+
+                <Tabs.Panel value="cuenta" pt="xl">
+                    <EstadoCuenta cliente={cliente} router={router} />
+                </Tabs.Panel>
 
                 {/* TAB 1: RESUMEN */}
                 <Tabs.Panel value="resumen" pt="xl">
@@ -106,7 +180,7 @@ export default function ClienteDashboard({ params }) {
                                 <Grid.Col span={{ base: 12, sm: 6 }}>
                                     <Card withBorder radius="md" p="xl" bg="gray.0">
                                         <Text size="sm" tt="uppercase" fw={700} c="dimmed">Total Histórico Comprado</Text>
-                                        <Text size="h1" fw={900} c="blue.9">${totalGastado.toFixed(2)}</Text>
+                                        <Text fz={30} fw={900} c="blue.9">${totalGastado.toFixed(2)}</Text>
                                     </Card>
                                 </Grid.Col>
                                 <Grid.Col span={{ base: 12, sm: 6 }}>
@@ -114,7 +188,7 @@ export default function ClienteDashboard({ params }) {
                                         <Text size="sm" tt="uppercase" fw={700} c={deudaPendiente > 0 ? 'red.9' : 'green.9'}>
                                             Deuda Pendiente (Créditos)
                                         </Text>
-                                        <Text size="h1" fw={900} c={deudaPendiente > 0 ? 'red.9' : 'green.9'}>
+                                        <Text fz={30} fw={900} c={deudaPendiente > 0 ? 'red.9' : 'green.9'}>
                                             ${deudaPendiente.toFixed(2)}
                                         </Text>
                                         {cliente.credito && (
@@ -172,8 +246,8 @@ export default function ClienteDashboard({ params }) {
 
                 {/* TAB 2: HISTORIAL DE PEDIDOS */}
                 <Tabs.Panel value="historial" pt="xl">
-                    <Paper withBorder radius="md" style={{ overflowX: 'auto' }}>
-                        <Table striped highlightOnHover minWidth={800} bg="white">
+                    <Paper withBorder radius="md" bg="white">
+                        <Table.ScrollContainer minWidth={760}><Table striped highlightOnHover bg="white">
                             <Table.Thead bg="gray.0">
                                 <Table.Tr>
                                     <Table.Th>Nro Pedido</Table.Th>
@@ -221,7 +295,7 @@ export default function ClienteDashboard({ params }) {
                                     })
                                 )}
                             </Table.Tbody>
-                        </Table>
+                        </Table></Table.ScrollContainer>
                     </Paper>
                 </Tabs.Panel>
             </Tabs>

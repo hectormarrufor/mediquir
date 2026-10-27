@@ -130,7 +130,7 @@ export default function EditarCliente({ params }) {
                 <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={() => router.back()}>
                     Volver
                 </Button>
-                <Title order={2} c="blue.9">Editar Cliente</Title>
+                <Title order={2} c="white">Editar cliente</Title>
             </Group>
 
             <Paper withBorder shadow="sm" p="xl" radius="md" bg="white">

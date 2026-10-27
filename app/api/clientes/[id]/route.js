@@ -3,7 +3,8 @@ import sequelize from '@/sequelize';
 import { Cliente, Venta } from '@/models';
 import { rolDe } from '@/app/constants/roles';
 import { requerirStaff } from '../../inventario/_lib';
-import { creditoDeCliente } from '../../b2b/_lib';
+import { Op } from 'sequelize';
+import { creditoDeCliente, estadoCobro, hoyCaracas, ventasDelCliente } from '../../b2b/_lib';
 import { filtrarCambiosCliente } from '@/app/constants/clienteCampos';
 import { borrarBlob, borrarSiReemplazado } from '@/app/lib/blob';
 
@@ -41,8 +42,28 @@ export async function GET(req, { params }) {
             condicionPago: v.condicionPago, fechaVencimiento: v.fechaVencimiento,
             total: v.moneda === 'BS' ? Number(v.totalFinal) / (Number(v.tasaCambio) || 1) : Number(v.totalFinal),
         }));
+
+        // Estado de cuenta: documentos con saldo (mismo cálculo que Cuentas por cobrar y el portal del cliente: manda el saldo
+        // de la cuenta por cobrar, que ya descuenta abonos, retenciones y notas) y sus últimos pagos
+        const hoy = hoyCaracas();
+        const abiertas = await ventasDelCliente(cliente.id, { where: { statusDespacho: { [Op.ne]: 'Cancelado' }, statusPago: { [Op.ne]: 'Pagado' } } });
+        const pendientes = abiertas
+            .map((v) => {
+                const cobro = estadoCobro(v, hoy);
+                return { id: v.id, numero: v.numeroDocumento, fecha: v.createdAt, tipoDocumento: v.tipoDocumento, total: v.moneda === 'BS' ? Number(v.totalFinal) / (Number(v.tasaCambio) || 1) : Number(v.totalFinal), saldo: cobro.saldo, vence: cobro.vence, estado: cobro.clave, etiqueta: cobro.etiqueta };
+            })
+            .filter((p) => p.saldo > 0)
+            .sort((a, b) => (a.vence || '9999').localeCompare(b.vence || '9999'));
+        const deudaPendiente = Number(pendientes.reduce((a, p) => a + p.saldo, 0).toFixed(2));
+        const pagos = await sequelize.query(
+            `SELECT a."id", a."fechaPago" AS fecha, a."metodoPago" AS metodo, a."referencia", a."montoUsd"::float AS "montoUsd", a."montoVes"::float AS "montoVes",
+                    v."id" AS "ventaId", v."numeroDocumento" AS documento
+             FROM "Abonos" a JOIN "Ventas" v ON v."id" = a."ventaId" WHERE v."clienteId" = :id ORDER BY a."fechaPago" DESC, a."id" DESC LIMIT 15`,
+            { replacements: { id: cliente.id }, type: sequelize.QueryTypes.SELECT }
+        );
+
         const credito = await creditoDeCliente(cliente);
-        return NextResponse.json({ ...json, pedidos, resumen: totales, credito }, { status: 200 });
+        return NextResponse.json({ ...json, pedidos, resumen: { ...totales, deudaPendiente }, estadoCuenta: { pendientes, pagos, total: deudaPendiente }, credito }, { status: 200 });
     } catch (error) {
         console.error('Error al obtener cliente:', error.message);
         return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });

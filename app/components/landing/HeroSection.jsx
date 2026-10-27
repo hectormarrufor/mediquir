@@ -139,8 +139,8 @@ export default function HeroSection({ searchQuery, onSearch }) {
                         </form>
                     </Paper>
 
-                    {/* Confianza en una sola fila (con scroll si no cabe) */}
-                    <Group gap={{ base: 'md', md: 'xl' }} wrap="nowrap" style={{ overflowX: 'auto', scrollbarWidth: 'none' }}>
+                    {/* Confianza: en el teléfono baja a una segunda fila en vez de cortarse a la derecha */}
+                    <Group gap={{ base: 'md', md: 'xl' }} rowGap={8} wrap="wrap">
                         <Group gap={6} wrap="nowrap">
                             <ThemeIcon color="rgba(255,255,255,0.12)" c="white" size="md" radius="xl"><IconTruckDelivery size={16} /></ThemeIcon>
                             <Text size="xs" fw={600} c="white" style={{ whiteSpace: 'nowrap' }}>Envíos nacionales</Text>

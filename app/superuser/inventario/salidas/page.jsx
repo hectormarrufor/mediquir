@@ -74,8 +74,8 @@ export default function SalidasInventarioPage() {
         <Box p="md" maw={1400} mx="auto">
             <Group justify="space-between" mb="xl">
                 <Group>
-                    <IconArrowUpRight size={28} color="#d32f2f" />
-                    <Title order={2} c="red.9">Salidas de Inventario</Title>
+                    <IconArrowUpRight size={28} color="#ff8787" />
+                    <Title order={2} c="white">Salidas de inventario</Title>
                 </Group>
                 <Badge size="lg" color="red" variant="light">
                     Total Registros: {salidasFiltradas.length}

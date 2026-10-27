@@ -27,7 +27,8 @@ export const slugify = (texto) => sinTildes(texto).toLowerCase().replace(/[^a-z0
 
 export const rutaProducto = (p) => `/productos/${slugify(p.nombre)}-${p.id}`;
 export const rutaCategoria = (c) => `/categoria/${slugify(c.nombre)}-${c.id}`;
-export const idDeSlug = (slug) => { const m = /-(\d+)$/.exec(String(slug || '')); return m ? Number(m[1]) : null; };
+// "guantes-de-latex-4229" -> 4229; también acepta el número solo ("/productos/4229", p. ej. un enlace copiado a mano)
+export const idDeSlug = (slug) => { const m = /(?:^|-)(\d+)$/.exec(String(slug || '')); return m ? Number(m[1]) : null; };
 export const absoluta = (ruta) => (/^https?:\/\//.test(ruta) ? ruta : `${SITIO.url}${ruta.startsWith('/') ? '' : '/'}${ruta}`);
 
 // Las imágenes se guardan como nombre de archivo en Vercel Blob

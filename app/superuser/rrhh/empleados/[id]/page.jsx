@@ -104,7 +104,7 @@ export default function Page({ params }) {
                         <IconChevronLeft size={24} />
                     </ActionIcon>
                     <div>
-                        <Title order={2}>Perfil de Empleado</Title>
+                        <Title order={2} c="white">Perfil de empleado</Title>
                         <Text c="dimmed" size="sm">Gestión de RRHH y Nómina</Text>
                     </div>
                 </Group>

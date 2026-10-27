@@ -2,36 +2,37 @@
 
 import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { 
-    Box, Title, Paper, Table, Badge, Group, Text, 
-    TextInput, Select, ScrollArea, Button, Stack 
+import {
+    Box, Title, Paper, Table, Badge, Group, Text,
+    TextInput, Button
 } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { IconSearch, IconReceipt2, IconCoins, IconArrowRight, IconCalendarEvent, IconBuildingStore } from '@tabler/icons-react';
+import { IconSearch, IconReceipt2, IconCoins, IconArrowRight, IconCalendarEvent, IconPlus } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import PrecioVisual from '@/app/components/ui/PrecioVisual';
-import dayjs from 'dayjs';
 import NotaCompraModal from './NotaCompraModal';
 import { fechaCaracas } from '@/app/constants/hora';
+import { useTasaBcv } from '@/hooks/useTasaBcv';
+import { useAuth } from '@/hooks/useAuth';
 
 const CompraModal = dynamic(() => import('@/app/components/admin/CompraModal'), { ssr: false });
 
 export default function ComprasDashboardPage() {
     const router = useRouter();
-    const getTodayYMD = () => fechaCaracas();
+    const { esVendedor } = useAuth();
 
-    const [fechaInicio, setFechaInicio] = useState(getTodayYMD());
-    const [fechaFin, setFechaFin] = useState(getTodayYMD());
+    // Por defecto, el mes en curso (antes solo hoy: la lista casi siempre salía vacía)
+    const [fechaInicio, setFechaInicio] = useState(`${fechaCaracas().slice(0, 8)}01`);
+    const [fechaFin, setFechaFin] = useState(fechaCaracas());
     const [search, setSearch] = useState('');
     const [notaDe, setNotaDe] = useState(null); // factura de compra a la que se le registra una nota del proveedor
     const [gastoAbierto, setGastoAbierto] = useState(false); // registrar un gasto (no afecta el inventario)
+    const [compraAbierta, setCompraAbierta] = useState(false); // registrar una compra de mercancía
 
-    // Tasa BCV vigente: la última del histórico
-    const { data: tasaBcv } = useQuery({
-        queryKey: ['tasa-bcv-compras'],
-        queryFn: async () => { const r = await (await fetch('/api/bcv/obtenerTodos')).json(); return Number(r?.data?.[r.data.length - 1]?.monto) || 0; },
-    });
+    // Tasa BCV vigente (antes se descargaba el histórico completo solo para leer la última)
+    const { tasa: tasaBcv } = useTasaBcv();
     const queryClient = useQueryClient();
+    const alCerrar = () => { queryClient.invalidateQueries({ queryKey: ['historial-compras'] }); queryClient.invalidateQueries({ queryKey: ['cuentas'] }); };
 
     const { data: compras, isLoading } = useQuery({
         queryKey: ['historial-compras', fechaInicio, fechaFin],
@@ -59,50 +60,41 @@ export default function ComprasDashboardPage() {
 
     return (
         <Box p="md" maw={1400} mx="auto">
-            <Group justify="space-between" mb="lg">
-                <Group>
-                    <IconReceipt2 size={28} color="#1971C2" />
-                    <Title order={2} c="blue.9">Historial de Facturas de Compra</Title>
+            <Group justify="space-between" mb="lg" wrap="wrap" gap="sm">
+                <Group gap="sm">
+                    <IconReceipt2 size={28} color="#74c0fc" />
+                    <Title order={2} c="white">Compras y gastos</Title>
                 </Group>
-                <Group gap="xs">
+                <Group gap="xs" wrap="wrap">
+                    <Button color="accent.6" leftSection={<IconPlus size={18} />} onClick={() => setCompraAbierta(true)} disabled={!tasaBcv}>Registrar compra</Button>
                     <Button color="teal" leftSection={<IconCoins size={18} />} onClick={() => setGastoAbierto(true)} disabled={!tasaBcv}>Registrar gasto</Button>
-                    <Button color="blue" onClick={() => router.push('/superuser')}>
-                        Volver al Dashboard
-                    </Button>
+                    {!esVendedor && <Button variant="light" color="orange" onClick={() => router.push('/superuser/cxp')}>Cuentas por pagar</Button>}
                 </Group>
             </Group>
 
             {/* FILTROS DE FECHA */}
             <Paper p="sm" mb="md" withBorder radius="md" bg="blue.0">
-                <Group justify="space-between" wrap="wrap">
-                    <Group gap="sm" align="center">
+                <Group justify="space-between" wrap="wrap" align="flex-end" gap="sm">
+                    <Group gap="sm" align="center" style={{ flex: '1 1 260px' }}>
                         <IconCalendarEvent size={20} color="#1971C2" />
-                        <TextInput 
-                            placeholder="Buscar por Nro o Proveedor..." 
-                            w={250} size="sm"
+                        <TextInput
+                            placeholder="Buscar por número o proveedor…"
+                            style={{ flex: 1 }} size="sm"
                             leftSection={<IconSearch size={16}/>}
                             value={search}
                             onChange={(e) => setSearch(e.currentTarget.value)}
                         />
                     </Group>
-                    <Group gap="xs">
-                        <TextInput 
-                            type="date" size="sm" label="Desde:" 
-                            labelProps={{ style: { display: 'inline', marginRight: 8 } }}
-                            value={fechaInicio} onChange={(e) => setFechaInicio(e.currentTarget.value)} 
-                        />
-                        <TextInput 
-                            type="date" size="sm" label="Hasta:" 
-                            labelProps={{ style: { display: 'inline', marginRight: 8 } }}
-                            value={fechaFin} onChange={(e) => setFechaFin(e.currentTarget.value)} 
-                        />
+                    <Group gap="xs" wrap="nowrap">
+                        <TextInput type="date" size="sm" label="Desde" value={fechaInicio} max={fechaFin} onChange={(e) => setFechaInicio(e.currentTarget.value)} />
+                        <TextInput type="date" size="sm" label="Hasta" value={fechaFin} min={fechaInicio} onChange={(e) => setFechaFin(e.currentTarget.value)} />
                     </Group>
                 </Group>
             </Paper>
 
             {/* TABLA DE COMPRAS */}
             <Paper withBorder radius="md" bg="white">
-                <ScrollArea>
+                <Table.ScrollContainer minWidth={980}>
                     <Table striped highlightOnHover verticalSpacing="sm">
                         <Table.Thead bg="gray.0">
                             <Table.Tr>
@@ -144,8 +136,13 @@ export default function ComprasDashboardPage() {
                                             </Table.Td>
                                             <Table.Td>
                                                 <Badge color={compra.condicionPago === 'Contado' ? 'green' : 'orange'} variant="light">
-                                                    {compra.condicionPago} {compra.condicionPago === 'Credito' ? `(${compra.diasCredito}d)` : ''}
+                                                    {compra.condicionPago === 'Credito' ? `Crédito (${compra.diasCredito}d)` : 'Contado'}
                                                 </Badge>
+                                                {compra.condicionPago === 'Credito' && (
+                                                    <Badge mt={4} display="block" w="fit-content" size="xs" color={compra.statusPago === 'Pagado' ? 'teal' : 'red'} variant="filled">
+                                                        {compra.statusPago === 'Pagado' ? 'Pagada' : 'Por pagar'}
+                                                    </Badge>
+                                                )}
                                             </Table.Td>
                                             <Table.Td>
                                                 <PrecioVisual valor={compra.totalFinal} simbolo={compra.moneda === 'BS' ? 'Bs' : '$'} size="sm" fw={700} />
@@ -173,10 +170,11 @@ export default function ComprasDashboardPage() {
                             )}
                         </Table.Tbody>
                     </Table>
-                </ScrollArea>
+                </Table.ScrollContainer>
             </Paper>
 
-            {gastoAbierto && <CompraModal opened={gastoAbierto} iniciarComoGasto onClose={() => { setGastoAbierto(false); queryClient.invalidateQueries({ queryKey: ['historial-compras'] }); }} tasaBcv={tasaBcv || 0} />}
+            {gastoAbierto && <CompraModal opened={gastoAbierto} iniciarComoGasto onClose={() => { setGastoAbierto(false); alCerrar(); }} tasaBcv={tasaBcv || 0} />}
+            {compraAbierta && <CompraModal opened={compraAbierta} onClose={() => { setCompraAbierta(false); alCerrar(); }} tasaBcv={tasaBcv || 0} />}
             {notaDe && <NotaCompraModal opened onClose={() => setNotaDe(null)} compra={notaDe} />}
         </Box>
     );
