@@ -1,12 +1,14 @@
-// Exportación de los libros de compras y ventas: PDF con el formato "Libro Declarativo" y CSV para Excel en español.
+// Libros de compras y ventas con el formato que lleva el contador (libro de compras y libro de ventas de la quincena del 01 al 15/04/2026
+// que mandó Hector): PDF, CSV para Excel y la vista en pantalla usan las MISMAS columnas, y al final el «Resumen del periodo imposición».
 
 const nf = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const dinero = (v) => (v === null || v === undefined || v === '' ? '' : nf.format(Number(v) || 0));
 export const fmtFecha = (v) => (v ? `${String(v).slice(8, 10)}/${String(v).slice(5, 7)}/${String(v).slice(0, 4)}` : '');
+const r2 = (v) => Math.round(((Number(v) || 0) + Number.EPSILON) * 100) / 100;
 
 export const TIPOS = {
-    compras: { titulo: 'Libro de Compras Declarativo', corto: 'Compras', montoTotal: 'Total Compras incluyendo I.V.A.', resumen: 'Resumen de Compras y Egresos', alicuota: 'Compras', descuentos: 'Descuentos en compras', nc: 'N/C' },
-    ventas: { titulo: 'Libro de Ventas Declarativo', corto: 'Ventas', montoTotal: 'Total Ventas incluyendo I.V.A.', resumen: 'Resumen de Ventas', alicuota: 'Ventas', descuentos: 'Descuentos en ventas', nc: 'N/C' },
+    compras: { titulo: 'Libro de Compras', mayus: 'LIBRO DE COMPRAS', totales: 'TOTALES' },
+    ventas: { titulo: 'Libro de Ventas', mayus: 'LIBRO DE VENTAS', totales: 'TOTAL' },
 };
 
 const nombreArchivo = (tipo, datos) => `libro-de-${tipo}-${datos.desde}_${datos.hasta}`;
@@ -19,40 +21,120 @@ function descargar(blob, nombre) {
     setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-// Etiqueta de la columna de base imponible: "al 16,00 %" cuando todo el periodo tiene una sola alícuota
-export function etiquetaBase(filas) {
-    const alicuotas = [...new Set(filas.filter((f) => f.tipo === 'FAC' && Number(f.base) > 0).map((f) => f.alicuota))];
-    return alicuotas.length === 1 ? `Base Imponible al ${nf.format(alicuotas[0])} %` : 'Base Imponible';
+// Tipo de documento como lo escribe el contador
+const TIPO_DOC = { FAC: 'FACTURA', NC: 'N/CREDITO', ND: 'N/DEBITO', RET: 'COM.RET' };
+// El comprobante de retención (AAAAMM + 8 dígitos) se escribe 2026-04-00006613
+const documento = (f) => {
+    const d = String(f.documento || '');
+    return f.tipo === 'RET' && /^\d{14}$/.test(d) ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}` : d;
+};
+const esDoc = (f) => f.tipo !== 'RET';
+const monto = (v) => (Number(v) ? dinero(v) : '');
+
+// Columnas de cada libro. `v` da el valor de la celda; `sum` es lo que se suma en la fila de totales.
+const COLS = {
+    compras: [
+        { k: 'fecha', t: 'Fecha', v: (f) => fmtFecha(f.fecha), w: 15 },
+        { k: 'tipoDoc', t: 'Tipo Doc.', v: (f) => TIPO_DOC[f.tipo] || f.tipo, w: 16 },
+        { k: 'documento', t: 'No. Documento', v: documento, w: 25 },
+        { k: 'control', t: 'No Control', v: (f) => f.control || '', w: 20 },
+        { k: 'facturaAfectada', t: 'No. Factura Afectada', v: (f) => f.facturaAfectada || '', w: 16 },
+        { k: 'nombre', t: 'Nombre y Apellido / Razón Social', v: (f) => f.nombre || '', w: 49 },
+        { k: 'rif', t: 'No. Rif', v: (f) => f.rif || '', w: 20 },
+        { k: 'exento', t: 'Compras Sin Derecho a Crédito Fiscal', num: true, v: (f) => (esDoc(f) ? monto(f.exento) : ''), sum: (f) => (esDoc(f) ? f.exento : 0), w: 22 },
+        { k: 'base', t: 'Compras Internas Gravadas', num: true, v: (f) => (esDoc(f) ? monto(f.base) : ''), sum: (f) => (esDoc(f) ? f.base : 0), w: 22 },
+        { k: 'iva', t: 'Impuesto IVA 16%', num: true, v: (f) => (esDoc(f) ? (Number(f.iva) ? dinero(f.iva) : '-') : ''), sum: (f) => (esDoc(f) ? f.iva : 0), w: 19 },
+        { k: 'total', t: 'Total Compras Incluye Iva', num: true, v: (f) => (esDoc(f) ? dinero(f.total) : ''), sum: (f) => (esDoc(f) ? f.total : 0), w: 22 },
+        { k: 'ivaRetenido', t: 'RETENCIÓN IVA', num: true, v: (f) => (f.tipo === 'RET' ? dinero(f.ivaRetenido) : ''), sum: (f) => (f.tipo === 'RET' ? f.ivaRetenido : 0), w: 18 },
+    ],
+    ventas: [
+        { k: 'fecha', t: 'Fecha', v: (f) => fmtFecha(f.fecha), w: 14 },
+        { k: 'corteZ', t: 'No. Corte Z', v: () => '', w: 11 },
+        { k: 'documento', t: 'No. Documento', v: documento, w: 21 },
+        { k: 'control', t: 'No Control', v: (f) => f.control || '', w: 18 },
+        { k: 'tipoDoc', t: 'Tipo de Documento', v: (f) => TIPO_DOC[f.tipo] || f.tipo, w: 15 },
+        { k: 'facturaAfectada', t: 'Factura Afectada', v: (f) => f.facturaAfectada || '', w: 14 },
+        { k: 'nombre', t: 'Nombre y Apellido / Razón Social', v: (f) => f.nombre || '', w: 35 },
+        { k: 'rif', t: 'No. Rif - C.I', v: (f) => f.rif || '', w: 19 },
+        { k: 'exento', t: 'Ventas Internas No Gravadas Base Imponible', num: true, v: (f) => (esDoc(f) ? monto(f.exento) : ''), sum: (f) => (esDoc(f) ? f.exento : 0), w: 19 },
+        { k: 'base', t: 'Ventas Internas Gravadas Base Imponible', num: true, v: (f) => (esDoc(f) ? monto(f.base) : ''), sum: (f) => (esDoc(f) ? f.base : 0), w: 19 },
+        { k: 'iva', t: 'Impuesto Iva 16%', num: true, v: (f) => (esDoc(f) ? (Number(f.iva) ? dinero(f.iva) : '-') : ''), sum: (f) => (esDoc(f) ? f.iva : 0), w: 16 },
+        { k: 'baseIgtf', t: 'BASE IGTF', num: true, v: (f) => (esDoc(f) ? (Number(f.baseIgtf) ? dinero(f.baseIgtf) : '-') : ''), sum: (f) => (esDoc(f) ? f.baseIgtf || 0 : 0), w: 12 },
+        { k: 'igtf', t: 'IGTF\nPERCIBIDO\n3%', num: true, v: (f) => (esDoc(f) ? (Number(f.igtf) ? dinero(f.igtf) : '-') : ''), sum: (f) => (esDoc(f) ? f.igtf || 0 : 0), w: 14 },
+        { k: 'total', t: 'Total Ventas Incluye Iva', num: true, v: (f) => (esDoc(f) ? dinero(f.total) : ''), sum: (f) => (esDoc(f) ? f.total : 0), w: 19 },
+        { k: 'ivaRetenido', t: 'IVA Retenido (por el Comprador)', num: true, v: (f) => (f.tipo === 'RET' ? dinero(f.ivaRetenido) : ''), sum: (f) => (f.tipo === 'RET' ? f.ivaRetenido : 0), w: 17 },
+    ],
+};
+
+export const COLUMNAS = (tipo) => COLS[tipo];
+export const celda = (c, f) => c.v(f);
+// Celda de la fila de totales (el IGTF en cero va con guion, como en el libro del contador)
+export const celdaTotal = (c, tot) => (!c.sum ? '' : ['baseIgtf', 'igtf'].includes(c.k) && !tot[c.k] ? '-' : dinero(tot[c.k]));
+
+/** Filas en el orden del libro: por fecha (las retenciones y notas entre las facturas de su día) */
+export const filasLibro = (libro) => [...libro.filas].sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || a.n - b.n);
+
+/** Fila de totales: suma de cada columna numérica (las notas de crédito ya vienen en negativo) */
+export function totalesLibro(tipo, filas) {
+    return Object.fromEntries(COLS[tipo].filter((c) => c.sum).map((c) => [c.k, r2(filas.reduce((a, f) => a + (Number(c.sum(f)) || 0), 0))]));
 }
 
-export const COLUMNAS = (tipo, filas) => [
-    { k: 'n', t: 'Oper.\nNro.' }, { k: 'fecha', t: 'Emisión', f: fmtFecha }, { k: 'rif', t: 'R.I.F.' }, { k: 'nombre', t: 'Nombre o Razón Social' }, { k: 'tipo', t: 'Tipo' },
-    { k: 'documento', t: 'Número\nDocumento' }, { k: 'facturaAfectada', t: '# Fact.\nAfect.' }, { k: 'control', t: 'Número de\nControl' }, { k: 'tipoTrans', t: 'Tipo\nTrans.' },
-    { k: 'total', t: TIPOS[tipo].montoTotal.replace('incluyendo', '\nincluyendo'), num: true }, { k: 'base', t: etiquetaBase(filas).replace(' al ', '\nal '), num: true },
-    { k: 'ivaRetenido', t: 'IVA RETENIDO', num: true }, { k: 'exento', t: 'Total\nExento', num: true }, { k: 'iva', t: 'Monto Total\nI.V.A.', num: true },
-];
-
-const valor = (c, f) => {
-    const v = f[c.k];
-    if (v === null || v === undefined) return '';
-    if (c.f) return c.f(v);
-    return c.num ? dinero(v) : String(v);
-};
+/**
+ * «Resumen del periodo imposición» (va al pie de los dos libros, igual que en el del contador).
+ * Lo de este periodo sale de los libros; lo que viene de declaraciones anteriores lo escribe el contador (`ajustes`):
+ *   excedenteAnterior (crédito fiscal del mes anterior), deducibles (créditos fiscales totalmente deducibles; vacío = el crédito del
+ *   periodo) y retencionesAcumuladas (retenciones por descontar de periodos anteriores).
+ */
+export function resumenPeriodo(datos, ajustes = {}) {
+    const v = datos.ventas.resumen;
+    const c = datos.compras.resumen;
+    const debito = r2(v.totalImpuesto);
+    const credito = r2(c.totalImpuesto);
+    const general = c.porAlicuota?.[16] || { base: 0, iva: 0 };
+    const reducida = c.porAlicuota?.[8] || { base: 0, iva: 0 };
+    const excedenteAnterior = r2(ajustes.excedenteAnterior);
+    const deducibles = ajustes.deducibles === '' || ajustes.deducibles === null || ajustes.deducibles === undefined ? credito : r2(ajustes.deducibles);
+    const retAcumuladas = r2(ajustes.retencionesAcumuladas);
+    const retPeriodo = r2(v.ivaRetenido);
+    const totalRet = r2(retAcumuladas + retPeriodo);
+    const cuota = r2(debito - deducibles - excedenteAnterior);
+    const descontadas = cuota > 0 ? Math.min(totalRet, cuota) : 0;
+    return [
+        ['Ventas No Gravadas', r2(v.exento), null, null],
+        ['Ventas Gravadas', r2(v.totalImponible.monto), debito, null],
+        ['Total Ventas', r2(v.exento + v.totalImponible.monto), debito, null],
+        ['Compras No Gravadas', r2(c.exento), null, null],
+        ['Compras Internas Gravadas con Alícuota General', r2(general.base), null, r2(general.iva)],
+        ['Compras Internas Gravadas con Alícuota Reducida', reducida.base ? r2(reducida.base) : null, null, reducida.iva ? r2(reducida.iva) : null],
+        ['Total Compras', r2(c.exento + c.totalImponible.monto), null, credito],
+        ['Excedente de crédito fiscal del mes anterior', null, null, excedenteAnterior || null],
+        ['Créditos Fiscales Totalmente Deducibles', null, null, deducibles],
+        ['Retenciones acumuladas por descontar', null, null, retAcumuladas || null],
+        ['Retenciones del periodo', null, null, retPeriodo],
+        ['Total Retenciones', null, null, totalRet],
+        ['Retenciones soportadas y descontadas en esta declaración', null, null, descontadas || null],
+        ['Saldo de retenciones de iva no aplicado', null, null, r2(totalRet - descontadas)],
+        ['Impuesto a Pagar', null, null, cuota > 0 ? r2(cuota - descontadas) : null],
+        ['Excedente de crédito fiscal para el mes siguiente', null, null, cuota < 0 ? r2(-cuota) : null],
+    ];
+}
 
 // ------------------------------------------------------------------ CSV
 const esc = (t) => `"${String(t ?? '').replace(/"/g, '""')}"`;
 const csv = (lineas) => new Blob(['﻿' + lineas.map((l) => l.map(esc).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+const periodoTexto = (datos) => `PERIODO ${fmtFecha(datos.desde)} - ${fmtFecha(datos.hasta)}`;
 
-export function descargarCsvLibro(tipo, datos) {
-    const libro = datos[tipo];
-    const cols = COLUMNAS(tipo, libro.filas);
-    const r = libro.resumen;
+export function descargarCsvLibro(tipo, datos, ajustes) {
+    const cols = COLS[tipo];
+    const filas = filasLibro(datos[tipo]);
+    const tot = totalesLibro(tipo, filas);
     const lineas = [
-        [`${datos.empresa.nombre} - RIF ${datos.empresa.rif}`], [`Dirección: ${datos.empresa.direccion || ''}`], [`${TIPOS[tipo].titulo} - desde ${fmtFecha(datos.desde)} hasta ${fmtFecha(datos.hasta)}`], [datos.aviso], [],
-        cols.map((c) => c.t.replace('\n', ' ')),
-        ...libro.filas.map((f) => cols.map((c) => valor(c, f))),
-        [],
-        cols.map((c) => (c.k === 'nombre' ? `TOTAL TRANSACCIONES: ${r.totalTransacciones}` : c.k === 'total' ? dinero(r.totalGeneral) : c.k === 'base' ? dinero(r.totalImponible.monto) : c.k === 'ivaRetenido' ? dinero(r.ivaRetenido) : c.k === 'exento' ? dinero(r.exento) : c.k === 'iva' ? dinero(r.totalImpuesto) : '')),
+        [TIPOS[tipo].mayus], [`RIF ${datos.empresa.rif}`], [periodoTexto(datos)], [],
+        cols.map((c) => c.t),
+        ...filas.map((f) => cols.map((c) => c.v(f))),
+        cols.map((c, i) => (i === 0 ? TIPOS[tipo].totales : celdaTotal(c, tot))),
+        [], ['Resumen del periodo imposición'], ['Concepto', 'Base Imponible', 'Debito fiscal', 'Credito Fiscal'],
+        ...resumenPeriodo(datos, ajustes).map(([concepto, ...m]) => [concepto, ...m.map((x) => (x === null ? '' : dinero(x)))]),
     ];
     descargar(csv(lineas), `${nombreArchivo(tipo, datos)}.csv`);
 }
@@ -68,113 +150,60 @@ export function descargarCsvRetenciones(tipo, datos) {
     descargar(csv(lineas), `iva-retenido-${tipo}-${datos.desde}_${datos.hasta}.csv`);
 }
 
-// ------------------------------------------------------------------ PDF (formato "Libro Declarativo")
-export async function descargarPdfLibro(tipo, datos, usuario = '') {
+// ------------------------------------------------------------------ PDF (formato del contador)
+export async function descargarPdfLibro(tipo, datos, ajustes) {
     const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
-    const libro = datos[tipo];
-    const info = TIPOS[tipo];
-    const r = libro.resumen;
-    const cols = COLUMNAS(tipo, libro.filas);
-    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape', compress: true });
+    const cols = COLS[tipo];
+    const filas = filasLibro(datos[tipo]);
+    const tot = totalesLibro(tipo, filas);
+    const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'landscape', compress: true });
     const ANCHO = doc.internal.pageSize.getWidth();
     const ALTO = doc.internal.pageSize.getHeight();
-    const M = 12;
-    const ahora = new Date();
-    const fechaLarga = ahora.toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Caracas' });
-    const hora = ahora.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Caracas' });
-    const NEGRO = [20, 20, 20];
+    const M = 8;
+    const NEGRO = [0, 0, 0];
 
+    // Encabezado de cada página: el nombre del libro, el RIF y el periodo, como en el del contador
     const cabecera = () => {
         doc.setTextColor(...NEGRO);
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.text(`Empresa: ${datos.empresa.nombre}`, M, 8.5);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-        doc.text(`R.I.F.: ${datos.empresa.rif}     Agencia: ${datos.empresa.agencia}`, M, 12.5);
-        doc.setFontSize(7.5);
-        doc.text(`Dirección: ${datos.empresa.direccion || ''}`, M, 16.2, { maxWidth: 182 }); // una sola línea: termina antes de la raya del título (x = 195 mm)
-        doc.setFontSize(8);
-        doc.text(`${fechaLarga.charAt(0).toUpperCase()}${fechaLarga.slice(1)}   Página: ${String(doc.getCurrentPageInfo().pageNumber).padStart(3, '0')}`, M, 20.5);
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text(info.titulo, ANCHO - M, 14, { align: 'right' });
-        doc.setLineWidth(0.7); doc.line(ANCHO - M - 90, 16, ANCHO - M, 16);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
-        const sub = `Desde el ${fmtFecha(datos.desde)} hasta el ${fmtFecha(datos.hasta)} / Factura o gastos / Retenciones / Notas de crédito / Según fecha ${tipo === 'compras' ? 'de recepción' : 'de emisión'} del documento`;
-        doc.text(sub, ANCHO - M, 21, { align: 'right' });
-        doc.setLineWidth(0.15); doc.line(M, 24, ANCHO - M, 24);
-    };
-    const pie = () => {
-        const y = ALTO - 12;
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...NEGRO);
-        doc.text(datos.empresa.nombre.toUpperCase(), M, y);
-        doc.setFont('helvetica', 'normal');
-        doc.text('Expresado en Bolívar', ANCHO - M, y, { align: 'right' });
-        doc.text(`Procesado por: ${String(usuario || '').toUpperCase()} desde la estación ${datos.empresa.estacion} a las ${hora}`, ANCHO - M, y + 4, { align: 'right' });
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+        doc.text(TIPOS[tipo].mayus, M, 9);
+        doc.text(`RIF ${datos.empresa.rif}`, M, 13.5);
+        doc.text(periodoTexto(datos), M, 18);
     };
 
-    const anchos = [9, 16, 19, 40, 8, 25, 25, 18, 9, 22, 22, 20, 20, 20];
+    // El ancho de las columnas se escala para llenar la hoja
+    const anchoTotal = cols.reduce((a, c) => a + c.w, 0);
+    const escala = (ANCHO - 2 * M) / anchoTotal;
+    const lineas = { lineWidth: 0.15, lineColor: NEGRO };
     autoTable(doc, {
-        startY: 27, margin: { top: 27, left: M, right: M, bottom: 16 }, theme: 'plain',
+        startY: 21, margin: { top: 21, left: M, right: M, bottom: 10 }, theme: 'grid',
         head: [cols.map((c) => c.t)],
-        body: libro.filas.map((f) => cols.map((c) => valor(c, f))),
-        foot: [cols.map((c) => (c.k === 'nombre' ? `TOTAL TRANSACCIONES:  ${r.totalTransacciones}` : c.k === 'total' ? dinero(r.totalGeneral) : c.k === 'base' ? dinero(r.totalImponible.monto) : c.k === 'ivaRetenido' ? dinero(r.ivaRetenido) : c.k === 'exento' ? dinero(r.exento) : c.k === 'iva' ? dinero(r.totalImpuesto) : ''))],
+        body: filas.map((f) => cols.map((c) => c.v(f))),
+        foot: [cols.map((c, i) => (i === 0 ? TIPOS[tipo].totales : celdaTotal(c, tot)))],
         showFoot: 'lastPage',
-        styles: { font: 'helvetica', fontSize: 6.3, cellPadding: { top: 0.9, bottom: 0.9, left: 0.8, right: 0.8 }, textColor: NEGRO, overflow: 'ellipsize' },
-        headStyles: { fontStyle: 'bold', fontSize: 6.1, halign: 'center', valign: 'middle', lineWidth: { bottom: 0.3, top: 0.3 }, lineColor: NEGRO },
-        footStyles: { fontStyle: 'bold', fontSize: 6.6, fillColor: false, textColor: NEGRO, lineWidth: { top: 0.3 }, lineColor: NEGRO },
-        columnStyles: Object.fromEntries(cols.map((c, i) => [i, { cellWidth: anchos[i], halign: c.num ? 'right' : (['n', 'tipo', 'tipoTrans'].includes(c.k) ? 'center' : 'left') }])),
-        // la fila de totales va alineada a la derecha como las cifras
+        styles: { font: 'helvetica', fontSize: 6.2, cellPadding: 0.7, textColor: NEGRO, overflow: 'linebreak', valign: 'middle', ...lineas },
+        headStyles: { fontStyle: 'bold', fontSize: 6, halign: 'center', fillColor: false, ...lineas },
+        footStyles: { fontStyle: 'bold', fontSize: 6.6, fillColor: false, textColor: NEGRO, ...lineas },
+        columnStyles: Object.fromEntries(cols.map((c, i) => [i, { cellWidth: c.w * escala, halign: c.num ? 'right' : 'left' }])),
         didParseCell: (d) => { if (d.section === 'foot' && cols[d.column.index].num) d.cell.styles.halign = 'right'; },
         didDrawPage: cabecera,
     });
 
-    // -------- cuadros de resumen (mismo orden que el libro de ejemplo)
-    let y = doc.lastAutoTable.finalY + 5;
-    if (y > ALTO - 78) { doc.addPage(); y = 30; }
-    const tabla = (x, w, inicioY, { head, body, foot, colStyles = {}, bold = false }) => {
-        autoTable(doc, {
-            startY: inicioY, margin: { left: x, right: ANCHO - x - w }, tableWidth: w, theme: 'grid',
-            head: [head], body, foot: foot ? [foot] : undefined, showFoot: 'lastPage',
-            styles: { font: 'helvetica', fontSize: 6.8, cellPadding: 1.1, textColor: NEGRO, lineColor: [60, 60, 60], lineWidth: 0.15 },
-            headStyles: { fillColor: [235, 235, 235], textColor: NEGRO, fontStyle: 'bold', halign: 'center' },
-            footStyles: { fillColor: [235, 235, 235], textColor: NEGRO, fontStyle: 'bold' },
-            bodyStyles: bold ? { fontStyle: 'bold' } : {}, columnStyles: colStyles, didDrawPage: () => {},
-            didParseCell: (d) => { if (d.section === 'foot' && colStyles[d.column.index]?.halign) d.cell.styles.halign = colStyles[d.column.index].halign; },
-        });
-        return doc.lastAutoTable.finalY;
-    };
-    const der = { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } };
-    const cuenta = (n) => ({ 0: {}, 1: { halign: 'right' }, 2: { halign: 'center', cellWidth: 12 } });
-    void cuenta;
+    // Resumen del periodo imposición, debajo de los totales
+    const filasResumen = resumenPeriodo(datos, ajustes);
+    let y = doc.lastAutoTable.finalY + 6;
+    if (y > ALTO - 92) { doc.addPage(); cabecera(); y = 24; }
+    const x = M + (ANCHO - 2 * M) * 0.36;
+    const w = 150;
+    autoTable(doc, {
+        startY: y, margin: { left: x, right: ANCHO - x - w, top: 21, bottom: 10 }, tableWidth: w, theme: 'grid',
+        head: [[{ content: 'Resumen del periodo imposición', colSpan: 4, styles: { halign: 'left' } }], ['Concepto', 'Base Imponible', 'Debito fiscal', 'Credito Fiscal']],
+        body: filasResumen.map(([concepto, ...m]) => [concepto, ...m.map((v) => (v === null ? '' : dinero(v)))]),
+        styles: { font: 'helvetica', fontSize: 6.6, cellPadding: 0.8, textColor: NEGRO, ...lineas },
+        headStyles: { fontStyle: 'normal', fillColor: false, textColor: NEGRO, ...lineas },
+        columnStyles: { 0: { cellWidth: 66 }, 1: { cellWidth: 28, halign: 'right', fontStyle: 'bold' }, 2: { cellWidth: 28, halign: 'right', fontStyle: 'bold' }, 3: { cellWidth: 28, halign: 'right', fontStyle: 'bold' } },
+        didDrawPage: () => {},
+    });
 
-    const yInicio = y;
-    let yIzq = tabla(M, 84, yInicio, { head: [info.resumen, 'Monto', 'Cant.'], body: [
-        ['Operac. sin impuesto', dinero(r.sinImpuesto.monto), String(r.sinImpuesto.cant)],
-        ['Total Imponible', dinero(r.totalImponible.monto), String(r.totalImponible.cant)],
-        ['Total Impuesto', dinero(r.totalImpuesto), ''],
-    ], foot: ['TOTAL GENERAL', dinero(r.totalGeneral), ''], colStyles: { 1: { halign: 'right' }, 2: { halign: 'center', cellWidth: 12 } } });
-    yIzq = tabla(M, 84, yIzq + 3, { head: ['Retenciones', 'Base Imponible', 'I.V.A. Retenido', 'Cant.'], body: [16, ...Object.keys(r.retenciones).map(Number).filter((a) => a !== 16 && r.retenciones[a]?.cant > 0)].map((a) => [`Retenciones al ${a},00 %`, dinero(r.retenciones[a]?.base || 0), dinero(r.retenciones[a]?.retenido || 0), String(r.retenciones[a]?.cant || 0)]),
-        foot: ['Totales:', dinero(r.totalRetenciones.base), dinero(r.totalRetenciones.retenido), String(r.totalRetenciones.cant)], colStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'center', cellWidth: 10 } } });
-
-    const yMed = tabla(M + 90, 62, yInicio, { head: [`Resumen de ${info.nc}`, 'Monto', 'Cant.'], body: [[info.nc + ':', dinero(r.notasCredito.monto), String(r.notasCredito.cant)], [`IVA ${info.nc}:`, dinero(r.notasCredito.iva), '']], colStyles: { 1: { halign: 'right' }, 2: { halign: 'center', cellWidth: 12 } } });
-    const yND = tabla(M + 90, 62, yMed + 3, { head: [`Resumen de ${info.nc.replace('C', 'D')}`, 'Monto', 'Cant.'], body: [[info.nc.replace('C', 'D') + ':', dinero(r.notasDebito?.monto || 0), String(r.notasDebito?.cant || 0)], [`IVA ${info.nc.replace('C', 'D')}:`, dinero(r.notasDebito?.iva || 0), '']], colStyles: { 1: { halign: 'right' }, 2: { halign: 'center', cellWidth: 12 } } });
-    const yMed2 = tabla(M + 90, 62, yND + 3, { head: ['Resumen de anulaciones', 'Monto', 'Cant.'], body: [['Monto anulado:', dinero(r.anulaciones.monto), String(r.anulaciones.cant)], ['Impuesto anulado:', dinero(r.anulaciones.iva), '']], colStyles: { 1: { halign: 'right' }, 2: { halign: 'center', cellWidth: 12 } } });
-
-    // Solo la alícuota general (16 %); cualquier otra aparece únicamente si algún documento tuvo movimiento con ella
-    const lista = [16, ...Object.keys(r.porAlicuota).map(Number).filter((a) => a !== 16 && (r.porAlicuota[a]?.base || r.porAlicuota[a]?.iva))];
-    const totBase = lista.reduce((a, k) => a + (r.porAlicuota[k]?.base || 0), 0);
-    const totIva = lista.reduce((a, k) => a + (r.porAlicuota[k]?.iva || 0), 0);
-    const yDer = tabla(M + 158, ANCHO - 2 * M - 158, yInicio, { head: ['', 'Base Imponible', 'Monto por I.V.A.', 'Monto I.V.A.\nNo Causado', 'Monto Neto\nI.V.A.'],
-        body: [...lista.map((a) => [`${info.alicuota} al ${a},00 %`, dinero(r.porAlicuota[a]?.base || 0), dinero(r.porAlicuota[a]?.iva || 0), dinero(0), dinero(r.porAlicuota[a]?.iva || 0)]), ['Monto Exento', dinero(r.exento), '', '', '']],
-        foot: ['Totales:', dinero(totBase), dinero(totIva), dinero(0), dinero(totIva)], colStyles: der });
-    void yDer;
-
-    // Firmas: debajo del cuadro más largo de las tres columnas (la del medio, con tres cuadros, suele ser la más alta).
-    // Si no caben en la página, van en una nueva en vez de encimarse sobre los cuadros.
-    let yF = Math.max(doc.lastAutoTable.finalY, yIzq, yMed2) + 20;
-    if (yF > ALTO - 24) { doc.addPage(); yF = 50; }
-    doc.setLineWidth(0.2); doc.setFontSize(7); doc.setFont('helvetica', 'normal');
-    doc.line(M + 100, yF, M + 150, yF); doc.text('Firma del contador', M + 125, yF + 3.5, { align: 'center' });
-    doc.line(M + 165, yF, M + 215, yF); doc.text('Firma del auditor', M + 190, yF + 3.5, { align: 'center' });
-
-    const paginas = doc.getNumberOfPages();
-    for (let i = 1; i <= paginas; i++) { doc.setPage(i); pie(); }
     descargar(doc.output('blob'), `${nombreArchivo(tipo, datos)}.pdf`);
 }

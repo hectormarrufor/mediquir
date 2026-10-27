@@ -1,14 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Alert, Badge, Box, Button, Card, Center, Group, Paper, SegmentedControl, SimpleGrid, Skeleton, Stack, Table, Tabs, Text, Title } from '@mantine/core';
+import { Alert, Badge, Box, Button, Card, Center, Group, NumberInput, Paper, SegmentedControl, SimpleGrid, Skeleton, Stack, Table, Tabs, Text, Title } from '@mantine/core';
 import { DatePickerInput, MonthPickerInput } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { IconAlertTriangle, IconBook2, IconDownload, IconFileTypePdf, IconInfoCircle, IconReceiptTax } from '@tabler/icons-react';
-import { useAuth } from '@/hooks/useAuth';
-import { COLUMNAS, TIPOS, descargarCsvLibro, descargarCsvRetenciones, descargarPdfLibro, dinero, fmtFecha } from '../_lib/libroExport';
+import { COLUMNAS, TIPOS, celda, celdaTotal, filasLibro, totalesLibro, resumenPeriodo, descargarCsvLibro, descargarCsvRetenciones, descargarPdfLibro, dinero, fmtFecha } from '../_lib/libroExport';
 
 async function pedirJson(url) {
     const res = await fetch(url);
@@ -28,28 +27,54 @@ function Dato({ titulo, valor, color, detalle }) {
 }
 
 function TablaLibro({ tipo, libro }) {
-    const cols = COLUMNAS(tipo, libro.filas);
-    const r = libro.resumen;
-    const valor = (c, f) => { const v = f[c.k]; if (v === null || v === undefined) return ''; if (c.f) return c.f(v); return c.num ? dinero(v) : String(v); };
-    if (!libro.filas.length) return <Center py={40}><Text c="dimmed">Sin operaciones en este periodo.</Text></Center>;
+    const cols = COLUMNAS(tipo);
+    const filas = filasLibro(libro);
+    const tot = totalesLibro(tipo, filas);
+    if (!filas.length) return <Center py={40}><Text c="dimmed">Sin operaciones en este periodo.</Text></Center>;
     return (
-        <Table.ScrollContainer minWidth={1100} h={430}>
-            <Table verticalSpacing={3} horizontalSpacing="xs" fz="xs" stickyHeader>
-                <Table.Thead><Table.Tr>{cols.map((c) => <Table.Th key={c.k} ta={c.num ? 'right' : 'left'} style={{ whiteSpace: 'pre-line', verticalAlign: 'bottom' }}>{c.t}</Table.Th>)}</Table.Tr></Table.Thead>
+        <Table.ScrollContainer minWidth={1200} h={430}>
+            <Table verticalSpacing={3} horizontalSpacing="xs" fz="xs" stickyHeader withColumnBorders>
+                <Table.Thead><Table.Tr>{cols.map((c) => <Table.Th key={c.k} ta={c.num ? 'right' : 'left'} style={{ verticalAlign: 'bottom', whiteSpace: 'pre-line' }}>{c.t}</Table.Th>)}</Table.Tr></Table.Thead>
                 <Table.Tbody>
-                    {libro.filas.map((f) => (
+                    {filas.map((f) => (
                         <Table.Tr key={f.n} bg={f.tipo === 'RET' ? 'var(--mantine-color-grape-0)' : f.tipo === 'NC' ? 'var(--mantine-color-red-0)' : f.tipo === 'ND' ? 'var(--mantine-color-blue-0)' : undefined}>
-                            {cols.map((c) => <Table.Td key={c.k} ta={c.num ? 'right' : 'left'} style={{ whiteSpace: 'nowrap' }}>{valor(c, f)}</Table.Td>)}
+                            {cols.map((c) => <Table.Td key={c.k} ta={c.num ? 'right' : 'left'} style={{ whiteSpace: 'nowrap' }}>{celda(c, f)}</Table.Td>)}
                         </Table.Tr>
                     ))}
                 </Table.Tbody>
                 <Table.Tfoot>
-                    <Table.Tr fw={800}>{cols.map((c) => <Table.Td key={c.k} ta={c.num ? 'right' : 'left'} fw={800}>
-                        {c.k === 'nombre' ? `TOTAL TRANSACCIONES: ${r.totalTransacciones}` : c.k === 'total' ? dinero(r.totalGeneral) : c.k === 'base' ? dinero(r.totalImponible.monto) : c.k === 'ivaRetenido' ? dinero(r.ivaRetenido) : c.k === 'exento' ? dinero(r.exento) : c.k === 'iva' ? dinero(r.totalImpuesto) : ''}
-                    </Table.Td>)}</Table.Tr>
+                    <Table.Tr>{cols.map((c, n) => <Table.Td key={c.k} ta={c.num ? 'right' : 'left'} fw={800}>{n === 0 ? TIPOS[tipo].totales : celdaTotal(c, tot)}</Table.Td>)}</Table.Tr>
                 </Table.Tfoot>
             </Table>
         </Table.ScrollContainer>
+    );
+}
+
+// «Resumen del periodo imposición» (va al pie de los dos libros). Lo de declaraciones anteriores lo escribe el contador.
+function ResumenPeriodo({ data, ajustes, setAjustes }) {
+    const filas = resumenPeriodo(data, ajustes);
+    const campo = (k, label, description) => (
+        <NumberInput size="xs" label={label} description={description} decimalSeparator="," thousandSeparator="." decimalScale={2} hideControls min={0}
+            value={ajustes[k] ?? ''} onChange={(v) => setAjustes((a) => ({ ...a, [k]: v === '' ? '' : Number(v) }))} />
+    );
+    return (
+        <Paper withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+            <Text fw={700} mb={4}>Resumen del periodo imposición</Text>
+            <Text size="xs" c="dimmed" mb="sm">Sale al pie de los dos libros. Lo de este periodo lo calcula el sistema; lo que viene de declaraciones anteriores, escríbelo (o pídeselo al contador).</Text>
+            <SimpleGrid cols={{ base: 1, sm: 3 }} mb="sm">
+                {campo('excedenteAnterior', 'Excedente de crédito fiscal del mes anterior', 'De la declaración anterior')}
+                {campo('deducibles', 'Créditos fiscales totalmente deducibles', 'Vacío = el crédito fiscal del periodo')}
+                {campo('retencionesAcumuladas', 'Retenciones acumuladas por descontar', 'Las que quedaron sin aplicar')}
+            </SimpleGrid>
+            <Table.ScrollContainer minWidth={560}>
+                <Table verticalSpacing={2} fz="xs" withTableBorder withColumnBorders>
+                    <Table.Thead><Table.Tr><Table.Th>Concepto</Table.Th><Table.Th ta="right">Base Imponible</Table.Th><Table.Th ta="right">Débito fiscal</Table.Th><Table.Th ta="right">Crédito fiscal</Table.Th></Table.Tr></Table.Thead>
+                    <Table.Tbody>
+                        {filas.map(([concepto, ...m]) => <Table.Tr key={concepto}><Table.Td>{concepto}</Table.Td>{m.map((v, n) => <Table.Td key={n} ta="right" fw={700}>{v === null ? '' : dinero(v)}</Table.Td>)}</Table.Tr>)}
+                    </Table.Tbody>
+                </Table>
+            </Table.ScrollContainer>
+        </Paper>
     );
 }
 
@@ -77,20 +102,24 @@ function TablaRetenciones({ filas }) {
     );
 }
 
-// Cierre de periodo: libros de compras y ventas en formato declarativo, retenciones de IVA y resumen del IVA
+// Cierre de periodo: libros de compras y ventas con el formato del contador, retenciones de IVA y resumen del periodo
 export default function CierreTab() {
-    const { nombre } = useAuth();
-    const [modo, setModo] = useState('mes');
+    const [modo, setModo] = useState('quincena');
+    // Quincena: del 1 al 15 o del 16 al fin de mes (como el libro del contador)
+    const [mesQ, setMesQ] = useState(dayjs().startOf('month').toDate());
+    const [mitad, setMitad] = useState(dayjs().date() <= 15 ? '1' : '2');
+    const [ajustes, setAjustes] = useState({ excedenteAnterior: '', deducibles: '', retencionesAcumuladas: '' });
     const [mes, setMes] = useState(dayjs().startOf('month').toDate()); // por defecto, el mes en curso (para cerrar el anterior, se elige arriba)
     const [rango, setRango] = useState([dayjs().startOf('month').toDate(), new Date()]);
     const [generando, setGenerando] = useState(false);
 
-    const consulta = modo === 'mes' ? (mes ? `mes=${dayjs(mes).format('YYYY-MM')}` : null) : (rango[0] && rango[1] ? `desde=${dayjs(rango[0]).format('YYYY-MM-DD')}&hasta=${dayjs(rango[1]).format('YYYY-MM-DD')}` : null);
+    const quincena = mesQ ? (mitad === '1' ? `desde=${dayjs(mesQ).format('YYYY-MM')}-01&hasta=${dayjs(mesQ).format('YYYY-MM')}-15` : `desde=${dayjs(mesQ).format('YYYY-MM')}-16&hasta=${dayjs(mesQ).endOf('month').format('YYYY-MM-DD')}`) : null;
+    const consulta = modo === 'quincena' ? quincena : modo === 'mes' ? (mes ? `mes=${dayjs(mes).format('YYYY-MM')}` : null) : (rango[0] && rango[1] ? `desde=${dayjs(rango[0]).format('YYYY-MM-DD')}&hasta=${dayjs(rango[1]).format('YYYY-MM-DD')}` : null);
     const { data, isLoading, error } = useQuery({ queryKey: ['libros', consulta], enabled: Boolean(consulta), queryFn: () => pedirJson(`/api/finanzas/libro?${consulta}`) });
 
     const pdf = async (tipo) => {
         setGenerando(true);
-        try { await descargarPdfLibro(tipo, data, nombre); } catch (e) { notifications.show({ color: 'red', title: 'No se pudo generar el PDF', message: e.message }); } finally { setGenerando(false); }
+        try { await descargarPdfLibro(tipo, data, ajustes); } catch (e) { notifications.show({ color: 'red', title: 'No se pudo generar el PDF', message: e.message }); } finally { setGenerando(false); }
     };
 
     const iva = data?.iva;
@@ -99,11 +128,13 @@ export default function CierreTab() {
             <Group justify="space-between" align="flex-end" wrap="wrap">
                 <Box>
                     <Title order={4} c="white">Libros de compras y ventas</Title>
-                    <Text size="sm" c="gray.4">Libros declarativos con retenciones de IVA, para el cierre del periodo y tu contador.</Text>
+                    <Text size="sm" c="gray.4">Con el formato del contador: por quincena, con las retenciones de IVA y el resumen del periodo imposición.</Text>
                 </Box>
                 <Group gap="sm">
-                    <SegmentedControl color="navy.9" value={modo} onChange={setModo} data={[{ value: 'mes', label: 'Mes' }, { value: 'rango', label: 'Rango' }]} />
-                    {modo === 'mes'
+                    <SegmentedControl color="navy.9" value={modo} onChange={setModo} data={[{ value: 'quincena', label: 'Quincena' }, { value: 'mes', label: 'Mes' }, { value: 'rango', label: 'Rango' }]} />
+                    {modo === 'quincena' && <MonthPickerInput value={mesQ} onChange={setMesQ} valueFormat="MMMM YYYY" maxDate={new Date()} w={170} aria-label="Mes de la quincena" />}
+                    {modo === 'quincena' && <SegmentedControl color="navy.9" value={mitad} onChange={setMitad} data={[{ value: '1', label: '1 al 15' }, { value: '2', label: '16 al fin' }]} />}
+                    {modo === 'quincena' ? null : modo === 'mes'
                         ? <MonthPickerInput value={mes} onChange={setMes} valueFormat="MMMM YYYY" maxDate={new Date()} w={190} aria-label="Mes del cierre" />
                         : <DatePickerInput type="range" value={rango} onChange={setRango} valueFormat="DD/MM/YYYY" maxDate={new Date()} w={260} aria-label="Rango de fechas" />}
                 </Group>
@@ -124,6 +155,8 @@ export default function CierreTab() {
                 </>}
             </SimpleGrid>
 
+            {data && <ResumenPeriodo data={data} ajustes={ajustes} setAjustes={setAjustes} />}
+
             <Paper withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
                 {isLoading || !data ? <Skeleton h={320} /> : (
                     <Tabs defaultValue="compras" keepMounted={false}>
@@ -140,7 +173,7 @@ export default function CierreTab() {
                                     <Text size="sm" fw={700}>{TIPOS[tipo].titulo} · {fmtFecha(data.desde)} al {fmtFecha(data.hasta)}</Text>
                                     <Group gap="xs">
                                         <Button size="xs" color="accent.6" leftSection={<IconFileTypePdf size={14} />} loading={generando} onClick={() => pdf(tipo)}>Descargar PDF</Button>
-                                        <Button size="xs" variant="light" leftSection={<IconDownload size={14} />} onClick={() => descargarCsvLibro(tipo, data)} disabled={!data[tipo].filas.length}>CSV (Excel)</Button>
+                                        <Button size="xs" variant="light" leftSection={<IconDownload size={14} />} onClick={() => descargarCsvLibro(tipo, data, ajustes)} disabled={!data[tipo].filas.length}>CSV (Excel)</Button>
                                     </Group>
                                 </Group>
                                 {tipo === 'ventas' && data.ventas.retencionesPendientes?.cant > 0 && (
