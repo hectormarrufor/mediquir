@@ -133,12 +133,29 @@ export async function POST(request, { params }) {
         let cat = await CategoriaFinanciera.findOne({ where: { nombre: 'Ingresos por Ventas' }, transaction: t });
         if (!cat) cat = await CategoriaFinanciera.create({ nombre: 'Ingresos por Ventas', tipo: 'INGRESO' }, { transaction: t });
 
+        // Igual que una venta de contado en el POS: el IVA de una factura no es ingreso de la empresa (es del SENIAT) y va aparte.
+        // Antes todo el pago entraba como ingreso y el balance contaba el IVA como ganancia.
+        const total = Number(venta.totalFinal) || 0;
+        const proporcionIva = venta.tipoDocumento === 'FACTURA' && total > 0 ? Math.max(0, Number(venta.montoIva) || 0) / total : 0;
+        const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+        const montoUsd = aDolares(montoPago, Number(venta.tasaCambio));
+        const ivaBs = r2(montoPago * proporcionIva);
+        const ivaUsd = r2(montoUsd * proporcionIva);
+        const comun = { tipo: 'INGRESO', fecha: fechaCaracas(), metodoPago: 'Pago Móvil', referencia: pago.referencia, tasaBcvAplicada: venta.tasaCambio, ventaId: venta.id, pagoSmsId: pago.id };
+
         await MovimientoFinanciero.create({
-            tipo: 'INGRESO', fecha: fechaCaracas(), metodoPago: 'Pago Móvil', referencia: pago.referencia,
-            montoUsd: aDolares(montoPago, Number(venta.tasaCambio)), tasaBcvAplicada: venta.tasaCambio, montoVes: montoPago,
+            ...comun, montoUsd: r2(montoUsd - ivaUsd), montoVes: r2(montoPago - ivaBs),
             descripcion: `Ingreso por Venta ${venta.numeroDocumento} - Pago Móvil vinculado a mano (Banco: ${pago.banco || 'N/A'}, Ref: ${pago.referencia})`,
-            categoriaId: cat.id, ventaId: venta.id, pagoSmsId: pago.id,
+            categoriaId: cat.id,
         }, { transaction: t });
+        if (ivaBs > 0) {
+            let catIva = await CategoriaFinanciera.findOne({ where: { nombre: 'IVA Recaudado' }, transaction: t });
+            if (!catIva) catIva = await CategoriaFinanciera.create({ nombre: 'IVA Recaudado', tipo: 'INGRESO' }, { transaction: t });
+            await MovimientoFinanciero.create({
+                ...comun, montoUsd: ivaUsd, montoVes: ivaBs,
+                descripcion: `IVA de Venta ${venta.numeroDocumento} (Impuesto SENIAT) - Pago Móvil vinculado a mano`, categoriaId: catIva.id,
+            }, { transaction: t });
+        }
 
         await t.commit();
         if (venta.tipoVenta === 'MAYOR') await avisarCliente(venta, 'PAGO_RECIBIDO', { abonoUsd: aDolares(montoPago, Number(venta.tasaCambio)), liquidada: true, saldoRestante: 0 });
