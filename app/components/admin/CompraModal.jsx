@@ -297,6 +297,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         if (carritoCompra.length === 0) return notifications.show({ message: 'El carrito de compra está vacío', color: 'orange' });
         if (!formCompra.values.numeroDocumento) return notifications.show({ message: 'Indica el número de factura o recibo', color: 'red' });
         if (!formCompra.values.proveedorId && !modoNuevoProveedor) return notifications.show({ message: 'Selecciona o crea un proveedor', color: 'red' });
+        if (formCompra.values.condicionPago === 'Credito' && !(Number(formCompra.values.diasCredito) >= 1)) return notifications.show({ message: 'Indica los días de crédito (si no, la cuenta por pagar nace vencida)', color: 'red' });
 
         setIsSubmitting(true);
         try {
@@ -342,6 +343,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         if (!formCompra.values.proveedorId && !modoNuevoProveedor) return notifications.show({ message: 'Selecciona o crea un proveedor', color: 'red' });
         if (String(gasto.descripcion).trim().length < 3) return notifications.show({ message: 'Describe en qué fue el gasto', color: 'red' });
         if (!gasto.categoriaId) return notifications.show({ message: 'Elige la categoría del gasto', color: 'red' });
+        if (formCompra.values.condicionPago === 'Credito' && !(Number(formCompra.values.diasCredito) >= 1)) return notifications.show({ message: 'Indica los días de crédito (si no, la cuenta por pagar nace vencida)', color: 'red' });
         if (!(subtotal > 0)) return notifications.show({ message: 'Indica el monto del gasto', color: 'red' });
         return handleEjecutarCompraFinal();
     };
@@ -389,7 +391,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             }
 
             notifications.show({ title: 'Éxito', message: `${esGasto ? 'Gasto registrado (no afecta el inventario).' : 'Factura registrada, inventario y costos actualizados.'}${data.comprobanteRetencion ? ` Comprobante de retención de IVA: ${data.comprobanteRetencion}` : ''}`, color: 'green', autoClose: 9000 });
-            queryClient.invalidateQueries(['productos-compra']);
+            queryClient.invalidateQueries({ queryKey: ['productos-compra'] });
+            queryClient.invalidateQueries({ queryKey: ['productos-pos'] }); // el POS ve el stock y el costo nuevos
             setCarritoCompra([]);
             setGasto({ descripcion: '', categoriaId: null, base: 0, exento: 0 });
             setModalSimulacionAbierto(false);
@@ -528,7 +531,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 value={gasto.categoriaId} onChange={(v) => setGasto({ ...gasto, categoriaId: v })}
                 nothingFoundMessage="No hay categorías de gasto: créalas en Finanzas" />
             <Group grow align="flex-start">
-                <NumberInput size="sm" label="Monto con IVA (base imponible)" description={esFactura ? `Se le suma el IVA ${CONFIG_FISCAL.alicuotaGeneral}%` : 'La nota de entrega no lleva IVA'} min={0} decimalScale={2} hideControls
+                <NumberInput size="sm" label="Monto gravado (base imponible)" description={esFactura ? `Se le suma el IVA ${CONFIG_FISCAL.alicuotaGeneral}%` : 'La nota de entrega no lleva IVA'} min={0} decimalScale={2} hideControls
                     value={gasto.base} onChange={(v) => setGasto({ ...gasto, base: v })} />
                 <NumberInput size="sm" label="Monto exento (sin IVA)" min={0} decimalScale={2} hideControls
                     value={gasto.exento} onChange={(v) => setGasto({ ...gasto, exento: v })} />
@@ -738,7 +741,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                             if (!res.ok) throw new Error(data.error);
 
                             notifications.show({ title: 'Proveedor Creado', message: 'Guardado y seleccionado.', color: 'green' });
-                            queryClient.invalidateQueries(['proveedores-compra']);
+                            queryClient.invalidateQueries({ queryKey: ['proveedores-compra'] });
                             formCompra.setFieldValue('proveedorId', String(data.id));
                             setModalCrearProv(false);
                             formNuevoProv.reset();

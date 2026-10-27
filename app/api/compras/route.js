@@ -120,11 +120,15 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Tipo de documento inválido: una compra es una factura o una nota de entrega' }, { status: 400 });
         }
         const esFactura = tipoDocumento === 'FACTURA';
-        const montoExento = esFactura ? Math.min(Math.max(0, Number(montoExentoCliente) || 0), Number(subtotal) || 0) : 0;
+        // Montos a 2 decimales en el servidor: el navegador los manda con todos los decimales de la multiplicación y el total
+        // podía no cuadrar por un céntimo con subtotal + IVA ya guardados
+        const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+        const subtotalNum = r2(Number(subtotal) || 0);
+        const montoExento = esFactura ? r2(Math.min(Math.max(0, Number(montoExentoCliente) || 0), subtotalNum)) : 0;
         // En un gasto el IVA lo calcula el servidor: es el de la alícuota general sobre lo que no es exento
-        const montoIva = esFactura ? (esGasto ? Math.round(((Number(subtotal) || 0) - montoExento) * CONFIG_FISCAL.alicuotaGeneral) / 100 : Math.max(0, Number(montoIvaCliente) || 0)) : 0;
+        const montoIva = esFactura ? (esGasto ? Math.round((subtotalNum - montoExento) * CONFIG_FISCAL.alicuotaGeneral) / 100 : r2(Math.max(0, Number(montoIvaCliente) || 0))) : 0;
         const numeroControl = esFactura ? numeroControlCliente : null;
-        const totalFinal = Math.round((Number(subtotal || 0) + montoIva) * 100) / 100;
+        const totalFinal = r2(subtotalNum + montoIva);
         const porcentajeRetencion = [75, 100].includes(Number(porcentajeRetencionCliente)) ? Number(porcentajeRetencionCliente) : CONFIG_FISCAL.porcentajeRetencionCompras;
         const retiene = CONFIG_FISCAL.agenteRetencionIva && esFactura && montoIva > 0 && aplicarRetencion !== false;
         const montoRetencion = retiene ? Math.round(montoIva * porcentajeRetencion) / 100 : 0;
@@ -249,7 +253,7 @@ export async function POST(request) {
                 statusPago: condicionPago === 'Contado' ? 'Pagado' : 'Pendiente',
                 moneda,
                 tasaCambio: Number(tasaCambio) || 1.00,
-                subtotal: Number(subtotal) || 0,
+                subtotal: subtotalNum,
                 montoIva: Number(montoIva) || 0,
                 montoRetencion: Number(montoRetencion) || 0,
                 totalFinal: Number(totalFinal) || 0,
@@ -273,7 +277,7 @@ export async function POST(request) {
                     tipo: 'COMPRA', fecha: fechaRet, periodo: periodoDe(fechaRet), comprobante: comprobanteRetencion,
                     facturaAfectada: numeroDocumento, numeroControlFactura: String(numeroControl || '').trim().slice(0, 30) || null,
                     contraparteRif: prov?.identificacion || null, contraparteNombre: prov?.nombre || null,
-                    baseImponible: aBs(Number(subtotal) - Number(montoExento || 0)), alicuota: 16, montoIva: aBs(montoIva),
+                    baseImponible: aBs(subtotalNum - Number(montoExento || 0)), alicuota: 16, montoIva: aBs(montoIva),
                     porcentajeRetencion: Number(porcentajeRetencion) || 75, ivaRetenido: aBs(montoRetencion),
                     tasaCambio: Number(tasaCambio) || 1, facturaCompraId: nuevaFacturaCompra.id, registradoPorId: registradoPorId || null,
                 }, { transaction: t });
