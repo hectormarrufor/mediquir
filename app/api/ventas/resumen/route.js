@@ -7,6 +7,11 @@ import { USD, alcanceDe } from '../_lib';
 export const dynamic = 'force-dynamic';
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
+// Lo que todavía falta por cobrar de una venta (USD): el saldo de su cuenta por cobrar o, sin cuenta, el total menos lo abonado.
+// Antes "Por cobrar" sumaba el total completo de cada venta sin pagar, aunque ya tuviera abonos.
+const SALDO_VENTA = `(CASE WHEN EXISTS (SELECT 1 FROM "CuentasPorCobrar" x WHERE x."ventaId" = v."id")
+    THEN (SELECT COALESCE(SUM(CASE WHEN x."moneda" = 'BS' THEN x."saldoPendiente" / NULLIF(x."tasaCambio", 0) ELSE x."saldoPendiente" END), 0) FROM "CuentasPorCobrar" x WHERE x."ventaId" = v."id")
+    ELSE GREATEST(${USD} - COALESCE((SELECT SUM(a."montoUsd") FROM "Abonos" a WHERE a."ventaId" = v."id"), 0), 0) END)`;
 
 // Indicadores y series para los gráficos de Ventas en un rango de fechas (día de Caracas)
 export async function GET(request) {
@@ -30,7 +35,7 @@ export async function GET(request) {
                 COUNT(*) FILTER (WHERE v."statusDespacho" <> 'Cancelado')::int AS ventas,
                 COALESCE(SUM(${USD}) FILTER (WHERE v."statusDespacho" <> 'Cancelado'), 0)::float AS total,
                 COUNT(*) FILTER (WHERE v."statusDespacho" = 'Cancelado')::int AS anuladas,
-                COALESCE(SUM(${USD}) FILTER (WHERE v."statusDespacho" <> 'Cancelado' AND v."statusPago" <> 'Pagado'), 0)::float AS "porCobrar",
+                COALESCE(SUM(${SALDO_VENTA}) FILTER (WHERE v."statusDespacho" <> 'Cancelado' AND v."statusPago" <> 'Pagado'), 0)::float AS "porCobrar",
                 COUNT(*) FILTER (WHERE v."statusDespacho" IN ('Pendiente', 'Empacado', 'Parcial'))::int AS "porDespachar"
                 ${base}`),
             consultar(`SELECT to_char((v."createdAt" AT TIME ZONE 'America/Caracas')::date, 'YYYY-MM-DD') AS dia,
