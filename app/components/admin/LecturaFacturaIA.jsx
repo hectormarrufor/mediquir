@@ -23,19 +23,44 @@ const limpiarParaBuscar = (texto) => String(texto || '')
 
 const PRESENTACION_IA = { CAJA: 'caja', BULTO: 'bulto', UNIDAD: 'unidad' };
 
+// Las tallas cuentan como medidas: «Faja ... L» no es la misma ficha que «Faja ... XL»
+const TALLAS = new Set(['xxs', 'xs', 's', 'm', 'l', 'xl', 'xxl', 'xxxl']);
+const esMedida = (t) => /\d/.test(t) || TALLAS.has(t);
+
 // Palabras y números de un texto, separando "x10" en "x" y "10" (así "1"X10" y "1" X 10" se comparan igual)
-const fichas = (texto) => normalizar(texto).replace(/([a-z])(\d)/g, '$1 $2').replace(/(\d)([a-z])/g, '$1 $2').split(' ').filter((t) => t.length > 1 || /\d/.test(t));
+const fichas = (texto) => normalizar(texto).replace(/([a-z])(\d)/g, '$1 $2').replace(/(\d)([a-z])/g, '$1 $2').split(' ').filter((t) => t.length > 1 || esMedida(t));
+
+// Muchos artículos tienen una ficha por marca con el mismo nombre (fajas, muletas, guantes...): la que vale es la marca que llegó.
+// ¿La marca del producto está en la factura? (la que leyó la IA o dentro de la descripción, como palabra completa)
+export const marcaEnFactura = (producto, linea) => {
+    const marca = normalizar(producto?.marca?.nombre);
+    if (marca.length < 2) return false;
+    return ` ${normalizar(`${linea?.marca || ''} ${linea?.descripcion || ''}`)} `.includes(` ${marca} `);
+};
+
+// Fichas agrupadas por nombre, para ofrecer las otras marcas del mismo artículo
+export const agruparPorNombre = (productos) => {
+    const grupos = new Map();
+    for (const p of productos || []) {
+        const k = normalizar(p.nombre);
+        grupos.set(k, [...(grupos.get(k) || []), p]);
+    }
+    return grupos;
+};
+const otrasMarcas = (producto, porNombre) => (producto ? (porNombre.get(normalizar(producto.nombre)) || []).filter((p) => Number(p.id) !== Number(producto.id)) : []);
 
 // Reordena los candidatos del buscador: pesan las palabras en común y, sobre todo, que las MEDIDAS coincidan
-// (con el buscador solo, «Durapore 1"» proponía primero «Durapore 1/2"»). Un número del producto que la factura no dice resta.
-function reordenar(candidatos, descripcion) {
-    const deFactura = new Set(fichas(descripcion));
+// (con el buscador solo, «Durapore 1"» proponía primero «Durapore 1/2"»). Una medida o talla del producto que la factura no dice
+// resta. La marca solo desempata: entre fichas del mismo artículo pasa adelante la de la marca que dice la factura, pero no
+// adelanta a otro artículo de esa marca.
+function reordenar(candidatos, linea) {
+    const deFactura = new Set(fichas(linea.descripcion));
     return candidatos
         .map((p, i) => {
             const delProducto = fichas(p.nombre);
             const comunes = delProducto.filter((t) => deFactura.has(t)).length;
-            const numerosAjenos = delProducto.filter((t) => /\d/.test(t) && !deFactura.has(t)).length;
-            return { p, puntos: comunes - numerosAjenos * 1.5, i };
+            const medidasAjenas = delProducto.filter((t) => esMedida(t) && !deFactura.has(t)).length;
+            return { p, puntos: comunes - medidasAjenas * 1.5 + (marcaEnFactura(p, linea) ? 0.5 : 0), i };
         })
         .sort((a, b) => b.puntos - a.puntos || a.i - b.i)
         .map((x) => x.p);
@@ -44,11 +69,13 @@ function reordenar(candidatos, descripcion) {
 /**
  * Prepara los renglones leídos para revisarlos: producto propuesto y presentación (unidad, caja o bulto).
  *  · Si este proveedor ya tiene ese código o descripción enlazado (se aprende al registrar compras), se propone ese producto.
- *  · Si no, se ofrecen hasta 3 candidatos por parecido, pero NO se elige ninguno: lo elige la persona.
+ *    Si la factura dice otra marca y existe la ficha de ese mismo artículo en esa marca, se propone esa.
+ *  · Si no, se ofrecen candidatos por parecido (con las demás marcas del mismo artículo), pero NO se elige ninguno: lo elige la persona.
  */
 export function prepararRenglones(lineas, productos, equivalencias) {
     const porClave = new Map((equivalencias || []).map((e) => [e.clave, e]));
     const porId = new Map((productos || []).map((p) => [Number(p.id), p]));
+    const porNombre = agruparPorNombre(productos);
     return (lineas || []).map((l, i) => {
         const clave = claveRenglonProveedor(l);
         const aprendido = clave ? porClave.get(clave) : null;
@@ -65,13 +92,20 @@ export function prepararRenglones(lineas, productos, equivalencias) {
             }
             if (producto) origen = 'barras';
         }
-        const candidatos = reordenar(buscarProductos(productos, limpiarParaBuscar(l.descripcion)).slice(0, 15), l.descripcion).slice(0, 3).map((p) => Number(p.id));
+        // Lo enlazado antes es de una marca; si esta vez la factura dice otra y existe esa ficha, se propone la de la factura
+        if (origen === 'aprendido' && !marcaEnFactura(producto, l)) {
+            const deLaFactura = otrasMarcas(producto, porNombre).find((p) => marcaEnFactura(p, l));
+            if (deLaFactura) { producto = deLaFactura; origen = 'marca'; }
+        }
+        const top = reordenar(buscarProductos(productos, limpiarParaBuscar(l.descripcion)).slice(0, 15), l).slice(0, 3);
+        // Junto a cada candidato, las demás marcas del mismo artículo (hasta 6 opciones): la persona elige la que llegó
+        const candidatos = [...new Set(top.flatMap((p) => [p, ...otrasMarcas(p, porNombre)]).map((p) => Number(p.id)))].slice(0, 6);
         return {
             idx: i, clave, linea: l,
             productoId: producto ? Number(producto.id) : null,
             origen,
             candidatos,
-            unidadCompra: (origen === 'aprendido' && aprendido.unidadCompra) || unidadPorCodigo || PRESENTACION_IA[l.unidadVenta] || 'unidad',
+            unidadCompra: (aprendido && (origen === 'aprendido' || origen === 'marca') && aprendido.unidadCompra) || unidadPorCodigo || PRESENTACION_IA[l.unidadVenta] || 'unidad',
             contenido: Number(l.unidadesPorPresentacion) > 1 ? Math.round(Number(l.unidadesPorPresentacion)) : null,
             incluir: true,
         };
@@ -86,9 +120,25 @@ const contenidoDe = (fila, producto) => {
     return Number(producto?.unidadesPorBulto) > 1 ? Number(producto.unidadesPorBulto) : 0;
 };
 
-function FilaRenglon({ fila, productos, opciones, porId, simbolo, onCambiar }) {
+// Hay fichas con el mismo nombre: el código y la marca ayudan a elegir la correcta
+const etiquetaProducto = (p) => `${p.nombre} · ${p.codigo}${p.marca?.nombre ? ` · ${p.marca.nombre}` : ''}`;
+
+function FilaRenglon({ fila, opciones, porId, porNombre, simbolo, onCambiar }) {
     const l = fila.linea;
     const producto = fila.productoId ? porId.get(fila.productoId) : null;
+    const hermanos = otrasMarcas(producto, porNombre);
+    const marcaDistinta = producto && l.marca && !marcaEnFactura(producto, l);
+    const candidatos = fila.candidatos.map((id) => porId.get(id)).filter(Boolean);
+    const variasMarcas = candidatos.some((p) => otrasMarcas(p, porNombre).length > 0);
+    const chip = (p) => {
+        const deLaFactura = marcaEnFactura(p, l);
+        return (
+            <Button key={p.id} size="compact-xs" variant={deLaFactura ? 'filled' : 'light'} color={deLaFactura ? 'teal' : 'grape'} tt="none"
+                onClick={() => onCambiar({ productoId: Number(p.id), origen: 'elegido' })} title={`Stock ${p.stockAlmacen ?? '—'}${deLaFactura ? ' · es la marca que dice la factura' : ''}`}>
+                {deLaFactura ? '✓ ' : ''}{etiquetaProducto(p)}
+            </Button>
+        );
+    };
     const contenido = contenidoDe(fila, producto);
     const faltaContenido = Boolean(producto) && fila.unidadCompra !== 'unidad' && !(contenido > 1);
     const ivaFicha = Number(producto?.porcentajeIva ?? 16);
@@ -105,7 +155,7 @@ function FilaRenglon({ fila, productos, opciones, porId, simbolo, onCambiar }) {
                 <Box style={{ minWidth: 0 }}>
                     <Text size="sm" fw={700} lh={1.3}>{fila.idx + 1}. {l.descripcion}</Text>
                     <Text size="xs" c="dimmed">
-                        {l.codigo ? `Cód. proveedor ${l.codigo} · ` : ''}{fmt(l.cantidad, 3)} {l.unidadVenta ? l.unidadVenta.toLowerCase() : ''} × {simbolo} {fmt(l.precioUnitario, 4)} = <b>{simbolo} {fmt(total)}</b>
+                        {l.codigo ? `Cód. proveedor ${l.codigo} · ` : ''}{l.marca ? <>Marca <b>{l.marca}</b> · </> : ''}{fmt(l.cantidad, 3)} {l.unidadVenta ? l.unidadVenta.toLowerCase() : ''} × {simbolo} {fmt(l.precioUnitario, 4)} = <b>{simbolo} {fmt(total)}</b>
                     </Text>
                 </Box>
                 <Group gap={6} wrap="nowrap">
@@ -119,17 +169,26 @@ function FilaRenglon({ fila, productos, opciones, porId, simbolo, onCambiar }) {
                 onChange={(v) => onCambiar({ productoId: v ? Number(v) : null, origen: v ? 'elegido' : null })} />
             {fila.origen === 'aprendido' && <Text size="xs" c="teal.8" mt={2}>✓ Ya enlazado antes con este proveedor (puedes cambiarlo)</Text>}
             {fila.origen === 'barras' && <Text size="xs" c="teal.8" mt={2}>✓ El código de la factura es el código de barras de este producto (puedes cambiarlo)</Text>}
-            {!producto && fila.candidatos.length > 0 && (
+            {fila.origen === 'marca' && <Text size="xs" c="teal.8" mt={2}>✓ Este artículo ya estaba enlazado con este proveedor; propongo la ficha de la marca que dice la factura (puedes cambiarla)</Text>}
+            {marcaDistinta && (
+                <Text size="xs" c="orange.8" mt={2}>
+                    Ojo: la factura dice marca <b>{l.marca}</b> y esta ficha {producto.marca?.nombre ? <>es de <b>{producto.marca.nombre}</b></> : 'no tiene marca'}. Elige la ficha de la marca que llegó o, si no existe, créala en el inventario.
+                </Text>
+            )}
+            {producto && hermanos.length > 0 && (
                 <Group gap={4} mt={6}>
-                    <Text size="xs" c="dimmed">¿Es alguno de estos?</Text>
-                    {fila.candidatos.map((id) => porId.get(id) && (
-                        <Button key={id} size="compact-xs" variant="light" color="grape" tt="none" onClick={() => onCambiar({ productoId: id, origen: 'elegido' })}
-                            title={`Código ${porId.get(id).codigo}${porId.get(id).marca?.nombre ? ` · ${porId.get(id).marca.nombre}` : ''} · stock ${porId.get(id).stockAlmacen ?? '—'}`}>
-                            {/* Hay fichas con el mismo nombre: el código y la marca ayudan a elegir la correcta */}
-                            {porId.get(id).nombre} · {porId.get(id).codigo}{porId.get(id).marca?.nombre ? ` · ${porId.get(id).marca.nombre}` : ''}
-                        </Button>
-                    ))}
+                    <Text size="xs" c="dimmed">Mismo artículo en otra marca:</Text>
+                    {hermanos.slice(0, 6).map(chip)}
                 </Group>
+            )}
+            {!producto && candidatos.length > 0 && (
+                <>
+                    <Group gap={4} mt={6}>
+                        <Text size="xs" c="dimmed">¿Es alguno de estos?</Text>
+                        {candidatos.map(chip)}
+                    </Group>
+                    {variasMarcas && !l.marca && <Text size="xs" c="orange.8" mt={2}>Este artículo tiene fichas de varias marcas y la factura no dice cuál: elige la marca que llegó (mírala en la mercancía).</Text>}
+                </>
             )}
 
             {producto && (
@@ -163,7 +222,8 @@ function FilaRenglon({ fila, productos, opciones, porId, simbolo, onCambiar }) {
 export function RevisionRenglonesIA({ opened, onClose, renglonesIniciales, productos, simbolo, proveedorNombre, onConfirmar }) {
     const [filas, setFilas] = useState(renglonesIniciales || []);
     const porId = useMemo(() => new Map((productos || []).map((p) => [Number(p.id), p])), [productos]);
-    const opciones = useMemo(() => (productos || []).map((p) => ({ value: String(p.id), label: `${p.nombre} · ${p.codigo}${p.marca?.nombre ? ` · ${p.marca.nombre}` : ''}` })), [productos]);
+    const porNombre = useMemo(() => agruparPorNombre(productos), [productos]);
+    const opciones = useMemo(() => (productos || []).map((p) => ({ value: String(p.id), label: etiquetaProducto(p) })), [productos]);
     const cambiar = (idx, cambios) => setFilas((prev) => prev.map((f) => (f.idx === idx ? { ...f, ...cambios } : f)));
 
     const incluidas = filas.filter((f) => f.incluir);
@@ -180,7 +240,7 @@ export function RevisionRenglonesIA({ opened, onClose, renglonesIniciales, produ
                 </Alert>
                 <ScrollArea.Autosize mah="60vh" type="auto">
                     <Stack gap="xs">
-                        {filas.map((f) => <FilaRenglon key={f.idx} fila={f} productos={productos} opciones={opciones} porId={porId} simbolo={simbolo} onCambiar={(c) => cambiar(f.idx, c)} />)}
+                        {filas.map((f) => <FilaRenglon key={f.idx} fila={f} opciones={opciones} porId={porId} porNombre={porNombre} simbolo={simbolo} onCambiar={(c) => cambiar(f.idx, c)} />)}
                     </Stack>
                 </ScrollArea.Autosize>
                 <Group justify="space-between" wrap="wrap" gap="xs">

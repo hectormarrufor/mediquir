@@ -34,6 +34,9 @@ const PROMPT_FACTURA = `
      si no coincide, revisa si te falta alguna fila. Cada renglón lleva:
        - codigo: el código o referencia del artículo del PROVEEDOR tal como está impreso (columna "Código", "Ref", "Cód."), o null.
        - descripcion: texto completo del artículo, tal como está impreso.
+       - marca: la marca o el fabricante del artículo SOLO si está impresa en el renglón (dentro de la descripción, por ejemplo
+         "FAJA DORSOLUMBAR TALLA L PROTEC" -> "PROTEC", o en una columna "Marca"/"Fabricante"), tal como aparece; si no aparece, null.
+         No la deduzcas ni la inventes: el mismo artículo existe en varias marcas y la que vale es la que llegó.
        - cantidad: número tal como está en la columna de cantidad.
        - unidadVenta: en qué se vende ese renglón según la factura: "CAJA" si la cantidad son cajas (columna unidad "CJ", "CAJA",
          o la descripción dice "CAJA X 100", "C/100", "CJ X 50"), "BULTO" si son bultos o fardos ("BULTO", "BTO", "FARDO"),
@@ -68,7 +71,7 @@ const PROMPT_FACTURA = `
     "proveedorDireccion": "string" | null,
     "moneda": "VES" | "USD",
     "tasaBcv": number | null,
-    "lineas": [ { "codigo": "string" | null, "descripcion": "string", "cantidad": number, "unidadVenta": "CAJA" | "BULTO" | "UNIDAD" | null,
+    "lineas": [ { "codigo": "string" | null, "descripcion": "string", "marca": "string" | null, "cantidad": number, "unidadVenta": "CAJA" | "BULTO" | "UNIDAD" | null,
                   "unidadesPorPresentacion": number | null, "cajasPorBulto": number | null, "precioUnitario": number, "precioUnitarioUsd": number | null,
                   "exento": boolean, "totalLinea": number | null } ],
     "montoExento": number | null,
@@ -97,6 +100,7 @@ export async function analizarFactura(buffer, mimeType) {
         .map((l) => ({
             codigo: l?.codigo ? String(l.codigo).trim().slice(0, 60) : null,
             descripcion: String(l?.descripcion || '').trim().slice(0, 300),
+            marca: l?.marca ? String(l.marca).trim().slice(0, 80) : null,
             cantidad: numero(l?.cantidad),
             unidadVenta: ['CAJA', 'BULTO', 'UNIDAD'].includes(l?.unidadVenta) ? l.unidadVenta : null,
             unidadesPorPresentacion: numero(l?.unidadesPorPresentacion),
