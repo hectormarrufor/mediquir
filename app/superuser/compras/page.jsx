@@ -16,6 +16,8 @@ import PagarRetenerModal, { estadoRetencion, saldoDe } from './_components/Pagar
 import { fechaCaracas, formatearFecha } from '@/app/constants/hora';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { useAuth } from '@/hooks/useAuth';
+import GuiaTutorial from '../_components/GuiaTutorial';
+import { IconListDetails, IconPrinter } from '@tabler/icons-react';
 
 const CompraModal = dynamic(() => import('@/app/components/admin/CompraModal'), { ssr: false });
 
@@ -257,6 +259,33 @@ export default function ComprasDashboardPage() {
                         <Text size="sm" c="gray.4">{vista ? VISTAS[vista].sub : 'Facturas de proveedores, gastos, retenciones de IVA y cuentas por pagar.'}</Text>
                     </Box>
                 </Group>
+                {/* Guías: se abren solas la primera vez y se pueden volver a ver; «No volver a mostrar» las oculta */}
+                {!vista && !esVendedor && (
+                    <GuiaTutorial clave="registro-compras-v1" titulo="Cómo es el proceso de compras" textoBoton="Cómo es el proceso"
+                        intro="Primero la factura (el documento), después el registro. Aquí se registran las facturas de los proveedores y los gastos, sus retenciones de IVA, lo que falta pagar y los libros."
+                        pasos={[
+                            { icono: IconFilePlus, titulo: '1. Llega la factura del proveedor', texto: 'Toca «Registrar factura de proveedor» y súbele la foto o el PDF: la IA lee el número, el control, el RIF, los renglones y los totales, y propone los productos. Revisa que cuadre al céntimo y registra.\nEn la misma ventana eliges cuándo se retiene el IVA: ahora, al pagar o no se retiene.', accion: { texto: 'Registrar una factura', onClick: () => setCompraAbierta(true) } },
+                            { icono: IconCoins, color: 'teal', titulo: '2. Los gastos van aparte', texto: 'Lo que no es mercancía (servicios, comida, equipos, Cashea…) se registra con «Registrar gasto»: no toca el inventario pero sí entra al libro de compras.', accion: { texto: 'Registrar un gasto', onClick: () => setGastoAbierto(true) } },
+                            { icono: IconReceiptTax, color: 'orange', titulo: '3. Retenciones de IVA', texto: 'En «Retenciones de IVA» → «Por retener» están las que quedaron para después. «Retener» saca el comprobante con el siguiente número (para imprimir o mandar por WhatsApp). Si a una factura no se le hará retención, «No aplica retención».', accion: { texto: 'Ir a Retenciones de IVA', onClick: () => abrir('retenciones') } },
+                            { icono: IconCash, color: 'red', titulo: '4. Cuentas por pagar', texto: 'Las facturas a crédito esperan aquí. «Pagar y retener» hace las dos cosas de una vez. Si pagó otra persona y no tienes el comprobante, marca «Ya se pagó, pero no tengo el comprobante».', accion: { texto: 'Ir a Cuentas por pagar', onClick: () => abrir('por_pagar') } },
+                            { icono: IconBook2, color: 'indigo', titulo: '5. Cierre de la quincena', texto: 'En «Libros de compras y ventas» eliges la quincena y descargas los libros con el formato del contador.', accion: { texto: 'Ir a los libros', onClick: () => router.push('/superuser/finanzas?tab=cierre') } },
+                        ]} />
+                )}
+                {vista === 'retenciones' && (
+                    <GuiaTutorial clave="retenciones-iva-v1" titulo="Retenciones de IVA" intro="La retención de IVA que la empresa le hace a sus proveedores."
+                        pasos={[
+                            { icono: IconReceiptTax, color: 'orange', titulo: 'Por retener', texto: 'Las facturas que quedaron «para retener al pagar». «Retener» genera el comprobante con el siguiente número; marca varias de un proveedor para uno solo.' },
+                            { icono: IconReceiptOff, color: 'gray', titulo: 'No aplica retención', texto: 'Si a una factura nunca se le hará retención (por ejemplo, se pagó con la tarjeta de la empresa), toca «No aplica retención» y deja de salir aquí.' },
+                            { icono: IconPrinter, color: 'teal', titulo: 'Comprobantes emitidos', texto: 'Los comprobantes del periodo: «Ver, imprimir o enviar» abre el comprobante para imprimirlo, descargarlo o mandarlo al proveedor por WhatsApp.' },
+                        ]} />
+                )}
+                {vista === 'por_pagar' && (
+                    <GuiaTutorial clave="cuentas-por-pagar-v1" titulo="Cuentas por pagar" intro="Lo que se le debe a cada proveedor."
+                        pasos={[
+                            { icono: IconCash, color: 'red', titulo: 'Pagar (y retener)', texto: '«Pagar» en una factura, o marca varias de un mismo proveedor y «Pagar y retener»: sale el comprobante de retención y el pago del total menos lo retenido, de una vez.' },
+                            { icono: IconListDetails, color: 'teal', titulo: 'Sin comprobante de pago', texto: 'Si pagó otra persona y no te pasó el capture, marca «Ya se pagó, pero no tengo el comprobante»: queda anotado y con tu nombre. Pon la fecha real del pago.' },
+                        ]} />
+                )}
                 {vista === 'periodo' && (
                     <Group gap="xs">
                         <Button color="accent.6" leftSection={<IconFilePlus size={18} />} onClick={() => setCompraAbierta(true)} disabled={!tasaBcv}>Registrar factura</Button>

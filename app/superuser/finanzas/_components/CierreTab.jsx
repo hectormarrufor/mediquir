@@ -7,6 +7,7 @@ import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { IconAlertTriangle, IconBook2, IconDownload, IconFileTypePdf, IconInfoCircle, IconReceiptTax } from '@tabler/icons-react';
+import GuiaTutorial from '../../_components/GuiaTutorial';
 import { COLUMNAS, TIPOS, celda, celdaTotal, filasLibro, totalesLibro, resumenPeriodo, descargarCsvLibro, descargarCsvRetenciones, descargarPdfLibro, dinero, fmtFecha } from '../_lib/libroExport';
 
 async function pedirJson(url) {
@@ -131,6 +132,12 @@ export default function CierreTab() {
                     <Text size="sm" c="gray.4">Con el formato del contador: por quincena, con las retenciones de IVA y el resumen del periodo imposición.</Text>
                 </Box>
                 <Group gap="sm">
+                    <GuiaTutorial clave="libros-v1" titulo="Libros de compras y ventas" intro="Los libros del IVA con el formato del contador, en bolívares."
+                        pasos={[
+                            { icono: IconBook2, color: 'indigo', titulo: '1. Elige la quincena', texto: '«Quincena», el mes y «1 al 15» o «16 al fin». También puedes ver un mes completo o un rango.' },
+                            { icono: IconReceiptTax, color: 'orange', titulo: '2. El resumen del periodo', texto: 'Lo de esta quincena lo calcula el sistema. Lo que viene de la declaración anterior lo escribes tú (o te lo pasa el contador): el excedente de crédito fiscal del mes anterior, los créditos fiscales totalmente deducibles y las retenciones acumuladas por descontar.' },
+                            { icono: IconFileTypePdf, color: 'red', titulo: '3. Revisa y descarga', texto: 'En las pestañas Compras y Ventas ves cada libro tal como sale en el PDF (facturas, notas y COM.RET). «Descargar PDF» o «CSV (Excel)» llevan el resumen al pie.' },
+                        ]} />
                     <SegmentedControl color="navy.9" value={modo} onChange={setModo} data={[{ value: 'quincena', label: 'Quincena' }, { value: 'mes', label: 'Mes' }, { value: 'rango', label: 'Rango' }]} />
                     {modo === 'quincena' && <MonthPickerInput value={mesQ} onChange={setMesQ} valueFormat="MMMM YYYY" maxDate={new Date()} w={170} aria-label="Mes de la quincena" />}
                     {modo === 'quincena' && <SegmentedControl color="navy.9" value={mitad} onChange={setMitad} data={[{ value: '1', label: '1 al 15' }, { value: '2', label: '16 al fin' }]} />}
