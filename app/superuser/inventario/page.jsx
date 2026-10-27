@@ -1,55 +1,41 @@
-// app/superuser/inventario/page.js
+// app/superuser/inventario/page.jsx
 'use client';
 
-import { Button, Card, Title, Stack, SimpleGrid, useMantineTheme, Group, ThemeIcon, Text } from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
+import { Box, Button, Card, Group, SimpleGrid, Stack, Text, ThemeIcon, Title } from '@mantine/core';
 import { useRouter } from 'next/navigation';
-import { IconEngine } from '@tabler/icons-react';
+import { IconArrowLeft, IconArrowUpRight, IconBarcode, IconPhotoCheck, IconReceipt2, IconSearch, IconTable } from '@tabler/icons-react';
+
+// Módulo de inventario: accesos a cada pantalla. Las entradas de inventario son las compras (cada compra registrada suma stock),
+// por eso ese botón lleva a Compras (antes llevaba a una página que no existía).
+const OPCIONES = [
+    { href: '/superuser/inventario/productos', titulo: 'Productos', detalle: 'Hoja de inventario: stock, costos, precios y creación de productos.', icono: IconTable, color: 'blue' },
+    { href: '/superuser/inventario/consulta', titulo: 'Consultar existencias', detalle: 'Buscar un producto y ver cuánto hay y su precio.', icono: IconSearch, color: 'teal' },
+    { href: '/superuser/compras', titulo: 'Entradas (compras)', detalle: 'Cada compra registrada suma stock y actualiza el costo.', icono: IconReceipt2, color: 'grape' },
+    { href: '/superuser/inventario/salidas', titulo: 'Salidas de inventario', detalle: 'Lo que salió por ventas y pedidos, con su estado.', icono: IconArrowUpRight, color: 'red' },
+    { href: '/superuser/inventario/auditar', titulo: 'Auditar fichas', detalle: 'Fotos, precios, presentación, caja y bulto de cada producto.', icono: IconPhotoCheck, color: 'orange' },
+    { href: '/superuser/inventario/codigos', titulo: 'Códigos de barras', detalle: 'Escanear y guardar el código de cada empaque desde el teléfono.', icono: IconBarcode, color: 'cyan' },
+];
 
 export default function InventarioDashboardPage() {
     const router = useRouter();
-    const theme = useMantineTheme();
-    const isMobile = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
 
     return (
-        <Stack justify="center" align="center" h="100vh">
-            <Card
-                shadow="xl"
-                padding="xl"
-                radius="md"
-                withBorder
-                style={{ width: '100%', maxWidth: 800 }}
-            >
-                <Title order={2} ta="center" mb="lg" c="dark.8">
-                    Módulo de Inventario y Anatomía
-                </Title>
-
-                <SimpleGrid
-                    cols={isMobile ? 1 : 2}
-                    spacing="md"
-                    breakpoints={[
-                        { maxWidth: 'lg', cols: 2 },
-                        { maxWidth: 'md', cols: 1 },
-                    ]}
-                >
-                    <Button fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/productos')}>
-                        Lista y creación de Productos 📦
-                    </Button>
-                    <Button fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/entradas')}>
-                        Entradas de Inventario 📥
-                    </Button>
-                    <Button fullWidth variant="filled" size="md" onClick={() => router.push('/superuser/inventario/salidas')}>
-                        Salidas de Inventario 📤
-                    </Button>
-                 
-                </SimpleGrid>
-
-                <Group justify="flex-end" mt="xl">
-                    <Button variant="default" onClick={() => router.push('/superuser')}>
-                        Volver al Menú Principal
-                    </Button>
-                </Group>
-            </Card>
-        </Stack>
+        <Box maw={960} mx="auto" px="md" py="md">
+            <Group mb="md" gap="sm">
+                <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={() => router.push('/superuser')}>Panel</Button>
+                <Title order={2} c="white">Inventario</Title>
+            </Group>
+            <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
+                {OPCIONES.map((o) => (
+                    <Card key={o.href} withBorder radius="lg" p="md" style={{ cursor: 'pointer', boxShadow: 'var(--mm-shadow-card)' }} onClick={() => router.push(o.href)}>
+                        <Stack gap={6}>
+                            <ThemeIcon size={42} radius="md" variant="light" color={o.color}><o.icono size={24} /></ThemeIcon>
+                            <Text fw={800} c="navy.9">{o.titulo}</Text>
+                            <Text size="sm" c="dimmed">{o.detalle}</Text>
+                        </Stack>
+                    </Card>
+                ))}
+            </SimpleGrid>
+        </Box>
     );
 }

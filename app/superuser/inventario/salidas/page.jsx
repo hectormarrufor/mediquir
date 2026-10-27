@@ -6,19 +6,25 @@ import {
     TextInput, Select, ScrollArea, Avatar, ActionIcon, Tooltip, 
     Grid
 } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
-import { IconSearch, IconFilter, IconArrowUpRight, IconReceipt, IconEdit } from '@tabler/icons-react';
-import dayjs from 'dayjs';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
+import { IconSearch, IconFilter, IconArrowUpRight, IconReceipt, IconExternalLink } from '@tabler/icons-react';
+
+import { fechaCaracas, formatearFecha, formatearFechaHora } from '@/app/constants/hora';
 
 export default function SalidasInventarioPage() {
+    const router = useRouter();
     const [search, setSearch] = useState('');
     const [filterEstado, setFilterEstado] = useState(null);
+    // Por defecto el mes en curso: se piden al servidor solo las salidas del rango (antes se descargaban todas)
+    const [desde, setDesde] = useState(`${fechaCaracas().slice(0, 8)}01`);
+    const [hasta, setHasta] = useState(fechaCaracas());
 
-    // Fetch de las Salidas Globales
     const { data: salidas, isLoading, isError } = useQuery({
-        queryKey: ['salidas-inventario'],
+        queryKey: ['salidas-inventario', desde, hasta],
+        placeholderData: keepPreviousData,
         queryFn: async () => {
-            const res = await fetch('/api/inventario/salidas');
+            const res = await fetch(`/api/inventario/salidas?desde=${desde}&hasta=${hasta}`);
             if (!res.ok) throw new Error('Error al cargar salidas');
             return res.json();
         }
@@ -36,6 +42,7 @@ export default function SalidasInventarioPage() {
         switch(estado) {
             case 'Entregada': return 'teal';
             case 'Pendiente': return 'yellow';
+            case 'Empacada': return 'blue';
             case 'Cancelada': return 'red';
             case 'Rechazada': return 'orange';
             case 'Esperando Firma': return 'blue';
@@ -85,20 +92,26 @@ export default function SalidasInventarioPage() {
             {/* PANEL DE FILTROS */}
             <Paper p="md" radius="md" withBorder bg="gray.0" mb="xl">
                 <Grid align="flex-end">
-                    <Grid.Col span={{ base: 12, md: 6 }}>
-                        <TextInput 
-                            label="Buscar Movimiento" 
-                            placeholder="Buscar por producto, justificación o N° de factura..." 
-                            leftSection={<IconSearch size={16} />} 
-                            value={search} 
-                            onChange={(e) => setSearch(e.currentTarget.value)} 
+                    <Grid.Col span={{ base: 12, md: 4 }}>
+                        <TextInput
+                            label="Buscar movimiento"
+                            placeholder="Producto, justificación o N° de documento…"
+                            leftSection={<IconSearch size={16} />}
+                            value={search}
+                            onChange={(e) => setSearch(e.currentTarget.value)}
                         />
                     </Grid.Col>
-                    <Grid.Col span={{ base: 12, md: 3 }}>
-                        <Select 
-                            label="Filtrar por Estado" 
-                            placeholder="Todos los estados" 
-                            data={['Pendiente', 'Entregada', 'Cancelada', 'Rechazada', 'Esperando Firma', 'Esperando Devolucion', 'Devuelta']}
+                    <Grid.Col span={{ base: 6, md: 2 }}>
+                        <TextInput type="date" label="Desde" value={desde} max={hasta} onChange={(e) => e.currentTarget.value && setDesde(e.currentTarget.value)} />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 6, md: 2 }}>
+                        <TextInput type="date" label="Hasta" value={hasta} min={desde} onChange={(e) => e.currentTarget.value && setHasta(e.currentTarget.value)} />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 4 }}>
+                        <Select
+                            label="Filtrar por estado"
+                            placeholder="Todos los estados"
+                            data={['Pendiente', 'Empacada', 'Entregada', 'Cancelada', 'Rechazada', 'Esperando Devolucion', 'Devuelta']}
                             value={filterEstado} 
                             onChange={setFilterEstado} 
                             clearable 
@@ -136,8 +149,8 @@ export default function SalidasInventarioPage() {
                                     return (
                                         <Table.Tr key={salida.id}>
                                             <Table.Td>
-                                                <Text size="sm" fw={500}>{dayjs(salida.fecha).format('DD/MM/YYYY')}</Text>
-                                                <Text size="xs" c="dimmed">{dayjs(salida.createdAt).format('hh:mm A')}</Text>
+                                                <Text size="sm" fw={500}>{formatearFecha(salida.fecha)}</Text>
+                                                <Text size="xs" c="dimmed">{formatearFechaHora(salida.createdAt, { day: undefined, month: undefined, year: undefined })}</Text>
                                             </Table.Td>
                                             
                                             <Table.Td>
@@ -179,11 +192,13 @@ export default function SalidasInventarioPage() {
                                             </Table.Td>
 
                                             <Table.Td ta="center">
-                                                <Tooltip label="Gestionar Despacho / Ajustar Estado">
-                                                    <ActionIcon variant="light" color="blue" size="md">
-                                                        <IconEdit size={16} />
-                                                    </ActionIcon>
-                                                </Tooltip>
+                                                {salida.venta ? (
+                                                    <Tooltip label="Ver el pedido (empaque y despacho)">
+                                                        <ActionIcon variant="light" color="blue" size="md" aria-label="Ver pedido" onClick={() => router.push(`/superuser/ventas/${salida.venta.id}`)}>
+                                                            <IconExternalLink size={16} />
+                                                        </ActionIcon>
+                                                    </Tooltip>
+                                                ) : '—'}
                                             </Table.Td>
                                         </Table.Tr>
                                     );

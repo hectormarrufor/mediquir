@@ -111,7 +111,6 @@ function PanelAdministrativo() {
     const [puestosList, setPuestosList] = useState([]);
     const [usuariosList, setUsuariosList] = useState([]);
 
-    const [pendientesFirma, setPendientesFirma] = useState([]);
     const [procesandoFirma, setProcesandoFirma] = useState(false);
     const [modalRechazo, setModalRechazo] = useState(false);
     const [selectedItemFirma, setSelectedItemFirma] = useState(null);
@@ -165,23 +164,6 @@ function PanelAdministrativo() {
 
         fetchData();
     }, []);
-
-    useEffect(() => {
-        const fetchPendientes = async () => {
-            if (!userId) return;
-            try {
-                const res = await fetch(`/api/inventario/salidas`);
-                if (res.ok) {
-                    const data = await res.json();
-                    const misPendientes = data.filter(s => s.estado === 'Esperando Firma' && s.solicitadoPorId === userId);
-                    setPendientesFirma(misPendientes);
-                }
-            } catch (error) {
-                console.error("Error cargando firmas pendientes", error);
-            }
-        };
-        fetchPendientes();
-    }, [userId]);
 
     const guardarPermisos = async () => {
         setIsSaving(true);
