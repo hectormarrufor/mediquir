@@ -24,6 +24,17 @@ import { PreguntarNumero, useNumeracion } from '@/app/superuser/_components/Nume
 
 const MAX_LISTA = 60; // renderizar el catálogo completo (600+ productos) en cada cambio del formulario era lo que volvía lenta la pantalla
 
+// Cómo se pagó una compra de contado (los mismos nombres que usan caja y los pagos a proveedores).
+// Pagar con la tarjeta de Mediquir en el punto del comercio queda como "Punto de Venta".
+const METODOS_PAGO_CONTADO = [
+    { value: 'Transferencia', label: 'Transferencia' },
+    { value: 'Punto de Venta', label: 'Tarjeta de la empresa (punto de venta)' },
+    { value: 'Pago Móvil', label: 'Pago Móvil' },
+    { value: 'Efectivo (Bs)', label: 'Efectivo (Bs)' },
+    { value: 'Efectivo ($)', label: 'Efectivo ($)' },
+    { value: 'Zelle', label: 'Zelle' },
+];
+
 const FilaProducto = memo(function FilaProducto({ prod, isMobile, onAgregar }) {
     return (
         <Paper p="sm" withBorder radius="sm" style={{ cursor: 'pointer' }} onClick={() => onAgregar(prod)}>
@@ -125,7 +136,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             condicionPago: 'Contado',
             diasCredito: 0,
             moneda: 'USD',
-            metodoPago: 'Efectivo',
+            metodoPago: 'Transferencia',
             referencia: '',
             aplicarRetencion: CONFIG_FISCAL.agenteRetencionIva,
             porcentajeRetencion: CONFIG_FISCAL.porcentajeRetencionCompras,
@@ -275,8 +286,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             if (!res.ok) throw new Error(d.error || 'No se pudo leer la factura');
             const avisos = [];
 
-            // Cabecera
-            setEsGasto(false);
+            // Cabecera (en modo gasto se lee igual; en vez de renglones de inventario se llenan la descripción y los montos del gasto)
+            const comoGasto = esGasto;
             formCompra.setFieldValue('tipoDocumento', d.tipoDocumento === 'NOTA_ENTREGA' ? 'NOTA_ENTREGA' : 'FACTURA');
             if (d.numeroFactura) formCompra.setFieldValue('numeroDocumento', String(d.numeroFactura).slice(0, 50));
             if (d.numeroControl && d.tipoDocumento !== 'NOTA_ENTREGA') formCompra.setFieldValue('numeroControl', String(d.numeroControl).slice(0, 30));
@@ -317,15 +328,37 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 avisos.push(`El proveedor ${d.proveedorNombre || ''}${d.proveedorRif ? ` (${d.proveedorRif})` : ''} no está registrado: revisa sus datos, consulta su RIF en el SENIAT y guárdalo.`);
             }
 
+            const impreso = { baseImponible: d.baseImponible, montoExento: d.montoExento, montoIva: d.montoIva, total: d.total, totalUsd: d.totalUsd };
+            const simbolo = monedaLeida === 'BS' ? 'Bs' : '$';
+
+            // Gasto (servicio, almuerzo, equipo...): la descripción sale de los renglones y la categoría, del último gasto de este proveedor
+            if (comoGasto) {
+                const lineas = d.lineas || [];
+                const sumar = (exento) => r2(lineas.filter((l) => Boolean(l.exento) === exento).reduce((a, l) => a + (Number(l.totalLinea) || r2((l.precioUnitario || 0) * (l.cantidad || 0))), 0));
+                let anterior = null;
+                if (proveedorId) {
+                    try { anterior = await (await fetch(`/api/compras/equivalencias?proveedorId=${proveedorId}&gasto=1`)).json(); } catch { anterior = null; }
+                }
+                setGasto((g) => ({
+                    descripcion: lineas.map((l) => l.descripcion).join(', ').slice(0, 200) || anterior?.descripcionGasto || g.descripcion,
+                    categoriaId: anterior?.categoriaGastoId ? String(anterior.categoriaGastoId) : g.categoriaId,
+                    base: d.baseImponible ?? sumar(false),
+                    exento: d.montoExento ?? sumar(true),
+                }));
+                if (anterior?.categoriaGastoId) avisos.push(`Categoría propuesta: la del último gasto de este proveedor («${anterior.descripcionGasto}»). Cámbiala si este es otro tipo de gasto.`);
+                setLectura({ impreso, avisos, renglones: 0, proveedorNombre: prov?.nombre || d.proveedorNombre || '', simbolo, lineas: [], equivalencias: [] });
+                notifications.update({ id, title: 'Factura leída', message: 'Revisa la descripción, la categoría y los montos del gasto.', color: 'teal', loading: false, autoClose: 5000 });
+                return;
+            }
+
             // Renglones: se proponen con lo aprendido de este proveedor (si ya lo conocemos) y candidatos por parecido
             let equivalencias = [];
             if (proveedorId) {
                 try { equivalencias = await (await fetch(`/api/compras/equivalencias?proveedorId=${proveedorId}`)).json(); } catch { equivalencias = []; }
             }
             const renglones = prepararRenglones(d.lineas || [], productos || [], Array.isArray(equivalencias) ? equivalencias : []);
-            const simbolo = monedaLeida === 'BS' ? 'Bs' : '$';
             setLectura({
-                impreso: { baseImponible: d.baseImponible, montoExento: d.montoExento, montoIva: d.montoIva, total: d.total, totalUsd: d.totalUsd },
+                impreso,
                 avisos, renglones: renglones.length, proveedorNombre: prov?.nombre || d.proveedorNombre || '', simbolo,
                 lineas: d.lineas || [], equivalencias: Array.isArray(equivalencias) ? equivalencias : [],
             });
@@ -635,16 +668,14 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             <Group justify="space-between" align="center" mb={isMobile ? 6 : 'xs'} wrap={isMobile ? 'wrap' : 'nowrap'} gap="xs">
                 <SegmentedControl size="xs" fullWidth={isMobile} style={isMobile ? { flex: '1 1 100%' } : undefined} value={esGasto ? 'gasto' : 'mercancia'} onChange={(v) => setEsGasto(v === 'gasto')}
                     data={[{ value: 'mercancia', label: isMobile ? 'Mercancía' : 'Compra de mercancía (inventario)' }, { value: 'gasto', label: isMobile ? 'Gasto' : 'Gasto (no afecta el inventario)' }]} />
-                {!esGasto && (
-                    // En el teléfono, "image/*" deja elegir entre la cámara y la galería
-                    <FileButton onChange={leerFactura} accept="image/*,application/pdf" disabled={analizando}>
-                        {(props) => (
-                            <Button {...props} size="xs" color="grape" variant="light" tt="none" loading={analizando} fullWidth={isMobile} leftSection={<IconSparkles size={16} />}>
-                                Leer factura con IA (foto o PDF)
-                            </Button>
-                        )}
-                    </FileButton>
-                )}
+                {/* En el teléfono, "image/*" deja elegir entre la cámara y la galería */}
+                <FileButton onChange={leerFactura} accept="image/*,application/pdf" disabled={analizando}>
+                    {(props) => (
+                        <Button {...props} size="xs" color="grape" variant="light" tt="none" loading={analizando} fullWidth={isMobile} leftSection={<IconSparkles size={16} />}>
+                            Leer factura con IA (foto o PDF)
+                        </Button>
+                    )}
+                </FileButton>
             </Group>
             <Grid gutter="xs" align="flex-end">
                 <Grid.Col span={{ base: 12, md: 5 }}>
@@ -677,6 +708,16 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                         <NumberInput size="sm" label="Días de crédito" min={1} withAsterisk {...formCompra.getInputProps('diasCredito')} />
                     </Grid.Col>
                 )}
+                {formCompra.values.condicionPago === 'Contado' && (
+                    <>
+                        <Grid.Col span={{ base: 6, md: 3 }}>
+                            <Select size="sm" label="¿Cómo se pagó?" allowDeselect={false} data={METODOS_PAGO_CONTADO} {...formCompra.getInputProps('metodoPago')} />
+                        </Grid.Col>
+                        <Grid.Col span={{ base: 6, md: 2 }}>
+                            <TextInput size="sm" label="Referencia" placeholder="Opcional" maxLength={100} {...formCompra.getInputProps('referencia')} />
+                        </Grid.Col>
+                    </>
+                )}
                 <Grid.Col span={{ base: 6, md: 2 }}>
                     <Select size="sm" label="Moneda" allowDeselect={false} data={[{ value: 'USD', label: 'USD ($)' }, { value: 'BS', label: 'Bs' }]} {...formCompra.getInputProps('moneda')} onChange={cambiarMoneda} />
                 </Grid.Col>
@@ -703,8 +744,15 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                     <Text size="xs">{tasa > 0 ? <>Factura en <b>bolívares</b>. Tasa {tasaFactura ? 'de la factura' : 'BCV de hoy'}: <b>Bs {tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</b> por dólar. Escribe los precios tal como vienen en la factura (Bs); el costo del producto se guarda en dólares y aquí ves el costo actual y el de esta factura en ambas monedas.</> : <b>No hay tasa BCV vigente: no se puede registrar una factura en bolívares.</b>}</Text>
                 </Alert>
             )}
+            {esFactura && montoIva > 0 && formCompra.values.aplicarRetencion && formCompra.values.condicionPago === 'Contado' && formCompra.values.metodoPago === 'Punto de Venta' && (
+                // Providencia de retenciones de IVA, art. 5: no se retiene lo pagado con tarjeta de débito o crédito cuyo titular es el agente de retención
+                <Group gap={6} mt="xs" wrap="wrap">
+                    <Text size="xs" c="orange.8">Pagada con la tarjeta de la empresa: la providencia de retenciones de IVA excluye de la retención lo pagado con tarjeta de débito o crédito a nombre del agente de retención (confírmalo con el contador).</Text>
+                    <Button size="compact-xs" variant="light" color="orange" onClick={() => formCompra.setFieldValue('aplicarRetencion', false)}>No retener</Button>
+                </Group>
+            )}
             {!esFactura && <Text size="xs" c="dimmed" mt="xs">La nota de entrega no es un documento fiscal: se registra sin IVA, sin retención y sin número de control, y no entra al libro de compras. {esGasto ? 'Al ser un gasto, no mueve el inventario.' : 'El inventario y el costo se actualizan igual.'}</Text>}
-            {lectura && !esGasto && (
+            {lectura && (
                 <>
                     {lectura.avisos.length > 0 && (
                         <Alert mt="xs" p="xs" color="yellow" variant="light" icon={<IconAlertTriangle size={18} />} title="Revisa lo que leyó la IA"
@@ -712,15 +760,16 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                             <Stack gap={2}>{lectura.avisos.map((a, i) => <Text key={i} size="xs">{a}</Text>)}</Stack>
                         </Alert>
                     )}
-                    {carritoCompra.length > 0 && (
+                    {/* En el gasto el IVA lo calcula el servidor sobre la base: no se ajusta al impreso */}
+                    {(esGasto ? subtotal > 0 : carritoCompra.length > 0) && (
                         <CuadreFactura
                             impreso={lectura.impreso} simbolo={sim} tasa={tasa}
-                            calculado={{ base: r2(subtotal - montoExento), exento: montoExento, ivaCalculado: montoIvaCalculado, total: r2(subtotal + montoIva) }}
-                            renglonesFactura={lectura.renglones} renglonesCompra={carritoCompra.length}
-                            ivaAjustado={ivaAjustado} onUsarIvaImpreso={() => setIvaAjustado(Number(lectura.impreso.montoIva))} onQuitarAjuste={() => setIvaAjustado(null)}
+                            calculado={{ base: r2(subtotal - montoExento), exento: montoExento, ivaCalculado: esGasto ? montoIva : montoIvaCalculado, total: totalFinal }}
+                            renglonesFactura={esGasto ? 0 : lectura.renglones} renglonesCompra={esGasto ? 0 : carritoCompra.length}
+                            ivaAjustado={esGasto ? null : ivaAjustado} onUsarIvaImpreso={esGasto ? null : () => setIvaAjustado(Number(lectura.impreso.montoIva))} onQuitarAjuste={() => setIvaAjustado(null)}
                         />
                     )}
-                    {revision === null && lectura.renglones > 0 && (
+                    {!esGasto && revision === null && lectura.renglones > 0 && (
                         <Button mt={6} size="compact-xs" variant="subtle" color="grape" leftSection={<IconSparkles size={14} />}
                             onClick={() => setRevision(prepararRenglones(lectura.lineas || [], productos || [], lectura.equivalencias || []))}>
                             Volver a ver los renglones leídos

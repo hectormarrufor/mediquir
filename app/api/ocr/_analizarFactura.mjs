@@ -5,7 +5,8 @@ import { generarConFallback } from "../../helpers/geminiConFallback.mjs";
 
 const PROMPT_FACTURA = `
   Analiza esta imagen o PDF de una FACTURA (o nota de entrega) de compra emitida por un proveedor en Venezuela.
-  Es un distribuidor de insumos médicos, quirúrgicos u odontológicos. EL CLIENTE es "MATERIALES Y EQUIPOS QUIRURGICOS MEDIQUIR, C.A."
+  Casi siempre es un distribuidor de insumos médicos, quirúrgicos u odontológicos, pero también puede ser un gasto de la empresa
+  (servicios, comida, equipos, reparaciones): lee igual todos sus datos. EL CLIENTE es "MATERIALES Y EQUIPOS QUIRURGICOS MEDIQUIR, C.A."
   (RIF J-30487649-1): sus datos aparecen en la factura pero NO son del proveedor.
 
   FORMATO DE LOS NÚMEROS: cada factura usa el suyo. Unas escriben "1.234,56" (punto de miles, coma decimal) y otras "1,234.56"

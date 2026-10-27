@@ -290,7 +290,7 @@ export function CuadreFactura({ impreso, calculado, simbolo, tasa, renglonesFact
                     <Text size="xs" c="dimmed">En dólares: factura $ {fmt(impreso.totalUsd)} · compra a la tasa {fmt(tasa)}: $ {fmt(calculado.total / tasa)}</Text>
                 )}
                 {ivaAjustado !== null && <Text size="xs" fw={700}>IVA ajustado al impreso: {simbolo} {fmt(ivaAjustado)} <Button size="compact-xs" variant="subtle" onClick={onQuitarAjuste}>Quitar ajuste</Button></Text>}
-                {ivaAjustado === null && soloCentimosIva && (
+                {ivaAjustado === null && soloCentimosIva && onUsarIvaImpreso && (
                     <Group gap={6} mt={2}>
                         <Text size="xs">El IVA difiere solo por céntimos (redondeo del proveedor).</Text>
                         <Button size="compact-xs" color="orange" variant="light" onClick={onUsarIvaImpreso}>Usar el IVA de la factura</Button>
