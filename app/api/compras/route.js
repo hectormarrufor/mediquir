@@ -7,7 +7,7 @@ import { rolDe } from '@/app/constants/roles';
 import { aBolivares } from '@/app/constants/facturacion';
 import { fechaCaracas } from '@/app/constants/hora';
 import { notificarCabezas } from '@/app/handlers/notificar';
-import { siguienteComprobante, periodoDe } from '../_lib/retenciones';
+import { siguienteComprobante, periodoDe, marcarRetencionPendiente } from '../_lib/retenciones';
 import { ErrorNumeracion } from '../_lib/numeracion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 const { RetencionIva, Proveedor, Producto, EntradaInventario, FacturaCompra, CategoriaFinanciera, MovimientoFinanciero, CuentaPorPagar, User, Empleado } = db;
@@ -32,13 +32,22 @@ export async function GET(request) {
             whereClause.createdAt = { [Op.between]: [`${fechaInicio} 00:00:00`, `${fechaInicio} 23:59:59`] };
         }
 
+        // ?pendientes=1: todo lo que falta por pagar o por retener, de cualquier fecha (no solo lo del periodo)
+        if (searchParams.get('pendientes') === '1') {
+            const conRetPendiente = await RetencionIva.findAll({ where: { tipo: 'COMPRA', estado: 'PENDIENTE' }, attributes: ['facturaCompraId'], raw: true });
+            whereClause = { [Op.or]: [{ '$cuentaPorPagar.saldoPendiente$': { [Op.gt]: 0.005 } }, { id: conRetPendiente.map((r) => r.facturaCompraId).filter(Boolean) }] };
+        }
+
         // Un vendedor solo ve las compras que él registró
         if (rolDe(acceso.sesion) === 'vendedor') whereClause.registradoPorId = Number(acceso.sesion.id);
 
         const facturas = await FacturaCompra.findAll({
             where: whereClause,
             include: [
-                { model: Proveedor, as: 'proveedor', attributes: ['id', 'nombre', 'identificacion'] },
+                { model: Proveedor, as: 'proveedor', attributes: ['id', 'nombre', 'identificacion', 'telefono', 'retencionIvaPorDefecto'] },
+                // Estado del pago y de la retención de cada compra (para filtrar «por pagar» / «falta retener» y pagar desde la lista)
+                { model: CuentaPorPagar, as: 'cuentaPorPagar', attributes: ['id', 'moneda', 'montoTotal', 'saldoPendiente', 'fechaVencimiento', 'estado', 'tasaCambio'], required: false },
+                { model: RetencionIva, as: 'retenciones', attributes: ['id', 'estado', 'comprobante', 'fecha', 'ivaRetenido', 'porcentajeRetencion'], where: { tipo: 'COMPRA' }, required: false },
                 { 
                     model: User, 
                     as: 'registrador', 
@@ -87,6 +96,7 @@ export async function POST(request) {
             montoExento: montoExentoCliente,
             porcentajeRetencion: porcentajeRetencionCliente,
             aplicarRetencion,
+            retencionModo,
             esGasto: esGastoCliente,
             descripcionGasto: descripcionGastoCliente,
             categoriaGastoId: categoriaGastoCliente
@@ -130,7 +140,11 @@ export async function POST(request) {
         const numeroControl = esFactura ? numeroControlCliente : null;
         const totalFinal = r2(subtotalNum + montoIva);
         const porcentajeRetencion = [75, 100].includes(Number(porcentajeRetencionCliente)) ? Number(porcentajeRetencionCliente) : CONFIG_FISCAL.porcentajeRetencionCompras;
-        const retiene = CONFIG_FISCAL.agenteRetencionIva && esFactura && montoIva > 0 && aplicarRetencion !== false;
+        // Cuándo se retiene: 'ahora' (comprobante al registrar), 'despues' (queda «Falta retener» y se hace al pagar; solo a crédito) o 'no'
+        const modoRetencion = ['ahora', 'despues', 'no'].includes(retencionModo) ? retencionModo : (aplicarRetencion === false ? 'no' : 'ahora');
+        const aplicaRetencion = CONFIG_FISCAL.agenteRetencionIva && esFactura && montoIva > 0;
+        const retiene = aplicaRetencion && modoRetencion === 'ahora';
+        const retencionPendiente = aplicaRetencion && modoRetencion === 'despues' && condicionPago === 'Credito';
         const montoRetencion = retiene ? Math.round(montoIva * porcentajeRetencion) / 100 : 0;
 
         // Datos fiscales coherentes: no se puede retener más IVA del que tiene la factura
@@ -281,6 +295,10 @@ export async function POST(request) {
                     porcentajeRetencion: Number(porcentajeRetencion) || 75, ivaRetenido: aBs(montoRetencion),
                     tasaCambio: Number(tasaCambio) || 1, facturaCompraId: nuevaFacturaCompra.id, registradoPorId: registradoPorId || null,
                 }, { transaction: t });
+            } else if (retencionPendiente) {
+                // Se retiene al pagarla: queda «Falta retener» (sin número todavía; no entra al libro hasta que se emita el comprobante)
+                const prov = await Proveedor.findByPk(idProveedorFinal, { attributes: ['identificacion', 'nombre'], transaction: t });
+                await marcarRetencionPendiente(nuevaFacturaCompra, prov, porcentajeRetencion, registradoPorId, t);
             }
 
             // Recorremos los detalles y cruzamos con los resultados de la simulación mediante el ID

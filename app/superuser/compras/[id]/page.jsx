@@ -11,6 +11,8 @@ import { fechaCaracas, formatearFecha, formatearFechaHora } from '@/app/constant
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { useAuth } from '@/hooks/useAuth';
+import { OPCIONES_PAGO_PROVEEDOR } from '@/app/constants/metodosPago';
+import PagarRetenerModal, { estadoRetencion } from '../_components/PagarRetenerModal';
 
 async function pedirJson(url) {
     const res = await fetch(url);
@@ -20,10 +22,9 @@ async function pedirJson(url) {
 }
 
 const bs = (n) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0);
-const METODOS = ['Transferencia', 'Pago Móvil', 'Efectivo ($)', 'Efectivo (Bs)', 'Zelle', 'Punto de Venta'];
 
 // Lo que se le debe al proveedor por esta compra, los pagos asentados en caja y el botón para registrar uno nuevo
-function PagoProveedorCard({ compra, onCambio }) {
+function PagoProveedorCard({ compra, onCambio, onPagarTodo }) {
     const { tasa } = useTasaBcv();
     const [abierto, setAbierto] = useState(false);
     const [enviando, setEnviando] = useState(false);
@@ -68,7 +69,13 @@ function PagoProveedorCard({ compra, onCambio }) {
                     <Group justify="space-between"><Text size="sm">Monto a pagar (sin la retención)</Text><PrecioVisual valor={cxp.montoTotal} simbolo={simboloCuenta} size="sm" /></Group>
                     <Group justify="space-between"><Text size="sm">Vence</Text><Text size="sm" fw={600} c={vencida ? 'red.7' : undefined}>{formatearFecha(cxp.fechaVencimiento) || '—'}</Text></Group>
                     <Group justify="space-between" mt={4}><Text fw={800}>Saldo pendiente</Text><PrecioVisual valor={saldo} simbolo={simboloCuenta} size="lg" fw={800} c={saldo > 0 ? 'red.7' : 'teal.7'} /></Group>
-                    {saldo > 0 && <Button fullWidth mt="sm" color="teal" leftSection={<IconCash size={18} />} onClick={abrir}>Registrar pago</Button>}
+                    {saldo > 0 && (
+                        <Group grow mt="sm">
+                            {/* Pago completo: si la factura tiene IVA sin retener, en el mismo paso sale su comprobante y se paga el total menos lo retenido */}
+                            <Button color="teal" leftSection={<IconCash size={18} />} onClick={onPagarTodo}>{['pendiente', 'sin_retener'].includes(estadoRetencion(compra)) ? 'Pagar y retener' : 'Pagar todo'}</Button>
+                            <Button variant="light" color="teal" onClick={abrir}>Abono parcial</Button>
+                        </Group>
+                    )}
                 </>
             )}
             <Divider my="sm" label="Pagos asentados en caja" labelPosition="left" />
@@ -97,7 +104,7 @@ function PagoProveedorCard({ compra, onCambio }) {
                         <Select label="Moneda" data={['USD', 'BS']} allowDeselect={false} value={form.moneda} onChange={(v) => setForm((f) => ({ ...f, moneda: v }))} />
                     </Group>
                     {form.moneda !== monedaCuenta && <Text size="xs" c="orange.8">Se convierte con la tasa BCV de hoy ({tasa || '…'} Bs/$){equivalente ? `: equivale a ${equivalente}` : ''}.</Text>}
-                    <Select label="Método de pago" data={METODOS} allowDeselect={false} value={form.metodoPago} onChange={(v) => setForm((f) => ({ ...f, metodoPago: v }))} />
+                    <Select label="Método de pago" data={OPCIONES_PAGO_PROVEEDOR} allowDeselect={false} value={form.metodoPago} onChange={(v) => setForm((f) => ({ ...f, metodoPago: v }))} />
                     <TextInput label="Referencia (opcional)" placeholder="Número de la transferencia o del recibo" value={form.referencia} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, referencia: v })); }} />
                     <Text size="xs" c="dimmed">El pago se asienta hoy como egreso en caja y baja la deuda con el proveedor.</Text>
                     <Button color="teal" loading={enviando} onClick={pagar} leftSection={<IconCash size={18} />}>Registrar pago</Button>
@@ -113,6 +120,8 @@ export default function DetalleCompraPage() {
     const router = useRouter();
     const queryClient = useQueryClient();
     const { esVendedor } = useAuth();
+    const [accion, setAccion] = useState(null); // 'pagar' | 'retener': ventana de «Pagar y retener» o de solo retener
+    const [descartando, setDescartando] = useState(false);
     const { data: c, isLoading, error } = useQuery({ queryKey: ['compra-detalle', id], queryFn: () => pedirJson(`/api/compras/${id}`) });
     const refrescar = () => {
         queryClient.invalidateQueries({ queryKey: ['compra-detalle', id] });
@@ -130,6 +139,24 @@ export default function DetalleCompraPage() {
     const simbolo = c.moneda === 'BS' ? 'Bs' : '$';
     const ret = (c.retenciones || []).find((r) => r.tipo === 'COMPRA' && r.comprobante);
     const esFactura = c.tipoDocumento === 'FACTURA';
+    const estRet = estadoRetencion(c);
+    const pendiente = (c.retenciones || []).find((r) => r.estado === 'PENDIENTE' && !r.comprobante);
+
+    // «No se retiene»: la factura deja de estar «Falta retener» (por ejemplo, se pagó con la tarjeta de la empresa)
+    const descartarPendiente = async () => {
+        if (!window.confirm('¿Esta factura no lleva retención? Dejará de aparecer en «Falta retener».')) return;
+        setDescartando(true);
+        try {
+            const res = await fetch('/api/compras/retenciones', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ facturaId: c.id }) });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || 'No se pudo quitar');
+            refrescar();
+        } catch (e) {
+            notifications.show({ color: 'red', title: 'Error', message: e.message });
+        } finally {
+            setDescartando(false);
+        }
+    };
 
     return (
         <Container size="lg" py="md">
@@ -193,7 +220,7 @@ export default function DetalleCompraPage() {
                         {!esFactura && <Text size="xs" c="dimmed" mt="xs">Nota de entrega: sin IVA ni retención, no entra al libro de compras.</Text>}
                     </Card>
 
-                    {!esVendedor && <PagoProveedorCard compra={c} onCambio={refrescar} />}
+                    {!esVendedor && <PagoProveedorCard compra={c} onCambio={refrescar} onPagarTodo={() => setAccion('pagar')} />}
 
                     {esFactura && (
                         <Card withBorder radius="lg" p="md" bg="white">
@@ -206,12 +233,28 @@ export default function DetalleCompraPage() {
                                     <Text size="xs" c="dimmed">Emitido el {formatearFecha(ret.fecha)}</Text>
                                     <Button fullWidth mt="sm" color="green" onClick={() => router.push(`/superuser/compras/${c.id}/retencion`)}>Ver, imprimir o enviar al proveedor</Button>
                                 </>
-                            ) : <Text size="sm" c="dimmed">Esta factura no generó retención (no tiene IVA o se registró sin retener).</Text>}
+                            ) : estRet === 'pendiente' ? (
+                                <>
+                                    <Text size="sm" c="orange.8" fw={600}>Falta retener: se retiene al pagarla ({Number(pendiente?.porcentajeRetencion) || 75}%, Bs {bs(pendiente?.ivaRetenido)}).</Text>
+                                    {!esVendedor && (
+                                        <Group grow mt="sm">
+                                            <Button color="orange" leftSection={<IconReceiptTax size={16} />} onClick={() => setAccion('retener')}>Retener ahora</Button>
+                                            <Button variant="subtle" color="gray" loading={descartando} onClick={descartarPendiente}>No se retiene</Button>
+                                        </Group>
+                                    )}
+                                </>
+                            ) : estRet === 'sin_retener' ? (
+                                <>
+                                    <Text size="sm" c="dimmed">Esta factura se registró sin retener.</Text>
+                                    {!esVendedor && <Button fullWidth mt="sm" variant="light" color="orange" leftSection={<IconReceiptTax size={16} />} onClick={() => setAccion('retener')}>Generar su comprobante de retención</Button>}
+                                </>
+                            ) : <Text size="sm" c="dimmed">Esta factura no tiene IVA: no lleva retención.</Text>}
                         </Card>
                     )}
                 </Grid.Col>
             </Grid>
             <Box h={30} />
+            {accion && <PagarRetenerModal facturas={[c]} modo={accion} onClose={() => { setAccion(null); refrescar(); }} />}
         </Container>
     );
 }

@@ -53,7 +53,10 @@ export default function ComprobanteRetencionPage() {
         try { await fn(); } catch (e) { notifications.show({ color: 'red', title: 'No se pudo generar el PDF', message: e.message }); } finally { setTrabajando(false); }
     };
 
-    const mensaje = data && `Buen día, le enviamos el comprobante de retención de IVA N° ${data.comprobante} correspondiente a su factura ${data.lineas[0].numeroFactura}, por un IVA retenido de Bs ${bs(data.totales.retenido)}. Gracias por su atención. — ${data.agente.nombre}`;
+    // Un comprobante puede agrupar varias facturas del proveedor
+    const facturas = data ? data.lineas.map((l) => l.numeroFactura) : [];
+    const deFacturas = facturas.length > 1 ? `sus facturas ${facturas.slice(0, -1).join(', ')} y ${facturas[facturas.length - 1]}` : `su factura ${facturas[0]}`;
+    const mensaje = data && `Buen día, le enviamos el comprobante de retención de IVA N° ${data.comprobante} correspondiente a ${deFacturas}, por un IVA retenido de Bs ${bs(data.totales.retenido)}. Gracias por su atención. — ${data.agente.nombre}`;
 
     // Guarda el PDF y abre el chat del proveedor con el mensaje escrito: solo falta adjuntar el archivo descargado
     const whatsapp = envolver(async () => {
@@ -89,7 +92,7 @@ export default function ComprobanteRetencionPage() {
                         <Button variant="subtle" leftSection={<IconArrowLeft size={16} />} onClick={() => router.back()}>Volver</Button>
                         <Box>
                             <Text fw={800} c="navy.9" lh={1.1}>Comprobante de retención N° {data.comprobante}</Text>
-                            <Text size="xs" c="dimmed">{data.sujeto.nombre} · factura {data.lineas[0].numeroFactura}</Text>
+                            <Text size="xs" c="dimmed">{data.sujeto.nombre} · {facturas.length > 1 ? `facturas ${facturas.join(', ')}` : `factura ${facturas[0]}`}</Text>
                         </Box>
                     </Group>
                     <Group gap="xs" wrap="wrap">

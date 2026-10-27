@@ -20,20 +20,10 @@ import PrecioVisual from '../ui/PrecioVisual';
 import { useAuth } from '@/hooks/useAuth';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
 import { fechaCaracas } from '@/app/constants/hora';
+import { OPCIONES_PAGO_PROVEEDOR } from '@/app/constants/metodosPago';
 import { PreguntarNumero, useNumeracion } from '@/app/superuser/_components/NumeracionFiscal';
 
 const MAX_LISTA = 60; // renderizar el catálogo completo (600+ productos) en cada cambio del formulario era lo que volvía lenta la pantalla
-
-// Cómo se pagó una compra de contado (los mismos nombres que usan caja y los pagos a proveedores).
-// Pagar con la tarjeta de Mediquir en el punto del comercio queda como "Punto de Venta".
-const METODOS_PAGO_CONTADO = [
-    { value: 'Transferencia', label: 'Transferencia' },
-    { value: 'Punto de Venta', label: 'Tarjeta de la empresa (punto de venta)' },
-    { value: 'Pago Móvil', label: 'Pago Móvil' },
-    { value: 'Efectivo (Bs)', label: 'Efectivo (Bs)' },
-    { value: 'Efectivo ($)', label: 'Efectivo ($)' },
-    { value: 'Zelle', label: 'Zelle' },
-];
 
 const FilaProducto = memo(function FilaProducto({ prod, isMobile, onAgregar }) {
     return (
@@ -138,7 +128,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             moneda: 'USD',
             metodoPago: 'Transferencia',
             referencia: '',
-            aplicarRetencion: CONFIG_FISCAL.agenteRetencionIva,
+            // Cuándo se retiene el IVA: 'ahora' (el comprobante sale al registrar), 'despues' (queda «Falta retener» y se hace al pagar) o 'no'
+            retencionModo: CONFIG_FISCAL.agenteRetencionIva ? 'ahora' : 'no',
             porcentajeRetencion: CONFIG_FISCAL.porcentajeRetencionCompras,
             numeroControl: ''
         }
@@ -168,9 +159,9 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     const [modalCrearProv, setModalCrearProv] = useState(false);
 
     // La retención de IVA la practica la EMPRESA (agente de retención) sobre toda factura con IVA, sea cual sea el proveedor;
-    // el porcentaje sale de la ficha del proveedor (75 % por defecto). Se puede desmarcar para una compra puntual.
+    // el porcentaje sale de la ficha del proveedor (75 % por defecto). Se puede dejar para el pago o no retener en una compra puntual.
     useEffect(() => {
-        formCompra.setFieldValue('aplicarRetencion', CONFIG_FISCAL.agenteRetencionIva);
+        formCompra.setFieldValue('retencionModo', CONFIG_FISCAL.agenteRetencionIva ? 'ahora' : 'no');
         const prov = proveedores?.find(p => String(p.id) === String(formCompra.values.proveedorId));
         formCompra.setFieldValue('porcentajeRetencion', Number(prov?.retencionIvaPorDefecto) || CONFIG_FISCAL.porcentajeRetencionCompras);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -483,7 +474,9 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     }
 
     let montoRetencion = 0;
-    if (formCompra.values.aplicarRetencion && esFactura && montoIva > 0) {
+    // De contado se paga ya: la retención no puede quedar para el pago
+    const retencionModo = formCompra.values.condicionPago === 'Contado' && formCompra.values.retencionModo === 'despues' ? 'ahora' : formCompra.values.retencionModo;
+    if (retencionModo === 'ahora' && esFactura && montoIva > 0) {
         montoRetencion = r2(montoIva * (formCompra.values.porcentajeRetencion / 100));
     }
 
@@ -514,7 +507,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 moneda: formCompra.values.moneda,
                 tasaCambio: tasa,
                 subtotal, montoIva, montoRetencion, totalFinal,
-                numeroControl: esFactura ? formCompra.values.numeroControl : null, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion, aplicarRetencion: Boolean(formCompra.values.aplicarRetencion),
+                numeroControl: esFactura ? formCompra.values.numeroControl : null, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion, aplicarRetencion: retencionModo === 'ahora', retencionModo,
                 detalles: carritoCompra
             };
 
@@ -574,7 +567,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 metodoPago: formCompra.values.metodoPago,
                 referencia: formCompra.values.referencia,
                 subtotal, montoIva, montoRetencion, totalFinal,
-                numeroControl: esFactura ? formCompra.values.numeroControl : null, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion, aplicarRetencion: Boolean(formCompra.values.aplicarRetencion),
+                numeroControl: esFactura ? formCompra.values.numeroControl : null, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion, aplicarRetencion: retencionModo === 'ahora', retencionModo,
                 registradoPorId: userId,
                 esGasto, descripcionGasto: esGasto ? gasto.descripcion : null, categoriaGastoId: esGasto ? Number(gasto.categoriaId) : null,
                 detalles: esGasto ? [] : carritoCompra
@@ -711,7 +704,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 {formCompra.values.condicionPago === 'Contado' && (
                     <>
                         <Grid.Col span={{ base: 6, md: 3 }}>
-                            <Select size="sm" label="¿Cómo se pagó?" allowDeselect={false} data={METODOS_PAGO_CONTADO} {...formCompra.getInputProps('metodoPago')} />
+                            <Select size="sm" label="¿Cómo se pagó?" allowDeselect={false} data={OPCIONES_PAGO_PROVEEDOR} {...formCompra.getInputProps('metodoPago')} />
                         </Grid.Col>
                         <Grid.Col span={{ base: 6, md: 2 }}>
                             <TextInput size="sm" label="Referencia" placeholder="Opcional" maxLength={100} {...formCompra.getInputProps('referencia')} />
@@ -730,9 +723,10 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 </Grid.Col>
                 {esFactura && montoIva > 0 && (
                     <Grid.Col span={{ base: 12, md: 'auto' }}>
-                        <Group gap="sm" wrap="nowrap" align="center" h={36}>
-                            <Checkbox label={<Text fw={600} size="sm">Retener IVA</Text>} {...formCompra.getInputProps('aplicarRetencion', { type: 'checkbox' })} />
-                            {formCompra.values.aplicarRetencion && (
+                        <Group gap="sm" wrap="nowrap" align="flex-end">
+                            <Select size="sm" w={170} label="Retención de IVA" allowDeselect={false} value={retencionModo} onChange={(v) => formCompra.setFieldValue('retencionModo', v)}
+                                data={[{ value: 'ahora', label: 'Retener ahora' }, { value: 'despues', label: 'Retener al pagar', disabled: formCompra.values.condicionPago === 'Contado' }, { value: 'no', label: 'No retener' }]} />
+                            {retencionModo !== 'no' && (
                                 <Select size="sm" allowDeselect={false} data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} w={84} {...formCompra.getInputProps('porcentajeRetencion')} />
                             )}
                         </Group>
@@ -744,11 +738,14 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                     <Text size="xs">{tasa > 0 ? <>Factura en <b>bolívares</b>. Tasa {tasaFactura ? 'de la factura' : 'BCV de hoy'}: <b>Bs {tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</b> por dólar. Escribe los precios tal como vienen en la factura (Bs); el costo del producto se guarda en dólares y aquí ves el costo actual y el de esta factura en ambas monedas.</> : <b>No hay tasa BCV vigente: no se puede registrar una factura en bolívares.</b>}</Text>
                 </Alert>
             )}
-            {esFactura && montoIva > 0 && formCompra.values.aplicarRetencion && formCompra.values.condicionPago === 'Contado' && formCompra.values.metodoPago === 'Punto de Venta' && (
+            {esFactura && montoIva > 0 && retencionModo === 'despues' && (
+                <Text size="xs" c="orange.8" mt="xs">Quedará «Falta retener»: el comprobante sale con el siguiente número cuando la pagues (Compras → Por pagar → Pagar y retener).</Text>
+            )}
+            {esFactura && montoIva > 0 && retencionModo === 'ahora' && formCompra.values.condicionPago === 'Contado' && formCompra.values.metodoPago === 'Punto de Venta' && (
                 // Providencia de retenciones de IVA, art. 5: no se retiene lo pagado con tarjeta de débito o crédito cuyo titular es el agente de retención
                 <Group gap={6} mt="xs" wrap="wrap">
                     <Text size="xs" c="orange.8">Pagada con la tarjeta de la empresa: la providencia de retenciones de IVA excluye de la retención lo pagado con tarjeta de débito o crédito a nombre del agente de retención (confírmalo con el contador).</Text>
-                    <Button size="compact-xs" variant="light" color="orange" onClick={() => formCompra.setFieldValue('aplicarRetencion', false)}>No retener</Button>
+                    <Button size="compact-xs" variant="light" color="orange" onClick={() => formCompra.setFieldValue('retencionModo', 'no')}>No retener</Button>
                 </Group>
             )}
             {!esFactura && <Text size="xs" c="dimmed" mt="xs">La nota de entrega no es un documento fiscal: se registra sin IVA, sin retención y sin número de control, y no entra al libro de compras. {esGasto ? 'Al ser un gasto, no mueve el inventario.' : 'El inventario y el costo se actualizan igual.'}</Text>}

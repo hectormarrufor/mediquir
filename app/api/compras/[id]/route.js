@@ -15,9 +15,9 @@ export async function GET(request, { params }) {
         const factura = await FacturaCompra.findOne({
             where: UUID_REGEX.test(id) ? { id } : { numeroDocumento: id },
             include: [
-                { model: Proveedor, as: 'proveedor', attributes: ['id', 'nombre', 'identificacion', 'telefono'] },
+                { model: Proveedor, as: 'proveedor', attributes: ['id', 'nombre', 'identificacion', 'telefono', 'retencionIvaPorDefecto'] },
                 { model: EntradaInventario, as: 'entradas', include: [{ model: Producto, as: 'producto', attributes: ['id', 'nombre', 'codigo'] }] },
-                { model: RetencionIva, as: 'retenciones', attributes: ['id', 'tipo', 'comprobante', 'fecha', 'ivaRetenido', 'porcentajeRetencion'] },
+                { model: RetencionIva, as: 'retenciones', attributes: ['id', 'tipo', 'estado', 'comprobante', 'fecha', 'ivaRetenido', 'porcentajeRetencion'] },
                 { model: User, as: 'registrador', attributes: ['id', 'user'], include: [{ model: Empleado, as: 'empleado', attributes: ['nombre', 'apellido'] }] },
             ],
         });
@@ -109,7 +109,9 @@ export async function DELETE(request, { params }) {
         for (const r of retenciones) {
             const secuencia = /^\d{14}$/.test(String(r.comprobante || '')) ? Number(String(r.comprobante).slice(-8)) : null;
             await r.destroy({ transaction: t });
-            if (secuencia) {
+            // Un comprobante puede agrupar varias facturas: si otra lo sigue usando, su número no se libera
+            const compartido = secuencia && await RetencionIva.count({ where: { tipo: 'COMPRA', comprobante: r.comprobante }, transaction: t });
+            if (secuencia && !compartido) {
                 const corr = await Correlativo.findOne({ where: { prefijo: 'RET-COMPRA' }, transaction: t, lock: t.LOCK.UPDATE });
                 if (corr && Number(corr.siguienteNumero) === secuencia + 1) await corr.update({ siguienteNumero: secuencia }, { transaction: t });
             }

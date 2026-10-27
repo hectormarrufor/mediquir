@@ -79,6 +79,8 @@ const FacturaCompra = sequelize.define('FacturaCompra', {
 
 FacturaCompra.associate = (models) => {
     FacturaCompra.hasMany(models.RetencionIva, { foreignKey: 'facturaCompraId', as: 'retenciones' });
+    // Lo que se le debe al proveedor si fue a crédito (la tabla ya tiene facturaCompraId: no cambia la base)
+    FacturaCompra.hasOne(models.CuentaPorPagar, { foreignKey: 'facturaCompraId', as: 'cuentaPorPagar' });
     FacturaCompra.belongsTo(models.Proveedor, { foreignKey: 'proveedorId', as: 'proveedor' });
     FacturaCompra.belongsTo(models.User, { foreignKey: 'registradoPorId', as: 'registrador' });
 

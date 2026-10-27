@@ -90,7 +90,7 @@ async function libroCompras(q) {
            ORDER BY COALESCE(f."fechaRecepcion", f."fechaFactura"), f."createdAt"`),
         q(`SELECT r.*, f."moneda"::text AS "monedaDoc", f."tasaCambio"::float AS "tasaDoc", f."totalFinal"::float AS "totalDoc"
            FROM "RetencionesIva" r LEFT JOIN "FacturasCompras" f ON f."id" = r."facturaCompraId"
-           WHERE r."tipo" = 'COMPRA' AND r."fecha" BETWEEN :desde AND :hasta ORDER BY r."fecha", r."id"`),
+           WHERE r."tipo" = 'COMPRA' AND r."estado" = 'REGISTRADA' AND r."comprobante" IS NOT NULL AND r."fecha" BETWEEN :desde AND :hasta ORDER BY r."fecha", r."id"`),
         // Notas de crédito y de débito que emitieron los proveedores
         q(`SELECT n."tipo", n."numeroDocumento" AS numero, n."numeroControl" AS control, n."fecha", n."moneda"::text AS moneda, n."tasaCambio"::float AS tasa,
                 n."totalFinal"::float AS total, n."montoIva"::float AS iva, n."baseImponible"::float AS base, n."alicuotaIva"::float AS alicuota,
