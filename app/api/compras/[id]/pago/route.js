@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import db from '@/models';
 import { requerirNoVendedor } from '../../../_lib/acceso';
-import { tasaVigente } from '../../../_lib/tasaBcv';
-import { pagarCuenta, metodoValido, ErrorPago } from '../../../_lib/pagosCompra';
+import { tasaVigente, tasaDelDia } from '../../../_lib/tasaBcv';
+import { pagarCuenta, metodoValido, referenciaDePago, fechaDePago, ErrorPago } from '../../../_lib/pagosCompra';
+import { fechaCaracas } from '@/app/constants/hora';
 
 const { sequelize, FacturaCompra, CuentaPorPagar } = db;
 
@@ -22,7 +23,8 @@ export async function POST(request, { params }) {
         const monto = Number(body.monto);
         const moneda = body.moneda === 'BS' ? 'BS' : body.moneda === 'USD' ? 'USD' : null;
         const metodoPago = metodoValido(body.metodoPago);
-        const referencia = String(body.referencia || '').trim().slice(0, 60) || null;
+        const referencia = referenciaDePago({ referencia: body.referencia, sinComprobante: body.sinComprobante, sesion: acceso.sesion });
+        const fecha = fechaDePago(body.fechaPago);
         if (!(monto > 0)) throw new ErrorPago('El monto del pago debe ser mayor a 0');
         if (!moneda) throw new ErrorPago('Moneda del pago inválida');
         if (!metodoPago) throw new ErrorPago('Elige el método de pago');
@@ -32,9 +34,9 @@ export async function POST(request, { params }) {
         const cxp = await CuentaPorPagar.findOne({ where: { facturaCompraId: factura.id }, transaction: t, lock: t.LOCK.UPDATE });
         if (!cxp) throw new ErrorPago('Esta compra no tiene cuenta por pagar: se registró de contado', 409);
 
-        // La tasa la pone el servidor (la de hoy). Sin tasa registrada solo se acepta un pago en la moneda de la cuenta.
-        const tasa = await tasaVigente({ transaction: t }).catch(() => null);
-        const r = await pagarCuenta({ factura, cxp, monto, moneda, metodoPago, referencia, tasa }, t);
+        // La tasa la pone el servidor: la de hoy, o la de ese día si se pagó antes. Sin tasa solo se acepta un pago en la moneda de la cuenta.
+        const tasa = (fecha < fechaCaracas() ? await tasaDelDia(fecha, { transaction: t }) : null) || await tasaVigente({ transaction: t }).catch(() => null);
+        const r = await pagarCuenta({ factura, cxp, monto, moneda, metodoPago, referencia, tasa, fecha }, t);
 
         await t.commit();
         return NextResponse.json({ success: true, liquidada: r.liquidada, saldoRestante: r.saldoRestante, moneda: cxp.moneda });

@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import db from '@/models';
 import { requerirNoVendedor } from '../../_lib/acceso';
-import { tasaVigente } from '../../_lib/tasaBcv';
+import { tasaVigente, tasaDelDia } from '../../_lib/tasaBcv';
 import { retenerFacturas, ErrorRetencion } from '../../_lib/retenciones';
 import { ErrorNumeracion } from '../../_lib/numeracion';
-import { pagarCuenta, metodoValido, ErrorPago } from '../../_lib/pagosCompra';
+import { pagarCuenta, metodoValido, referenciaDePago, fechaDePago, ErrorPago } from '../../_lib/pagosCompra';
+import { fechaCaracas } from '@/app/constants/hora';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +17,8 @@ const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
  *  1. emite UN comprobante de retención (siguiente número) para las que tienen IVA y todavía no lo tienen (si retener = true), y
  *  2. paga completo lo que queda de cada una (total menos la retención), con el mismo método y referencia.
  * Todo o nada: si algo falla no queda ni el comprobante ni los pagos.
- * Body: { facturaIds, retener, porcentaje?, fecha? (del comprobante), metodoPago, referencia? }
+ * Body: { facturaIds, retener, porcentaje?, fecha? (del comprobante), metodoPago, referencia?, fechaPago?, sinComprobante? }
+ * sinComprobante: ya se pagó pero quien pagó no entregó el comprobante; queda dicho en la referencia y quién lo marcó.
  */
 export async function POST(request) {
     const acceso = await requerirNoVendedor();
@@ -26,7 +28,8 @@ export async function POST(request) {
         const body = await request.json();
         const ids = [...new Set((body.facturaIds || []).map(String))];
         const metodoPago = metodoValido(body.metodoPago);
-        const referencia = String(body.referencia || '').trim().slice(0, 60) || null;
+        const referencia = referenciaDePago({ referencia: body.referencia, sinComprobante: body.sinComprobante, sesion: acceso.sesion });
+        const fechaPago = fechaDePago(body.fechaPago);
         if (!ids.length) throw new ErrorPago('Elige al menos una factura');
         if (!metodoPago) throw new ErrorPago('Elige cómo se pagó');
 
@@ -44,14 +47,14 @@ export async function POST(request) {
         }
 
         // 2. Pago completo de lo que queda de cada una, en la moneda de su cuenta
-        const tasa = await tasaVigente({ transaction: t }).catch(() => null);
+        const tasa = (fechaPago < fechaCaracas() ? await tasaDelDia(fechaPago, { transaction: t }) : null) || await tasaVigente({ transaction: t }).catch(() => null);
         const pagos = [];
         for (const id of ids) {
             const factura = await FacturaCompra.findByPk(id, { transaction: t, lock: t.LOCK.UPDATE });
             const cxp = await CuentaPorPagar.findOne({ where: { facturaCompraId: id }, transaction: t, lock: t.LOCK.UPDATE });
             const saldo = Number(cxp?.saldoPendiente) || 0;
             if (!cxp || cxp.estado === 'Pagado' || !(saldo > 0.005)) continue;
-            const r = await pagarCuenta({ factura, cxp, monto: saldo, moneda: cxp.moneda, metodoPago, referencia, tasa }, t);
+            const r = await pagarCuenta({ factura, cxp, monto: saldo, moneda: cxp.moneda, metodoPago, referencia, tasa, fecha: fechaPago }, t);
             pagos.push({ numero: factura.numeroDocumento, moneda: cxp.moneda, monto: saldo, montoUsd: r.montoUsd, montoBs: r.montoBs });
         }
         if (!pagos.length && !retencion) throw new ErrorPago('Esas facturas ya están pagadas y no tienen nada que retener', 409);

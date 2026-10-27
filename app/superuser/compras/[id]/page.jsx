@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Badge, Box, Button, Card, Container, Divider, Grid, Group, Loader, Modal, NumberInput, Paper, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Badge, Box, Button, Card, Checkbox, Container, Divider, Grid, Group, Loader, Modal, NumberInput, Paper, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconArrowLeft, IconCash, IconFileText, IconReceiptTax } from '@tabler/icons-react';
 import PrecioVisual from '@/app/components/ui/PrecioVisual';
@@ -28,7 +28,7 @@ function PagoProveedorCard({ compra, onCambio, onPagarTodo }) {
     const { tasa } = useTasaBcv();
     const [abierto, setAbierto] = useState(false);
     const [enviando, setEnviando] = useState(false);
-    const [form, setForm] = useState({ monto: 0, moneda: 'USD', metodoPago: 'Transferencia', referencia: '' });
+    const [form, setForm] = useState({ monto: 0, moneda: 'USD', metodoPago: 'Transferencia', referencia: '', fechaPago: fechaCaracas(), sinComprobante: false });
     const cxp = compra.cuentaPorPagar;
     const pagos = compra.pagos || [];
     const monedaCuenta = cxp?.moneda || compra.moneda;
@@ -36,7 +36,7 @@ function PagoProveedorCard({ compra, onCambio, onPagarTodo }) {
     const saldo = Number(cxp?.saldoPendiente) || 0;
     const vencida = cxp && saldo > 0 && cxp.fechaVencimiento && String(cxp.fechaVencimiento).slice(0, 10) < fechaCaracas();
 
-    const abrir = () => { setForm({ monto: saldo, moneda: monedaCuenta, metodoPago: monedaCuenta === 'BS' ? 'Transferencia' : 'Zelle', referencia: '' }); setAbierto(true); };
+    const abrir = () => { setForm({ monto: saldo, moneda: monedaCuenta, metodoPago: monedaCuenta === 'BS' ? 'Transferencia' : 'Zelle', referencia: '', fechaPago: fechaCaracas(), sinComprobante: false }); setAbierto(true); };
     const equivalente = form.moneda !== monedaCuenta && tasa > 0 && Number(form.monto) > 0
         ? (monedaCuenta === 'USD' ? `$${aDolares(Number(form.monto), tasa).toFixed(2)}` : `Bs ${bs(aBolivares(Number(form.monto), tasa))}`)
         : null;
@@ -105,8 +105,11 @@ function PagoProveedorCard({ compra, onCambio, onPagarTodo }) {
                     </Group>
                     {form.moneda !== monedaCuenta && <Text size="xs" c="orange.8">Se convierte con la tasa BCV de hoy ({tasa || '…'} Bs/$){equivalente ? `: equivale a ${equivalente}` : ''}.</Text>}
                     <Select label="Método de pago" data={OPCIONES_PAGO_PROVEEDOR} allowDeselect={false} value={form.metodoPago} onChange={(v) => setForm((f) => ({ ...f, metodoPago: v }))} />
-                    <TextInput label="Referencia (opcional)" placeholder="Número de la transferencia o del recibo" value={form.referencia} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, referencia: v })); }} />
-                    <Text size="xs" c="dimmed">El pago se asienta hoy como egreso en caja y baja la deuda con el proveedor.</Text>
+                    <TextInput type="date" label="Fecha del pago" value={form.fechaPago} max={fechaCaracas()} onChange={(e) => { const v = e.currentTarget.value || fechaCaracas(); setForm((f) => ({ ...f, fechaPago: v })); }} />
+                    {/* Quien pagó (por ejemplo, el dueño) a veces no pasa el capture: igual se puede marcar como pagado, sin comprobante */}
+                    <Checkbox label="Ya se pagó, pero no tengo el comprobante (lo pagó otra persona)" checked={form.sinComprobante} onChange={(e) => { const v = e.currentTarget.checked; setForm((f) => ({ ...f, sinComprobante: v })); }} />
+                    {!form.sinComprobante && <TextInput label="Referencia (opcional)" placeholder="Número de la transferencia o del recibo" value={form.referencia} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, referencia: v })); }} />}
+                    <Text size="xs" c="dimmed">El pago se asienta en caja con la fecha del pago y baja la deuda con el proveedor.{form.sinComprobante ? ' Quedará anotado que no hay comprobante y que lo marcaste tú.' : ''}</Text>
                     <Button color="teal" loading={enviando} onClick={pagar} leftSection={<IconCash size={18} />}>Registrar pago</Button>
                 </Stack>
             </Modal>

@@ -5,7 +5,7 @@
 import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Group, Modal, ScrollArea, SegmentedControl, Select, Stack, Switch, Table, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Checkbox, Group, Modal, ScrollArea, SegmentedControl, Select, Stack, Switch, Table, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconCash, IconCheck, IconReceiptTax } from '@tabler/icons-react';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
@@ -55,6 +55,8 @@ export default function PagarRetenerModal({ facturas, modo = 'pagar', onClose, o
     const [periodo, setPeriodo] = useState(fechaCaracas().slice(0, 7));
     const [metodoPago, setMetodoPago] = useState('Transferencia');
     const [referencia, setReferencia] = useState('');
+    const [fechaPago, setFechaPago] = useState(fechaCaracas());
+    const [sinComprobante, setSinComprobante] = useState(false); // ya se pagó, pero quien pagó no pasó el comprobante
     const [enviando, setEnviando] = useState(false);
     const [resultado, setResultado] = useState(null);
 
@@ -92,7 +94,7 @@ export default function PagarRetenerModal({ facturas, modo = 'pagar', onClose, o
         setEnviando(true);
         try {
             const res = modo === 'pagar'
-                ? await fetch('/api/compras/pagar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ facturaIds: facturas.map((c) => c.id), retener: conRetencion, porcentaje: Number(pct), fecha: fechaRet, metodoPago, referencia }) })
+                ? await fetch('/api/compras/pagar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ facturaIds: facturas.map((c) => c.id), retener: conRetencion, porcentaje: Number(pct), fecha: fechaRet, metodoPago, referencia, fechaPago, sinComprobante }) })
                 : await fetch('/api/compras/retenciones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ facturaIds: porRetener.map((c) => c.id), porcentaje: Number(pct), fecha: fechaRet }) });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
@@ -186,10 +188,16 @@ export default function PagarRetenerModal({ facturas, modo = 'pagar', onClose, o
                     )}
 
                     {modo === 'pagar' && hayQuePagar && (
-                        <Group grow align="flex-start">
-                            <Select label="¿Cómo se pagó?" allowDeselect={false} data={OPCIONES_PAGO_PROVEEDOR} value={metodoPago} onChange={(v) => setMetodoPago(v || 'Transferencia')} />
-                            <TextInput label="Referencia" placeholder="Nº de la transferencia" maxLength={60} value={referencia} onChange={(e) => setReferencia(e.currentTarget.value)} />
-                        </Group>
+                        <Stack gap={6}>
+                            <Group grow align="flex-start">
+                                <TextInput type="date" label="Fecha del pago" value={fechaPago} max={hoy} onChange={(e) => setFechaPago(e.currentTarget.value || hoy)} />
+                                <Select label="¿Cómo se pagó?" allowDeselect={false} data={OPCIONES_PAGO_PROVEEDOR} value={metodoPago} onChange={(v) => setMetodoPago(v || 'Transferencia')} />
+                            </Group>
+                            <Checkbox label="Ya se pagó, pero no tengo el comprobante (lo pagó otra persona)" checked={sinComprobante} onChange={(e) => setSinComprobante(e.currentTarget.checked)} />
+                            {sinComprobante
+                                ? <Text size="xs" c="dimmed">Quedará marcada como pagada sin comprobante, con tu nombre. Si luego te pasan la referencia, puedes anotarla en caja.</Text>
+                                : <TextInput label="Referencia (opcional)" placeholder="Nº de la transferencia" maxLength={60} value={referencia} onChange={(e) => setReferencia(e.currentTarget.value)} />}
+                        </Stack>
                     )}
                     {modo === 'pagar' && hayQuePagar && (
                         <Text fw={800}>Total a pagar al proveedor: {totalesPago.map((x) => `${x.m === 'BS' ? 'Bs' : '$'} ${fmt(x.v)}`).join(' + ') || '0,00'}</Text>
