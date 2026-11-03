@@ -29,8 +29,13 @@ const resumenError = (e) => {
  * Si ningún modelo responde lanza un Error con .status (429 si fue por cuota) y .intentos = [{ modelo, estado, motivo }].
  */
 export async function generarConFallback(partes, { json = false, sinPensar = true, timeout = 40000 } = {}) {
-    const apiKey = process.env.GOOGLE_API_KEY;
-    if (!apiKey) throw new Error("API Key de Google no configurada");
+    // La llave vive en las variables de entorno del SERVIDOR: el .env local no se sube, en Vercel hay que cargarla aparte
+    const apiKey = String(process.env.GOOGLE_API_KEY || '').trim();
+    if (!apiKey) {
+        throw new Error(process.env.VERCEL
+            ? `Falta la llave de Gemini en Vercel: agrega la variable GOOGLE_API_KEY (Settings → Environment Variables, ambiente ${process.env.VERCEL_ENV || 'production'}) y vuelve a desplegar.`
+            : 'Falta la llave de Gemini: agrega GOOGLE_API_KEY al archivo .env y reinicia el servidor.');
+    }
     const genAI = new GoogleGenerativeAI(apiKey);
 
     const intentos = [];
