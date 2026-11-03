@@ -3,9 +3,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActionIcon, Button, Checkbox, Group, Menu, Paper, SegmentedControl, Select, SimpleGrid, Stack, Switch, TextInput, Tooltip } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import { IconArrowBackUp, IconChevronsDown, IconChevronsUp, IconColumns3, IconDownload, IconFileTypePdf, IconFilterOff, IconLock, IconLockOpen, IconPlus, IconSearch, IconX } from '@tabler/icons-react';
+import { IconArrowBackUp, IconChevronsDown, IconChevronsUp, IconColumns3, IconFileSpreadsheet, IconFileTypePdf, IconFilterOff, IconLock, IconLockOpen, IconPlus, IconSearch, IconX } from '@tabler/icons-react';
 import { COLUMNAS } from '../_lib/columnas';
-import { aQueryString } from '../_hooks/useInventarioParams';
 
 const ESTADOS = [
     { value: '', label: 'Todos' },
@@ -19,7 +18,7 @@ const aOpciones = (lista) => (lista || []).map((o) => ({ value: String(o.id), la
 export default function BarraFiltros({
     params, setParams, hayFiltros, limpiarFiltros, opciones, isMobile,
     columnasVisibles, setColumnasVisibles, onRestablecerColumnas, puedeEditar, bloqueado, setBloqueado,
-    onDeshacer, hayHistorial, onNuevo, onListaPrecios, grupos = [], contraidos = new Set(), setContraidos = () => {},
+    onDeshacer, hayHistorial, onNuevo, onListaPrecios, onExportar, grupos = [], contraidos = new Set(), setContraidos = () => {},
 }) {
     // La búsqueda se envía al servidor 300 ms después de dejar de teclear.
     // OJO: la URL tarda en actualizarse. Antes, al llegar el valor de la URL se pisaba lo que la persona ya seguía escribiendo
@@ -36,9 +35,6 @@ export default function BarraFiltros({
         if (q !== enviado.current) { enviado.current = q; setParams({ q }); }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [textoDebounced]);
-
-    const { page: _p, pageSize: _s, ...filtrosCsv } = params;
-    const hrefCsv = `/api/inventario/productos?${aQueryString({ ...filtrosCsv, formato: 'csv' })}`;
 
     const selector = (placeholder, datos, clave, ancho, extra = {}) => (
         <Select
@@ -101,8 +97,8 @@ export default function BarraFiltros({
             <Tooltip label="PDF con fotos: elige Precio 6 o Precio 7">
                 <Button size="xs" variant="default" leftSection={<IconFileTypePdf size={14} />} onClick={onListaPrecios} tt="none">Lista de precios</Button>
             </Tooltip>
-            <Tooltip label="Descarga todo el resultado filtrado para Excel">
-                <Button component="a" href={hrefCsv} size="xs" variant="default" leftSection={<IconDownload size={14} />} tt="none">CSV</Button>
+            <Tooltip label="Descarga el resultado filtrado a Excel: te pregunta qué columnas llevar">
+                <Button size="xs" variant="default" leftSection={<IconFileSpreadsheet size={14} />} onClick={onExportar} tt="none">Excel</Button>
             </Tooltip>
             <Button size="xs" color="navy.9" leftSection={<IconPlus size={14} />} onClick={onNuevo} tt="none">Nuevo</Button>
         </Group>

@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { Producto } from '@/models';
-import { costoPorCaja, costoPorBulto } from '@/app/constants/inventarioCampos';
+import { columnasPedidas } from '@/app/constants/inventarioExportacion';
+import { exacto } from '@/app/helpers/sinRedondeo';
+import { crearXlsx } from '@/app/api/_lib/xlsx';
 import { INCLUDES, filaProducto, tagsPorProducto, requerirStaff, puedeEditarInventario } from '../_lib';
 import { leerParametros, construirWhere } from './_consulta';
 import { obtenerEntradas, idsDeEntradas, contarProductos } from './_entradas';
 import { aplicarLote } from './_lote';
 
-const TOPE_CSV = 5000;
+const TOPE_EXPORTACION = 5000;
 
 const filasCompletas = async (ids) => {
     const [productos, tags] = await Promise.all([
@@ -18,7 +20,8 @@ const filasCompletas = async (ids) => {
 
 // GET /api/inventario/productos
 //   ?page=1&pageSize=50&q=papel&categoriaId=&marcaId=&grupoId=&tagId=&oferta=con&stock=bajo&sort=stockAlmacen&dir=asc
-//   &formato=csv  -> descarga todo el resultado filtrado (hasta 5000 filas) como CSV para Excel
+//   &formato=xlsx (o csv) &columnas=codigo,nombre,... -> descarga todo el resultado filtrado (hasta 5000 filas) para Excel,
+//                                                       solo con las columnas elegidas (ver app/constants/inventarioExportacion.js)
 //
 // Se pagina por ENTRADAS: un grupo de equivalencia con sus hermanos cuenta como una sola entrada.
 export async function GET(request) {
@@ -30,7 +33,8 @@ export async function GET(request) {
         const f = leerParametros(url.searchParams);
         const entradas = await obtenerEntradas(f, construirWhere(f));
 
-        if (url.searchParams.get('formato') === 'csv') return await exportarCsv(entradas);
+        const formato = url.searchParams.get('formato');
+        if (formato === 'csv' || formato === 'xlsx') return await exportar(entradas, formato, url.searchParams.get('columnas'));
 
         const total = entradas.length;
         const totalPages = Math.max(1, Math.ceil(total / f.pageSize));
@@ -83,33 +87,50 @@ export async function PATCH(request) {
     }
 }
 
-const celdaCsv = (v) => {
-    if (v === null || v === undefined) return '';
-    const s = typeof v === 'number' ? String(Math.round(v * 100000) / 100000).replace('.', ',') : String(v);
+// Fecha de hoy en Caracas (UTC-4 todo el año) para el nombre del archivo
+const hoyCaracas = () => new Date(Date.now() - 4 * 3600 * 1000).toISOString().slice(0, 10);
+
+const celdaCsv = (v, tipo) => {
+    if (v === null || v === undefined || v === '') return '';
+    let s;
+    if (tipo === 'numero') s = String(exacto(v)).replace('.', ',');
+    else if (tipo === 'fecha') s = new Date(new Date(v).getTime() - 4 * 3600 * 1000).toISOString().slice(0, 16).replace('T', ' ');
+    else s = String(v);
     return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-async function exportarCsv(entradas) {
-    const ids = idsDeEntradas(entradas).slice(0, TOPE_CSV);
+// Solo las columnas que eligió la persona (&columnas=codigo,nombre,...), en el orden de la lista.
+// Excel (.xlsx) por defecto; &formato=csv sigue funcionando para quien lo use.
+async function exportar(entradas, formato, columnasTexto) {
+    const columnas = columnasPedidas(columnasTexto);
+    const ids = idsDeEntradas(entradas).slice(0, TOPE_EXPORTACION);
     const filas = await filasCompletas(ids);
-    const cab = ['Código', 'Producto', 'Categoría', 'Marca', 'Grupo', 'Stock', 'Stock mínimo (grupo o propio)', 'Costo por unidad USD', 'Precio 6', 'Precio 7', '% Descuento', '% IVA', 'Presentación', 'Und por caja', 'Cajas por bulto', 'Und por bulto', 'Costo por caja', 'Costo por bulto', 'Modificado'];
-    const lineas = [];
+    const datos = [];
     entradas.forEach((e) => {
-        const ids2 = e.tipo === 'grupo' ? e.hijos.map((h) => h.id) : [e.producto.id];
-        ids2.forEach((id) => {
+        const idsEntrada = e.tipo === 'grupo' ? e.hijos.map((h) => h.id) : [e.producto.id];
+        idsEntrada.forEach((id) => {
             const r = filas.get(id);
-            if (!r) return;
-            const minimo = e.tipo === 'grupo' ? e.grupo.stockMinimoGlobal : r.stockMinimo;
-            lineas.push([r.codigo, r.nombre, r.categoria?.nombre, r.marca?.nombre, r.grupo?.nombre, r.stockAlmacen, minimo, r.costoUsd, r.precio6, r.precio7, r.porcentajeDescuento, r.porcentajeIva, r.presentacion, r.unidadesPorCaja, r.cajasPorBulto, r.unidadesPorBulto, costoPorCaja(r), costoPorBulto(r), new Date(r.updatedAt).toISOString().slice(0, 16).replace('T', ' ')]
-                .map(celdaCsv).join(';'));
+            if (r) datos.push(columnas.map((c) => c.valor(r, e)));
         });
     });
-    // BOM + ';' para que Excel en español lo abra con columnas y acentos correctos
-    const cuerpo = '﻿' + [cab.join(';'), ...lineas].join('\r\n');
-    return new NextResponse(cuerpo, {
+
+    if (formato === 'csv') {
+        const lineas = datos.map((fila) => fila.map((v, i) => celdaCsv(v, columnas[i].tipo)).join(';'));
+        // BOM + ';' para que Excel en español lo abra con columnas y acentos correctos
+        const cuerpo = '﻿' + [columnas.map((c) => celdaCsv(c.label)).join(';'), ...lineas].join('\r\n');
+        return new NextResponse(cuerpo, {
+            headers: {
+                'Content-Type': 'text/csv; charset=utf-8',
+                'Content-Disposition': `attachment; filename="inventario-${hoyCaracas()}.csv"`,
+            },
+        });
+    }
+
+    const archivo = crearXlsx({ hoja: 'Inventario', columnas, filas: datos });
+    return new NextResponse(archivo, {
         headers: {
-            'Content-Type': 'text/csv; charset=utf-8',
-            'Content-Disposition': `attachment; filename="inventario-${new Date().toISOString().slice(0, 10)}.csv"`,
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition': `attachment; filename="inventario-${hoyCaracas()}.xlsx"`,
         },
     });
 }

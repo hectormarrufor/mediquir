@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { GrupoEquivalencia, Categoria } from '@/models'; 
 import { requerirStaff } from '@/app/api/inventario/_lib';
+import { nombreRepetido } from '@/app/api/_lib/nombreRepetido';
 
 // GET: Listar todos los grupos con su categoría
 export async function GET() {
@@ -32,8 +33,11 @@ export async function POST(req) {
             return NextResponse.json({ error: 'Debe heredar una categoría válida' }, { status: 400 });
         }
 
+        const otro = await nombreRepetido(GrupoEquivalencia, nombre);
+        if (otro) return NextResponse.json({ error: `Ya existe el grupo "${otro.nombre}"` }, { status: 409 });
+
         const nuevoGrupo = await GrupoEquivalencia.create({
-            nombre: nombre.trim(),
+            nombre: nombre.trim().replace(/\s+/g, ' '),
             stockMinimoGlobal: stockMinimoGlobal ? parseInt(stockMinimoGlobal) : 0,
             categoriaId: parseInt(categoriaId),
             imagen: imagen || null // Guardamos la url de la imagen si existe

@@ -6,13 +6,14 @@ import { useLocalStorage, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { IconAlertCircle, IconBarcode, IconEye, IconPencil, IconPhotoCheck } from '@tabler/icons-react';
+import { IconAlertCircle, IconBarcode, IconCategory, IconEye, IconPencil, IconPhotoCheck } from '@tabler/icons-react';
 import { COLUMNAS, VISIBLES_POR_DEFECTO, aplanarEntradas } from './_lib/columnas';
 import { useInventarioParams } from './_hooks/useInventarioParams';
 import { useEdicionInventario, useListaInventario, useOpcionesInventario, useResumenInventario } from './_hooks/useInventario';
 import BarraFiltros from './_components/BarraFiltros';
 import FotoModal from './_components/FotoModal';
 import ListaPreciosModal from './_components/ListaPreciosModal';
+import ExportarExcelModal from './_components/ExportarExcelModal';
 import InventarioGrid from './_components/InventarioGrid';
 import ListaMovil from './_components/ListaMovil';
 import PaginacionInventario from './_components/PaginacionInventario';
@@ -40,6 +41,7 @@ export default function InventarioProductosPage() {
     const [contraidos, setContraidos] = useState(() => new Set());
     const [fotoDe, setFotoDe] = useState(null);
     const [listaPrecios, setListaPrecios] = useState(false);
+    const [exportar, setExportar] = useState(false);
 
     const entries = data?.entries ?? [];
     const tienePermiso = Boolean(data?.permisos?.editar);
@@ -148,6 +150,9 @@ export default function InventarioProductosPage() {
                     <Button variant="white" leftSection={<IconPhotoCheck size={18} />} onClick={() => router.push('/superuser/inventario/auditar')}>
                         Auditar fotos y precios
                     </Button>
+                    <Button variant="white" leftSection={<IconCategory size={18} />} onClick={() => router.push('/superuser/inventario/clasificacion')}>
+                        Marcas, categorías y grupos
+                    </Button>
                 </Group>
             )}
 
@@ -162,6 +167,7 @@ export default function InventarioProductosPage() {
                 grupos={todosLosGrupos} contraidos={contraidos} setContraidos={setContraidos}
                 onNuevo={() => router.push('/superuser/inventario/productos/nuevo')}
                 onListaPrecios={() => setListaPrecios(true)}
+                onExportar={() => setExportar(true)}
             />
 
             {isError && !data ? (
@@ -205,6 +211,7 @@ export default function InventarioProductosPage() {
             )}
 
             <ListaPreciosModal opened={listaPrecios} onClose={() => setListaPrecios(false)} params={params} hayFiltros={hayFiltros} />
+            <ExportarExcelModal opened={exportar} onClose={() => setExportar(false)} params={params} hayFiltros={hayFiltros} totalProductos={data?.totalProductos} />
             <FotoModal item={fotoDe} onCerrar={() => setFotoDe(null)} onCambiarImagen={cambiarImagen} onCambiarMarca={cambiarFotoMarca} />
         </Box>
     );

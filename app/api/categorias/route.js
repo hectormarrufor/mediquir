@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Categoria } from '@/models';
 import { requerirStaff } from '@/app/api/inventario/_lib';
+import { nombreRepetido } from '@/app/api/_lib/nombreRepetido';
 
 // GET: Obtener todas las categorías
 export async function GET() {
@@ -25,8 +26,11 @@ export async function POST(req) {
             return NextResponse.json({ error: 'El nombre de la categoría es obligatorio' }, { status: 400 });
         }
 
+        const otra = await nombreRepetido(Categoria, body.nombre);
+        if (otra) return NextResponse.json({ error: `Ya existe la categoría "${otra.nombre}"` }, { status: 409 });
+
         const nuevaCategoria = await Categoria.create({
-            nombre: body.nombre.trim(),
+            nombre: body.nombre.trim().replace(/\s+/g, ' '),
             descripcion: body.descripcion || null
         });
         

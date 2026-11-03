@@ -36,6 +36,16 @@ export async function puedeEditarInventario(sesion) {
     return coincide(permiso.allowedDepartments, misDeptos) || coincide(permiso.allowedPositions, misPuestos);
 }
 
+// Para cambiar o borrar marcas, categorías y grupos: personal con el permiso de edición de inventario (o admin).
+export async function requerirEditorInventario() {
+    const { sesion, error } = await requerirStaff();
+    if (error) return { error };
+    if (!(await puedeEditarInventario(sesion))) {
+        return { error: NextResponse.json({ error: 'Necesitas el permiso de edición de inventario para hacer este cambio' }, { status: 403 }) };
+    }
+    return { sesion };
+}
+
 // Includes comunes: solo relaciones belongsTo, así una fila de producto = una fila SQL (paginación correcta).
 export const INCLUDES = [
     { model: Categoria, as: 'categoria', attributes: ['id', 'nombre'] },
