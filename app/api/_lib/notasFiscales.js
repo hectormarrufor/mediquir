@@ -16,7 +16,7 @@ import { fechaCaracas } from '../../constants/hora.js';
 
 const {
     sequelize, NotaFiscal, NotaFiscalDetalle, Venta, VentaDetalle, Producto, Abono, CuentaPorCobrar, CuentaPorPagar, Correlativo,
-    MovimientoFinanciero, CategoriaFinanciera, Cliente,
+    MovimientoFinanciero, CategoriaFinanciera, Cliente, FacturaCompra,
 } = db;
 
 export class ErrorNota extends Error {
@@ -272,24 +272,31 @@ export async function registrarNotaCompra({ factura, tipo, numeroDocumento, nume
     }, { transaction: t });
 
     const cxp = await CuentaPorPagar.findOne({ where: { facturaCompraId: factura.id }, transaction: t, lock: t.LOCK.UPDATE });
+    const estadoFactura = async (estado) => { if (factura.statusPago !== estado) { factura.statusPago = estado; await factura.save({ transaction: t }); } };
     if (tipo === 'CREDITO') {
+        // aplicadoCxp: cuánto bajó de verdad lo que se le debe al proveedor (al anular la nota se devuelve ESO, no el total de la nota)
+        let aplicadoCxp = 0;
         if (cxp) {
             const saldo = Number(cxp.saldoPendiente);
+            aplicadoCxp = r2(Math.min(Math.max(0, saldo), total));
             cxp.saldoPendiente = r2(Math.max(0, saldo - total));
-            if (cxp.saldoPendiente <= 0.005) cxp.estado = 'Pagado';
+            if (cxp.saldoPendiente <= 0.005) { cxp.saldoPendiente = 0; cxp.estado = 'Pagado'; await estadoFactura('Pagado'); }
             await cxp.save({ transaction: t });
             // Si ya se había pagado de más, el proveedor nos debe esa diferencia
             nota.saldoAFavorUsd = aUsdDoc(Math.max(0, total - saldo), moneda, tasa);
         } else {
             nota.saldoAFavorUsd = aUsdDoc(total, moneda, tasa); // factura pagada de contado: el proveedor nos debe el monto
         }
+        nota.facturasAfectadas = [{ numeroDocumento: factura.numeroDocumento, fecha: String(factura.fechaFactura || '').slice(0, 10), aplicadoCxp }];
         await nota.save({ transaction: t });
     } else if (cxp) {
         cxp.montoTotal = r2(Number(cxp.montoTotal) + total);
         cxp.saldoPendiente = r2(Number(cxp.saldoPendiente) + total);
         cxp.estado = 'Pendiente';
         await cxp.save({ transaction: t });
+        await estadoFactura('Pendiente');
     } else {
+        await estadoFactura('Pendiente');
         await CuentaPorPagar.create({
             proveedorId: factura.proveedorId, facturaCompraId: factura.id, montoTotal: total, saldoPendiente: total, moneda, tasaCambio: tasa,
             fechaVencimiento: fechaCaracas(new Date(Date.now() + 7 * 86400000)), estado: 'Pendiente',
@@ -343,16 +350,26 @@ export async function anularNota({ nota, transaction: t }) {
         }
     } else {
         const cxp = await CuentaPorPagar.findOne({ where: { facturaCompraId: nota.facturaCompraId }, transaction: t, lock: t.LOCK.UPDATE });
+        const factura = await FacturaCompra.findByPk(nota.facturaCompraId, { transaction: t, lock: t.LOCK.UPDATE });
+        const estadoFactura = async (estado) => { if (factura && factura.statusPago !== estado) { factura.statusPago = estado; await factura.save({ transaction: t }); } };
         if (cxp) {
             const monto = Number(nota.totalFinal);
             if (nota.tipo === 'CREDITO') {
-                cxp.saldoPendiente = r2(Number(cxp.saldoPendiente) + monto);
-                cxp.estado = 'Pendiente';
+                // Vuelve a la deuda SOLO lo que la nota le había bajado. Antes se sumaba el total de la nota: si la nota dejó saldo a
+                // favor o cayó sobre una factura ya pagada, al anularla aparecía una deuda que no existía.
+                const registro = (Array.isArray(nota.facturasAfectadas) ? nota.facturasAfectadas : []).find((f) => f && f.aplicadoCxp !== undefined);
+                const favorEnDoc = nota.moneda === 'BS' ? aBsDoc(aBolivares(Number(nota.saldoAFavorUsd) || 0, Number(nota.tasaCambio) || 1), 'BS', 1) : Number(nota.saldoAFavorUsd) || 0;
+                const aplicado = registro ? Number(registro.aplicadoCxp) || 0 : r2(Math.max(0, monto - favorEnDoc)); // notas anteriores a este cambio
+                if (aplicado > 0.005) {
+                    cxp.saldoPendiente = r2(Number(cxp.saldoPendiente) + aplicado);
+                    cxp.estado = 'Pendiente';
+                    await estadoFactura('Pendiente');
+                }
             } else {
                 if (Number(cxp.saldoPendiente) < monto - 0.005) throw new ErrorNota('Ya se pagó parte de esta nota de débito: no se puede anular', 409);
                 cxp.montoTotal = r2(Number(cxp.montoTotal) - monto);
                 cxp.saldoPendiente = r2(Number(cxp.saldoPendiente) - monto);
-                if (cxp.saldoPendiente <= 0.005) cxp.estado = 'Pagado';
+                if (cxp.saldoPendiente <= 0.005) { cxp.saldoPendiente = 0; cxp.estado = 'Pagado'; await estadoFactura('Pagado'); }
             }
             await cxp.save({ transaction: t });
         }

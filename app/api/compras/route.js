@@ -4,7 +4,7 @@ import sequelize from '@/sequelize';
 import db from '@/models';
 import { requerirStaff } from '../inventario/_lib';
 import { rolDe } from '@/app/constants/roles';
-import { aBolivaresExacto } from '@/app/constants/facturacion';
+import { aBolivaresExacto, retencionCompra } from '@/app/constants/facturacion';
 import { exacto, formatoExacto } from '@/app/helpers/sinRedondeo';
 import { fechaCaracas } from '@/app/constants/hora';
 import { notificarCabezas } from '@/app/handlers/notificar';
@@ -131,6 +131,15 @@ export async function POST(request) {
         if (!['FACTURA', 'NOTA_ENTREGA'].includes(tipoDocumento)) {
             return NextResponse.json({ error: 'Tipo de documento inválido: una compra es una factura o una nota de entrega' }, { status: 400 });
         }
+        // A crédito nace una cuenta por pagar con su vencimiento: sin días de crédito no se podía guardar (la cuenta exige la fecha)
+        if (!['Contado', 'Credito'].includes(condicionPago)) {
+            return NextResponse.json({ error: 'Condición de pago inválida: de contado o a crédito' }, { status: 400 });
+        }
+        if (condicionPago === 'Credito' && !(Number.isInteger(Number(diasCredito)) && Number(diasCredito) >= 1)) {
+            return NextResponse.json({ error: 'Indica los días de crédito (1 o más)' }, { status: 400 });
+        }
+        if (!['USD', 'BS'].includes(moneda)) return NextResponse.json({ error: 'Moneda inválida' }, { status: 400 });
+        if (moneda === 'BS' && !(Number(tasaCambio) > 0)) return NextResponse.json({ error: 'Falta la tasa de cambio de la factura' }, { status: 400 });
         const esFactura = tipoDocumento === 'FACTURA';
         // Los montos se guardan TAL CUAL (sin redondear a céntimos): lo que se escribió en la factura y lo que da de ahí.
         // `exacto` solo quita el ruido de la coma flotante (7,665000000000001 -> 7,665).
@@ -146,7 +155,10 @@ export async function POST(request) {
         const aplicaRetencion = CONFIG_FISCAL.agenteRetencionIva && esFactura && montoIva > 0;
         const retiene = aplicaRetencion && modoRetencion === 'ahora';
         const retencionPendiente = aplicaRetencion && modoRetencion === 'despues' && condicionPago === 'Credito';
-        const montoRetencion = retiene ? exacto(montoIva * porcentajeRetencion / 100) : 0;
+        // Misma regla que la retención al pagar y que la pantalla: IVA en Bs (tasa completa, a céntimos) × %, a céntimos.
+        // Así el comprobante, el libro y lo que se le descuenta al proveedor dan exactamente lo mismo.
+        const calcRetencion = retiene ? retencionCompra({ moneda, tasaCambio, montoIva, porcentaje: porcentajeRetencion }) : null;
+        const montoRetencion = calcRetencion ? calcRetencion.enMoneda : 0;
 
         // Datos fiscales coherentes: no se puede retener más IVA del que tiene la factura
         if (Number(montoRetencion) > Number(montoIva) + 0.005) {
@@ -248,11 +260,14 @@ export async function POST(request) {
             const repetida = await FacturaCompra.findOne({ where: { proveedorId: idProveedorFinal, tipoDocumento, numeroDocumento }, attributes: ['id'], transaction: t });
             if (repetida) throw new ErrorCompra(`Ya registraste ${esFactura ? 'la factura' : 'la nota de entrega'} ${numeroDocumento} de este proveedor`, 409);
 
+            // Vence N días después de la fecha de la factura. Se cuenta sobre la fecha (AAAA-MM-DD), sin horas: antes, según el huso
+            // horario del servidor, podía quedar un día antes.
             let fechaVencimiento = null;
-            if (condicionPago === 'Credito' && Number(diasCredito) > 0) {
-                const baseDate = fechaFactura ? new Date(fechaFactura) : new Date();
-                fechaVencimiento = new Date(baseDate);
-                fechaVencimiento.setDate(fechaVencimiento.getDate() + Number(diasCredito));
+            if (condicionPago === 'Credito') {
+                const base = /^\d{4}-\d{2}-\d{2}/.test(String(fechaFactura || '')) ? String(fechaFactura).slice(0, 10) : fechaCaracas();
+                const d = new Date(`${base}T12:00:00Z`);
+                d.setUTCDate(d.getUTCDate() + Number(diasCredito));
+                fechaVencimiento = d.toISOString().slice(0, 10);
             }
 
             const nuevaFacturaCompra = await FacturaCompra.create({
@@ -291,8 +306,8 @@ export async function POST(request) {
                     tipo: 'COMPRA', fecha: fechaRet, periodo: periodoDe(fechaRet), comprobante: comprobanteRetencion,
                     facturaAfectada: numeroDocumento, numeroControlFactura: String(numeroControl || '').trim().slice(0, 30) || null,
                     contraparteRif: prov?.identificacion || null, contraparteNombre: prov?.nombre || null,
-                    baseImponible: aBs(subtotalNum - Number(montoExento || 0)), alicuota: 16, montoIva: aBs(montoIva),
-                    porcentajeRetencion: Number(porcentajeRetencion) || 75, ivaRetenido: aBs(montoRetencion),
+                    baseImponible: aBs(subtotalNum - Number(montoExento || 0)), alicuota: 16, montoIva: calcRetencion.ivaBs,
+                    porcentajeRetencion: Number(porcentajeRetencion) || 75, ivaRetenido: calcRetencion.retenidoBs,
                     tasaCambio: Number(tasaCambio) || 1, facturaCompraId: nuevaFacturaCompra.id, registradoPorId: registradoPorId || null,
                 }, { transaction: t });
             } else if (retencionPendiente) {

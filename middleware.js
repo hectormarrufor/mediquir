@@ -37,6 +37,7 @@ const CUALQUIER_SESION = [/^\/api\/notificaciones(\/|$)/, /^\/api\/users\/change
 const VENDEDOR_API = [
     ['GET', /^\/api\/(categorias|marcas|grupos-equivalencia|tags|proveedores|correlativos)$/],
     ['POST', /^\/api\/proveedores$/],
+    ['GET', /^\/api\/proveedores\/resumen$/],      // pantalla de proveedores (la ruta le quita lo que se les debe)
     ['GET', /^\/api\/clientes(\/[^/]+)?$/],
     ['POST', /^\/api\/clientes$/],
     ['GET', /^\/api\/presupuestos(\/[^/]+)?$/],   // cotizaciones: no son un documento fiscal, cualquier vendedor puede hacerlas
@@ -63,7 +64,7 @@ const VENDEDOR_API = [
 const VENDEDOR_PAGINAS = [
     /^\/superuser$/, /^\/superuser\/ventas(\/.*)?$/, /^\/superuser\/compras$/,
     /^\/superuser\/inventario\/consulta$/, /^\/superuser\/clientes(\/nuevo)?$/, /^\/superuser\/notificaciones$/,
-    /^\/superuser\/presupuestos(\/.*)?$/,
+    /^\/superuser\/presupuestos(\/.*)?$/, /^\/superuser\/proveedores$/,
 ];
 
 const json = (mensaje, status) => NextResponse.json({ error: mensaje }, { status });

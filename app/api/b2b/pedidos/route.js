@@ -173,7 +173,7 @@ export async function POST(request) {
         if (aCredito && !enRevision) {
             await CuentaPorCobrar.create({
                 clienteId, ventaId: venta.id, montoTotal: factura.totalFinal, saldoPendiente: factura.totalFinal,
-                moneda: 'USD', tasaCambio, fechaVencimiento: venta.fechaVencimiento, estado: 'Pendiente',
+                moneda: 'USD', tasaCambio, fechaVencimiento: fechaCaracas(venta.fechaVencimiento), estado: 'Pendiente',
             }, { transaction: t });
         }
 

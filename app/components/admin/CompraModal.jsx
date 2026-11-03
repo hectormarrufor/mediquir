@@ -17,6 +17,7 @@ import { RevisionRenglonesIA, CuadreFactura, prepararRenglones, normRif } from '
 import SelectorRetencion, { validarRetencion } from './SelectorRetencion';
 import { notifications } from '@mantine/notifications';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
+import { retencionCompra } from '@/app/constants/facturacion';
 import PrecioVisual from '../ui/PrecioVisual';
 import { useAuth } from '@/hooks/useAuth';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
@@ -483,7 +484,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     // De contado se paga ya: la retención no puede quedar para el pago
     const retencionModo = formCompra.values.condicionPago === 'Contado' && formCompra.values.retencionModo === 'despues' ? 'ahora' : formCompra.values.retencionModo;
     if (retencionModo === 'ahora' && esFactura && montoIva > 0) {
-        montoRetencion = exacto(montoIva * (formCompra.values.porcentajeRetencion / 100));
+        // Lo mismo que dirá el comprobante: IVA en Bs (a céntimos) × %, a céntimos (app/constants/facturacion.js)
+        montoRetencion = retencionCompra({ moneda: formCompra.values.moneda, tasaCambio: tasa, montoIva, porcentaje: formCompra.values.porcentajeRetencion }).enMoneda;
     }
 
     const totalFinal = exacto(subtotal + montoIva);

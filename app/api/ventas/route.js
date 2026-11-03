@@ -193,7 +193,14 @@ export async function POST(request) {
         await corr.save({ transaction: t });
 
         // --- 3. VENTA ---
-        const fechaVencimiento = condicionPago === 'Credito' ? new Date(Date.now() + 15 * 86400000) : null;
+        // A crédito vence a los días de crédito del cliente (los de su ficha); si no tiene, a los 15 días
+        let diasCredito = 15;
+        if (condicionPago === 'Credito') {
+            const clienteCredito = await Cliente.findByPk(clienteId, { attributes: ['id', 'diasCredito'], transaction: t });
+            if (!clienteCredito) throw new ErrorNegocio('El cliente de la venta a crédito no existe');
+            if (Number(clienteCredito.diasCredito) > 0) diasCredito = Number(clienteCredito.diasCredito);
+        }
+        const fechaVencimiento = condicionPago === 'Credito' ? new Date(Date.now() + diasCredito * 86400000) : null;
         const nuevaVenta = await Venta.create({
             clienteId: clienteId || null,
             vendedorId: esVend ? Number(acceso.sesion.id) : (vendedorId || null),
@@ -215,7 +222,7 @@ export async function POST(request) {
                 saldoPendiente: factura.totalFinal,
                 moneda,
                 tasaCambio,
-                fechaVencimiento,
+                fechaVencimiento: fechaCaracas(fechaVencimiento),
                 estado: 'Pendiente',
             }, { transaction: t });
         }

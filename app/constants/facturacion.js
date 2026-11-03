@@ -132,6 +132,23 @@ export function aBolivaresExacto(monto, tasa = 1) {
     return aNumero(negativo ? -redondeado : redondeado, D_MONTO);
 }
 
+/**
+ * Retención de IVA de una factura de COMPRA (el comprobante lo emite la empresa). Regla del comprobante y del libro de compras:
+ * IVA en bolívares (con la tasa completa de la factura, a céntimos) × 75 % o 100 %, a céntimos.
+ * `enMoneda`: lo retenido en la moneda de la factura, que es lo que se le descuenta al proveedor de su cuenta por pagar.
+ * La usan el registro de la compra (pantalla y servidor) y la retención al pagar: antes cada uno calculaba distinto y el
+ * comprobante podía diferir en un céntimo de lo que se le descontaba al proveedor.
+ */
+export function retencionCompra({ moneda, tasaCambio, montoIva, porcentaje }) {
+    const tasa = moneda === 'BS' ? 1 : (Number(tasaCambio) || 1);
+    const ivaBs = aBolivaresExacto(Math.max(0, Number(montoIva) || 0), tasa);
+    const pct = BigInt(Math.round(Number(porcentaje) || 0));
+    const retenidoCent = dividirRedondeando(aEscala(ivaBs, D_MONTO) * pct, 100n);
+    const retenidoBs = aNumero(retenidoCent, D_MONTO);
+    const enMoneda = moneda === 'BS' ? retenidoBs : aNumero(dividirRedondeando(retenidoCent * POT(D_EXACTO), aEscala(tasa, D_EXACTO)), D_MONTO);
+    return { ivaBs, retenidoBs, enMoneda };
+}
+
 // Precio unitario en bolívares (se muestra con 2 decimales)
 export const precioEnBolivares = (precioUsd, tasa) => aBolivares(precioUsd, tasa);
 

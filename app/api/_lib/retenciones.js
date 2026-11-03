@@ -1,6 +1,6 @@
 import { Correlativo, FacturaCompra, Proveedor, RetencionIva, CuentaPorPagar } from '@/models';
 import { ErrorNumeracion, ultimoUsado } from './numeracion.js';
-import { aBolivaresExacto } from '@/app/constants/facturacion';
+import { aBolivaresExacto, retencionCompra } from '@/app/constants/facturacion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { fechaCaracas } from '@/app/constants/hora';
 
@@ -61,14 +61,9 @@ export const porcentajeDe = (elegido, proveedor) => {
  * facturas suma esas retenciones ya redondeadas, así cada columna cuadra al céntimo. `enMoneda`: lo retenido en la moneda de la factura.
  */
 export function calcularRetencion(factura, pct) {
-    const ivaBs = enBs(factura, factura.montoIva);
-    const retenidoBs = r2(ivaBs * pct / 100);
-    const tasa = Number(factura.tasaCambio) || 1;
-    return {
-        ivaBs, retenidoBs,
-        baseBs: enBs(factura, Number(factura.subtotal) - Number(factura.montoExento || 0)),
-        enMoneda: factura.moneda === 'BS' ? retenidoBs : r2(retenidoBs / tasa),
-    };
+    // La misma cuenta que hace la pantalla al registrar la compra con «Retener ahora» (app/constants/facturacion.js)
+    const { ivaBs, retenidoBs, enMoneda } = retencionCompra({ moneda: factura.moneda, tasaCambio: factura.tasaCambio, montoIva: factura.montoIva, porcentaje: pct });
+    return { ivaBs, retenidoBs, enMoneda, baseBs: enBs(factura, Number(factura.subtotal) - Number(factura.montoExento || 0)) };
 }
 
 // Fila de la retención de una factura (la misma forma para la que se emite y para la que queda pendiente)

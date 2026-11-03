@@ -4,7 +4,7 @@
 import db from '../../../models/index.js';
 import { aBolivares, aDolares } from '../../constants/facturacion.js';
 
-const { Abono, CuentaPorCobrar, RetencionIva, Cliente, VentaDetalle } = db;
+const { Abono, CuentaPorCobrar, RetencionIva, Cliente, VentaDetalle, MovimientoFinanciero } = db;
 
 export const hoyCaracas = () =>
     new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -17,6 +17,14 @@ export async function recalcularCobro(venta, t) {
     let pagada = abonadoUsd >= totalUsd - 0.005;
 
     const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, transaction: t });
+    if (!cxc) {
+        // Sin cuenta por cobrar: venta de contado. Si se cobró en caja al registrarla, ese cobro son sus ingresos de caja (no abonos).
+        // Se compara en la moneda de la venta para no perder céntimos al convertir.
+        const enMoneda = (x) => Number(venta.moneda === 'BS' ? x.montoVes : x.montoUsd) || 0;
+        const cobradoCaja = await MovimientoFinanciero.findAll({ where: { ventaId: venta.id, tipo: 'INGRESO', abonoId: null }, attributes: ['montoUsd', 'montoVes'], transaction: t });
+        const cobrado = abonos.reduce((a, x) => a + enMoneda(x), 0) + cobradoCaja.reduce((a, x) => a + enMoneda(x), 0);
+        pagada = cobrado >= Number(venta.totalFinal) - 0.005;
+    }
     // La cuenta creada por una nota de débito sobre una factura ya cobrada solo tiene la deuda de la nota: sus pagos no son los de la factura
     if (cxc?.notaId) {
         venta.statusPago = cxc.estado === 'Pagado' ? 'Pagado' : 'Pendiente';
