@@ -19,14 +19,24 @@ const CAMBIOS = [
     ['EntradasInventario', 'costoUnitario', 'numeric(20,8)'],
 ];
 
+// Algunas tablas (EntradasInventario, underscored) guardan las columnas como costo_unitario y no costoUnitario:
+// se busca el nombre real en la base antes de cambiarla.
+const conGuionBajo = (s) => s.replace(/[A-Z]/g, (l) => `_${l.toLowerCase()}`);
+
 (async () => {
     const db = new Client({ connectionString: process.env.DB_URI, ssl: { rejectUnauthorized: false } });
     await db.connect();
     try {
         await db.query('BEGIN');
         for (const [tabla, columna, tipo] of CAMBIOS) {
-            await db.query(`ALTER TABLE "${tabla}" ALTER COLUMN "${columna}" TYPE ${tipo}`);
-            console.log(`  ${tabla}.${columna} -> ${tipo}`);
+            const { rows } = await db.query(
+                `SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1 AND column_name = ANY($2)`,
+                [tabla, [columna, conGuionBajo(columna)]]
+            );
+            if (!rows.length) throw new Error(`no existe la columna ${columna} (ni ${conGuionBajo(columna)}) en "${tabla}"`);
+            const real = rows[0].column_name;
+            await db.query(`ALTER TABLE "${tabla}" ALTER COLUMN "${real}" TYPE ${tipo}`);
+            console.log(`  ${tabla}.${real} -> ${tipo}`);
         }
         await db.query('COMMIT');
         console.log('Migración lista: las compras ya guardan los montos y la tasa con todos sus decimales.');
