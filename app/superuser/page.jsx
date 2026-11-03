@@ -16,7 +16,7 @@ import {
     IconPackage,
     IconBuildingStore,
     IconReceipt,
-    IconShieldCheck, IconTargetArrow } from '@tabler/icons-react';
+    IconShieldCheck, IconTargetArrow, IconBuildingWarehouse } from '@tabler/icons-react';
 import './superuser.css';
 import { useAuth } from '@/hooks/useAuth';
 import TareasPanel from '../components/tareas/TareasPanel';
@@ -38,6 +38,7 @@ const glassCardStyle = {
 
 const menuOptions = [
     { title: 'Clientes', href: '/superuser/clientes', description: 'Gestión de clientes', icon: IconUser, color: 'green' },
+    { title: 'Proveedores', href: '/superuser/proveedores', description: 'Gestión de proveedores: datos, compras, deuda y retención de IVA.', icon: IconBuildingWarehouse, color: 'orange' },
     { title: 'Inventario', href: '/superuser/inventario', description: 'Control almacén.', icon: IconArchive, color: 'indigo' },
     { title: 'Personal', href: '/superuser/rrhh', description: 'RRHH y empleados.', icon: IconUser, color: 'cyan' },
     { title: 'Ventas / Pedidos', href: '/superuser/ventas', description: 'Gestión de ventas de diario y pedidos.', icon: IconShoppingCart, color: 'grape' },

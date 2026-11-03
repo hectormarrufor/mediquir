@@ -1,58 +1,46 @@
 import { NextResponse } from 'next/server';
-import db from '@/models';
-const { Proveedor } = db;
+import { Proveedor } from '@/models';
+import { requerirStaff } from '@/app/api/inventario/_lib';
+import { datosProveedor, rifRepetido } from './_datos';
 
-// GET: Listar todos los proveedores activos para poblar el select
+// GET: proveedores ACTIVOS, para los selectores (registro de compras). La pantalla de proveedores usa /api/proveedores/resumen.
 export async function GET() {
+    const { error } = await requerirStaff();
+    if (error) return error;
     try {
         const proveedores = await Proveedor.findAll({
             where: { activo: true },
             order: [['nombre', 'ASC']]
         });
         return NextResponse.json(proveedores);
-    } catch (error) {
-        console.error('Error al obtener proveedores:', error);
+    } catch (err) {
+        console.error('Error al obtener proveedores:', err);
         return NextResponse.json({ error: 'Error al obtener la lista de proveedores' }, { status: 500 });
     }
 }
 
-// POST: Crear un proveedor nuevo (desde el modal de compras)
+// POST: crear un proveedor (desde la pantalla de proveedores o desde el registro de compras).
+// El porcentaje de retención de IVA es obligatorio: no se asume 75 %.
 export async function POST(request) {
+    const { error } = await requerirStaff();
+    if (error) return error;
     try {
-        const body = await request.json();
-        const {
-            identificacion,
-            nombre,
-            telefono,
-            email,
-            direccion,
-            esContribuyenteEspecial,
-            retencionIvaPorDefecto,
-            notas
-        } = body;
+        const { datos, error: invalido } = datosProveedor(await request.json(), { creando: true });
+        if (invalido) return NextResponse.json({ error: invalido }, { status: 400 });
 
-        if (!identificacion || !nombre) {
-            return NextResponse.json({ error: 'La identificación (RIF) y el nombre son obligatorios' }, { status: 400 });
-        }
+        const otro = await rifRepetido(datos.identificacion);
+        if (otro) return NextResponse.json({ error: `Ya existe un proveedor con ese RIF: ${otro.nombre} (${otro.identificacion})` }, { status: 409 });
 
-        const nuevoProveedor = await Proveedor.create({
-            identificacion,
-            nombre,
-            telefono: telefono || null,
-            email: email || null,
-            direccion: direccion || null,
-            esContribuyenteEspecial: esContribuyenteEspecial || false,
-            retencionIvaPorDefecto: Number(retencionIvaPorDefecto) === 100 ? 100 : 75,
-            notas: notas || null,
-            activo: true
-        });
-
+        const nuevoProveedor = await Proveedor.create(datos);
         return NextResponse.json(nuevoProveedor, { status: 201 });
-    } catch (error) {
-        console.error('Error al crear proveedor:', error);
-        if (error.name === 'SequelizeUniqueConstraintError') {
-            return NextResponse.json({ error: 'Ya existe un proveedor registrado con ese RIF/Identificación' }, { status: 400 });
+    } catch (err) {
+        console.error('Error al crear proveedor:', err);
+        if (err.name === 'SequelizeUniqueConstraintError') {
+            return NextResponse.json({ error: 'Ya existe un proveedor registrado con ese RIF' }, { status: 409 });
         }
-        return NextResponse.json({ error: 'Error interno al registrar el proveedor', detalle: error.message }, { status: 500 });
+        if (err.name === 'SequelizeValidationError') {
+            return NextResponse.json({ error: err.errors.map((e) => e.message).join(', ') }, { status: 400 });
+        }
+        return NextResponse.json({ error: 'Error interno al registrar el proveedor' }, { status: 500 });
     }
 }

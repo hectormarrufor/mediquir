@@ -9,9 +9,9 @@ import { buscarProductos, normalizar } from '@/app/helpers/busquedaProductos';
 import { claveRenglonProveedor } from '@/app/constants/claveProveedor';
 import { exacto } from '@/app/helpers/sinRedondeo';
 
-// Consulta de RIF del portal del SENIAT (tiene captcha: se abre en otra pestaña y la persona pega el RIF)
-export const URL_SENIAT_RIF = 'http://contribuyente.seniat.gob.ve/BuscaRif/BuscaRif.jsp';
-export const normRif = (r) => String(r || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+// Consulta de RIF del SENIAT y comparación de RIF: viven en app/constants/rif.js (se re-exportan para quien ya los importaba de aquí)
+import { URL_SENIAT_RIF, normRif } from '@/app/constants/rif';
+export { URL_SENIAT_RIF, normRif };
 
 // Se muestran todos los decimales que tenga el número (al menos 2): nada se redondea al mostrarlo
 const fmt = (n) => exacto(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 10 });

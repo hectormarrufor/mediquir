@@ -26,12 +26,18 @@ export async function POST(req) {
     try {
         // Solo se guardan los campos permitidos; el crédito (días y cupo de pedidos) únicamente si quien registra es administrador,
         // porque un vendedor también puede registrar clientes y no debe darse crédito a sí mismo
-        const { cambios, error: errorCampo } = filtrarCambiosCliente(await req.json(), { esAdmin: rolDe(acceso.sesion) === 'admin' });
+        const cuerpo = (await req.json()) || {};
+        // La retención de IVA no tiene valor por defecto: si no es contribuyente especial no aplica y puede venir vacía
+        if (cuerpo.retencionIvaPorDefecto === null || cuerpo.retencionIvaPorDefecto === '') delete cuerpo.retencionIvaPorDefecto;
+        const { cambios, error: errorCampo } = filtrarCambiosCliente(cuerpo, { esAdmin: rolDe(acceso.sesion) === 'admin' });
         if (errorCampo) return NextResponse.json({ error: errorCampo }, { status: 400 });
 
         // Validación básica obligatoria
         if (!cambios.identificacion) {
             return NextResponse.json({ error: 'La identificación (RIF/Cédula) es obligatoria' }, { status: 400 });
+        }
+        if (cambios.esContribuyenteEspecial && cambios.retencionIvaPorDefecto === undefined) {
+            return NextResponse.json({ error: 'Es contribuyente especial: elige si retiene el 75 % o el 100 % del IVA' }, { status: 400 });
         }
 
         const nuevoCliente = await Cliente.create(cambios);

@@ -11,6 +11,7 @@ import { notificarCabezas } from '@/app/handlers/notificar';
 import { siguienteComprobante, periodoDe, marcarRetencionPendiente } from '../_lib/retenciones';
 import { ErrorNumeracion } from '../_lib/numeracion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
+import { datosProveedor, rifRepetido } from '../proveedores/_datos';
 const { RetencionIva, Proveedor, Producto, EntradaInventario, FacturaCompra, CategoriaFinanciera, MovimientoFinanciero, CuentaPorPagar, User, Empleado } = db;
 
 class ErrorCompra extends Error {
@@ -234,16 +235,12 @@ export async function POST(request) {
 
             let idProveedorFinal = proveedorId;
             if (!idProveedorFinal && nuevoProveedor) {
-                const provCreado = await Proveedor.create({
-                    identificacion: nuevoProveedor.identificacion,
-                    nombre: nuevoProveedor.nombre,
-                    telefono: nuevoProveedor.telefono,
-                    email: nuevoProveedor.email,
-                    direccion: nuevoProveedor.direccion,
-                    esContribuyenteEspecial: nuevoProveedor.esContribuyenteEspecial || false,
-                    retencionIvaPorDefecto: Number(nuevoProveedor.retencionIvaPorDefecto) === 100 ? 100 : 75,
-                    notas: nuevoProveedor.notas
-                }, { transaction: t });
+                // Mismas reglas que /api/proveedores: la retención de IVA hay que elegirla (no se asume 75 %) y el RIF no se repite
+                const { datos, error: invalido } = datosProveedor(nuevoProveedor, { creando: true });
+                if (invalido) throw new ErrorCompra(invalido, 400);
+                const otro = await rifRepetido(datos.identificacion, null, t);
+                if (otro) throw new ErrorCompra(`Ya existe un proveedor con ese RIF: ${otro.nombre} (${otro.identificacion})`, 409);
+                const provCreado = await Proveedor.create(datos, { transaction: t });
                 idProveedorFinal = provCreado.id;
             }
 

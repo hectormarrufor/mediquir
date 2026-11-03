@@ -8,7 +8,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { IconSearch, IconArrowLeft, IconArrowRight, IconCalendarEvent, IconCash, IconReceiptTax, IconFileInvoice, IconFilePlus, IconCoins, IconBook2, IconReceiptOff, IconNotes } from '@tabler/icons-react';
+import { IconSearch, IconArrowLeft, IconArrowRight, IconCalendarEvent, IconCash, IconReceiptTax, IconFileInvoice, IconFilePlus, IconCoins, IconBook2, IconReceiptOff, IconNotes, IconBuildingWarehouse } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import PrecioVisual from '@/app/components/ui/PrecioVisual';
 import NotaCompraModal from './NotaCompraModal';
@@ -297,7 +297,7 @@ export default function ComprasDashboardPage() {
             {/* ---------- Inicio: botones y resumen ---------- */}
             {!vista && (
                 <>
-                    <SimpleGrid cols={{ base: 2, sm: 3, md: esVendedor ? 3 : 7 }} mb="xl">
+                    <SimpleGrid cols={{ base: 2, sm: 4, md: 4 }} mb="xl">
                         <BotonModulo icono={IconFilePlus} titulo="Registrar factura de proveedor" sub="Foto o PDF: la IA la lee" onClick={() => setCompraAbierta(true)} disabled={!tasaBcv} />
                         <BotonModulo icono={IconCoins} titulo="Registrar gasto" sub="Servicios, comida, equipos" onClick={() => setGastoAbierto(true)} disabled={!tasaBcv} />
                         <BotonModulo icono={IconFileInvoice} titulo="Historial de compras y gastos" onClick={() => abrir('periodo')} />
@@ -305,6 +305,7 @@ export default function ComprasDashboardPage() {
                         {!esVendedor && <BotonModulo icono={IconCash} titulo="Cuentas por pagar" onClick={() => abrir('por_pagar')} />}
                         {!esVendedor && <BotonModulo icono={IconNotes} titulo="Notas de crédito y débito" href="/superuser/notas" />}
                         {!esVendedor && <BotonModulo icono={IconBook2} titulo="Libros de compras y ventas" href="/superuser/finanzas?tab=cierre" />}
+                        <BotonModulo icono={IconBuildingWarehouse} titulo="Proveedores" sub="Datos, deuda y retención" href="/superuser/proveedores" />
                     </SimpleGrid>
 
                     <Text fw={800} c="white" mb="xs" tt="uppercase" size="sm">Resumen de documentos · {formatearFecha(fechaInicio)} al {formatearFecha(fechaFin)}</Text>

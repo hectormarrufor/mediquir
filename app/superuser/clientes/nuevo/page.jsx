@@ -5,12 +5,13 @@ import { useForm } from '@mantine/form';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
     Box, Button, Group, Title, TextInput, Textarea, 
-    Switch, Select, Paper, Stack, Grid 
+    Switch, Paper, Stack, Grid, Text 
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
 import { IconDeviceFloppy, IconArrowLeft } from '@tabler/icons-react';
 import ImageDropzone from '@/app/components/ImageDropzone'; // Tu componente de imágenes
+import SelectorRetencion, { validarRetencion } from '@/app/components/admin/SelectorRetencion';
 
 export default function NuevoCliente() {
     const router = useRouter();
@@ -26,12 +27,13 @@ export default function NuevoCliente() {
             direccion: '',
             notas: '',
             esContribuyenteEspecial: false,
-            retencionIvaPorDefecto: '75', // Lo manejamos como string para el Select, luego lo pasamos a Number
+            retencionIvaPorDefecto: null, // sin valor por defecto: si es contribuyente especial hay que elegir 75 % o 100 %
             imagen: null
         },
         validate: {
             identificacion: (value) => (value.trim().length < 4 ? 'La identificación (RIF/CI) es obligatoria' : null),
             email: (value) => (value && !/^\S+@\S+\.\S+$/.test(value) ? 'Correo inválido' : null),
+            retencionIvaPorDefecto: (v, valores) => (valores.esContribuyenteEspecial ? validarRetencion(v) : null),
         }
     });
 
@@ -42,7 +44,7 @@ export default function NuevoCliente() {
                 ...values,
                 // Si el email está vacío, mandamos null para no chocar con la validación de Sequelize
                 email: values.email.trim() === '' ? null : values.email.trim(),
-                retencionIvaPorDefecto: Number(values.retencionIvaPorDefecto)
+                retencionIvaPorDefecto: values.esContribuyenteEspecial ? Number(values.retencionIvaPorDefecto) : null
             };
 
             // Lógica de subida de imagen usando tu ImageDropzone
@@ -157,15 +159,12 @@ export default function NuevoCliente() {
                                     />
                                 </Grid.Col>
                                 <Grid.Col span={{ base: 12, md: 6 }}>
-                                    <Select
-                                        label="Porcentaje de Retención IVA"
-                                        data={[
-                                            { value: '75', label: '75%' },
-                                            { value: '100', label: '100%' }
-                                        ]}
-                                        disabled={!form.values.esContribuyenteEspecial}
-                                        {...form.getInputProps('retencionIvaPorDefecto')}
-                                    />
+                                    {form.values.esContribuyenteEspecial ? (
+                                        <SelectorRetencion value={form.values.retencionIvaPorDefecto} error={form.errors.retencionIvaPorDefecto}
+                                            onChange={(v) => form.setFieldValue('retencionIvaPorDefecto', v)} description="Cuánto del IVA nos retiene este cliente. No viene marcado: elige uno." />
+                                    ) : (
+                                        <Text size="sm" c="dimmed">Si es contribuyente especial, aquí eliges si retiene el 75 % o el 100 % del IVA.</Text>
+                                    )}
                                 </Grid.Col>
                             </Grid>
                         </Paper>

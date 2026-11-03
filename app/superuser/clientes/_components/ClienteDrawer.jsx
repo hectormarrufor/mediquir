@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Button, Checkbox, Divider, Drawer, Group, Select, Stack, Switch, Text, TextInput, Textarea } from '@mantine/core';
+import { Button, Checkbox, Divider, Drawer, Group, Stack, Switch, Text, TextInput, Textarea } from '@mantine/core';
 import { useForm } from '@mantine/form';
+import SelectorRetencion, { validarRetencion } from '@/app/components/admin/SelectorRetencion';
 import { notifications } from '@mantine/notifications';
 import { useQueryClient } from '@tanstack/react-query';
 import { IconDeviceFloppy } from '@tabler/icons-react';
@@ -21,11 +22,13 @@ export default function ClienteDrawer({ opened, onClose, onCreado }) {
     const [crearAcceso, setCrearAcceso] = useState(true);
 
     const form = useForm({
-        initialValues: { identificacion: '', nombre: '', telefono: '', email: '', direccion: '', notas: '', esContribuyenteEspecial: false, retencionIvaPorDefecto: '75' },
+        initialValues: { identificacion: '', nombre: '', telefono: '', email: '', direccion: '', notas: '', esContribuyenteEspecial: false, retencionIvaPorDefecto: null },
         validate: {
             identificacion: (v) => (v.trim().length < 4 ? 'Indica el RIF o la cédula' : null),
             nombre: (v) => (v.trim().length < 2 ? 'Indica el nombre o la razón social' : null),
             email: (v) => (v && !/^\S+@\S+\.\S+$/.test(v) ? 'Correo inválido' : null),
+            // sin valor por defecto: si es contribuyente especial hay que elegir 75 % o 100 %
+            retencionIvaPorDefecto: (v, valores) => (valores.esContribuyenteEspecial ? validarRetencion(v) : null),
         },
     });
 
@@ -38,7 +41,7 @@ export default function ClienteDrawer({ opened, onClose, onCreado }) {
                     ...values,
                     identificacion: values.identificacion.trim().toUpperCase(),
                     email: values.email.trim() || null,
-                    retencionIvaPorDefecto: Number(values.retencionIvaPorDefecto),
+                    retencionIvaPorDefecto: values.esContribuyenteEspecial ? Number(values.retencionIvaPorDefecto) : null,
                 }),
             });
             let credenciales = null;
@@ -74,7 +77,8 @@ export default function ClienteDrawer({ opened, onClose, onCreado }) {
                     <Textarea label="Dirección fiscal" autosize minRows={2} {...form.getInputProps('direccion')} />
                     <Switch color="brand.6" label="Contribuyente especial" description="Aplica retención de IVA" {...form.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })} />
                     {form.values.esContribuyenteEspecial && (
-                        <Select label="Retención de IVA" data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} allowDeselect={false} {...form.getInputProps('retencionIvaPorDefecto')} />
+                        <SelectorRetencion rif={form.values.identificacion} value={form.values.retencionIvaPorDefecto} error={form.errors.retencionIvaPorDefecto}
+                            onChange={(v) => form.setFieldValue('retencionIvaPorDefecto', v)} description="Cuánto del IVA nos retiene este cliente. No viene marcado: elige uno." />
                     )}
                     <Textarea label="Notas internas" autosize minRows={2} {...form.getInputProps('notas')} />
                     <Divider />

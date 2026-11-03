@@ -17,6 +17,7 @@ import {
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import PrecioVisual from '../ui/PrecioVisual'; 
+import SelectorRetencion, { validarRetencion } from './SelectorRetencion';
 import { useAuth } from '@/hooks/useAuth';
 import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 import { numeroALetras } from '@/app/utils/numeroALetras';
@@ -80,8 +81,11 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
             email: '',
             direccion: '',
             esContribuyenteEspecial: false,
-            retencionIvaPorDefecto: 75,
+            retencionIvaPorDefecto: null, // sin valor por defecto: si es contribuyente especial hay que elegir 75 % o 100 %
             notas: ''
+        },
+        validate: {
+            retencionIvaPorDefecto: (v, valores) => (valores.esContribuyenteEspecial ? validarRetencion(v) : null),
         }
     });
 
@@ -870,7 +874,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
                         const res = await fetch('/api/clientes', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(tipoVenta === 'MAYOR' ? values : { identificacion: values.identificacion.trim(), nombre: values.nombre.trim(), telefono: values.telefono?.trim() || null })
+                            body: JSON.stringify(tipoVenta === 'MAYOR' ? { ...values, retencionIvaPorDefecto: values.esContribuyenteEspecial ? Number(values.retencionIvaPorDefecto) : null } : { identificacion: values.identificacion.trim(), nombre: values.nombre.trim(), telefono: values.telefono?.trim() || null })
                         });
                         const data = await res.json();
                         if (!res.ok) throw new Error(data.error);
@@ -892,10 +896,12 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
                             <>
                                 <TextInput size="md" label="Correo Electrónico" placeholder="contacto@cliente.com" {...formNuevoCliente.getInputProps('email')} />
                                 <TextInput size="md" label="Dirección Fiscal" placeholder="Ej: Av. Principal, Local 4..." {...formNuevoCliente.getInputProps('direccion')} />
-                                <Group grow>
-                                    <Checkbox label="Contribuyente Especial" size="md" mt={8} {...formNuevoCliente.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })} />
-                                    <Select size="md" label="Retención Default" data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} value={String(formNuevoCliente.values.retencionIvaPorDefecto)} onChange={(v) => formNuevoCliente.setFieldValue('retencionIvaPorDefecto', Number(v) === 100 ? 100 : 75)} allowDeselect={false} />
-                                </Group>
+                                <Checkbox label="Contribuyente Especial" size="md" mt={8} {...formNuevoCliente.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })} />
+                                {formNuevoCliente.values.esContribuyenteEspecial && (
+                                    <SelectorRetencion size="md" rif={formNuevoCliente.values.identificacion} value={formNuevoCliente.values.retencionIvaPorDefecto}
+                                        error={formNuevoCliente.errors.retencionIvaPorDefecto} onChange={(v) => formNuevoCliente.setFieldValue('retencionIvaPorDefecto', v)}
+                                        description="Cuánto del IVA nos retiene este cliente. No viene marcado: elige uno." />
+                                )}
                                 <TextInput size="md" label="Notas Adicionales" placeholder="(Opcional)" {...formNuevoCliente.getInputProps('notas')} />
                             </>
                         )}

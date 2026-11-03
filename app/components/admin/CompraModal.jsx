@@ -10,10 +10,11 @@ import { useForm } from '@mantine/form';
 import { useMediaQuery } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
-    IconTrash, IconPlus, IconMinus, IconCheck, IconShieldCheck, IconAlertTriangle, IconReceiptTax, IconPackage, IconSparkles, IconExternalLink
+    IconTrash, IconPlus, IconMinus, IconCheck, IconShieldCheck, IconAlertTriangle, IconReceiptTax, IconPackage, IconSparkles
 } from '@tabler/icons-react';
 import imageCompression from 'browser-image-compression';
-import { RevisionRenglonesIA, CuadreFactura, prepararRenglones, normRif, URL_SENIAT_RIF } from './LecturaFacturaIA';
+import { RevisionRenglonesIA, CuadreFactura, prepararRenglones, normRif } from './LecturaFacturaIA';
+import SelectorRetencion, { validarRetencion } from './SelectorRetencion';
 import { notifications } from '@mantine/notifications';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import PrecioVisual from '../ui/PrecioVisual';
@@ -152,8 +153,13 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             email: '',
             direccion: '',
             esContribuyenteEspecial: false,
-            retencionIvaPorDefecto: 75,
+            retencionIvaPorDefecto: null, // sin valor por defecto: hay que elegir 75 % o 100 % (lo dice el SENIAT)
             notas: ''
+        },
+        validate: {
+            identificacion: (v) => (normRif(v).length < 4 ? 'Escribe el RIF' : null),
+            nombre: (v) => (String(v || '').trim().length < 2 ? 'Escribe la razón social' : null),
+            retencionIvaPorDefecto: validarRetencion,
         }
     });
 
@@ -314,7 +320,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 formCompra.setFieldValue('proveedorId', null);
                 formNuevoProv.setValues({
                     identificacion: d.proveedorRif || '', nombre: d.proveedorNombre || '', telefono: d.proveedorTelefono || '', email: d.proveedorEmail || '',
-                    direccion: d.proveedorDireccion || '', esContribuyenteEspecial: false, retencionIvaPorDefecto: 75, notas: '',
+                    direccion: d.proveedorDireccion || '', esContribuyenteEspecial: false, retencionIvaPorDefecto: null, notas: '',
                 });
                 setModalCrearProv(true);
                 avisos.push(`El proveedor ${d.proveedorNombre || ''}${d.proveedorRif ? ` (${d.proveedorRif})` : ''} no está registrado: revisa sus datos, consulta su RIF en el SENIAT y guárdalo.`);
@@ -1017,22 +1023,13 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                             <TextInput size={isMobile ? 'sm' : 'md'} label="Teléfono" {...formNuevoProv.getInputProps('telefono')} />
                             <TextInput size={isMobile ? 'sm' : 'md'} label="Email" {...formNuevoProv.getInputProps('email')} />
                             <TextInput size={isMobile ? 'sm' : 'md'} label="Dirección" {...formNuevoProv.getInputProps('direccion')} />
-                            {/* El SENIAT dice si a este proveedor se le retiene el 75 % o el 100 % del IVA (su consulta tiene captcha: se abre aparte) */}
-                            <Alert color="blue" variant="light" p="xs" title="¿Se le retiene 75 % o 100 %?">
-                                <Text size="xs" mb={6}>Consulta el RIF en el portal del SENIAT: el resultado dice su porcentaje de retención de IVA y si es contribuyente especial. Al abrirlo se copia el RIF para que lo pegues.</Text>
-                                <Button size="xs" variant="white" leftSection={<IconExternalLink size={14} />}
-                                    onClick={() => {
-                                        const rif = normRif(formNuevoProv.values.identificacion);
-                                        if (rif) navigator.clipboard?.writeText(rif).catch(() => {});
-                                        window.open(URL_SENIAT_RIF, '_blank', 'noopener');
-                                    }}>
-                                    Consultar RIF en el SENIAT{normRif(formNuevoProv.values.identificacion) ? ` (${normRif(formNuevoProv.values.identificacion)})` : ''}
-                                </Button>
-                            </Alert>
-                            <Group grow>
-                                <Checkbox label="Contribuyente Especial" size="md" mt={8} {...formNuevoProv.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })} />
-                                <Select size={isMobile ? 'sm' : 'md'} label="Retención Default" data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} value={String(formNuevoProv.values.retencionIvaPorDefecto)} onChange={(v) => formNuevoProv.setFieldValue('retencionIvaPorDefecto', Number(v) === 100 ? 100 : 75)} allowDeselect={false} />
-                            </Group>
+                            {/* El SENIAT dice si a este proveedor se le retiene el 75 % o el 100 % del IVA: no viene marcado, hay que elegirlo */}
+                            <SelectorRetencion
+                                size={isMobile ? 'sm' : 'md'} rif={formNuevoProv.values.identificacion}
+                                value={formNuevoProv.values.retencionIvaPorDefecto} error={formNuevoProv.errors.retencionIvaPorDefecto}
+                                onChange={(v) => formNuevoProv.setFieldValue('retencionIvaPorDefecto', v)}
+                            />
+                            <Checkbox label="Contribuyente Especial" size="md" {...formNuevoProv.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })} />
                             <Button size="md" type="submit" color="grape" mt="md">Guardar Proveedor</Button>
                         </Stack>
                     </form>
