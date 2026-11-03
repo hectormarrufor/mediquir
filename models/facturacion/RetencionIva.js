@@ -25,7 +25,7 @@ const RetencionIva = sequelize.define('RetencionIva', {
     montoIva: { type: DataTypes.DECIMAL(14, 2), allowNull: false, defaultValue: 0 },
     porcentajeRetencion: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 75 },
     ivaRetenido: { type: DataTypes.DECIMAL(14, 2), allowNull: false },
-    tasaCambio: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 1 },
+    tasaCambio: { type: DataTypes.DECIMAL(20, 8), allowNull: false, defaultValue: 1 }, // la tasa completa de la factura
     ventaId: { type: DataTypes.UUID, allowNull: true },
     facturaCompraId: { type: DataTypes.UUID, allowNull: true },
     abonoId: { type: DataTypes.INTEGER, allowNull: true },

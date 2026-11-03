@@ -13,13 +13,14 @@ import {
     IconTrash, IconPlus, IconMinus, IconCheck, IconShieldCheck, IconAlertTriangle, IconReceiptTax, IconPackage, IconSparkles, IconExternalLink
 } from '@tabler/icons-react';
 import imageCompression from 'browser-image-compression';
-import { RevisionRenglonesIA, CuadreFactura, prepararRenglones, normRif, r2, URL_SENIAT_RIF } from './LecturaFacturaIA';
+import { RevisionRenglonesIA, CuadreFactura, prepararRenglones, normRif, URL_SENIAT_RIF } from './LecturaFacturaIA';
 import { notifications } from '@mantine/notifications';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import PrecioVisual from '../ui/PrecioVisual';
 import { useAuth } from '@/hooks/useAuth';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
 import { fechaCaracas } from '@/app/constants/hora';
+import { exacto, formatoExacto } from '@/app/helpers/sinRedondeo';
 import { OPCIONES_PAGO_PROVEEDOR } from '@/app/constants/metodosPago';
 import { PreguntarNumero, useNumeracion } from '@/app/superuser/_components/NumeracionFiscal';
 
@@ -36,7 +37,7 @@ const FilaProducto = memo(function FilaProducto({ prod, isMobile, onAgregar }) {
                 </Box>
                 {prod.costoUsd !== undefined && (
                     <Badge color="blue" size={isMobile ? 'md' : 'lg'} variant="light" tt="none" style={{ flexShrink: 0 }}>
-                        {isMobile ? '' : 'Costo: '}<PrecioVisual valor={prod.costoUsd} simbolo="$" size="sm" />
+                        {isMobile ? '' : 'Costo: '}<PrecioVisual exacto valor={prod.costoUsd} simbolo="$" size="sm" />
                     </Badge>
                 )}
             </Group>
@@ -180,8 +181,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     // Un vendedor registra la compra pero no ve costos ni cambia precios: el servidor le devuelve la simulación sin esos datos
     const soloRegistro = Boolean(datosSimulacion?.[0]?.soloRegistro);
 
-    // Monto de un renglón como lo imprime el proveedor: precio de lo que se compra (unidad, caja o bulto) × cantidad, a céntimos
-    const montoLinea = (item) => r2((Number(item.precioCompra) || 0) * (Number(item.cantidadCompra) || 0));
+    // Monto de un renglón: precio de lo que se compra (unidad, caja o bulto) × cantidad, EXACTO (sin redondear a céntimos)
+    const montoLinea = (item) => exacto((Number(item.precioCompra) || 0) * (Number(item.cantidadCompra) || 0));
 
     // El IVA ajustado al impreso deja de valer si cambian los renglones o el tipo de documento
     useEffect(() => { setIvaAjustado(null); }, [carritoCompra, formCompra.values.tipoDocumento]);
@@ -201,7 +202,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             empaqueOriginal: { undPorCaja: Number(prod.unidadesPorCaja) || 0, cajasPorBulto: Number(prod.cajasPorBulto) || 0, undPorBulto: Number(prod.unidadesPorBulto) || 0 },
             unidadCompra: 'unidad',
             cantidadCompra: 1,
-            precioCompra: Number(aMon(costoUnidad).toFixed(4)),
+            precioCompra: exacto(aMon(costoUnidad)), // el costo de la ficha con todos sus decimales (p. ej. 0.00825)
             porcentajeIva: prod.porcentajeIva === null || prod.porcentajeIva === undefined || prod.porcentajeIva === "" || Number.isNaN(Number(prod.porcentajeIva)) ? 16 : Number(prod.porcentajeIva), // 0 = exento: no se puede tratar como "sin dato"
             aceptarCambioPrecio: true
         };
@@ -237,14 +238,14 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             if (factorPedido > 1) { cantidad *= factorPedido; precio /= factorPedido; avisos.push(`«${prod.nombre}»: se pasó a unidades (${n} por ${f.unidadCompra}) porque no cuadra con el empaque de la ficha.`); }
             if (!Number.isInteger(cantidad)) { avisos.push(`«${prod.nombre}»: la cantidad ${cantidad} no es entera; se redondeó.`); cantidad = Math.max(1, Math.round(cantidad)); }
             delete it._bultoSinCuadrar;
-            it = recalcular({ ...it, unidadCompra: unidad, cantidadCompra: cantidad, precioCompra: Number(precio.toFixed(6)), claveProveedor: f.clave, descripcionProveedor: f.linea.descripcion });
+            it = recalcular({ ...it, unidadCompra: unidad, cantidadCompra: cantidad, precioCompra: exacto(precio), claveProveedor: f.clave, descripcionProveedor: f.linea.descripcion });
 
             const previo = carrito.find((i) => i.id === it.id);
             if (previo) {
                 // El mismo producto en dos renglones: se juntan en unidades con el precio promedio (el monto no cambia)
                 const unidades = previo.cantidad + it.cantidad;
                 const monto = previo.precioCompraUnitario * previo.cantidad + it.precioCompraUnitario * it.cantidad;
-                carrito = carrito.map((i) => (i.id === it.id ? recalcular({ ...previo, unidadCompra: 'unidad', cantidadCompra: unidades, precioCompra: Number((monto / unidades).toFixed(6)) }) : i));
+                carrito = carrito.map((i) => (i.id === it.id ? recalcular({ ...previo, unidadCompra: 'unidad', cantidadCompra: unidades, precioCompra: exacto(monto / unidades) }) : i));
                 avisos.push(`«${prod.nombre}» venía en más de un renglón: se juntó en ${unidades} unidades.`);
             } else {
                 carrito.push(it);
@@ -325,7 +326,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             // Gasto (servicio, almuerzo, equipo...): la descripción sale de los renglones y la categoría, del último gasto de este proveedor
             if (comoGasto) {
                 const lineas = d.lineas || [];
-                const sumar = (exento) => r2(lineas.filter((l) => Boolean(l.exento) === exento).reduce((a, l) => a + (Number(l.totalLinea) || r2((l.precioUnitario || 0) * (l.cantidad || 0))), 0));
+                const sumar = (exento) => exacto(lineas.filter((l) => Boolean(l.exento) === exento).reduce((a, l) => a + (Number(l.totalLinea) || (l.precioUnitario || 0) * (l.cantidad || 0)), 0));
                 let anterior = null;
                 if (proveedorId) {
                     try { anterior = await (await fetch(`/api/compras/equivalencias?proveedorId=${proveedorId}&gasto=1`)).json(); } catch { anterior = null; }
@@ -398,7 +399,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         setCarritoCompra(carritoCompra.map(i => {
             if (i.id !== id) return i;
             const nuevo = { ...i, unidadCompra: unidad, cantidadCompra: 1 };
-            return recalcular({ ...nuevo, precioCompra: i.precioCompraUnitario * factorDe(nuevo) });
+            return recalcular({ ...nuevo, precioCompra: exacto(i.precioCompraUnitario * factorDe(nuevo)) });
         }));
     };
 
@@ -424,8 +425,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         if (!nueva || nueva === formCompra.values.moneda) return;
         if (nueva === 'BS' && !(tasa > 0)) return notifications.show({ title: 'Sin tasa BCV', message: 'No hay una tasa BCV vigente para convertir a bolívares.', color: 'red' });
         const k = nueva === 'BS' ? tasa : 1 / tasa;
-        setCarritoCompra(carritoCompra.map(i => recalcular({ ...i, precioCompra: Number(((Number(i.precioCompra) || 0) * k).toFixed(4)) })));
-        setGasto({ ...gasto, base: Number(((Number(gasto.base) || 0) * k).toFixed(2)), exento: Number(((Number(gasto.exento) || 0) * k).toFixed(2)) });
+        setCarritoCompra(carritoCompra.map(i => recalcular({ ...i, precioCompra: exacto((Number(i.precioCompra) || 0) * k) })));
+        setGasto({ ...gasto, base: exacto((Number(gasto.base) || 0) * k), exento: exacto((Number(gasto.exento) || 0) * k) });
         formCompra.setFieldValue('moneda', nueva);
     };
 
@@ -441,9 +442,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     const eliminarItem = (id) => setCarritoCompra(carritoCompra.filter(i => i.id !== id));
 
     const esFactura = formCompra.values.tipoDocumento === 'FACTURA';
-    // Misma regla que imprime el proveedor (y que usan las ventas): cada renglón = precio × cantidad redondeado a céntimos,
-    // y el IVA se calcula UNA vez sobre la base de cada alícuota. Antes se sumaban renglones sin redondear y el IVA renglón por
-    // renglón, y la base o el IVA podían quedar un céntimo distintos de la factura en papel (y del libro de compras).
+    // Los números se usan TAL CUAL se escriben: cada renglón = precio × cantidad exacto, la base y el exento son la suma exacta
+    // de los renglones y el IVA se calcula una vez sobre la base de cada alícuota. Nada se redondea a céntimos.
     let subtotal = 0;
     let montoIva = 0;
     let montoExento = 0; // lo que no lleva IVA: va como exento en el libro de compras
@@ -458,29 +458,29 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             montoExento += itemSub;
         }
     });
-    subtotal = r2(subtotal);
-    montoExento = r2(montoExento);
-    montoIva = r2([...basesPorAlicuota.entries()].reduce((a, [pct, base]) => a + r2(r2(base) * pct / 100), 0));
+    subtotal = exacto(subtotal);
+    montoExento = exacto(montoExento);
+    montoIva = exacto([...basesPorAlicuota.entries()].reduce((a, [pct, base]) => a + base * pct / 100, 0));
     const montoIvaCalculado = montoIva;
-    // El IVA impreso en la factura, si la persona eligió usarlo (solo difiere por céntimos de redondeo del proveedor)
-    if (!esGasto && esFactura && ivaAjustado !== null) montoIva = r2(ivaAjustado);
+    // El IVA impreso en la factura, si la persona eligió usarlo (cuando el proveedor lo imprimió redondeado a céntimos)
+    if (!esGasto && esFactura && ivaAjustado !== null) montoIva = exacto(ivaAjustado);
 
     if (esGasto) {
         const base = Math.max(0, Number(gasto.base) || 0);
         const exento = Math.max(0, Number(gasto.exento) || 0);
-        subtotal = base + exento;
-        montoExento = esFactura ? exento : 0;
-        montoIva = esFactura ? Math.round(base * CONFIG_FISCAL.alicuotaGeneral) / 100 : 0;
+        subtotal = exacto(base + exento);
+        montoExento = esFactura ? exacto(exento) : 0;
+        montoIva = esFactura ? exacto(base * CONFIG_FISCAL.alicuotaGeneral / 100) : 0;
     }
 
     let montoRetencion = 0;
     // De contado se paga ya: la retención no puede quedar para el pago
     const retencionModo = formCompra.values.condicionPago === 'Contado' && formCompra.values.retencionModo === 'despues' ? 'ahora' : formCompra.values.retencionModo;
     if (retencionModo === 'ahora' && esFactura && montoIva > 0) {
-        montoRetencion = r2(montoIva * (formCompra.values.porcentajeRetencion / 100));
+        montoRetencion = exacto(montoIva * (formCompra.values.porcentajeRetencion / 100));
     }
 
-    const totalFinal = r2(subtotal + montoIva);
+    const totalFinal = exacto(subtotal + montoIva);
 
     // Comprobante de retención: si todavía no se dijo con qué número empieza la numeración, se pregunta antes de registrar
     const serieRet = numeracion?.series?.find((s) => s.clave === 'RET-COMPRA');
@@ -715,7 +715,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                     <Select size="sm" label="Moneda" allowDeselect={false} data={[{ value: 'USD', label: 'USD ($)' }, { value: 'BS', label: 'Bs' }]} {...formCompra.getInputProps('moneda')} onChange={cambiarMoneda} />
                 </Grid.Col>
                 <Grid.Col span={{ base: 6, md: 2 }}>
-                    <NumberInput size="sm" label="Tasa de la factura" min={0} decimalScale={4} hideControls
+                    <NumberInput size="sm" label="Tasa de la factura" min={0} hideControls
                         value={tasaFactura ?? (Number(tasaBcv) || '')} onChange={(v) => setTasaFactura(Number(v) > 0 ? Number(v) : null)}
                         description={tasaFactura && Math.abs(tasaFactura - (Number(tasaBcv) || 0)) > 0.005
                             ? <Text span size="xs">BCV hoy {tasaBcv} · <Text span size="xs" c="blue" style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setTasaFactura(null)}>usar la de hoy</Text></Text>
@@ -761,7 +761,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                     {(esGasto ? subtotal > 0 : carritoCompra.length > 0) && (
                         <CuadreFactura
                             impreso={lectura.impreso} simbolo={sim} tasa={tasa}
-                            calculado={{ base: r2(subtotal - montoExento), exento: montoExento, ivaCalculado: esGasto ? montoIva : montoIvaCalculado, total: totalFinal }}
+                            calculado={{ base: exacto(subtotal - montoExento), exento: montoExento, ivaCalculado: esGasto ? montoIva : montoIvaCalculado, total: totalFinal }}
                             renglonesFactura={esGasto ? 0 : lectura.renglones} renglonesCompra={esGasto ? 0 : carritoCompra.length}
                             ivaAjustado={esGasto ? null : ivaAjustado} onUsarIvaImpreso={esGasto ? null : () => setIvaAjustado(Number(lectura.impreso.montoIva))} onQuitarAjuste={() => setIvaAjustado(null)}
                         />
@@ -787,9 +787,9 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 value={gasto.categoriaId} onChange={(v) => setGasto({ ...gasto, categoriaId: v })}
                 nothingFoundMessage="No hay categorías de gasto: créalas en Finanzas" />
             <Group grow align="flex-start">
-                <NumberInput size="sm" label="Monto gravado (base imponible)" description={esFactura ? `Se le suma el IVA ${CONFIG_FISCAL.alicuotaGeneral}%` : 'La nota de entrega no lleva IVA'} min={0} decimalScale={2} hideControls
+                <NumberInput size="sm" label="Monto gravado (base imponible)" description={esFactura ? `Se le suma el IVA ${CONFIG_FISCAL.alicuotaGeneral}%` : 'La nota de entrega no lleva IVA'} min={0} hideControls
                     value={gasto.base} onChange={(v) => setGasto({ ...gasto, base: v })} />
-                <NumberInput size="sm" label="Monto exento (sin IVA)" min={0} decimalScale={2} hideControls
+                <NumberInput size="sm" label="Monto exento (sin IVA)" min={0} hideControls
                     value={gasto.exento} onChange={(v) => setGasto({ ...gasto, exento: v })} />
             </Group>
         </Stack>
@@ -808,7 +808,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                         <Group justify="space-between" wrap="nowrap" align="flex-start" mb={4}>
                             <Box style={{ minWidth: 0, flex: 1 }}>
                                 <Text fw={700} size="sm" lineClamp={2} lh={1.25}>{item.nombre}</Text>
-                                <Text size="xs" c="dimmed">{item.marca ? `${item.marca} · ` : ''}SKU: {item.codigo} · costo ant. <PrecioVisual valor={item.costoAnterior} simbolo="$" size="xs" c="dimmed" />{esBs && <> · <PrecioVisual valor={costoAntMon} simbolo="Bs" size="xs" c="dimmed" /></>}</Text>
+                                <Text size="xs" c="dimmed">{item.marca ? `${item.marca} · ` : ''}SKU: {item.codigo} · costo ant. <PrecioVisual exacto valor={item.costoAnterior} simbolo="$" size="xs" c="dimmed" />{esBs && <> · <PrecioVisual exacto valor={costoAntMon} simbolo="Bs" size="xs" c="dimmed" /></>}</Text>
                             </Box>
                             <ActionIcon color="red" variant="subtle" size="md" onClick={() => eliminarItem(item.id)}><IconTrash size={18}/></ActionIcon>
                         </Group>
@@ -827,13 +827,13 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                 <ActionIcon size="lg" variant="light" onClick={() => cambiarCantidad(item.id, 1)}><IconPlus size={16}/></ActionIcon>
                             </Group>
                             <Box style={{ flex: 1, minWidth: 0 }}>
-                                <NumberInput value={item.precioCompra} onChange={(val) => actualizarPrecioCompra(item.id, val)} decimalScale={4} size="sm" leftSection={esBs ? 'Bs' : '$'} leftSectionWidth={esBs ? 36 : undefined} />
+                                <NumberInput value={item.precioCompra} onChange={(val) => actualizarPrecioCompra(item.id, val)} size="sm" leftSection={esBs ? 'Bs' : '$'} leftSectionWidth={esBs ? 36 : undefined} />
                             </Box>
                         </Group>
                         <EditorEmpaque item={item} onCambiar={(c, v) => cambiarEmpaque(item.id, c, v)} />
                         <Text size="xs" c="dimmed" mt={4}>
-                            por {item.unidadCompra}{item.unidadCompra !== 'unidad' ? ` = ${item.cantidad.toLocaleString('es-VE')} und · ${item.precioCompraUnitario.toFixed(4)} c/u` : ''}
-                            {esBs && tasa > 0 && ` · ≈ $${(item.precioCompraUnitario / tasa).toFixed(4)} c/u`}
+                            por {item.unidadCompra}{item.unidadCompra !== 'unidad' ? ` = ${item.cantidad.toLocaleString('es-VE')} und · ${formatoExacto(item.precioCompraUnitario)} c/u` : ''}
+                            {esBs && tasa > 0 && ` · ≈ $${formatoExacto(item.precioCompraUnitario / tasa)} c/u`}
                             {diferencia !== 0 && <Text span size="xs" fw={700} c={diferencia > 0 ? 'red' : 'teal'}> · {diferencia > 0 ? `▲ +${variacionPorcentual}%` : `▼ ${variacionPorcentual}%`}</Text>}
                         </Text>
                     </Paper>
@@ -890,18 +890,18 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                     </Stack>
                                 </Table.Td>
                                 <Table.Td>
-                                    <PrecioVisual valor={item.costoAnterior} simbolo="$" size="sm" c="dimmed" />
-                                    {esBs && <PrecioVisual valor={costoAntMon} simbolo="Bs" size="sm" c="dimmed" />}
+                                    <PrecioVisual exacto valor={item.costoAnterior} simbolo="$" size="sm" c="dimmed" />
+                                    {esBs && <PrecioVisual exacto valor={costoAntMon} simbolo="Bs" size="sm" c="dimmed" />}
                                 </Table.Td>
                                 <Table.Td>
-                                    <NumberInput value={item.precioCompra} onChange={(val) => actualizarPrecioCompra(item.id, val)} decimalScale={4} w={esBs ? 150 : 120} size="sm" leftSection={esBs ? 'Bs' : '$'} leftSectionWidth={esBs ? 36 : undefined} />
+                                    <NumberInput value={item.precioCompra} onChange={(val) => actualizarPrecioCompra(item.id, val)} w={esBs ? 150 : 120} size="sm" leftSection={esBs ? 'Bs' : '$'} leftSectionWidth={esBs ? 36 : undefined} />
                                     <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-                                        por {item.unidadCompra}{item.unidadCompra !== 'unidad' ? ` → ${item.precioCompraUnitario.toFixed(4)} c/u` : ''}
-                                        {esBs && tasa > 0 && ` · ≈ $${(item.precioCompraUnitario / tasa).toFixed(4)} c/u`}
+                                        por {item.unidadCompra}{item.unidadCompra !== 'unidad' ? ` → ${formatoExacto(item.precioCompraUnitario)} c/u` : ''}
+                                        {esBs && tasa > 0 && ` · ≈ $${formatoExacto(item.precioCompraUnitario / tasa)} c/u`}
                                         {diferencia !== 0 && <Text span size="xs" fw={700} c={diferencia > 0 ? 'red' : 'teal'}> · {diferencia > 0 ? `▲ +${variacionPorcentual}%` : `▼ ${variacionPorcentual}%`}</Text>}
                                     </Text>
                                 </Table.Td>
-                                <Table.Td ta="right"><PrecioVisual valor={montoLinea(item)} simbolo={sim} size="sm" fw={700} /></Table.Td>
+                                <Table.Td ta="right"><PrecioVisual exacto valor={montoLinea(item)} simbolo={sim} size="sm" fw={700} /></Table.Td>
                                 <Table.Td><ActionIcon color="red" variant="subtle" size="lg" onClick={() => eliminarItem(item.id)}><IconTrash size={18}/></ActionIcon></Table.Td>
                             </Table.Tr>
                         );
@@ -926,16 +926,16 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         <Paper withBorder p="sm" radius="md" style={{ flex: '0 0 auto' }}>
             <Group justify="space-between" align="center" wrap="nowrap">
                 <Group gap="xl" align="flex-end">
-                    <Box><Text size="xs" c="dimmed">Subtotal</Text><PrecioVisual valor={subtotal} simbolo={sim} size="md" fw={600} /></Box>
-                    {esFactura && <Box><Text size="xs" c="dimmed">IVA ({CONFIG_FISCAL.alicuotaGeneral}%)</Text><PrecioVisual valor={montoIva} simbolo={sim} size="md" fw={600} /></Box>}
+                    <Box><Text size="xs" c="dimmed">Subtotal</Text><PrecioVisual exacto valor={subtotal} simbolo={sim} size="md" fw={600} /></Box>
+                    {esFactura && <Box><Text size="xs" c="dimmed">IVA ({CONFIG_FISCAL.alicuotaGeneral}%)</Text><PrecioVisual exacto valor={montoIva} simbolo={sim} size="md" fw={600} /></Box>}
                     {montoRetencion > 0 && (
                         <Box>
                             <Text size="xs" c="red">Retención (−)</Text>
-                            <Text c="red" fw={700}><PrecioVisual valor={montoRetencion} simbolo={sim} size="md" fw={700} c="red" /></Text>
+                            <Text c="red" fw={700}><PrecioVisual exacto valor={montoRetencion} simbolo={sim} size="md" fw={700} c="red" /></Text>
                             {serieRet?.configurado && <Text size="xs" c="dimmed">Comprobante N° {periodoRet}{serieRet.siguiente}</Text>}
                         </Box>
                     )}
-                    <Box><Text size="xs" c="dimmed">Total</Text><PrecioVisual valor={totalFinal} simbolo={sim} size="xl" fw={900} c="blue.9" /></Box>
+                    <Box><Text size="xs" c="dimmed">Total</Text><PrecioVisual exacto valor={totalFinal} simbolo={sim} size="xl" fw={900} c="blue.9" /></Box>
                 </Group>
                 <Button size="lg" color="green.8" leftSection={<IconCheck size={22} />} onClick={accionRegistrar} loading={isSubmitting} disabled={registroBloqueado}>{labelBoton}</Button>
             </Group>
@@ -945,8 +945,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     const pieMovil = (
         <Box style={{ position: 'sticky', bottom: 0, zIndex: 15, background: '#fff', margin: '6px -8px -8px', padding: '8px 12px calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -6px 16px rgba(0,0,0,0.12)', borderTop: '1px solid var(--mantine-color-gray-3)' }}>
             <Group justify="space-between" mb={6} wrap="nowrap">
-                <Text size="xs" c="dimmed">Subtotal <PrecioVisual valor={subtotal} simbolo={sim} size="xs" />{esFactura && <> · IVA <PrecioVisual valor={montoIva} simbolo={sim} size="xs" /></>}{montoRetencion > 0 && <Text span size="xs" c="red" fw={700}> · Ret. −<PrecioVisual valor={montoRetencion} simbolo={sim} size="xs" /></Text>}</Text>
-                <Text fw={900} size="lg" c="blue.9" style={{ whiteSpace: 'nowrap' }}><PrecioVisual valor={totalFinal} simbolo={sim} size="lg" fw={900} c="blue.9" /></Text>
+                <Text size="xs" c="dimmed">Subtotal <PrecioVisual exacto valor={subtotal} simbolo={sim} size="xs" />{esFactura && <> · IVA <PrecioVisual exacto valor={montoIva} simbolo={sim} size="xs" /></>}{montoRetencion > 0 && <Text span size="xs" c="red" fw={700}> · Ret. −<PrecioVisual exacto valor={montoRetencion} simbolo={sim} size="xs" /></Text>}</Text>
+                <Text fw={900} size="lg" c="blue.9" style={{ whiteSpace: 'nowrap' }}><PrecioVisual exacto valor={totalFinal} simbolo={sim} size="lg" fw={900} c="blue.9" /></Text>
             </Group>
             <Button fullWidth size="md" color="green.8" tt="none" leftSection={<IconCheck size={20} />} onClick={accionRegistrar} loading={isSubmitting} disabled={registroBloqueado}>{labelBoton}</Button>
         </Box>
@@ -1078,8 +1078,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                                 </Table.Td>
                                                 {!soloRegistro && <>
                                                 <Table.Td ta="center">
-                                                    <Text size="sm" c="dimmed">Ant: ${sim.costoActual}{esBs && ` · Bs ${(sim.costoActual * tasa).toFixed(2)}`}</Text>
-                                                    <Text size="md" fw={700} c="teal">Nuevo: ${sim.nuevoCostoPonderado}{esBs && ` · Bs ${(sim.nuevoCostoPonderado * tasa).toFixed(2)}`}</Text>
+                                                    <Text size="sm" c="dimmed">Ant: ${sim.costoActual}{esBs && ` · Bs ${formatoExacto(sim.costoActual * tasa)}`}</Text>
+                                                    <Text size="md" fw={700} c="teal">Nuevo: ${sim.nuevoCostoPonderado}{esBs && ` · Bs ${formatoExacto(sim.nuevoCostoPonderado * tasa)}`}</Text>
                                                 </Table.Td>
                                                 <Table.Td ta="center">
                                                     <Badge color={sim.porcentajeAumento >= 0 ? 'red' : 'teal'} size="lg" variant="filled">
@@ -1088,11 +1088,11 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                                 </Table.Td>
                                                 <Table.Td>
                                                     <Text size="md">${sim.precio6.actual} ➔ <Text span fw={700} c="blue" size="lg">${sim.precio6.nuevo}</Text></Text>
-                                                    {esBs && <Text size="xs" c="dimmed">Bs {(sim.precio6.actual * tasa).toFixed(2)} ➔ Bs {(sim.precio6.nuevo * tasa).toFixed(2)}</Text>}
+                                                    {esBs && <Text size="xs" c="dimmed">Bs {formatoExacto(sim.precio6.actual * tasa)} ➔ Bs {formatoExacto(sim.precio6.nuevo * tasa)}</Text>}
                                                 </Table.Td>
                                                 <Table.Td>
                                                     <Text size="md">${sim.precio7.actual} ➔ <Text span fw={700} c="blue" size="lg">${sim.precio7.nuevo}</Text></Text>
-                                                    {esBs && <Text size="xs" c="dimmed">Bs {(sim.precio7.actual * tasa).toFixed(2)} ➔ Bs {(sim.precio7.nuevo * tasa).toFixed(2)}</Text>}
+                                                    {esBs && <Text size="xs" c="dimmed">Bs {formatoExacto(sim.precio7.actual * tasa)} ➔ Bs {formatoExacto(sim.precio7.nuevo * tasa)}</Text>}
                                                 </Table.Td>
                                                 <Table.Td ta="center">
                                                     <Checkbox 

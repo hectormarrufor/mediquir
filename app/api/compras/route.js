@@ -4,7 +4,8 @@ import sequelize from '@/sequelize';
 import db from '@/models';
 import { requerirStaff } from '../inventario/_lib';
 import { rolDe } from '@/app/constants/roles';
-import { aBolivares } from '@/app/constants/facturacion';
+import { aBolivaresExacto } from '@/app/constants/facturacion';
+import { exacto, formatoExacto } from '@/app/helpers/sinRedondeo';
 import { fechaCaracas } from '@/app/constants/hora';
 import { notificarCabezas } from '@/app/handlers/notificar';
 import { siguienteComprobante, periodoDe, marcarRetencionPendiente } from '../_lib/retenciones';
@@ -130,22 +131,21 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Tipo de documento inválido: una compra es una factura o una nota de entrega' }, { status: 400 });
         }
         const esFactura = tipoDocumento === 'FACTURA';
-        // Montos a 2 decimales en el servidor: el navegador los manda con todos los decimales de la multiplicación y el total
-        // podía no cuadrar por un céntimo con subtotal + IVA ya guardados
-        const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
-        const subtotalNum = r2(Number(subtotal) || 0);
-        const montoExento = esFactura ? r2(Math.min(Math.max(0, Number(montoExentoCliente) || 0), subtotalNum)) : 0;
+        // Los montos se guardan TAL CUAL (sin redondear a céntimos): lo que se escribió en la factura y lo que da de ahí.
+        // `exacto` solo quita el ruido de la coma flotante (7,665000000000001 -> 7,665).
+        const subtotalNum = exacto(Number(subtotal) || 0);
+        const montoExento = esFactura ? exacto(Math.min(Math.max(0, Number(montoExentoCliente) || 0), subtotalNum)) : 0;
         // En un gasto el IVA lo calcula el servidor: es el de la alícuota general sobre lo que no es exento
-        const montoIva = esFactura ? (esGasto ? Math.round((subtotalNum - montoExento) * CONFIG_FISCAL.alicuotaGeneral) / 100 : r2(Math.max(0, Number(montoIvaCliente) || 0))) : 0;
+        const montoIva = esFactura ? (esGasto ? exacto((subtotalNum - montoExento) * CONFIG_FISCAL.alicuotaGeneral / 100) : exacto(Math.max(0, Number(montoIvaCliente) || 0))) : 0;
         const numeroControl = esFactura ? numeroControlCliente : null;
-        const totalFinal = r2(subtotalNum + montoIva);
+        const totalFinal = exacto(subtotalNum + montoIva);
         const porcentajeRetencion = [75, 100].includes(Number(porcentajeRetencionCliente)) ? Number(porcentajeRetencionCliente) : CONFIG_FISCAL.porcentajeRetencionCompras;
         // Cuándo se retiene: 'ahora' (comprobante al registrar), 'despues' (queda «Falta retener» y se hace al pagar; solo a crédito) o 'no'
         const modoRetencion = ['ahora', 'despues', 'no'].includes(retencionModo) ? retencionModo : (aplicarRetencion === false ? 'no' : 'ahora');
         const aplicaRetencion = CONFIG_FISCAL.agenteRetencionIva && esFactura && montoIva > 0;
         const retiene = aplicaRetencion && modoRetencion === 'ahora';
         const retencionPendiente = aplicaRetencion && modoRetencion === 'despues' && condicionPago === 'Credito';
-        const montoRetencion = retiene ? Math.round(montoIva * porcentajeRetencion) / 100 : 0;
+        const montoRetencion = retiene ? exacto(montoIva * porcentajeRetencion / 100) : 0;
 
         // Datos fiscales coherentes: no se puede retener más IVA del que tiene la factura
         if (Number(montoRetencion) > Number(montoIva) + 0.005) {
@@ -153,6 +153,8 @@ export async function POST(request) {
         }
 
         const simulacionResultados = [];
+        // Precio de ESTA compra por unidad, en dólares, tal cual se escribió (si la factura es en Bs, con la tasa de la factura)
+        const precioUsdDe = (item) => (moneda === 'BS' ? Number(item.precioCompraUnitario) / Number(tasaCambio) : Number(item.precioCompraUnitario));
 
         // --- FASE 1: SIMULACIÓN DE COSTOS PONDERADOS ---
         // Una sola consulta para todos los productos (antes era una por línea, y otra más por línea al registrar)
@@ -168,7 +170,7 @@ export async function POST(request) {
             const stockActual = Number(producto.stockAlmacen) || 0;
             const costoActual = Number(producto.costoUsd) || 0;
             const cantidadComprada = Number(item.cantidad) || 0;
-            const precioCompraUsd = moneda === 'BS' ? Number(item.precioCompraUnitario) / Number(tasaCambio) : Number(item.precioCompraUnitario);
+            const precioCompraUsd = precioUsdDe(item);
 
             let nuevoCostoPonderado = costoActual;
             if (stockActual + cantidadComprada > 0) {
@@ -266,7 +268,7 @@ export async function POST(request) {
                 fechaVencimiento,
                 statusPago: condicionPago === 'Contado' ? 'Pagado' : 'Pendiente',
                 moneda,
-                tasaCambio: Number(tasaCambio) || 1.00,
+                tasaCambio: Number(tasaCambio) || 1,
                 subtotal: subtotalNum,
                 montoIva: Number(montoIva) || 0,
                 montoRetencion: Number(montoRetencion) || 0,
@@ -284,7 +286,8 @@ export async function POST(request) {
             if (montoRetencion > 0) {
                 const prov = await Proveedor.findByPk(idProveedorFinal, { attributes: ['identificacion', 'nombre'], transaction: t });
                 if (!String(prov?.identificacion || '').trim()) throw new ErrorCompra('El proveedor no tiene RIF: complétalo para poder emitir el comprobante de retención de IVA', 400);
-                const aBs = (v) => (moneda === 'BS' ? Number(Number(v).toFixed(2)) : aBolivares(Number(v), Number(tasaCambio) || 1));
+                // Con la tasa completa de la factura (antes se cortaba a 2 decimales); el comprobante, documento fiscal, queda en Bs a céntimos
+                const aBs = (v) => aBolivaresExacto(Number(v) || 0, moneda === 'BS' ? 1 : (Number(tasaCambio) || 1));
                 const fechaRet = fechaRecepcion || fechaFactura || fechaCaracas();
                 comprobanteRetencion = await siguienteComprobante(fechaRet, t);
                 await RetencionIva.create({
@@ -331,7 +334,8 @@ export async function POST(request) {
                     productoId: producto.id,
                     proveedorId: idProveedorFinal,
                     cantidad: item.cantidad,
-                    costoUnitario: sim.nuevoCostoPonderado,
+                    // Lo que costó cada unidad en ESTA factura, tal cual se escribió (antes guardaba el costo promedio y no el de la compra)
+                    costoUnitario: exacto(precioUsdDe(item)),
                     justificacion: `Compra ${tipoDocumento} Nro: ${numeroDocumento}`,
                     estado: 'Recibida',
                     registradoPorId: registradoPorId || null
@@ -339,7 +343,7 @@ export async function POST(request) {
             }
             if (entradas.length) await EntradaInventario.bulkCreate(entradas, { transaction: t });
 
-            const montoGastoNeto = Number(totalFinal) - (Number(montoRetencion) || 0);
+            const montoGastoNeto = exacto(Number(totalFinal) - (Number(montoRetencion) || 0));
 
             if (condicionPago === 'Contado') {
                 let catCompras = categoriaGasto || await CategoriaFinanciera.findOne({ where: { nombre: 'Compras de Mercancía' }, transaction: t });
@@ -367,7 +371,7 @@ export async function POST(request) {
                     montoTotal: montoGastoNeto,
                     saldoPendiente: montoGastoNeto,
                     moneda,
-                    tasaCambio: Number(tasaCambio) || 1.00,
+                    tasaCambio: Number(tasaCambio) || 1,
                     fechaVencimiento,
                     estado: 'Pendiente'
                 }, { transaction: t });
@@ -402,7 +406,7 @@ export async function POST(request) {
                 try {
                     await notificarCabezas({
                         title: 'Compra registrada 🧾',
-                        body: `${[acceso.sesion.nombre, acceso.sesion.apellido].filter(Boolean).join(' ') || 'Un empleado'} registró la compra ${numeroDocumento} por ${moneda === 'BS' ? 'Bs ' : '$'}${Number(totalFinal || 0).toFixed(2)}${condicionPago === 'Credito' ? ' a crédito' : ''}.`,
+                        body: `${[acceso.sesion.nombre, acceso.sesion.apellido].filter(Boolean).join(' ') || 'Un empleado'} registró la compra ${numeroDocumento} por ${moneda === 'BS' ? 'Bs ' : '$'}${formatoExacto(totalFinal)}${condicionPago === 'Credito' ? ' a crédito' : ''}.`,
                         url: '/superuser/compras', tipo: 'Info',
                     });
                 } catch (e) {

@@ -28,16 +28,16 @@ const FacturaCompra = sequelize.define('FacturaCompra', {
         defaultValue: 'USD'
     },
     tasaCambio: {
-        type: DataTypes.DECIMAL(10, 2),
+        type: DataTypes.DECIMAL(20, 8), // la tasa completa (la que imprime la factura puede traer 4 u 8 decimales)
         allowNull: false,
         defaultValue: 1.00
     },
     subtotal: {
-        type: DataTypes.DECIMAL(12, 2),
+        type: DataTypes.DECIMAL(20, 6), // tal cual se escribió, sin redondear a céntimos
         defaultValue: 0.00
     },
     montoIva: {
-        type: DataTypes.DECIMAL(12, 2),
+        type: DataTypes.DECIMAL(20, 6), // tal cual se escribió, sin redondear a céntimos
         defaultValue: 0.00
     },
     fechaFactura: {
@@ -46,11 +46,11 @@ const FacturaCompra = sequelize.define('FacturaCompra', {
         defaultValue: DataTypes.NOW
     },
     montoRetencion: {
-        type: DataTypes.DECIMAL(12, 2),
+        type: DataTypes.DECIMAL(20, 6), // tal cual se escribió, sin redondear a céntimos
         defaultValue: 0.00
     },
     totalFinal: {
-        type: DataTypes.DECIMAL(12, 2),
+        type: DataTypes.DECIMAL(20, 6), // tal cual se escribió, sin redondear a céntimos
         defaultValue: 0.00
     },
     registradoPorId: {
@@ -65,7 +65,7 @@ const FacturaCompra = sequelize.define('FacturaCompra', {
     // Datos fiscales
     numeroControl: { type: DataTypes.STRING(30), allowNull: true },
     fechaRecepcion: { type: DataTypes.DATEONLY, allowNull: true }, // el libro de compras se ordena por fecha de recepción
-    montoExento: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
+    montoExento: { type: DataTypes.DECIMAL(20, 6), allowNull: false, defaultValue: 0 },
     alicuotaIva: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 16 },
     tipoTransaccion: { type: DataTypes.STRING(2), allowNull: false, defaultValue: '01' },
     // Gasto (servicio, flete, alquiler...): documento de compra sin mercancía, no mueve inventario. Entra al libro de compras si es factura.

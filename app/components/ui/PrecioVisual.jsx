@@ -1,15 +1,16 @@
 import React from 'react';
 import { Text } from '@mantine/core';
+import { formatoExacto } from '@/app/helpers/sinRedondeo';
 
-export default function PrecioVisual({ valor, simbolo = '$', size = 'md', fw = 700, c = 'inherit' }) {
+// exacto: muestra el número con TODOS sus decimales (al menos 2), sin redondear; si no, a 3 decimales
+export default function PrecioVisual({ valor, simbolo = '$', size = 'md', fw = 700, c = 'inherit', exacto = false }) {
     const numero = Number(valor);
     if (isNaN(numero)) return <Text component="span" size={size} fw={fw} c={c}>{simbolo} 0.000</Text>;
 
-    // Formateamos a 3 decimales estrictos y separamos la parte entera de la decimal
-    const [entero, decimales] = numero.toFixed(3).split('.');
-    
-    // Opcional: agregamos separador de miles a la parte entera (ej: 1,250)
-    const enteroConMiles = Number(entero).toLocaleString('en-US');
+    // Separamos la parte entera (con separador de miles, ej: 1,250) de la decimal
+    const [enteroConMiles, decimales] = exacto
+        ? formatoExacto(numero).split('.')
+        : (([e, d]) => [Number(e).toLocaleString('en-US'), d])(numero.toFixed(3).split('.'));
 
     return (
         <Text component="span" size={size} fw={fw} c={c} style={{ display: 'inline-flex', alignItems: 'baseline' }}>

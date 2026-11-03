@@ -7,6 +7,7 @@ import { Alert, Badge, Box, Button, Card, Checkbox, Container, Divider, Grid, Gr
 import { notifications } from '@mantine/notifications';
 import { IconArrowLeft, IconCash, IconFileText, IconReceiptTax } from '@tabler/icons-react';
 import PrecioVisual from '@/app/components/ui/PrecioVisual';
+import { formatoExacto } from '@/app/helpers/sinRedondeo';
 import { fechaCaracas, formatearFecha, formatearFechaHora } from '@/app/constants/hora';
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
@@ -196,13 +197,13 @@ export default function DetalleCompraPage() {
                         <Title order={5} c="navy.9" mb="xs">Productos que entraron al inventario</Title>
                         <Table.ScrollContainer minWidth={420}>
                             <Table verticalSpacing="xs" fz="sm">
-                                <Table.Thead><Table.Tr><Table.Th>Producto</Table.Th><Table.Th ta="right">Cantidad</Table.Th><Table.Th ta="right">Costo unit. ($)</Table.Th></Table.Tr></Table.Thead>
+                                <Table.Thead><Table.Tr><Table.Th>Producto</Table.Th><Table.Th ta="right">Cantidad</Table.Th><Table.Th ta="right">Precio de compra / und ($)</Table.Th></Table.Tr></Table.Thead>
                                 <Table.Tbody>
                                     {(c.entradas || []).map((e) => (
                                         <Table.Tr key={e.id}>
                                             <Table.Td><Text size="sm" fw={600}>{e.producto?.nombre}</Text><Text size="xs" c="dimmed">{e.producto?.codigo}</Text></Table.Td>
                                             <Table.Td ta="right">{Number(e.cantidad)}</Table.Td>
-                                            <Table.Td ta="right">{Number(e.costoUnitario).toFixed(4)}</Table.Td>
+                                            <Table.Td ta="right">{formatoExacto(e.costoUnitario)}</Table.Td>
                                         </Table.Tr>
                                     ))}
                                 </Table.Tbody>
@@ -215,11 +216,11 @@ export default function DetalleCompraPage() {
                 <Grid.Col span={{ base: 12, md: 5 }}>
                     <Card withBorder radius="lg" p="md" bg="white" mb="md">
                         <Title order={5} c="navy.9" mb="xs">Montos</Title>
-                        <Group justify="space-between"><Text size="sm">Subtotal</Text><PrecioVisual valor={c.subtotal} simbolo={simbolo} size="sm" /></Group>
-                        {esFactura && <Group justify="space-between"><Text size="sm">IVA (16%)</Text><PrecioVisual valor={c.montoIva} simbolo={simbolo} size="sm" /></Group>}
-                        {Number(c.montoRetencion) > 0 && <Group justify="space-between"><Text size="sm" c="red.8">Retención de IVA (−)</Text><PrecioVisual valor={c.montoRetencion} simbolo={simbolo} size="sm" c="red.8" /></Group>}
-                        <Group justify="space-between" mt={6}><Text fw={800}>Total del documento</Text><PrecioVisual valor={c.totalFinal} simbolo={simbolo} size="lg" fw={800} /></Group>
-                        {Number(c.montoRetencion) > 0 && <Group justify="space-between"><Text size="sm" c="dimmed">A pagar al proveedor</Text><PrecioVisual valor={Number(c.totalFinal) - Number(c.montoRetencion)} simbolo={simbolo} size="sm" fw={700} /></Group>}
+                        <Group justify="space-between"><Text size="sm">Subtotal</Text><PrecioVisual exacto valor={c.subtotal} simbolo={simbolo} size="sm" /></Group>
+                        {esFactura && <Group justify="space-between"><Text size="sm">IVA (16%)</Text><PrecioVisual exacto valor={c.montoIva} simbolo={simbolo} size="sm" /></Group>}
+                        {Number(c.montoRetencion) > 0 && <Group justify="space-between"><Text size="sm" c="red.8">Retención de IVA (−)</Text><PrecioVisual exacto valor={c.montoRetencion} simbolo={simbolo} size="sm" c="red.8" /></Group>}
+                        <Group justify="space-between" mt={6}><Text fw={800}>Total del documento</Text><PrecioVisual exacto valor={c.totalFinal} simbolo={simbolo} size="lg" fw={800} /></Group>
+                        {Number(c.montoRetencion) > 0 && <Group justify="space-between"><Text size="sm" c="dimmed">A pagar al proveedor</Text><PrecioVisual exacto valor={Number(c.totalFinal) - Number(c.montoRetencion)} simbolo={simbolo} size="sm" fw={700} /></Group>}
                         {!esFactura && <Text size="xs" c="dimmed" mt="xs">Nota de entrega: sin IVA ni retención, no entra al libro de compras.</Text>}
                     </Card>
 

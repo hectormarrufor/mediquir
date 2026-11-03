@@ -31,7 +31,7 @@ const CuentaPorPagar = sequelize.define('CuentaPorPagar', {
         defaultValue: 'USD'
     },
     tasaCambio: {
-        type: DataTypes.DECIMAL(10, 2),
+        type: DataTypes.DECIMAL(20, 8), // la tasa completa de la factura
         allowNull: false,
         defaultValue: 1.00
     },

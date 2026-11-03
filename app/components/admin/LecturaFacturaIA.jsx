@@ -7,13 +7,14 @@ import { Alert, Badge, Box, Button, Checkbox, Group, Modal, NumberInput, Paper, 
 import { IconAlertTriangle, IconCheck, IconSparkles } from '@tabler/icons-react';
 import { buscarProductos, normalizar } from '@/app/helpers/busquedaProductos';
 import { claveRenglonProveedor } from '@/app/constants/claveProveedor';
+import { exacto } from '@/app/helpers/sinRedondeo';
 
 // Consulta de RIF del portal del SENIAT (tiene captcha: se abre en otra pestaña y la persona pega el RIF)
 export const URL_SENIAT_RIF = 'http://contribuyente.seniat.gob.ve/BuscaRif/BuscaRif.jsp';
 export const normRif = (r) => String(r || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-export const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
-const fmt = (n, dec = 2) => Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: dec });
+// Se muestran todos los decimales que tenga el número (al menos 2): nada se redondea al mostrarlo
+const fmt = (n) => exacto(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 10 });
 
 // La descripción del proveedor trae palabras de empaque ("CAJA X 100", "C/50", "UND") que estorban al buscar el producto
 const limpiarParaBuscar = (texto) => String(texto || '')
@@ -147,7 +148,7 @@ function FilaRenglon({ fila, opciones, porId, porNombre, simbolo, onCambiar }) {
     const fichaBulto = Number(producto?.unidadesPorBulto) > 1 ? Number(producto.unidadesPorBulto) : 0;
     const enFicha = fila.unidadCompra === 'caja' ? fichaCaja : fichaBulto;
     const cambiaFicha = producto && fila.unidadCompra !== 'unidad' && contenido > 1 && contenido !== enFicha;
-    const total = l.totalLinea ?? r2((l.precioUnitario || 0) * (l.cantidad || 0));
+    const total = l.totalLinea ?? exacto((l.precioUnitario || 0) * (l.cantidad || 0));
 
     return (
         <Paper withBorder radius="md" p="sm" style={{ borderLeft: `4px solid var(--mantine-color-${!fila.incluir ? 'gray' : producto ? (faltaContenido ? 'orange' : 'teal') : 'orange'}-5)`, opacity: fila.incluir ? 1 : 0.6 }}>
@@ -155,7 +156,7 @@ function FilaRenglon({ fila, opciones, porId, porNombre, simbolo, onCambiar }) {
                 <Box style={{ minWidth: 0 }}>
                     <Text size="sm" fw={700} lh={1.3}>{fila.idx + 1}. {l.descripcion}</Text>
                     <Text size="xs" c="dimmed">
-                        {l.codigo ? `Cód. proveedor ${l.codigo} · ` : ''}{l.marca ? <>Marca <b>{l.marca}</b> · </> : ''}{fmt(l.cantidad, 3)} {l.unidadVenta ? l.unidadVenta.toLowerCase() : ''} × {simbolo} {fmt(l.precioUnitario, 4)} = <b>{simbolo} {fmt(total)}</b>
+                        {l.codigo ? `Cód. proveedor ${l.codigo} · ` : ''}{l.marca ? <>Marca <b>{l.marca}</b> · </> : ''}{fmt(l.cantidad)} {l.unidadVenta ? l.unidadVenta.toLowerCase() : ''} × {simbolo} {fmt(l.precioUnitario)} = <b>{simbolo} {fmt(total)}</b>
                     </Text>
                 </Box>
                 <Group gap={6} wrap="nowrap">
@@ -260,7 +261,7 @@ export function RevisionRenglonesIA({ opened, onClose, renglonesIniciales, produ
 }
 
 /**
- * Cuadre con lo impreso en la factura (el SENIAT exige que base, IVA y total coincidan al céntimo).
+ * Cuadre con lo impreso en la factura: se compara EXACTO (sin redondear lo calculado), así se ve cualquier diferencia.
  * `impreso`: lo que leyó la IA · `calculado`: lo que da la compra con sus renglones.
  */
 export function CuadreFactura({ impreso, calculado, simbolo, tasa, renglonesFactura, renglonesCompra, ivaAjustado, onUsarIvaImpreso, onQuitarAjuste }) {
@@ -270,19 +271,19 @@ export function CuadreFactura({ impreso, calculado, simbolo, tasa, renglonesFact
         ['IVA', impreso.montoIva, calculado.ivaCalculado],
         ['Total', impreso.total, calculado.total],
     ].filter(([, imp]) => imp !== null && imp !== undefined);
-    const dif = (a, b) => Math.abs(r2(a) - r2(b));
-    const descuadres = filas.filter(([, imp, calc]) => dif(imp, calc) > 0.005);
+    const dif = (a, b) => Math.abs(exacto(Number(a) - Number(b)));
+    const descuadres = filas.filter(([, imp, calc]) => dif(imp, calc) > 0);
     const difIva = impreso.montoIva !== null && impreso.montoIva !== undefined ? dif(impreso.montoIva, calculado.ivaCalculado) : null;
-    const soloCentimosIva = difIva !== null && difIva > 0.005 && difIva <= 0.5;
+    const soloCentimosIva = difIva !== null && difIva > 0 && difIva <= 0.5;
     if (!filas.length) return null;
     return (
         <Alert mt="xs" p="xs" color={descuadres.length ? 'orange' : 'teal'} variant="light" icon={descuadres.length ? <IconAlertTriangle size={18} /> : <IconCheck size={18} />}
-            title={descuadres.length ? 'La compra todavía no cuadra con la factura' : 'Cuadra al céntimo con la factura'}>
+            title={descuadres.length ? 'La compra todavía no cuadra con la factura' : 'Cuadra exacto con la factura'}>
             <Stack gap={2}>
                 {renglonesCompra !== renglonesFactura && <Text size="xs">La factura trae {renglonesFactura} renglón(es) y la compra tiene {renglonesCompra}.</Text>}
                 {filas.map(([nombre, imp, calc]) => (
-                    <Text key={nombre} size="xs" c={dif(imp, calc) > 0.005 ? 'orange.9' : undefined}>
-                        {nombre}: factura {simbolo} {fmt(imp)} · compra {simbolo} {fmt(calc)}{dif(imp, calc) > 0.005 ? ` (diferencia ${fmt(dif(imp, calc))})` : ' ✓'}
+                    <Text key={nombre} size="xs" c={dif(imp, calc) > 0 ? 'orange.9' : undefined}>
+                        {nombre}: factura {simbolo} {fmt(imp)} · compra {simbolo} {fmt(calc)}{dif(imp, calc) > 0 ? ` (diferencia ${fmt(dif(imp, calc))})` : ' ✓'}
                     </Text>
                 ))}
                 {/* Solo de referencia: el proveedor también imprime el total en dólares; el documento fiscal es el de bolívares */}
@@ -292,7 +293,7 @@ export function CuadreFactura({ impreso, calculado, simbolo, tasa, renglonesFact
                 {ivaAjustado !== null && <Text size="xs" fw={700}>IVA ajustado al impreso: {simbolo} {fmt(ivaAjustado)} <Button size="compact-xs" variant="subtle" onClick={onQuitarAjuste}>Quitar ajuste</Button></Text>}
                 {ivaAjustado === null && soloCentimosIva && onUsarIvaImpreso && (
                     <Group gap={6} mt={2}>
-                        <Text size="xs">El IVA difiere solo por céntimos (redondeo del proveedor).</Text>
+                        <Text size="xs">El IVA difiere por céntimos: el proveedor lo imprimió redondeado.</Text>
                         <Button size="compact-xs" color="orange" variant="light" onClick={onUsarIvaImpreso}>Usar el IVA de la factura</Button>
                     </Group>
                 )}

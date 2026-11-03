@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import sequelize from '@/sequelize';
-import { REGLAS, aBolivares } from '@/app/constants/facturacion';
+import { REGLAS, aBolivaresExacto } from '@/app/constants/facturacion';
 import { CONFIG_FISCAL, MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 import { requerirNoVendedor } from '../../_lib/acceso';
 
@@ -12,8 +12,9 @@ const num = (v) => Number(v) || 0;
 const r2 = (v) => Number(num(v).toFixed(2));
 const ALICUOTAS = [16]; // solo se usa la alícuota general; una alícuota distinta que aparezca en un documento se agrega sola al resumen
 
-// Monto de un documento en bolívares con la tasa DEL DOCUMENTO (los libros se llevan en Bs)
-const aBs = (monto, moneda, tasa) => (moneda === 'BS' ? r2(monto) : aBolivares(num(monto), num(tasa) || 1));
+// Monto de un documento en bolívares con la tasa DEL DOCUMENTO completa (los libros se llevan en Bs, a céntimos).
+// Las compras guardan sus montos y su tasa tal cual se escribieron: aquí no se recortan antes de multiplicar.
+const aBs = (monto, moneda, tasa) => aBolivaresExacto(num(monto), moneda === 'BS' ? 1 : (num(tasa) || 1));
 const iso = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
 
 // Resumen del libro en el formato del libro declarativo: por tipo de operación, por alícuota y retenciones

@@ -121,6 +121,17 @@ export function aBolivares(usd, tasa) {
     return aNumero(dividirRedondeando(milesimas * aEscala(tasa, 2), POT(D_PRECIO + 2 - D_MONTO)), D_MONTO);
 }
 
+// Monto × tasa -> bolívares a 2 decimales (mitad hacia arriba), SIN recortar antes ni el monto ni la tasa.
+// Para las compras, que guardan los números tal cual se escribieron (la tasa impresa en la factura puede traer 4 u 8 decimales).
+// Con montos y tasas de 2 decimales da exactamente lo mismo que aBolivares.
+const D_EXACTO = 8;
+export function aBolivaresExacto(monto, tasa = 1) {
+    const producto = aEscala(monto, D_EXACTO) * aEscala(tasa, D_EXACTO);
+    const negativo = producto < 0n;
+    const redondeado = dividirRedondeando(negativo ? -producto : producto, POT(2 * D_EXACTO - D_MONTO));
+    return aNumero(negativo ? -redondeado : redondeado, D_MONTO);
+}
+
 // Precio unitario en bolívares (se muestra con 2 decimales)
 export const precioEnBolivares = (precioUsd, tasa) => aBolivares(precioUsd, tasa);
 

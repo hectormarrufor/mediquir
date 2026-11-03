@@ -1,6 +1,6 @@
 import { Correlativo, FacturaCompra, Proveedor, RetencionIva, CuentaPorPagar } from '@/models';
 import { ErrorNumeracion, ultimoUsado } from './numeracion.js';
-import { aBolivares } from '@/app/constants/facturacion';
+import { aBolivaresExacto } from '@/app/constants/facturacion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { fechaCaracas } from '@/app/constants/hora';
 
@@ -45,8 +45,9 @@ export async function proximoComprobante(fecha) {
 
 export const periodoDe = (fecha) => String(fecha).slice(0, 7);
 
-// Montos de la factura en bolívares (el comprobante y el libro van en Bs): si la factura es en dólares, con SU tasa
-const enBs = (factura, v) => (factura.moneda === 'BS' ? r2(v) : aBolivares(Number(v) || 0, Number(factura.tasaCambio) || 1));
+// Montos de la factura en bolívares (el comprobante y el libro van en Bs, a céntimos): si la factura es en dólares, con SU tasa
+// completa; ni el monto ni la tasa se recortan antes de multiplicar (la compra los guarda tal cual se escribieron)
+const enBs = (factura, v) => aBolivaresExacto(Number(v) || 0, factura.moneda === 'BS' ? 1 : (Number(factura.tasaCambio) || 1));
 
 /** % a retener: el elegido si es 75 o 100; si no, el del proveedor; si no, el de la empresa. */
 export const porcentajeDe = (elegido, proveedor) => {
