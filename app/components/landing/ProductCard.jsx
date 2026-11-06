@@ -8,7 +8,7 @@ import { useCart } from './CartContext';
 import ImageCarousel from './ImageCarousel';
 import ProductDetail from './ProductDetail';
 import { getProductImages, getPricing, getPresentacionLabel, presentacionesTienda, formatearPrecio, formatearBs } from './productUtils';
-import { aBolivares, montoRenglon } from '@/app/constants/facturacion';
+import { aBolivares, montoRenglon, calcularFactura } from '@/app/constants/facturacion';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import classes from './landing.module.css';
 
@@ -21,6 +21,10 @@ export default function ProductCard({ product, isMobile }) {
     const { stock, precioBase, porcentajeAhorro, hasDiscount, precioFinal, isOutOfStock, isLowStock } = getPricing(product);
     const unidadEtiqueta = presentacionesTienda(product).find((p) => p.clave === 'UNIDAD')?.etiqueta || 'Unidad';
     const { tasa } = useTasaBcv();
+    const porcentajeIva = Number(product?.porcentajeIva) || 0;
+    // Mismo cálculo que el carrito: IVA y total de una unidad
+    const { montoIva, subtotal: baseUnidad } = calcularFactura({ renglones: [{ precioUnitario: precioFinal, cantidad: 1, aplicaIva: porcentajeIva > 0, porcentajeIva }] });
+    const totalUnidad = Math.round((baseUnidad + montoIva) * 100) / 100;
     const enCarrito = unidadesEnCarrito(product.id);
     const puedeAgregar = !isOutOfStock && enCarrito < stock;
     const caja = presentacionesTienda(product).find((p) => p.clave === 'CAJA') || null;
@@ -114,7 +118,11 @@ export default function ProductCard({ product, isMobile }) {
                             <Text fw={800} fz={{ base: 13, sm: 19 }} lh={1.15} c={hasDiscount ? 'red.7' : 'brand.6'}>
                                 Ref ${formatearPrecio(precioFinal)}{caja && <Text span fz={{ base: 8, sm: 11 }} fw={600} c="dimmed"> c/u</Text>}
                             </Text>
-                            {tasa && <Text fz={{ base: 9, sm: 12 }} fw={600} c="dimmed" lh={1.2}>Bs {formatearBs(aBolivares(precioFinal, tasa))}</Text>}
+                            <Text fz={{ base: 9, sm: 11 }} fw={600} c="dimmed" lh={1.2}>
+                                {porcentajeIva > 0 ? `+ IVA ${porcentajeIva}%: $${formatearPrecio(montoIva)}` : 'Exento de IVA'}
+                            </Text>
+                            <Text fz={{ base: 10, sm: 13 }} fw={800} c="navy.9" lh={1.2}>Total ${formatearPrecio(totalUnidad)}</Text>
+                            {tasa && <Text fz={{ base: 9, sm: 12 }} fw={600} c="dimmed" lh={1.2}>Bs {formatearBs(aBolivares(totalUnidad, tasa))}</Text>}
                         </Box>
                         {!caja && (
                             <ActionIcon

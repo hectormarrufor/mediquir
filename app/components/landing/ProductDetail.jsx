@@ -9,7 +9,7 @@ import ImageCarousel from './ImageCarousel';
 import { rutaProducto } from '@/app/lib/seo';
 import { useCart } from './CartContext';
 import { getProductImages, getPricing, getPresentacionLabel, presentacionesTienda, formatearPrecio, formatearBs } from './productUtils';
-import { aBolivares, montoRenglon } from '@/app/constants/facturacion';
+import { aBolivares, montoRenglon, calcularFactura } from '@/app/constants/facturacion';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 
 
@@ -27,6 +27,10 @@ function DetailBody({ product, onClose, isMobile }) {
     // Cuántas de la presentación elegida caben todavía (el stock está en unidades)
     const disponible = Math.floor(Math.max(0, stock - enCarrito) / pres.unidades);
     const precioPres = pres.unidades > 1 ? montoRenglon(precioFinal, pres.unidades) : precioFinal;
+
+    // IVA y total de la presentación elegida (mismo cálculo que el carrito)
+    const { montoIva: ivaPres, subtotal: basePres } = calcularFactura({ renglones: [{ precioUnitario: precioFinal, cantidad: pres.unidades, aplicaIva: porcentajeIva > 0, porcentajeIva }] });
+    const totalPres = Math.round((basePres + ivaPres) * 100) / 100;
 
     const handleAdd = () => {
         addToCart(product, quantity, precioFinal, pres.clave);
@@ -85,12 +89,13 @@ function DetailBody({ product, onClose, isMobile }) {
                         )}
                     </Group>
 
-                    {tasa && (
-                        <Text fw={700} size="lg" c="dimmed" lh={1.2}>Bs {formatearBs(aBolivares(precioPres, tasa))} <Text span size="xs" fw={500}>· tasa BCV {formatearBs(tasa)}</Text></Text>
-                    )}
-                    <Text size="xs" c="dimmed">
-                        {porcentajeIva > 0 ? `Precio sin IVA. Se suma el IVA (${porcentajeIva}%) al pagar.` : 'Producto exento de IVA.'}
+                    <Text size="sm" c="dimmed" fw={600}>
+                        {porcentajeIva > 0 ? `+ IVA (${porcentajeIva}%): $${formatearPrecio(ivaPres)}` : 'Producto exento de IVA'}
                     </Text>
+                    <Text fw={800} size="xl" c="navy.9" lh={1.2}>Total Ref ${formatearPrecio(totalPres)}</Text>
+                    {tasa && (
+                        <Text fw={700} size="lg" c="dimmed" lh={1.2}>Bs {formatearBs(aBolivares(totalPres, tasa))} <Text span size="xs" fw={500}>· tasa BCV {formatearBs(tasa)}</Text></Text>
+                    )}
 
                     {isOutOfStock ? (
                         <Text c="red.7" fw={700} mt="sm">Producto temporalmente agotado.</Text>
