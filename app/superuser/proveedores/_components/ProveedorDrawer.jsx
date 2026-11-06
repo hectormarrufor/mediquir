@@ -7,7 +7,7 @@ import { notifications } from '@mantine/notifications';
 import { useQueryClient } from '@tanstack/react-query';
 import { IconDeviceFloppy } from '@tabler/icons-react';
 import SelectorRetencion, { validarRetencion } from '@/app/components/admin/SelectorRetencion';
-import { formatearIdentificacion, formatearTelefono } from '@/app/constants/identificacion';
+import { esSinRif, formatearIdentificacion, formatearTelefono } from '@/app/constants/identificacion';
 
 async function pedirJson(url, opciones) {
     const res = await fetch(url, opciones);
@@ -41,7 +41,7 @@ export default function ProveedorDrawer({ opened, onClose, proveedor = null, pue
     useEffect(() => {
         if (!opened) return;
         form.setValues(proveedor ? {
-            identificacion: proveedor.identificacion || '',
+            identificacion: esSinRif(proveedor.identificacion) ? '' : (proveedor.identificacion || ''), // el RIF provisional no se muestra: hay que escribir el real
             nombre: proveedor.nombre || '',
             telefono: proveedor.telefono || '',
             email: proveedor.email || '',
@@ -95,7 +95,9 @@ export default function ProveedorDrawer({ opened, onClose, proveedor = null, pue
             <form onSubmit={form.onSubmit(guardar)}>
                 <fieldset disabled={soloLectura} style={{ border: 0, padding: 0, margin: 0 }}>
                     <Stack gap="md">
-                        <TextInput withAsterisk label="RIF" placeholder="J-12345678-9" data-autofocus {...form.getInputProps('identificacion')} />
+                        <TextInput withAsterisk label="RIF" placeholder="J-12345678-9" data-autofocus
+                            description={esSinRif(proveedor?.identificacion) ? 'Este proveedor está sin RIF: escribe el real para poder guardarlo' : undefined}
+                            {...form.getInputProps('identificacion')} />
                         <TextInput withAsterisk label="Razón social" {...form.getInputProps('nombre')} />
                         <Group grow align="flex-start">
                             <TextInput label="Teléfono" placeholder="04141234567 o +573001234567" {...form.getInputProps('telefono')} />

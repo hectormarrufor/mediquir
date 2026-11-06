@@ -17,7 +17,7 @@ const APLICAR = process.argv.includes('--aplicar') || PROBAR;
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 const { Client } = require('pg');
 const { randomUUID } = require('crypto');
-const { formatearIdentificacion, claveIdentificacion, formatearNombre } = require('../../app/constants/identificacion.js');
+const { formatearIdentificacion, claveIdentificacion, formatearNombre, PREFIJO_SIN_RIF, esSinRif } = require('../../app/constants/identificacion.js');
 
 const DESDE = '2023-01-01';
 const DIR = path.join(__dirname, 'datos', 'privado');
@@ -39,7 +39,7 @@ function rifDeLibro(crudo) {
 (async () => {
     const db = new Client({ connectionString: process.env.DB_URI, ssl: { rejectUnauthorized: false } });
     await db.connect();
-    const rep = { ventaSinFactura: [], ventaAmbigua: [], compraSinRif: [], compraNoCarga: [], retSinFactura: [], retAmbigua: [] };
+    const rep = { ventaSinFactura: [], ventaAmbigua: [], compraSinRif: [], sinRifRecuperado: [], compraNoCarga: [], retSinFactura: [], retAmbigua: [] };
     const tasas = (await db.query(`SELECT fecha::text AS f, monto::float AS m FROM "BcvPreciosHistoricos" ORDER BY fecha`)).rows;
     const tasaDe = (fecha) => { let t = null; for (const x of tasas) { if (x.f <= fecha) t = x; else break; } return t?.m ?? null; };
 
@@ -74,9 +74,22 @@ function rifDeLibro(crudo) {
     for (const r of txt) { const rif = cl(r[5]); const p = pct(Number(r[10]), Number(r[9]) * 0.16); retPorProv.set(rif, Math.max(retPorProv.get(rif) || 0, p)); }
 
     const comprasPlan = []; const provNuevos = new Map();
+    // RIF de un proveedor sin RIF en el libro que sí aparece (por control y total) en el TXT: vale para todas sus facturas (mismo nombre)
+    const rifPorNombre = new Map();
     for (const l of facCompra) {
-        const id = rifDeLibro(l.rif);
-        if (!id) { rep.compraSinRif.push({ fecha: l.fecha, nombre: l.nombre, factura: l.factura, total: l.total, rif: l.rif }); continue; }
+        if (rifDeLibro(l.rif) || !l.control) continue;
+        const t = txt.find((r) => cl(r[7]) === cl(l.control) && Math.abs(Number(r[8]) - l.total) <= 0.02);
+        const rt = t ? (formatearIdentificacion(t[5]).valor || (/^\d{9}$/.test(cl(t[5])) ? formatearIdentificacion(`J${cl(t[5])}`).valor : null)) : null;
+        if (rt) rifPorNombre.set(cl(l.nombre), rt);
+    }
+    for (const l of facCompra) {
+        let id = rifDeLibro(l.rif);
+        if (!id) {
+            // Sin RIF en el libro: se busca en el TXT de retenciones (misma factura por control y total); si no está, RIF provisional "SIN-RIF-<nombre>"
+            const rt = rifPorNombre.get(cl(l.nombre)) || null;
+            if (rt) { id = rt; rep.sinRifRecuperado.push({ nombre: l.nombre, factura: l.factura, rif: rt }); }
+            else { id = `${PREFIJO_SIN_RIF}${cl(l.nombre).slice(0, 30)}`; rep.compraSinRif.push({ fecha: l.fecha, nombre: l.nombre, factura: l.factura, total: l.total }); }
+        }
         if (!proveedores.has(cl(id)) && !provNuevos.has(cl(id))) provNuevos.set(cl(id), { identificacion: id, nombre: (formatearNombre(l.nombre) || 'PROVEEDOR').slice(0, 200) });
         const fecha = iso(l.fecha);
         const exento = l.exento || 0; const base = l.base || 0;
@@ -108,7 +121,7 @@ function rifDeLibro(crudo) {
     console.log(`\nA. RETENCIONES DE VENTA (desde ${DESDE}): ${filasRet.length} en el libro, ${facturas.length} facturas con retención`);
     console.log(`   relacionadas con su factura: ${retVenta.length} (${rep.ventaAmbigua.length} con varias candidatas) · sin factura: ${rep.ventaSinFactura.length} · ya cargadas: ${retVenta.length - nuevasVenta.length}`);
     console.log(`   clientes que se marcan contribuyente especial: ${new Set(nuevasVenta.map((x) => x.v.clienteId)).size}`);
-    console.log(`B. COMPRAS: ${comprasPlan.length} facturas (${rep.compraSinRif.length} sin RIF legible, ${rep.compraNoCarga.length} notas de crédito/débito sin cargar)`);
+    console.log(`B. COMPRAS: ${comprasPlan.length} facturas (${rep.sinRifRecuperado.length} sin RIF en el libro cuyo RIF salió del TXT, ${rep.compraSinRif.length} con RIF provisional SIN-RIF para que lo consigas, ${rep.compraNoCarga.length} notas de crédito/débito sin cargar)`);
     console.log(`   proveedores: ${new Set(comprasPlan.map((c) => cl(c.id))).size} distintos, ${provNuevos.size} sin ficha (se crean)`);
     console.log(`   retenciones de compra: ${retCompra.length} en el TXT · con su factura: ${retCompra.filter((x) => x.c).length} · sin factura: ${rep.retSinFactura.length} (${rep.retAmbigua.length} ambiguas)`);
     console.log(`   facturas con retención: ${retPorFactura.size}`);
@@ -129,8 +142,8 @@ function rifDeLibro(crudo) {
         // proveedores nuevos
         for (const p of provNuevos.values()) {
             const rp = retPorProv.get(cl(p.identificacion));
-            const r = await db.query(`INSERT INTO "Proveedores" (identificacion, nombre, "esContribuyenteEspecial", "retencionIvaPorDefecto", activo, "createdAt", "updatedAt") VALUES ($1,$2,$3,$4,true,now(),now())
-                ON CONFLICT (identificacion) DO UPDATE SET identificacion = EXCLUDED.identificacion RETURNING id`, [p.identificacion, p.nombre, Boolean(rp), rp || 75]);
+            const r = await db.query(`INSERT INTO "Proveedores" (identificacion, nombre, "esContribuyenteEspecial", "retencionIvaPorDefecto", activo, notas, "createdAt", "updatedAt") VALUES ($1,$2,$3,$4,true,$5,now(),now())
+                ON CONFLICT (identificacion) DO UPDATE SET identificacion = EXCLUDED.identificacion RETURNING id`, [p.identificacion, p.nombre, Boolean(rp), rp || 75, esSinRif(p.identificacion) ? 'RIF pendiente: el libro de compras no lo traía. Consíguelo con el proveedor y complétalo en su ficha.' : null]);
             proveedores.set(cl(p.identificacion), r.rows[0].id);
         }
         // proveedores que ya existían pero le retenemos: se marcan contribuyentes especiales

@@ -78,6 +78,10 @@ export function formatearTelefono(entrada) {
     return { valor: null, motivo: `${d.length} dígitos` };
 }
 
+// Proveedor cargado desde el libro de compras sin RIF legible: se guarda con un RIF provisional y la pantalla de proveedores avisa que hay que conseguirlo
+export const PREFIJO_SIN_RIF = 'SIN-RIF-';
+export const esSinRif = (identificacion) => String(identificacion ?? '').toUpperCase().startsWith(PREFIJO_SIN_RIF);
+
 // Para comparar: sin signos, mayúsculas
 export const claveIdentificacion = (v) => String(v ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 

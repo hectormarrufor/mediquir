@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { IconAlertTriangle, IconBuildingWarehouse, IconCash, IconEdit, IconEye, IconPackageOff, IconPlus, IconSearch } from '@tabler/icons-react';
 import { formatearFecha } from '@/app/constants/hora';
 import { normRif } from '@/app/constants/rif';
+import { esSinRif } from '@/app/constants/identificacion';
 import ProveedorDrawer from './_components/ProveedorDrawer';
 
 const dos = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -56,6 +57,7 @@ export default function ProveedoresPage() {
 
     const proveedores = data?.proveedores || [];
     const permisos = data?.permisos || { editar: false, verDeuda: false };
+    const sinRif = useMemo(() => proveedores.filter((p) => p.activo !== false && esSinRif(p.identificacion)), [proveedores]);
     const kpi = useMemo(() => {
         const activos = proveedores.filter((p) => p.activo !== false);
         return {
@@ -93,6 +95,21 @@ export default function ProveedoresPage() {
                 </Group>
 
                 {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}
+
+                {sinRif.length > 0 && (
+                    <Alert color="yellow" variant="light" radius="md" icon={<IconAlertTriangle size={20} />}
+                        title={`${sinRif.length} proveedor${sinRif.length === 1 ? '' : 'es'} sin RIF: hay que conseguirlo`}>
+                        <Text size="sm" mb={6}>
+                            Sus facturas de compra ya están registradas, pero el libro de compras no traía su RIF y quedaron con uno provisional.
+                            Consíguelo con cada proveedor y complétalo en su ficha; mientras tanto no se les puede emitir comprobante de retención de IVA.
+                        </Text>
+                        <Group gap="xs">
+                            {sinRif.map((p) => (
+                                <Button key={p.id} size="compact-xs" variant="white" color="yellow.9" onClick={() => setDrawer({ proveedor: p })}>{p.nombre}</Button>
+                            ))}
+                        </Group>
+                    </Alert>
+                )}
 
                 <SimpleGrid cols={{ base: 1, xs: 2, lg: permisos.verDeuda ? 3 : 2 }} spacing="md">
                     <Indicador icono={IconBuildingWarehouse} color="blue" titulo="Proveedores activos" cargando={isLoading} valor={kpi.activos} detalle={kpi.inactivos ? `${kpi.inactivos} inactivo(s)` : null} />

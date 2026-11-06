@@ -1,6 +1,7 @@
 import { Correlativo, FacturaCompra, Proveedor, RetencionIva, CuentaPorPagar } from '@/models';
 import { ErrorNumeracion, ultimoUsado } from './numeracion.js';
 import { aBolivaresExacto, retencionCompra } from '@/app/constants/facturacion';
+import { esSinRif } from '@/app/constants/identificacion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { fechaCaracas } from '@/app/constants/hora';
 
@@ -106,7 +107,7 @@ export async function retenerFacturas({ facturaIds, porcentaje, fecha, registrad
     if (facturas.length !== ids.length) throw new ErrorRetencion('No se encontró alguna de las facturas', 404);
     if (new Set(facturas.map((f) => f.proveedorId)).size > 1) throw new ErrorRetencion('Un comprobante agrupa solo facturas de un mismo proveedor');
     const proveedor = await Proveedor.findByPk(facturas[0].proveedorId, { transaction: t });
-    if (!String(proveedor?.identificacion || '').trim()) throw new ErrorRetencion('El proveedor no tiene RIF: complétalo en su ficha para poder emitir el comprobante');
+    if (!String(proveedor?.identificacion || '').trim() || esSinRif(proveedor?.identificacion)) throw new ErrorRetencion('El proveedor no tiene RIF: complétalo en su ficha para poder emitir el comprobante');
 
     const previas = await RetencionIva.findAll({ where: { facturaCompraId: ids, tipo: 'COMPRA' }, transaction: t, lock: t.LOCK.UPDATE });
     for (const f of facturas) {

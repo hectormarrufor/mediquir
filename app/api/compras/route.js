@@ -12,6 +12,7 @@ import { siguienteComprobante, periodoDe, marcarRetencionPendiente } from '../_l
 import { ErrorNumeracion } from '../_lib/numeracion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { datosProveedor, rifRepetido } from '../proveedores/_datos';
+import { esSinRif } from '@/app/constants/identificacion';
 const { RetencionIva, Proveedor, Producto, EntradaInventario, FacturaCompra, CategoriaFinanciera, MovimientoFinanciero, CuentaPorPagar, User, Empleado } = db;
 
 class ErrorCompra extends Error {
@@ -297,7 +298,7 @@ export async function POST(request) {
             let comprobanteRetencion = null;
             if (montoRetencion > 0) {
                 const prov = await Proveedor.findByPk(idProveedorFinal, { attributes: ['identificacion', 'nombre'], transaction: t });
-                if (!String(prov?.identificacion || '').trim()) throw new ErrorCompra('El proveedor no tiene RIF: complétalo para poder emitir el comprobante de retención de IVA', 400);
+                if (!String(prov?.identificacion || '').trim() || esSinRif(prov?.identificacion)) throw new ErrorCompra('El proveedor no tiene RIF: complétalo para poder emitir el comprobante de retención de IVA', 400);
                 // Con la tasa completa de la factura (antes se cortaba a 2 decimales); el comprobante, documento fiscal, queda en Bs a céntimos
                 const aBs = (v) => aBolivaresExacto(Number(v) || 0, moneda === 'BS' ? 1 : (Number(tasaCambio) || 1));
                 const fechaRet = fechaRecepcion || fechaFactura || fechaCaracas();
