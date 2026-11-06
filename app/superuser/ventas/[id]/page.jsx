@@ -25,6 +25,7 @@ import PagoPorVerificarCard from '../_components/PagoPorVerificarCard';
 import { aInputFechaHora, formatearFecha, formatearFechaHora } from '@/app/constants/hora';
 import NotasFacturaCard from '../_components/NotasFacturaCard';
 import ConvertirNotaEntregaModal from '../_components/ConvertirNotaEntregaModal';
+import DatosDeCopia from '@/app/components/admin/DatosDeCopia';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function DetallePedidoMayorPage() {
@@ -39,6 +40,7 @@ export default function DetallePedidoMayorPage() {
     const [modalCobroTienda, setModalCobroTienda] = useState(false);
     const [cobroTienda, setCobroTienda] = useState({ metodoPago: 'Efectivo ($)', referencia: '' });
     const [modalFactura, setModalFactura] = useState(false);
+    const [copiaFactura, setCopiaFactura] = useState({ numero: '', control: '', fecha: '' }); // datos de la factura si ya se emitió en el sistema anterior
     const [modalNotaAFactura, setModalNotaAFactura] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const isMobile = useMediaQuery('(max-width: 48em)');
@@ -119,7 +121,7 @@ export default function DetallePedidoMayorPage() {
 
     const handleConfirmarEmpaque = (values) => handleAction('EMPACAR', { ...values, vendedorId: userId }, setModalEmpacar, 'Caja armada y stock descontado.');
     const handleAsignar = (values) => handleAction('ASIGNAR', values, setModalEmpacar, 'Personal asignado. Les avisamos para que preparen el pedido.');
-    const handleConvertirFactura = () => handleAction('CONVERTIR_A_FACTURA', {}, setModalFactura, 'Convertido en factura. Ahora aparece en el libro de ventas con la fecha de hoy.');
+    const handleConvertirFactura = () => handleAction('CONVERTIR_A_FACTURA', { numeroFactura: copiaFactura.numero, numeroControl: copiaFactura.control, fecha: copiaFactura.fecha }, setModalFactura, 'Convertido en factura. Ya aparece en el libro de ventas.');
     const handleFirmar = (accion, mensaje) => handleAction(accion, {}, null, mensaje);
     const handleConfirmarDespacho = (values) => handleAction('DESPACHAR', values, setModalDespacho, 'Despacho registrado y flete asentado.');
 
@@ -620,7 +622,8 @@ export default function DetallePedidoMayorPage() {
 
             <Modal opened={modalFactura} onClose={() => setModalFactura(false)} title={<Title order={4}>Convertir en factura</Title>} centered>
                 <Stack gap="md">
-                    <Text size="sm">El recibo <b>{pedido.numeroDocumento}</b> pasará a ser una <b>factura</b> con un número F- nuevo y fecha de emisión <b>de hoy</b>, y entrará al libro de ventas de este periodo.</Text>
+                    <Text size="sm">El recibo <b>{pedido.numeroDocumento}</b> pasará a ser una <b>factura</b>: con el número F- que escribas abajo (si ya la emitiste en el sistema anterior) o con uno nuevo, y fecha de emisión la que indiques o <b>la de hoy</b>. Entrará al libro de ventas de ese periodo.</Text>
+                    <DatosDeCopia valores={copiaFactura} onCambio={setCopiaFactura} />
                     <Text size="sm">El IVA ya cobrado dejará de contar como ingreso de la tienda y quedará reservado para pagar al SENIAT. Esta acción no se puede deshacer.</Text>
                     <Button loading={isSubmitting} fullWidth color="indigo" onClick={handleConvertirFactura}>Sí, convertir en factura</Button>
                 </Stack>

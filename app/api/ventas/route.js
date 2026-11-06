@@ -4,7 +4,7 @@ import sequelize from '@/sequelize'; // 🔥 IMPORTACIÓN CORRECTA DE LA INSTANC
 import db from '@/models';
 const { Venta, VentaDetalle, Producto, Marca, Correlativo, CategoriaFinanciera, MovimientoFinanciero, Cliente, User, Empleado, SalidaInventario, CuentaPorCobrar } = db;
 import { requerirStaff } from '../inventario/_lib';
-import { tasaVigente } from '../_lib/tasaBcv';
+import { tasaVigente, tasaDelDia } from '../_lib/tasaBcv';
 import { crearRetencionPendiente } from '../_lib/retencionesVenta';
 import { calcularFactura, aBolivares, aDolares, REGLAS, precioPorTarifa, TARIFAS_VENDEDOR } from '@/app/constants/facturacion';
 import { rolDe } from '@/app/constants/roles';
@@ -109,7 +109,7 @@ export async function POST(request) {
         const body = await request.json();
         const {
             tipoVenta, tipoDocumento, clienteId, moneda, condicionPago, quienRetira, costoFlete,
-            detalles, metodoPago, referencia, numeroDocumentoManual, vendedorId, numeroControl,
+            detalles, metodoPago, referencia, numeroDocumentoManual, vendedorId, numeroControl, fechaEmision: fechaEmisionBody,
         } = body;
 
         if (!Array.isArray(detalles) || detalles.length === 0) {
@@ -132,8 +132,18 @@ export async function POST(request) {
         if (!['USD', 'BS'].includes(moneda)) throw new ErrorNegocio('Moneda inválida');
         if (condicionPago === 'Credito' && !clienteId) throw new ErrorNegocio('Una venta a crédito requiere un cliente');
 
-        // La tasa la pone el servidor, no el navegador
-        const tasaCambio = await tasaVigente({ transaction: t });
+        // Fecha de emisión: hoy, o la que indique un administrador (YYYY-MM-DD, nunca futura) para copiar un documento que el sistema anterior emitió otro día.
+        // Con esa fecha la venta toma la tasa BCV de ESE día (la tasa la pone el servidor, no el navegador).
+        let fechaDoc = null;
+        if (fechaEmisionBody) {
+            if (esVend) throw new ErrorNegocio('Solo administración puede cambiar la fecha de emisión', 403);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fechaEmisionBody)) || String(fechaEmisionBody) > fechaCaracas()) throw new ErrorNegocio('La fecha de emisión no es válida (no puede ser futura)');
+            if (String(fechaEmisionBody) < fechaCaracas()) fechaDoc = String(fechaEmisionBody);
+        }
+        const tasaCambio = fechaDoc
+            ? ((await tasaDelDia(fechaDoc, { transaction: t })) || (() => { throw new ErrorNegocio(`No hay tasa BCV registrada para el ${fechaDoc.split('-').reverse().join('/')}`); })())
+            : await tasaVigente({ transaction: t });
+        const momentoDoc = fechaDoc ? new Date(`${fechaDoc}T12:00:00-04:00`) : null;
 
         // --- 1. CÁLCULO EXACTO DE RENGLONES Y TOTALES (mismas reglas que el POS) ---
         const productos = new Map();
@@ -185,7 +195,10 @@ export async function POST(request) {
         const numeroExtraido = parseInt(String(numeroDocumentoManual || '').replace(/\D/g, ''), 10);
         let numeroBase = (!isNaN(numeroExtraido) && numeroExtraido > 0) ? numeroExtraido : siguienteLibre;
         let numeroDocumento = numeroDocumentoManual ? `${prefijo}-${String(numeroBase).padStart(corr.cerosRelleno || 5, '0')}` : '';
-        if (!numeroDocumento || await Venta.findOne({ where: { numeroDocumento }, attributes: ['id'], transaction: t })) {
+        const yaExiste = numeroDocumento ? await Venta.findOne({ where: { numeroDocumento }, attributes: ['id'], transaction: t }) : null;
+        // Una FACTURA con número escrito a mano es la copia de una que ya existe en el sistema anterior: si ese número ya está tomado NO se cambia en silencio por otro (saldría con un número que no es el de la factura)
+        if (yaExiste && tipoDocumento === 'FACTURA' && numeroDocumentoManual) throw new ErrorNegocio(`Ya existe el documento ${numeroDocumento}: revisa el número de la factura`, 409);
+        if (!numeroDocumento || yaExiste) {
             numeroBase = siguienteLibre;
             numeroDocumento = `${prefijo}-${String(numeroBase).padStart(corr.cerosRelleno || 5, '0')}`;
         }
@@ -200,7 +213,7 @@ export async function POST(request) {
             if (!clienteCredito) throw new ErrorNegocio('El cliente de la venta a crédito no existe');
             if (Number(clienteCredito.diasCredito) > 0) diasCredito = Number(clienteCredito.diasCredito);
         }
-        const fechaVencimiento = condicionPago === 'Credito' ? new Date(Date.now() + diasCredito * 86400000) : null;
+        const fechaVencimiento = condicionPago === 'Credito' ? new Date((momentoDoc ? momentoDoc.getTime() : Date.now()) + diasCredito * 86400000) : null;
         const nuevaVenta = await Venta.create({
             clienteId: clienteId || null,
             vendedorId: esVend ? Number(acceso.sesion.id) : (vendedorId || null),
@@ -212,6 +225,7 @@ export async function POST(request) {
             fechaVencimiento, quienRetira: quienRetira || null,
             costoFlete: factura.flete,
             subtotal: factura.subtotal, montoIva: factura.montoIva, totalFinal: factura.totalFinal,
+            ...(momentoDoc ? { createdAt: momentoDoc, fechaEmision: momentoDoc } : {}),
         }, { transaction: t });
 
         if (condicionPago === 'Credito') {
@@ -284,7 +298,7 @@ export async function POST(request) {
             // El flete también lo cobra la empresa: forma parte del ingreso
             const ingreso = Number((factura.subtotal + factura.flete).toFixed(2));
             await MovimientoFinanciero.create({
-                tipo: 'INGRESO', fecha: fechaCaracas(), metodoPago: metodoPago || 'No especificado', referencia,
+                tipo: 'INGRESO', fecha: fechaDoc || fechaCaracas(), metodoPago: metodoPago || 'No especificado', referencia,
                 montoUsd: aUsd(ingreso), tasaBcvAplicada: tasaCambio, montoVes: aBs(ingreso),
                 descripcion: `Venta ${numeroDocumento} (Subtotal${factura.flete > 0 ? ' + flete' : ''})`, categoriaId: catVentas.id, ventaId: nuevaVenta.id,
             }, { transaction: t });
@@ -294,7 +308,7 @@ export async function POST(request) {
                 if (!catIva) catIva = await CategoriaFinanciera.create({ nombre: 'IVA Recaudado', tipo: 'INGRESO' }, { transaction: t });
 
                 await MovimientoFinanciero.create({
-                    tipo: 'INGRESO', fecha: fechaCaracas(), metodoPago: metodoPago || 'No especificado', referencia,
+                    tipo: 'INGRESO', fecha: fechaDoc || fechaCaracas(), metodoPago: metodoPago || 'No especificado', referencia,
                     montoUsd: aUsd(factura.montoIva), tasaBcvAplicada: tasaCambio, montoVes: aBs(factura.montoIva),
                     descripcion: `IVA de Venta ${numeroDocumento} (Impuesto SENIAT)`, categoriaId: catIva.id, ventaId: nuevaVenta.id,
                 }, { transaction: t });

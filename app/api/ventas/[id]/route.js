@@ -17,7 +17,7 @@ import { registrarAbono, asegurarCuentaContado, ErrorAbono } from '../../_lib/ab
 import { recalcularCobro } from '../../_lib/retencionesVenta';
 import { eliminarVenta, borrarArchivosDeVenta } from '../_eliminar';
 import { convertirAFactura, convertirNotaEntregaAFactura, ErrorConversion } from '../../_lib/convertirFactura';
-import { tasaVigente } from '../../_lib/tasaBcv';
+import { tasaVigente, tasaDelDia } from '../../_lib/tasaBcv';
 import { avisarCliente } from '../../_lib/avisosCliente';
 import { confirmarPagoManual, cancelarPedidoTienda, asentarCobroTienda, ErrorPagoTienda } from '../../_lib/pagoTienda';
 import { fechaCaracas, desdeInputFechaHora } from '@/app/constants/hora';
@@ -221,9 +221,11 @@ export async function PUT(request, { params }) {
         // Recibo V- -> factura F- (el cliente la pidió después de comprar). Solo administración; la fecha de emisión es hoy
         if (accion === 'CONVERTIR_A_FACTURA') {
             if (rol !== 'admin') throw new ErrorLogistica('Solo un administrador puede convertir un recibo en factura', 403);
+            // Mientras convivan los dos sistemas la factura se copia con el número, el control y la fecha que ya tiene en el sistema anterior (opcionales)
+            const datosCopia = { numeroManual: body.numeroFactura || null, numeroControl: body.numeroControl || null, fecha: body.fecha || null };
             const r = venta.tipoDocumento === 'NOTA_ENTREGA'
-                ? await convertirNotaEntregaAFactura({ venta, tasaHoy: await tasaVigente({ transaction: t }), transaction: t })
-                : await convertirAFactura({ venta, transaction: t });
+                ? await convertirNotaEntregaAFactura({ venta, tasaHoy: (datosCopia.fecha && await tasaDelDia(datosCopia.fecha, { transaction: t })) || await tasaVigente({ transaction: t }), transaction: t, ...datosCopia })
+                : await convertirAFactura({ venta, transaction: t, ...datosCopia });
             await t.commit();
             return NextResponse.json({ success: true, ...r });
         }

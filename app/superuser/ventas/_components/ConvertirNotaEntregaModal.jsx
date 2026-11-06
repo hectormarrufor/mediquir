@@ -4,11 +4,13 @@ import React from 'react';
 import { Alert, Button, Group, Loader, Modal, Stack, Table, Text } from '@mantine/core';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
+import DatosDeCopia from '@/app/components/admin/DatosDeCopia';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 
 // Nota de entrega a crédito -> factura el día que el cliente paga: suma el IVA, toma la tasa de hoy y entra al libro de ventas con la fecha de hoy
 export default function ConvertirNotaEntregaModal({ opened, onClose, pedido, onListo }) {
+    const [copia, setCopia] = React.useState({ numero: '', control: '', fecha: '' }); // datos de la factura si ya se emitió en el sistema anterior
     const { data, isLoading, error } = useQuery({
         queryKey: ['convertir-factura', pedido.id],
         enabled: opened,
@@ -23,7 +25,7 @@ export default function ConvertirNotaEntregaModal({ opened, onClose, pedido, onL
 
     const convertir = useMutation({
         mutationFn: async () => {
-            const res = await fetch(`/api/ventas/${pedido.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'CONVERTIR_A_FACTURA' }) });
+            const res = await fetch(`/api/ventas/${pedido.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'CONVERTIR_A_FACTURA', numeroFactura: copia.numero, numeroControl: copia.control, fecha: copia.fecha }) });
             const cuerpo = await res.json();
             if (!res.ok) throw new Error(cuerpo.error || 'No se pudo convertir');
             return cuerpo;
@@ -50,6 +52,7 @@ export default function ConvertirNotaEntregaModal({ opened, onClose, pedido, onL
                             <Table.Tr><Table.Td c="dimmed">Saldo por cobrar (USD)</Table.Td><Table.Td ta="right"><b>${nf(data.saldoNuevoUsd)}</b></Table.Td></Table.Tr>
                         </Table.Tbody>
                     </Table>
+                    <DatosDeCopia valores={copia} onCambio={setCopia} />
                     <Text size="xs" c="dimmed">Si el cliente es contribuyente especial, la retención de IVA queda calculada. El número de control se asigna al imprimir. Esta acción no se puede deshacer.</Text>
                     <Button loading={convertir.isPending} fullWidth color="indigo" onClick={() => convertir.mutate()}>Sí, emitir la factura</Button>
                 </Stack>

@@ -126,6 +126,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
             costoFlete: '',
             numeroDocumento: '',
             numeroControl: '',
+            fechaEmision: '', // vacía = hoy; solo administración (copiar un documento que el sistema anterior emitió otro día)
             validoDias: 15, // solo presupuesto
             notas: ''       // solo presupuesto
         }
@@ -385,6 +386,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
                 tipoDocumento: tipoDocumentoActual === 'VENTA RAPIDA' ? 'VENTA_RAPIDA' : (tipoDocumentoActual === 'NOTA DE ENTREGA' ? 'NOTA_ENTREGA' : 'FACTURA'),
                 numeroDocumentoManual: formVenta.values.numeroDocumento,
                 numeroControl: tipoDocumentoActual === 'FACTURA' ? formVenta.values.numeroControl : null,
+                fechaEmision: puedeEditarPrecio && formVenta.values.fechaEmision ? formVenta.values.fechaEmision : undefined,
                 clienteId: formVenta.values.clienteId ? Number(formVenta.values.clienteId) : null,
                 moneda: simboloMoneda === 'Bs' ? 'BS' : 'USD',
                 tasaCambio: tasaBcv,
@@ -458,7 +460,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
     
     const clienteSeleccionado = clientes?.find(c => c.id.toString() === formVenta.values.clienteId?.toString());
     const formatoNumero = (num) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
-    const fechaEmision = formatearFecha(new Date());
+    const fechaEmision = formatearFecha(formVenta.values.fechaEmision ? new Date(`${formVenta.values.fechaEmision}T12:00:00-04:00`) : new Date());
 
     const limiteMediaCarta = 8;
     const cantidadArticulos = carrito.length || 0;
@@ -592,6 +594,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
                                 </Group>
                                 {tipoDocumentoActual === 'FACTURA' && (
                                     <TextInput mt="xs" label="N° de control" placeholder="00-000000" size={isMobile ? 'xs' : 'sm'} {...formVenta.getInputProps('numeroControl')} />
+                                )}
+                                {puedeEditarPrecio && (
+                                    <TextInput mt="xs" type="date" label="Fecha de emisión" description="Vacía = hoy. Si copias una factura de otro día, elige esa fecha (toma la tasa BCV de ese día)"
+                                        size={isMobile ? 'xs' : 'sm'} max={new Date().toISOString().slice(0, 10)} {...formVenta.getInputProps('fechaEmision')} />
                                 )}
                             </Paper>
                             )}

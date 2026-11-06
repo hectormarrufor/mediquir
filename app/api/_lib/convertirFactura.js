@@ -7,8 +7,9 @@
 import db from '../../../models/index.js';
 import { calcularFactura, aDolares, aBolivares, REGLAS } from '../../constants/facturacion.js';
 import { recalcularCobro, crearRetencionPendiente } from './retencionesVenta.js';
+import { fechaCaracas } from '../../constants/hora.js';
 
-const { sequelize, Correlativo, CategoriaFinanciera, MovimientoFinanciero, VentaDetalle, Producto, CuentaPorCobrar } = db;
+const { sequelize, Correlativo, CategoriaFinanciera, MovimientoFinanciero, VentaDetalle, Producto, CuentaPorCobrar, Venta } = db;
 const { Op } = db.Sequelize;
 
 export class ErrorConversion extends Error {
@@ -17,33 +18,55 @@ export class ErrorConversion extends Error {
 
 const CAT_IVA = 'IVA Recaudado';
 
-// Siguiente número de factura: nunca por debajo del mayor F- ya emitido
-async function siguienteNumeroFactura(t) {
+// Siguiente número de factura: nunca por debajo del mayor F- ya emitido.
+// `manual`: el número que ya tiene esa factura en el sistema anterior (mientras convivan los dos, la factura se copia con SU número y no con uno nuevo).
+// Si ya existe una factura con ese número se rechaza (no se renumera en silencio); el correlativo avanza para que el siguiente sea el que sigue.
+async function siguienteNumeroFactura(t, manual = null) {
     let corr = await Correlativo.findOne({ where: { prefijo: 'F' }, transaction: t, lock: t.LOCK.UPDATE });
     if (!corr) corr = await Correlativo.create({ prefijo: 'F', siguienteNumero: 1, cerosRelleno: 5 }, { transaction: t });
+    const ceros = corr.cerosRelleno || 5;
+    if (manual !== null && manual !== undefined && String(manual).trim() !== '') {
+        const n = parseInt(String(manual).replace(/\D/g, ''), 10);
+        if (!Number.isInteger(n) || n < 1) throw new ErrorConversion('El número de factura no es válido', 400);
+        const numero = `F-${String(n).padStart(ceros, '0')}`;
+        if (await Venta.findOne({ where: { numeroDocumento: numero }, attributes: ['id'], transaction: t })) throw new ErrorConversion(`Ya existe la factura ${numero}`, 409);
+        corr.siguienteNumero = Math.max(Number(corr.siguienteNumero) || 1, n + 1);
+        await corr.save({ transaction: t });
+        return numero;
+    }
     const [{ maximo }] = await sequelize.query(
-        `SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace("numeroDocumento", '\\D', '', 'g'), '') AS bigint)), 0) AS maximo
+        `SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace("numeroDocumento", '[^0-9]', '', 'g'), '') AS bigint)), 0) AS maximo
          FROM "Ventas" WHERE "numeroDocumento" LIKE 'F-%'`,
         { type: sequelize.QueryTypes.SELECT, transaction: t }
     );
     const n = Math.max(corr.siguienteNumero, Number(maximo) + 1);
     corr.siguienteNumero = n + 1;
     await corr.save({ transaction: t });
-    return `F-${String(n).padStart(corr.cerosRelleno || 5, '0')}`;
+    return `F-${String(n).padStart(ceros, '0')}`;
 }
 
+// Fecha de emisión: hoy, o la que se indique (YYYY-MM-DD, nunca futura) para copiar una factura que el sistema anterior emitió otro día
+export function fechaEmisionDe(fecha) {
+    if (!fecha) return new Date();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha)) || String(fecha) > fechaCaracas()) throw new ErrorConversion('La fecha de emisión no es válida (no puede ser futura)', 400);
+    return new Date(`${fecha}T12:00:00-04:00`);
+}
+const controlDe = (c) => String(c ?? '').trim().slice(0, 30) || null;
+
 /** Convierte `venta` (instancia de Venta ya cargada dentro de la transacción `t`). No hace commit. */
-export async function convertirAFactura({ venta, transaction: t }) {
+export async function convertirAFactura({ venta, transaction: t, numeroManual = null, numeroControl = null, fecha = null }) {
     if (venta.tipoDocumento !== 'VENTA_RAPIDA') throw new ErrorConversion('Solo un recibo de venta (V-) se puede convertir en factura', 409);
     if (venta.statusDespacho === 'Cancelado') throw new ErrorConversion('Este pedido está cancelado', 409);
     if (!venta.clienteId) throw new ErrorConversion('Una factura necesita los datos del cliente (cédula o RIF)', 409);
 
     const anterior = venta.numeroDocumento;
-    const numero = await siguienteNumeroFactura(t);
+    const emision = fechaEmisionDe(fecha);
+    const numero = await siguienteNumeroFactura(t, numeroManual);
     venta.numeroDocumentoAnterior = anterior;
     venta.numeroDocumento = numero;
     venta.tipoDocumento = 'FACTURA';
-    venta.fechaEmision = new Date();
+    venta.fechaEmision = emision;
+    if (controlDe(numeroControl)) venta.numeroControl = controlDe(numeroControl);
     await venta.save({ transaction: t });
 
     // El IVA cobrado deja de ser ingreso de la tienda y pasa a estar reservado para el SENIAT
@@ -101,17 +124,19 @@ export async function vistaPreviaConversion({ venta, tasaHoy, transaction }) {
 }
 
 /** Convierte la nota de entrega `venta` (ya cargada y bloqueada dentro de `transaction`) en factura con la tasa de hoy. No hace commit. */
-export async function convertirNotaEntregaAFactura({ venta, tasaHoy, transaction: t }) {
+export async function convertirNotaEntregaAFactura({ venta, tasaHoy, transaction: t, numeroManual = null, numeroControl = null, fecha = null }) {
     if (!(Number(tasaHoy) > 0)) throw new ErrorConversion('No hay una tasa BCV vigente registrada', 409);
     const p = await planConversionNE(venta, t);
     const anterior = venta.numeroDocumento;
-    const numero = await siguienteNumeroFactura(t);
+    const emision = fechaEmisionDe(fecha);
+    const numero = await siguienteNumeroFactura(t, numeroManual);
 
     for (const l of p.lineas) { l.d.aplicaIva = l.aplicaIva; await l.d.save({ transaction: t }); }
     venta.numeroDocumentoAnterior = anterior;
     venta.numeroDocumento = numero;
     venta.tipoDocumento = 'FACTURA';
-    venta.fechaEmision = new Date();
+    venta.fechaEmision = emision;
+    if (controlDe(numeroControl)) venta.numeroControl = controlDe(numeroControl);
     venta.tasaCambio = tasaHoy;
     venta.montoIva = p.ivaNuevo;
     venta.totalFinal = p.totalNuevo;
