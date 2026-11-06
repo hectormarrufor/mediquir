@@ -4,6 +4,7 @@ import { notificarCabezas, notificarTodos, notificarUsuario } from '@/app/handle
 import { calcularFactura, precioParaCliente } from '@/app/constants/facturacion';
 import { presentacionDe } from '@/app/constants/presentaciones';
 import { requerirCliente } from '../../_lib/acceso';
+import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { crearRetencionPendiente } from '../../_lib/retencionesVenta';
 import { tasaVigente } from '../../_lib/tasaBcv';
 import { ESTADOS_ACTIVOS, Op, creditoDeCliente, hoyCaracas, resumenPedido, ventasDelCliente } from '../_lib';
@@ -93,8 +94,10 @@ export async function POST(request) {
             }
         }
         // El cliente elige el documento, sea de contado o a crédito: factura (con IVA) o nota de entrega (sin IVA)
-        const tipoDocumento = body.tipoDocumento === 'FACTURA' ? 'FACTURA' : 'NOTA_ENTREGA';
-        const prefijo = tipoDocumento === 'FACTURA' ? 'F' : 'NE';
+        // Con la convivencia de sistemas, quien pide factura recibe un recibo V- con IVA que luego se convierte en la factura con su número real (ver CONFIG_FISCAL)
+        const quiereFactura = body.tipoDocumento === 'FACTURA';
+        const tipoDocumento = quiereFactura ? (CONFIG_FISCAL.convivenciaSistemaAnterior ? 'VENTA_RAPIDA' : 'FACTURA') : 'NOTA_ENTREGA';
+        const prefijo = tipoDocumento === 'FACTURA' ? 'F' : (tipoDocumento === 'NOTA_ENTREGA' ? 'NE' : 'V');
 
         const productos = await Producto.findAll({ where: { id: { [Op.in]: idsProductos } }, transaction: t, lock: t.LOCK.UPDATE });
         if (productos.length !== idsProductos.length) throw new ErrorNegocio('Alguno de los productos ya no está disponible');
@@ -128,7 +131,7 @@ export async function POST(request) {
         const factura = calcularFactura({
             renglones: lineas.map(({ producto, cantidad }) => {
                 const porcentajeIva = Number(producto.porcentajeIva) || 0;
-                return { precioUnitario: precioParaCliente(producto, tarifa), cantidad, aplicaIva: tipoDocumento === 'FACTURA' && porcentajeIva > 0, porcentajeIva };
+                return { precioUnitario: precioParaCliente(producto, tarifa), cantidad, aplicaIva: quiereFactura && porcentajeIva > 0, porcentajeIva };
             }),
         });
         const tasaCambio = await tasaVigente({ transaction: t });
@@ -237,8 +240,8 @@ export async function POST(request) {
             await notificarTodos({
                 title: aCredito ? 'Nuevo pedido B2B a crédito 📦' : 'Nuevo pedido B2B 📦',
                 body: aCredito
-                    ? `${cliente?.nombre || 'Un cliente'} hizo ${tipoDocumento === 'FACTURA' ? 'la factura' : 'la nota de entrega'} ${numeroDocumento} a crédito por $${factura.totalFinal.toFixed(2)} (${credito.diasCredito} días; crédito activo ${credito.activos + 1} de ${credito.maxPedidos}).${tipoDocumento === 'FACTURA' ? ' Su número de control se asigna al imprimirla.' : ''}`
-                    : `${cliente?.nombre || 'Un cliente'} hizo ${tipoDocumento === 'FACTURA' ? 'la factura' : 'el pedido'} ${numeroDocumento} por $${factura.totalFinal.toFixed(2)}.${tipoDocumento === 'FACTURA' ? ' Su número de control se asigna al imprimirla.' : ''}`,
+                    ? `${cliente?.nombre || 'Un cliente'} hizo ${quiereFactura ? 'el pedido con factura' : 'la nota de entrega'} ${numeroDocumento} a crédito por $${factura.totalFinal.toFixed(2)} (${credito.diasCredito} días; crédito activo ${credito.activos + 1} de ${credito.maxPedidos}).${quiereFactura ? (tipoDocumento === 'FACTURA' ? ' Su número de control se asigna al imprimirla.' : ' Emite la factura en el sistema anterior y conviértela aquí con su número.') : ''}`
+                    : `${cliente?.nombre || 'Un cliente'} hizo ${quiereFactura ? 'el pedido con factura' : 'el pedido'} ${numeroDocumento} por $${factura.totalFinal.toFixed(2)}.${quiereFactura ? (tipoDocumento === 'FACTURA' ? ' Su número de control se asigna al imprimirla.' : ' Emite la factura en el sistema anterior y conviértela aquí con su número.') : ''}`,
                 url: `/superuser/ventas/${venta.id}`,
                 tipo: 'Info',
             });

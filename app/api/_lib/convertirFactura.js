@@ -68,6 +68,8 @@ export async function convertirAFactura({ venta, transaction: t, numeroManual = 
     venta.fechaEmision = emision;
     if (controlDe(numeroControl)) venta.numeroControl = controlDe(numeroControl);
     await venta.save({ transaction: t });
+    // Pedido B2B (o venta a crédito) de un contribuyente especial: la retención de IVA queda calculada desde ya (falta su comprobante). En la tienda de contado no se hace.
+    if (venta.tipoVenta === 'MAYOR' || venta.condicionPago === 'Credito') await crearRetencionPendiente({ venta, transaction: t });
 
     // El IVA cobrado deja de ser ingreso de la tienda y pasa a estar reservado para el SENIAT
     let catIva = await CategoriaFinanciera.findOne({ where: { nombre: CAT_IVA }, transaction: t });

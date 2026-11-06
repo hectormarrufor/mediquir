@@ -26,6 +26,9 @@ export const CONFIG_FISCAL = {
     porcentajeRetencionCompras: 75,
     alicuotaGeneral: 16,
     agencia: 'Oficina Principal',
+    // Mientras el sistema anterior siga emitiendo facturas, este NO le inventa números de factura: los pedidos B2B que piden factura entran como recibo (V-)
+    // con el IVA incluido, y la factura se emite en el sistema anterior y se copia aquí con su número (botón «Convertir en factura»).
+    convivenciaSistemaAnterior: true,
     maxRenglonesFactura: 13, // renglones que caben en la forma libre preimpresa (media carta)
     estacion: '001',
 };
