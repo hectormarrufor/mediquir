@@ -147,6 +147,12 @@ const textoObs = (v, desde = 4) => v.slice(desde).filter((x) => typeof x === 'st
             }
         }
 
+        // Lo que NO figura en estos libros ya está cobrado (lo confirmó administración): cuentas abiertas de facturas migradas que no están en el Excel
+        const enExcel = new Set([...docs.keys()]);
+        const abiertas = (await q(`SELECT c.id AS cxc, v.id AS venta, v."numeroDocumento" AS num, c."saldoPendiente"::float AS saldo, c.moneda::text AS moneda, c."tasaCambio"::float AS tasa
+            FROM "CuentasPorCobrar" c JOIN "Ventas" v ON v.id = c."ventaId" WHERE c.estado <> 'Pagado' AND v."numeroDocumento" ~ '^F-[0-9]+$' AND CAST(substring(v."numeroDocumento" from 3) AS bigint) <= 146865`)).filter((c) => !enExcel.has(c.num));
+        const ventasPendientesSinCuenta = (await q(`SELECT v.id, v."numeroDocumento" AS num FROM "Ventas" v WHERE v."statusPago" = 'Pendiente' AND v."statusDespacho" <> 'Cancelado' AND v."numeroDocumento" ~ '^F-[0-9]+$'
+            AND CAST(substring(v."numeroDocumento" from 3) AS bigint) <= 146865 AND NOT EXISTS (SELECT 1 FROM "CuentasPorCobrar" c WHERE c."ventaId" = v.id)`)).filter((v) => !enExcel.has(v.num));
         // Notas de entrega que SOLO están en la hoja de un vendedor: su estado sale de esa hoja (abonos de la hoja y "PAGADO" del cliente)
         for (const [nombreV, vv] of vendedores) {
             for (const l of vv.lineas) {
@@ -177,6 +183,7 @@ const textoObs = (v, desde = 4) => v.slice(desde).filter((x) => typeof x === 'st
         console.log(`   clientes de notas de entrega sin ficha (se crean con RIF provisional SIN-RIF): ${distintosSinFicha.length} distintos`);
         const totalDocs = r2([...docs.values()].reduce((a, d) => a + d.monto, 0)); const totalPagos = r2(pagos.reduce((a, p) => a + (p.monto || 0), 0));
         console.log(`   cuadre: documentos USD ${totalDocs.toLocaleString('en-US')} - pagos USD ${totalPagos.toLocaleString('en-US')} = ${r2(totalDocs - totalPagos).toLocaleString('en-US')} (Excel neto de los 4 libros: 73,437)`);
+        console.log(`Cuentas abiertas que no figuran en el Excel (ya cobradas, se cierran): ${abiertas.length} cuentas por cobrar y ${ventasPendientesSinCuenta.length} facturas pendientes sin cuenta`);
         console.log(`Vendedores a comisión: ${vendedores.size} (${[...vendedores.values()].map((v) => `${v.nombre} ${v.porcentaje}% · ${v.lineas.length} líneas`).join('; ')}); ${comisionesN} líneas de comisión`);
         const sinVenta = [...vendedores.values()].flatMap((v) => v.lineas).filter((l) => !ventas.has(l.doc) && !docs.has(l.doc));
         console.log(`   líneas de comisión cuya factura no está en el sistema: ${sinVenta.length}`);
@@ -231,6 +238,12 @@ const textoObs = (v, desde = 4) => v.slice(desde).filter((x) => typeof x === 'st
             // estado de la factura
             await db.query(`UPDATE "Ventas" SET "statusPago" = $1::"enum_Ventas_statusPago", "condicionPago" = CASE WHEN $2 THEN 'Credito'::"enum_Ventas_condicionPago" ELSE "condicionPago" END, "updatedAt" = now() WHERE id = $3`, [pendiente ? 'Pendiente' : 'Pagado', pendiente, v.id]);
         }
+        // cerrar lo que no figura en el Excel
+        if (abiertas.length) {
+            await db.query(`UPDATE "CuentasPorCobrar" SET "saldoPendiente" = 0, estado = 'Pagado', observacion = left(COALESCE(observacion || ' ', '') || '[Cobrada: no figura en las cuentas por cobrar de la administración]', 500), "updatedAt" = now() WHERE id = ANY($1::int[])`, [abiertas.map((c) => c.cxc)]);
+            await db.query(`UPDATE "Ventas" SET "statusPago" = 'Pagado'::"enum_Ventas_statusPago", "updatedAt" = now() WHERE id = ANY($1::uuid[])`, [abiertas.map((c) => c.venta)]);
+        }
+        if (ventasPendientesSinCuenta.length) await db.query(`UPDATE "Ventas" SET "statusPago" = 'Pagado'::"enum_Ventas_statusPago", "updatedAt" = now() WHERE id = ANY($1::uuid[])`, [ventasPendientesSinCuenta.map((v) => v.id)]);
         // vendedores y comisiones
         for (const vv of vendedores.values()) {
             const r = await db.query(`INSERT INTO "VendedoresComision" (nombre, porcentaje) VALUES ($1,$2) ON CONFLICT (nombre) DO UPDATE SET porcentaje = EXCLUDED.porcentaje RETURNING id`, [vv.nombre, vv.porcentaje]);
@@ -244,7 +257,7 @@ const textoObs = (v, desde = 4) => v.slice(desde).filter((x) => typeof x === 'st
                 nCom++;
             }
         }
-        const resumen = `${nNE} notas de entrega, ${nClientes} clientes nuevos, ${nCxc} cuentas por cobrar, ${nAbonos} abonos, ${vendedores.size} vendedores con ${nCom} comisiones`;
+        const resumen = `${abiertas.length + ventasPendientesSinCuenta.length} cuentas cerradas por ya estar cobradas, ${nNE} notas de entrega, ${nClientes} clientes nuevos, ${nCxc} cuentas por cobrar, ${nAbonos} abonos, ${vendedores.size} vendedores con ${nCom} comisiones`;
         if (PROBAR) { await db.query('ROLLBACK'); console.log(`\nPRUEBA OK (revertida, no quedó nada): ${resumen}.`); return; }
         await db.query('COMMIT');
         console.log(`\nCargado: ${resumen}.`);
