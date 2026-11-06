@@ -1,10 +1,13 @@
 import { Op } from 'sequelize';
 import { BcvPrecioHistorico } from '@/models';
+import { fechaCaracas } from '@/app/constants/hora';
 
-// Tasa BCV vigente según la base de datos (el registro más reciente). Es la ÚNICA tasa que el servidor
-// acepta al cobrar: el navegador nunca decide a cuánto se convierte el dólar.
+// Tasa BCV vigente según la base de datos: la más reciente cuya FECHA VALOR ya llegó (la tasa que el BCV publica en la tarde para
+// mañana queda guardada pero NO se usa hasta mañana). Es la ÚNICA tasa que el servidor acepta al cobrar: el navegador nunca decide
+// a cuánto se convierte el dólar.
 export async function tasaVigente({ transaction } = {}) {
     const fila = await BcvPrecioHistorico.findOne({
+        where: { fecha: { [Op.lte]: fechaCaracas() } },
         order: [['fecha', 'DESC'], ['id', 'DESC']],
         attributes: ['monto', 'fecha'],
         transaction,

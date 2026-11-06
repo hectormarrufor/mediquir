@@ -1,9 +1,9 @@
 import axios from 'axios';
-import https from 'https';
+import { Op } from 'sequelize';
 import { NextResponse } from 'next/server';
-const cheerio = require  ('cheerio'); // Importación corregida para Next.js
 import BcvPrecioHistorico from '../../../models/BcvPrecioHistorico';
 import { requerirStaff } from '../inventario/_lib';
+import { leerBcv } from '../_lib/bcvScrape';
 
 // Forzar la actualización (scraping del BCV y de Binance + escritura en la base) solo lo puede pedir el cron de Vercel o el personal.
 // Antes cualquier visitante anónimo podía hacerlo con ?force=true.
@@ -63,41 +63,34 @@ export async function GET(request) {
         const fechaActual = fechaCaracas; 
         const horaActual = horaCaracas;
 
-        // 1. Verificar si existe registro en BD
-        const existingPrice = await BcvPrecioHistorico.findOne({
-            where: { fecha: fechaActual },
+        // 1. La tasa que rige HOY: la más reciente con fecha valor <= hoy (la de mañana puede estar ya guardada y no se usa todavía)
+        const vigenteHoy = () => BcvPrecioHistorico.findOne({ where: { fecha: { [Op.lte]: fechaActual } }, order: [['fecha', 'DESC'], ['id', 'DESC']] });
+        const existingPrice = await vigenteHoy();
+        const respuestaBD = (fila, origen) => NextResponse.json({
+            message: 'Precios obtenidos de base de datos',
+            precio: parseFloat(fila.monto),        // USD BCV
+            eur: parseFloat(fila.montoEur || 0),   // EUR BCV
+            usdt: parseFloat(fila.montoUsdt || 0), // USDT Binance
+            fecha: fila.fecha,
+            hora: fila.hora,
+            origen,
         });
 
-        if (existingPrice && !forceUpdate) {
-            return NextResponse.json({
-                message: 'Precios obtenidos de base de datos',
-                precio: parseFloat(existingPrice.monto),        // USD BCV
-                eur: parseFloat(existingPrice.montoEur || 0),   // EUR BCV
-                usdt: parseFloat(existingPrice.montoUsdt || 0), // USDT Binance
-                fecha: existingPrice.fecha,
-                hora: existingPrice.hora,
-                origen: 'base_de_datos'
-            });
+        if (existingPrice && existingPrice.fecha === fechaActual && !forceUpdate) return respuestaBD(existingPrice, 'base_de_datos');
+
+        // ---------------------------------------------------------
+        // 2. SCRAPING BCV (USD y EUR) con su fecha valor
+        // ---------------------------------------------------------
+        let bcv;
+        try {
+            bcv = await leerBcv();
+        } catch (e) {
+            // Si el BCV no responde pero ya hay una tasa vigente, se sigue con ella en vez de dejar la tienda sin tasa
+            if (existingPrice) return respuestaBD(existingPrice, 'base_de_datos_sin_actualizar');
+            throw e;
         }
-
-        // ---------------------------------------------------------
-        // 2. SCRAPING BCV (USD y EUR)
-        // ---------------------------------------------------------
-        const agent = new https.Agent({ rejectUnauthorized: false });
-        // Pedimos la página del BCV
-        const { data: htmlBCV } = await axios.get('https://www.bcv.org.ve/', { httpsAgent: agent, timeout: 15000 });
-        const $ = cheerio.load(htmlBCV);
-
-        // Helper para limpiar el texto "36,4500000" -> 36.45
-        const parseBCV = (selector) => {
-            const text = $(selector).first().text().trim();
-            return parseFloat(text.replace(/\./g, '').replace(',', '.')).toFixed(2);
-        };
-
-        const precioDolarBCV = parseBCV('div#dolar .recuadrotsmc .centrado');
-        const precioEuroBCV = parseBCV('div#euro .recuadrotsmc .centrado');
-
-        if (isNaN(precioDolarBCV)) throw new Error("No se pudo parsear el precio del Dólar BCV.");
+        const precioDolarBCV = bcv.usd;
+        const precioEuroBCV = bcv.eur;
 
         // ---------------------------------------------------------
         // 3. CALCULO USDT BINANCE (Lógica Dinámica 50 USDT)
@@ -137,7 +130,6 @@ export async function GET(request) {
         // ---------------------------------------------------------
         // 4. Guardar en Base de Datos
         // ---------------------------------------------------------
-        let resultRecord;
         let operacion;
 
         // Datos a guardar
@@ -148,19 +140,17 @@ export async function GET(request) {
             hora: horaActual
         };
 
-        if (existingPrice) {
-            // Actualizar
-            await existingPrice.update(datosAGuardar);
-            resultRecord = existingPrice;
+        // Se guarda con la FECHA VALOR del BCV (no con la fecha en que se leyó): la tasa publicada hoy para mañana queda en mañana
+        const mismaFecha = await BcvPrecioHistorico.findOne({ where: { fecha: bcv.fechaValor }, order: [['id', 'DESC']] });
+        if (mismaFecha) {
+            await mismaFecha.update(datosAGuardar);
             operacion = 'actualizado_por_fuerza';
         } else {
-            // Crear nuevo
-            resultRecord = await BcvPrecioHistorico.create({
-                fecha: fechaActual,
-                ...datosAGuardar
-            });
+            await BcvPrecioHistorico.create({ fecha: bcv.fechaValor, ...datosAGuardar });
             operacion = 'creado_nuevo';
         }
+        // Al navegador se le responde la tasa que rige hoy
+        const resultRecord = (await vigenteHoy()) || { monto: precioDolarBCV, montoEur: datosAGuardar.montoEur, montoUsdt: datosAGuardar.montoUsdt, fecha: bcv.fechaValor, hora: horaActual };
 
 
         return NextResponse.json({

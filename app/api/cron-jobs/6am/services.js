@@ -14,6 +14,7 @@ import { cancelarPedidoTienda } from '../../_lib/pagoTienda';
 import { avisarCliente } from '../../_lib/avisosCliente';
 import { notificarUsuario, notificarCabezas } from '@/app/handlers/notificar';
 import { fechaCaracas } from '@/app/constants/hora';
+import { leerBcv } from '../../_lib/bcvScrape';
 import { diasHasta } from '@/app/constants/tareas';
 import { borrarTodasLasFotos, DIAS_RETENCION_FOTOS, DIAS_CANCELADAS, DIAS_SIN_FIRMAR } from '../../ventas/_fotosEmpaque';
 
@@ -53,31 +54,10 @@ export async function syncExchangeRates() {
             timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit', second: '2-digit',
         }).format(now);
 
-        const existingPrice = await BcvPrecioHistorico.findOne({ where: { fecha: fechaActual } });
-
-        // 🔥 CORREGIDO: Ya no retorna NextResponse, sino un objeto estándar
-        if (existingPrice && !forceUpdate) {
-            return { 
-                type: 'FINANZAS', 
-                status: 'OK', 
-                msg: `Precios en BD -> BCV: ${existingPrice.monto}, EUR: ${existingPrice.montoEur}, USDT: ${existingPrice.montoUsdt}` 
-            };
-        }
-
-        // SCRAPING BCV
-        const agent = new https.Agent({ rejectUnauthorized: false });
-        const { data: htmlBCV } = await axios.get('https://www.bcv.org.ve/', { httpsAgent: agent, timeout: 15000 });
-        const $ = cheerio.load(htmlBCV);
-
-        const parseBCV = (selector) => {
-            const text = $(selector).first().text().trim();
-            return parseFloat(text.replace(/\./g, '').replace(',', '.')).toFixed(2);
-        };
-
-        const precioDolarBCV = parseBCV('div#dolar .recuadrotsmc .centrado');
-        const precioEuroBCV = parseBCV('div#euro .recuadrotsmc .centrado');
-
-        if (isNaN(precioDolarBCV)) throw new Error("No se pudo parsear el Dólar BCV.");
+        // SCRAPING BCV: la tasa y su fecha valor (a las 6:00 a. m. es la de hoy; en la tarde ya es la de mañana)
+        const bcv = await leerBcv();
+        const precioDolarBCV = bcv.usd;
+        const precioEuroBCV = bcv.eur;
 
         // BINANCE USDT
         let precioUsdtPromedio = 0;
@@ -107,13 +87,10 @@ export async function syncExchangeRates() {
             hora: horaActual
         };
 
-        let resultRecord;
-        if (existingPrice) {
-            await existingPrice.update(datosAGuardar);
-            resultRecord = existingPrice;
-        } else {
-            resultRecord = await BcvPrecioHistorico.create({ fecha: fechaActual, ...datosAGuardar });
-        }
+        // Se guarda con la FECHA VALOR del BCV, no con la fecha de hoy
+        let resultRecord = await BcvPrecioHistorico.findOne({ where: { fecha: bcv.fechaValor }, order: [['id', 'DESC']] });
+        if (resultRecord) await resultRecord.update(datosAGuardar);
+        else resultRecord = await BcvPrecioHistorico.create({ fecha: bcv.fechaValor, ...datosAGuardar });
 
         return { type: 'FINANZAS', status: 'OK', msg: `Actualizado -> BCV: ${resultRecord.monto}, EUR: ${resultRecord.montoEur}, USDT: ${resultRecord.montoUsdt}` };
     } catch (e) {
