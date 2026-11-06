@@ -105,6 +105,8 @@ export async function cancelarPedidoTienda({ venta, estado = 'RECHAZADO', nota =
         if (!producto) continue;
         // stockAlmacen es DECIMAL: llega como texto, hay que convertirlo (sumar texto + número concatenaría)
         producto.stockAlmacen = Number(producto.stockAlmacen) + Number(d.cantidad);
+        // La venta online sumó nroVentas al hacerse (checkout): al cancelarse se resta. El mayor lo suma al empacar, por eso no se toca aquí.
+        if (venta.tipoVenta === 'ONLINE') producto.nroVentas = Math.max(0, (Number(producto.nroVentas) || 0) - Number(d.cantidad));
         await producto.save({ transaction: t });
     }
     venta.statusDespacho = 'Cancelado';

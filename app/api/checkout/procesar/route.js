@@ -179,6 +179,9 @@ export async function POST(req) {
         });
         for (let i = 0; i < lineas.length; i++) {
             lineas[i].productoBD.stockAlmacen = Number(lineas[i].productoBD.stockAlmacen) - factura.renglones[i].cantidad;
+            // Más vendidos de la tienda: Productos.nroVentas cuenta las unidades vendidas. Antes la venta online no lo sumaba (solo el punto de venta
+            // y el empaque del mayor), así que lo que más se vendía por la web nunca aparecía en "los más vendidos".
+            lineas[i].productoBD.nroVentas = (Number(lineas[i].productoBD.nroVentas) || 0) + factura.renglones[i].cantidad;
             await lineas[i].productoBD.save({ transaction });
         }
 
