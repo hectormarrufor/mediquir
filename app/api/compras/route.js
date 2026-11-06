@@ -8,7 +8,7 @@ import { aBolivaresExacto, retencionCompra } from '@/app/constants/facturacion';
 import { exacto, formatoExacto } from '@/app/helpers/sinRedondeo';
 import { fechaCaracas } from '@/app/constants/hora';
 import { notificarCabezas } from '@/app/handlers/notificar';
-import { siguienteComprobante, periodoDe, marcarRetencionPendiente } from '../_lib/retenciones';
+import { siguienteComprobante, usarComprobanteManual, periodoDe, marcarRetencionPendiente } from '../_lib/retenciones';
 import { ErrorNumeracion } from '../_lib/numeracion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { datosProveedor, rifRepetido } from '../proveedores/_datos';
@@ -77,6 +77,7 @@ export async function POST(request) {
         if (esVend) body.registradoPorId = Number(acceso.sesion.id); // la compra queda a nombre de quien la registra
         const {
             simular,
+            comprobanteManual, // número del comprobante de retención si ya se emitió en el sistema anterior (opcional)
             proveedorId, 
             nuevoProveedor, 
             tipoDocumento, 
@@ -302,7 +303,7 @@ export async function POST(request) {
                 // Con la tasa completa de la factura (antes se cortaba a 2 decimales); el comprobante, documento fiscal, queda en Bs a céntimos
                 const aBs = (v) => aBolivaresExacto(Number(v) || 0, moneda === 'BS' ? 1 : (Number(tasaCambio) || 1));
                 const fechaRet = fechaRecepcion || fechaFactura || fechaCaracas();
-                comprobanteRetencion = await siguienteComprobante(fechaRet, t);
+                comprobanteRetencion = String(comprobanteManual ?? '').trim() ? await usarComprobanteManual(comprobanteManual, fechaRet, idProveedorFinal, t) : await siguienteComprobante(fechaRet, t);
                 await RetencionIva.create({
                     tipo: 'COMPRA', fecha: fechaRet, periodo: periodoDe(fechaRet), comprobante: comprobanteRetencion,
                     facturaAfectada: numeroDocumento, numeroControlFactura: String(numeroControl || '').trim().slice(0, 30) || null,

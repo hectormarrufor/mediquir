@@ -1,3 +1,4 @@
+import { Op } from 'sequelize';
 import { Correlativo, FacturaCompra, Proveedor, RetencionIva, CuentaPorPagar } from '@/models';
 import { ErrorNumeracion, ultimoUsado } from './numeracion.js';
 import { aBolivaresExacto, retencionCompra } from '@/app/constants/facturacion';
@@ -29,6 +30,28 @@ export async function siguienteComprobante(fecha, transaction) {
     await corr.save({ transaction });
     const [anio, mes] = String(fecha).slice(0, 7).split('-');
     return `${anio}${mes}${String(numero).padStart(8, '0')}`;
+}
+
+/**
+ * Comprobante que YA tiene su número en el sistema anterior: se copia con ese número en vez de tomar el siguiente.
+ *  · 14 dígitos: año + mes + secuencia de 8 (el año y el mes deben ser los de la fecha del comprobante).
+ *  · Un comprobante agrupa facturas de UN proveedor: si ya lo usa otro proveedor se rechaza.
+ *  · El correlativo avanza (si hace falta) para que el siguiente sea el que sigue.
+ */
+export async function usarComprobanteManual(valor, fechaRet, proveedorId, transaction) {
+    const comprobante = String(valor ?? '').replace(/\D/g, '');
+    if (!/^\d{14}$/.test(comprobante)) throw new ErrorRetencion('El número de comprobante debe tener 14 dígitos (año, mes y 8 de secuencia, por ejemplo 20261100006774)');
+    if (comprobante.slice(0, 6) !== String(fechaRet).slice(0, 7).replace('-', '')) throw new ErrorRetencion(`El año y el mes del comprobante (${comprobante.slice(0, 4)}-${comprobante.slice(4, 6)}) no coinciden con su fecha (${String(fechaRet).slice(0, 7)})`);
+    const usos = await RetencionIva.findAll({ where: { tipo: 'COMPRA', comprobante }, attributes: ['facturaCompraId'], transaction });
+    if (usos.length) {
+        const ids = usos.map((u) => u.facturaCompraId).filter(Boolean);
+        const otras = ids.length ? await FacturaCompra.count({ where: { id: ids, proveedorId: { [Op.ne]: proveedorId } }, transaction }) : 0;
+        if (otras > 0) throw new ErrorRetencion(`El comprobante ${comprobante} ya lo usa otro proveedor`, 409);
+    }
+    const corr = await Correlativo.findOne({ where: { prefijo: PREFIJO_COMPRAS }, transaction, lock: transaction.LOCK.UPDATE });
+    const secuencia = Number(comprobante.slice(-8));
+    if (corr) { corr.siguienteNumero = Math.max(Number(corr.siguienteNumero) || 1, secuencia + 1); corr.configurado = true; await corr.save({ transaction }); }
+    return comprobante;
 }
 
 /** El número que le tocaría al próximo comprobante fechado en `fecha` (sin tomarlo). */
@@ -94,7 +117,7 @@ export async function marcarRetencionPendiente(factura, proveedor, pct, registra
  *  · fecha: la del comprobante (hoy por defecto, nunca futura); su año y mes encabezan el número.
  * Debe llamarse dentro de una transacción. Devuelve el comprobante, lo retenido y avisos para la persona.
  */
-export async function retenerFacturas({ facturaIds, porcentaje, fecha, registradoPorId }, t) {
+export async function retenerFacturas({ facturaIds, porcentaje, fecha, registradoPorId, comprobanteManual = null }, t) {
     const ids = [...new Set((facturaIds || []).map(String))];
     if (!ids.length) throw new ErrorRetencion('Elige al menos una factura');
     if (!CONFIG_FISCAL.agenteRetencionIva) throw new ErrorRetencion('La empresa no está configurada como agente de retención de IVA');
@@ -118,7 +141,7 @@ export async function retenerFacturas({ facturaIds, porcentaje, fecha, registrad
     }
 
     const pct = porcentajeDe(porcentaje, proveedor);
-    const comprobante = await siguienteComprobante(fechaRet, t);
+    const comprobante = String(comprobanteManual ?? '').trim() ? await usarComprobanteManual(comprobanteManual, fechaRet, facturas[0].proveedorId, t) : await siguienteComprobante(fechaRet, t);
     const avisos = [];
     const detalle = [];
     // En el orden de las fechas de las facturas (así salen en el comprobante)

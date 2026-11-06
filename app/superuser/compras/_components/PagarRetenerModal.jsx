@@ -57,6 +57,7 @@ export default function PagarRetenerModal({ facturas, modo = 'pagar', onClose, o
     const [referencia, setReferencia] = useState('');
     const [fechaPago, setFechaPago] = useState(fechaCaracas());
     const [sinComprobante, setSinComprobante] = useState(false); // ya se pagó, pero quien pagó no pasó el comprobante
+    const [comprobanteManual, setComprobanteManual] = useState(''); // número del comprobante si ya se emitió en el sistema anterior (opcional)
     const [enviando, setEnviando] = useState(false);
     const [resultado, setResultado] = useState(null);
 
@@ -94,8 +95,8 @@ export default function PagarRetenerModal({ facturas, modo = 'pagar', onClose, o
         setEnviando(true);
         try {
             const res = modo === 'pagar'
-                ? await fetch('/api/compras/pagar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ facturaIds: facturas.map((c) => c.id), retener: conRetencion, porcentaje: Number(pct), fecha: fechaRet, metodoPago, referencia, fechaPago, sinComprobante }) })
-                : await fetch('/api/compras/retenciones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ facturaIds: porRetener.map((c) => c.id), porcentaje: Number(pct), fecha: fechaRet }) });
+                ? await fetch('/api/compras/pagar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ facturaIds: facturas.map((c) => c.id), retener: conRetencion, porcentaje: Number(pct), fecha: fechaRet, comprobante: comprobanteManual || undefined, metodoPago, referencia, fechaPago, sinComprobante }) })
+                : await fetch('/api/compras/retenciones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ facturaIds: porRetener.map((c) => c.id), porcentaje: Number(pct), fecha: fechaRet, comprobante: comprobanteManual || undefined }) });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
                 if (data.codigo === 'RETENCION_PENDIENTE') refetch();
@@ -171,6 +172,7 @@ export default function PagarRetenerModal({ facturas, modo = 'pagar', onClose, o
                                         </div>
                                         <Select size="xs" w={190} label="Mes del comprobante" allowDeselect={false} data={opcionesPeriodo} value={periodo} onChange={(v) => setPeriodo(v || hoy.slice(0, 7))} />
                                     </Group>
+                                    <TextInput size="xs" label="Número del comprobante (opcional)" description="Si ya lo emitiste en el sistema anterior, escribe su número (14 dígitos); vacío = el siguiente" placeholder={info?.siguiente || '20261100006774'} maxLength={20} value={comprobanteManual} onChange={(e) => setComprobanteManual(e.currentTarget.value)} />
                                     {info?.configurado && <Text size="sm">Comprobante N° <b>{info.siguiente}</b>{info.ultimo ? ` (el último fue …${info.ultimo})` : ''} · retenido <b>Bs {fmt(totalRetBs)}</b></Text>}
                                     {info && !info.configurado && serieRet && (
                                         <Alert color="orange" variant="light" p="xs" title="Falta el número del primer comprobante">

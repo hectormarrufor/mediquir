@@ -43,7 +43,7 @@ export async function POST(request) {
             const emitidas = new Set((await RetencionIva.findAll({ where: { facturaCompraId: ids, tipo: 'COMPRA' }, attributes: ['facturaCompraId', 'comprobante'], transaction: t }))
                 .filter((r) => r.comprobante).map((r) => r.facturaCompraId));
             const porRetener = facturas.filter((f) => f.tipoDocumento === 'FACTURA' && Number(f.montoIva) > 0 && !emitidas.has(f.id)).map((f) => f.id);
-            if (porRetener.length) retencion = await retenerFacturas({ facturaIds: porRetener, porcentaje: body.porcentaje, fecha: body.fecha, registradoPorId: Number(acceso.sesion?.id) || null }, t);
+            if (porRetener.length) retencion = await retenerFacturas({ facturaIds: porRetener, porcentaje: body.porcentaje, fecha: body.fecha, registradoPorId: Number(acceso.sesion?.id) || null, comprobanteManual: body.comprobante || null }, t);
         }
 
         // 2. Pago completo de lo que queda de cada una, en la moneda de su cuenta

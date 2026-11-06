@@ -134,6 +134,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             // Cuándo se retiene el IVA: 'ahora' (el comprobante sale al registrar), 'despues' (queda «Falta retener» y se hace al pagar) o 'no'
             retencionModo: CONFIG_FISCAL.agenteRetencionIva ? 'ahora' : 'no',
             porcentajeRetencion: CONFIG_FISCAL.porcentajeRetencionCompras,
+            comprobanteManual: '', // número del comprobante de retención si ya se emitió en el sistema anterior (opcional)
             numeroControl: ''
         }
     });
@@ -515,7 +516,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 moneda: formCompra.values.moneda,
                 tasaCambio: tasa,
                 subtotal, montoIva, montoRetencion, totalFinal,
-                numeroControl: esFactura ? formCompra.values.numeroControl : null, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion, aplicarRetencion: retencionModo === 'ahora', retencionModo,
+                numeroControl: esFactura ? formCompra.values.numeroControl : null, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion, aplicarRetencion: retencionModo === 'ahora', retencionModo, comprobanteManual: retencionModo === 'ahora' ? (formCompra.values.comprobanteManual || undefined) : undefined,
                 detalles: carritoCompra
             };
 
@@ -575,7 +576,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 metodoPago: formCompra.values.metodoPago,
                 referencia: formCompra.values.referencia,
                 subtotal, montoIva, montoRetencion, totalFinal,
-                numeroControl: esFactura ? formCompra.values.numeroControl : null, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion, aplicarRetencion: retencionModo === 'ahora', retencionModo,
+                numeroControl: esFactura ? formCompra.values.numeroControl : null, montoExento: esFactura ? montoExento : 0, porcentajeRetencion: formCompra.values.porcentajeRetencion, aplicarRetencion: retencionModo === 'ahora', retencionModo, comprobanteManual: retencionModo === 'ahora' ? (formCompra.values.comprobanteManual || undefined) : undefined,
                 registradoPorId: userId,
                 esGasto, descripcionGasto: esGasto ? gasto.descripcion : null, categoriaGastoId: esGasto ? Number(gasto.categoriaId) : null,
                 detalles: esGasto ? [] : carritoCompra
@@ -941,6 +942,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                             <Text size="xs" c="red">Retención (−)</Text>
                             <Text c="red" fw={700}><PrecioVisual exacto valor={montoRetencion} simbolo={sim} size="md" fw={700} c="red" /></Text>
                             {serieRet?.configurado && <Text size="xs" c="dimmed">Comprobante N° {periodoRet}{serieRet.siguiente}</Text>}
+                            {retencionModo === 'ahora' && <TextInput size="xs" w={210} mt={4} label="N° del comprobante (opcional)" placeholder={`${periodoRet}${serieRet?.siguiente || ''}`} description="Si ya lo emitiste en el sistema anterior" maxLength={20} {...formCompra.getInputProps('comprobanteManual')} />}
                         </Box>
                     )}
                     <Box><Text size="xs" c="dimmed">Total</Text><PrecioVisual exacto valor={totalFinal} simbolo={sim} size="xl" fw={900} c="blue.9" /></Box>

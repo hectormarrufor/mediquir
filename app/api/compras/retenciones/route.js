@@ -60,7 +60,7 @@ export async function POST(request) {
     const t = await sequelize.transaction();
     try {
         const body = await request.json();
-        const r = await retenerFacturas({ facturaIds: body.facturaIds, porcentaje: body.porcentaje, fecha: body.fecha, registradoPorId: Number(acceso.sesion?.id) || null }, t);
+        const r = await retenerFacturas({ facturaIds: body.facturaIds, porcentaje: body.porcentaje, fecha: body.fecha, registradoPorId: Number(acceso.sesion?.id) || null, comprobanteManual: body.comprobante || null }, t);
         await t.commit();
         return NextResponse.json({ success: true, ...r });
     } catch (error) {
