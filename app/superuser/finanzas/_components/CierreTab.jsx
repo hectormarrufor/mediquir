@@ -6,7 +6,7 @@ import { DatePickerInput, MonthPickerInput } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import { IconAlertTriangle, IconBook2, IconDownload, IconFileTypePdf, IconInfoCircle, IconReceiptTax } from '@tabler/icons-react';
+import { IconAlertTriangle, IconBook2, IconDownload, IconFileText, IconFileTypePdf, IconInfoCircle, IconReceiptTax } from '@tabler/icons-react';
 import GuiaTutorial from '../../_components/GuiaTutorial';
 import { COLUMNAS, TIPOS, celda, celdaTotal, filasLibro, totalesLibro, resumenPeriodo, descargarCsvLibro, descargarCsvRetenciones, descargarPdfLibro, dinero, fmtFecha } from '../_lib/libroExport';
 
@@ -79,14 +79,14 @@ function ResumenPeriodo({ data, ajustes, setAjustes }) {
     );
 }
 
-function TablaRetenciones({ filas }) {
+function TablaRetenciones({ filas, tipo }) {
     if (!filas.length) return <Center py={40}><Text c="dimmed">No hay retenciones en este periodo.</Text></Center>;
     return (
         <Table.ScrollContainer minWidth={1000} h={380}>
             <Table verticalSpacing={3} horizontalSpacing="xs" fz="xs" stickyHeader>
                 <Table.Thead><Table.Tr>
                     <Table.Th>Nº</Table.Th><Table.Th>Fecha</Table.Th><Table.Th>RIF</Table.Th><Table.Th>Nombre o razón social</Table.Th><Table.Th>Comprobante</Table.Th><Table.Th>Nº control</Table.Th>
-                    <Table.Th ta="right">Total</Table.Th><Table.Th ta="right">Base imponible</Table.Th><Table.Th ta="right">Exento</Table.Th><Table.Th ta="right">IVA</Table.Th><Table.Th>Doc. afectado</Table.Th><Table.Th ta="right">IVA retenido</Table.Th>
+                    <Table.Th ta="right">Total</Table.Th><Table.Th ta="right">Base imponible</Table.Th><Table.Th ta="right">Exento</Table.Th><Table.Th ta="right">IVA</Table.Th><Table.Th>Doc. afectado</Table.Th><Table.Th ta="right">IVA retenido</Table.Th><Table.Th ta="center">Formato</Table.Th>
                 </Table.Tr></Table.Thead>
                 <Table.Tbody>
                     {filas.map((f) => (
@@ -94,10 +94,18 @@ function TablaRetenciones({ filas }) {
                             <Table.Td>{f.n}</Table.Td><Table.Td>{fmtFecha(f.fecha)}</Table.Td><Table.Td>{f.rif}</Table.Td><Table.Td>{f.nombre}</Table.Td><Table.Td>{f.comprobante}</Table.Td><Table.Td>{f.control}</Table.Td>
                             <Table.Td ta="right">{dinero(f.totalVentas)}</Table.Td><Table.Td ta="right">{dinero(f.base)}</Table.Td><Table.Td ta="right">{dinero(f.exento)}</Table.Td><Table.Td ta="right">{dinero(f.iva)}</Table.Td>
                             <Table.Td>{f.facturaAfectada}</Table.Td><Table.Td ta="right" fw={700}>{dinero(f.ivaRetenido)}</Table.Td>
+                            <Table.Td ta="center">
+                                {/* El comprobante de una retención a un proveedor se ve, imprime, guarda en PDF y se manda por WhatsApp; el de un cliente se ve en su factura */}
+                                {tipo === 'compras' && f.facturaCompraId
+                                    ? <Button component="a" href={`/superuser/compras/${f.facturaCompraId}/retencion`} target="_blank" rel="noopener noreferrer" size="compact-xs" variant="light" color="orange" leftSection={<IconFileText size={12} />}>Ver comprobante</Button>
+                                    : tipo === 'ventas' && f.ventaId
+                                        ? <Button component="a" href={`/superuser/ventas/${f.ventaId}`} target="_blank" rel="noopener noreferrer" size="compact-xs" variant="light" color="teal" leftSection={<IconFileText size={12} />}>Ver factura</Button>
+                                        : <Text size="xs" c="dimmed" title="Esta retención no está enlazada a una factura">—</Text>}
+                            </Table.Td>
                         </Table.Tr>
                     ))}
                 </Table.Tbody>
-                <Table.Tfoot><Table.Tr><Table.Td colSpan={11} ta="right" fw={800}>TOTAL IVA RETENIDO</Table.Td><Table.Td ta="right" fw={800}>{dinero(filas.reduce((a, f) => a + f.ivaRetenido, 0))}</Table.Td></Table.Tr></Table.Tfoot>
+                <Table.Tfoot><Table.Tr><Table.Td colSpan={11} ta="right" fw={800}>TOTAL IVA RETENIDO</Table.Td><Table.Td ta="right" fw={800}>{dinero(filas.reduce((a, f) => a + f.ivaRetenido, 0))}</Table.Td><Table.Td /></Table.Tr></Table.Tfoot>
             </Table>
         </Table.ScrollContainer>
     );
@@ -200,7 +208,7 @@ export default function CierreTab() {
                                     <Text size="sm" fw={700}>{titulo}</Text>
                                     <Button size="xs" variant="light" leftSection={<IconDownload size={14} />} onClick={() => descargarCsvRetenciones(tipo, data)} disabled={!data[tipo].retencionesDetalle.length}>CSV (Excel)</Button>
                                 </Group>
-                                <TablaRetenciones filas={data[tipo].retencionesDetalle} />
+                                <TablaRetenciones filas={data[tipo].retencionesDetalle} tipo={tipo} />
                             </Tabs.Panel>
                         ))}
                     </Tabs>
