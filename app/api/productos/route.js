@@ -39,7 +39,8 @@ export async function GET(request) {
         if (esVend) {
             const paraVendedor = productos.map((p) => {
                 const j = p.toJSON();
-                const { costoUsd, ...resto } = j;
+                // Ni el costo ni cuánto se vende cada producto (nroVentas): con las unidades y el precio se calcularía el total de ventas, que solo ven los administradores
+                const { costoUsd, nroVentas, ...resto } = j;
                 const b = preciosBase(j, { sinCosto: true });
                 return { ...resto, precio6: precioUnitario(b.p6), precio7: precioUnitario(b.p7) };
             });
