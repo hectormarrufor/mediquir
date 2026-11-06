@@ -79,7 +79,7 @@ const detalleRetencion = (r, doc) => ({
     fecha: iso(r.fecha), rif: r.contraparteRif || '', nombre: r.contraparteNombre || '', tipoDoc: 'RET', comprobante: r.comprobante,
     control: r.numeroControlFactura || '', totalVentas: doc.total, base: r2(r.baseImponible), exento: r2(doc.total - num(r.baseImponible) - num(r.montoIva)),
     iva: r2(r.montoIva), facturaAfectada: r.facturaAfectada, ivaRetenido: r2(r.ivaRetenido), porcentaje: num(r.porcentajeRetencion),
-    facturaCompraId: r.facturaCompraId || null, ventaId: r.ventaId || null, // para abrir el formato del comprobante de esa retención
+    retId: r.id, facturaCompraId: r.facturaCompraId || null, ventaId: r.ventaId || null, // para abrir el formato del comprobante de esa retención
 });
 
 async function libroCompras(q) {

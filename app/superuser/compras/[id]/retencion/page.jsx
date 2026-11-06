@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import React, { useEffect, useRef, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Box, Button, Checkbox, Group, Loader, Paper, ScrollArea, Text, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
@@ -21,11 +21,21 @@ const bs = (n) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, max
 export default function ComprobanteRetencionPage() {
     const { id } = useParams();
     const router = useRouter();
+    const busqueda = useSearchParams();
+    const retId = busqueda.get('ret'); // desde la lista de retenciones: la planilla de ESA retención, tenga o no factura enlazada
+    const imprimir = busqueda.get('imprimir') === '1';
     const hoja = useRef(null);
     const [conSello, setConSello] = useState(true);
     const [trabajando, setTrabajando] = useState(false);
 
-    const { data, isLoading, error } = useQuery({ queryKey: ['comprobante-retencion', id], queryFn: () => pedirJson(`/api/compras/${id}/retencion`) });
+    const { data, isLoading, error } = useQuery({ queryKey: ['comprobante-retencion', retId || id], queryFn: () => pedirJson(retId ? `/api/retenciones/${retId}/comprobante` : `/api/compras/${id}/retencion`) });
+
+    // Con ?imprimir=1 abre directo el cuadro de impresión cuando la planilla ya está en pantalla
+    useEffect(() => {
+        if (!imprimir || !data) return undefined;
+        const t = setTimeout(() => window.print(), 700);
+        return () => clearTimeout(t);
+    }, [imprimir, data]);
 
     const nombreArchivo = data ? `Comprobante-Retencion-${data.comprobante}.pdf` : 'comprobante.pdf';
 

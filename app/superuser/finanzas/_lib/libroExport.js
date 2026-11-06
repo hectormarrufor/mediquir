@@ -151,6 +151,43 @@ export function descargarCsvRetenciones(tipo, datos) {
 }
 
 // ------------------------------------------------------------------ PDF (formato del contador)
+// PDF de la relación de IVA retenido (retenciones a proveedores o de clientes): hoja carta horizontal con el encabezado en cada página y el total al final
+export async function descargarPdfRetenciones(tipo, datos) {
+    const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
+    const filas = datos[tipo].retencionesDetalle;
+    const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'landscape', compress: true });
+    const ANCHO = doc.internal.pageSize.getWidth();
+    const M = 8;
+    const NEGRO = [0, 0, 0];
+    const titulo = `RELACIÓN DE IVA RETENIDO (${tipo === 'ventas' ? 'RETENCIONES QUE TE HICIERON TUS CLIENTES' : 'RETENCIONES PRACTICADAS A TUS PROVEEDORES'})`;
+    const cabecera = () => {
+        doc.setTextColor(...NEGRO);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+        doc.text(`${datos.empresa.nombre} - RIF ${datos.empresa.rif}`, M, 9);
+        doc.text(titulo, M, 13.5);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+        doc.text(periodoTexto(datos), M, 18);
+    };
+    const lineas = { lineWidth: 0.15, lineColor: NEGRO };
+    const total = filas.reduce((a, f) => a + f.ivaRetenido, 0);
+    const cols = [['Nº', 8, false], ['FECHA', 17, false], ['RIF', 24, false], ['NOMBRE O RAZÓN SOCIAL', 62, false], ['COMPROBANTE', 31, false], ['Nº CONTROL', 20, false], ['TOTAL', 22, true], ['BASE IMPONIBLE', 22, true], ['EXENTO', 20, true], ['IVA', 18, true], ['DOC. AFECTADO', 22, false], ['IVA RETENIDO', 22, true]];
+    const escala = (ANCHO - 2 * M) / cols.reduce((a, c) => a + c[1], 0);
+    autoTable(doc, {
+        startY: 21, margin: { top: 21, left: M, right: M, bottom: 10 }, theme: 'grid',
+        head: [cols.map((c) => c[0])],
+        body: filas.map((f) => [f.n, fmtFecha(f.fecha), f.rif, f.nombre, f.comprobante, f.control, dinero(f.totalVentas), dinero(f.base), dinero(f.exento), dinero(f.iva), f.facturaAfectada, dinero(f.ivaRetenido)]),
+        foot: [cols.map((c, i) => (i === 0 ? 'TOTAL IVA RETENIDO' : i === cols.length - 1 ? dinero(total) : ''))],
+        showFoot: 'lastPage',
+        styles: { font: 'helvetica', fontSize: 6.4, cellPadding: 0.8, textColor: NEGRO, overflow: 'linebreak', valign: 'middle', ...lineas },
+        headStyles: { fontStyle: 'bold', fontSize: 6, halign: 'center', fillColor: false, ...lineas },
+        footStyles: { fontStyle: 'bold', fontSize: 7, fillColor: false, textColor: NEGRO, ...lineas },
+        columnStyles: Object.fromEntries(cols.map((c, i) => [i, { cellWidth: c[1] * escala, halign: c[2] ? 'right' : 'left' }])),
+        didParseCell: (d) => { if (d.section === 'foot') { d.cell.styles.halign = d.column.index === cols.length - 1 ? 'right' : 'left'; if (d.column.index === 0) d.cell.colSpan = cols.length - 1; } },
+        didDrawPage: cabecera,
+    });
+    descargar(doc.output('blob'), `iva-retenido-${tipo}-${datos.desde}_${datos.hasta}.pdf`);
+}
+
 export async function descargarPdfLibro(tipo, datos, ajustes) {
     const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
     const cols = COLS[tipo];
