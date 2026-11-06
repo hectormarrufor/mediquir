@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Button, Checkbox, Divider, Drawer, Group, Stack, Switch, Text, TextInput, Textarea } from '@mantine/core';
+import { Button, Checkbox, Divider, Drawer, Group, NumberInput, Stack, Switch, Text, TextInput, Textarea } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { useQueryClient } from '@tanstack/react-query';
 import { IconDeviceFloppy } from '@tabler/icons-react';
 import SelectorRetencion, { validarRetencion } from '@/app/components/admin/SelectorRetencion';
-import { normRif } from '@/app/constants/rif';
+import { formatearIdentificacion, formatearTelefono } from '@/app/constants/identificacion';
 
 async function pedirJson(url, opciones) {
     const res = await fetch(url, opciones);
@@ -16,7 +16,8 @@ async function pedirJson(url, opciones) {
     return cuerpo;
 }
 
-const VACIO = { identificacion: '', nombre: '', telefono: '', email: '', direccion: '', notas: '', esContribuyenteEspecial: false, retencionIvaPorDefecto: null, activo: true };
+const VACIO = { identificacion: '', nombre: '', telefono: '', email: '', direccion: '', notas: '', esContribuyenteEspecial: false, retencionIvaPorDefecto: null, activo: true,
+    contactoNombre: '', contactoCargo: '', contactoTelefono: '', contactoEmail: '', maxCreditos: 3, diasCredito: 7 };
 
 // Registrar un proveedor (proveedor = null) o cambiar sus datos. La retención de IVA NO viene marcada: hay que elegir 75 % o 100 %.
 export default function ProveedorDrawer({ opened, onClose, proveedor = null, puedeEditar = true }) {
@@ -27,7 +28,10 @@ export default function ProveedorDrawer({ opened, onClose, proveedor = null, pue
     const form = useForm({
         initialValues: VACIO,
         validate: {
-            identificacion: (v) => (normRif(v).length < 4 ? 'Escribe el RIF del proveedor' : null),
+            identificacion: (v) => (formatearIdentificacion(v).valor ? null : 'RIF no válido. Ejemplo: J-12345678-9'),
+            telefono: (v) => (!v || formatearTelefono(v).valor ? null : 'Usa 04141234567 o +57 3001234567'),
+            contactoTelefono: (v) => (!v || formatearTelefono(v).valor ? null : 'Usa 04141234567 o +57 3001234567'),
+            contactoEmail: (v) => (v && !/^\S+@\S+\.\S+$/.test(v) ? 'Correo inválido' : null),
             nombre: (v) => (String(v || '').trim().length < 2 ? 'Escribe la razón social' : null),
             email: (v) => (v && !/^\S+@\S+\.\S+$/.test(v) ? 'Correo inválido' : null),
             retencionIvaPorDefecto: validarRetencion,
@@ -46,6 +50,12 @@ export default function ProveedorDrawer({ opened, onClose, proveedor = null, pue
             esContribuyenteEspecial: Boolean(proveedor.esContribuyenteEspecial),
             retencionIvaPorDefecto: [75, 100].includes(Number(proveedor.retencionIvaPorDefecto)) ? String(proveedor.retencionIvaPorDefecto) : null,
             activo: proveedor.activo !== false,
+            contactoNombre: proveedor.contactoNombre || '',
+            contactoCargo: proveedor.contactoCargo || '',
+            contactoTelefono: proveedor.contactoTelefono || '',
+            contactoEmail: proveedor.contactoEmail || '',
+            maxCreditos: proveedor.maxCreditos ?? 3,
+            diasCredito: proveedor.diasCredito ?? 7,
         } : VACIO);
         form.resetDirty();
         form.clearErrors();
@@ -57,7 +67,7 @@ export default function ProveedorDrawer({ opened, onClose, proveedor = null, pue
         try {
             const cuerpo = {
                 ...values,
-                identificacion: values.identificacion.trim().toUpperCase(),
+                identificacion: formatearIdentificacion(values.identificacion).valor,
                 email: values.email.trim() || null,
                 retencionIvaPorDefecto: Number(values.retencionIvaPorDefecto),
             };
@@ -88,10 +98,26 @@ export default function ProveedorDrawer({ opened, onClose, proveedor = null, pue
                         <TextInput withAsterisk label="RIF" placeholder="J-12345678-9" data-autofocus {...form.getInputProps('identificacion')} />
                         <TextInput withAsterisk label="Razón social" {...form.getInputProps('nombre')} />
                         <Group grow align="flex-start">
-                            <TextInput label="Teléfono" placeholder="0414-1234567" {...form.getInputProps('telefono')} />
+                            <TextInput label="Teléfono" placeholder="04141234567 o +573001234567" {...form.getInputProps('telefono')} />
                             <TextInput label="Correo" type="email" {...form.getInputProps('email')} />
                         </Group>
                         <Textarea label="Dirección fiscal" autosize minRows={2} {...form.getInputProps('direccion')} />
+
+                        <Divider label="Persona de contacto" labelPosition="left" />
+                        <Group grow align="flex-start">
+                            <TextInput label="Nombre" {...form.getInputProps('contactoNombre')} />
+                            <TextInput label="Cargo" placeholder="Ej: Jefe de compras" {...form.getInputProps('contactoCargo')} />
+                        </Group>
+                        <Group grow align="flex-start">
+                            <TextInput label="Teléfono" placeholder="04141234567" {...form.getInputProps('contactoTelefono')} />
+                            <TextInput label="Correo" type="email" {...form.getInputProps('contactoEmail')} />
+                        </Group>
+
+                        <Divider label="Crédito que nos da" labelPosition="left" />
+                        <Group grow align="flex-start">
+                            <NumberInput label="Créditos a la vez" description="Compras a crédito sin pagar. 0 = solo contado" min={0} max={100} allowDecimal={false} clampBehavior="strict" {...form.getInputProps('maxCreditos')} />
+                            <NumberInput label="Días de crédito" description="Plazo de cada compra" min={0} max={365} allowDecimal={false} clampBehavior="strict" {...form.getInputProps('diasCredito')} />
+                        </Group>
 
                         <Divider label="Retención de IVA" labelPosition="left" />
                         <SelectorRetencion

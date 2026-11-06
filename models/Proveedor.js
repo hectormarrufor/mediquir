@@ -59,6 +59,14 @@ const Proveedor = sequelize.define('Proveedor', {
     type: DataTypes.TEXT,
     allowNull: true,
   },
+  // Persona de contacto (en una clínica o droguería, con quién se habla)
+  contactoNombre: { type: DataTypes.STRING(150), allowNull: true },
+  contactoCargo: { type: DataTypes.STRING(100), allowNull: true },
+  contactoTelefono: { type: DataTypes.STRING(40), allowNull: true },
+  contactoEmail: { type: DataTypes.STRING(150), allowNull: true },
+  // Crédito que da el proveedor: cuántas compras a crédito sin pagar a la vez (0 = no da crédito) y los días de cada una
+  maxCreditos: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 3, validate: { min: 0, max: 100 } },
+  diasCredito: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 7, validate: { min: 0, max: 365 } },
   activo: {
     type: DataTypes.BOOLEAN,
     defaultValue: true

@@ -93,15 +93,26 @@ export async function GET(request) {
         });
 
         const [[m]] = [await consulta(`SELECT (SELECT count(*)::int FROM "DatoAuditoria" WHERE estado = 'APROBADO') aprobados,
-            (SELECT count(*)::int FROM "Marcas" mm WHERE mm.imagen IS NULL AND NOT EXISTS (SELECT 1 FROM "ImagenAuditoria" i WHERE i.tipo = 'marca' AND i."refId" = mm.id AND i.estado = 'OMITIDA')) marcas_sin_logo`)].map((r) => r[0]);
+            (SELECT count(*)::int FROM "Marcas" mm WHERE mm.imagen IS NULL AND NOT EXISTS (SELECT 1 FROM "ImagenAuditoria" i WHERE i.tipo = 'marca' AND i."refId" = mm.id AND i.estado = 'OMITIDA')) marcas_sin_logo,
+            (SELECT count(*)::int FROM "Proveedores" pp WHERE pp.activo AND pp.imagen IS NULL AND NOT EXISTS (SELECT 1 FROM "ImagenAuditoria" i WHERE i.tipo = 'proveedor' AND i."refId" = pp.id AND i.estado = 'OMITIDA')) proveedores_sin_logo`)].map((r) => r[0]);
         const conteo = {
-            fichas: fichas.length, aprobados: m.aprobados, marcasSinLogo: m.marcas_sin_logo,
+            fichas: fichas.length, aprobados: m.aprobados, marcasSinLogo: m.marcas_sin_logo, proveedoresSinLogo: m.proveedores_sin_logo,
             dudosos: fichas.filter((x) => x.peso >= 2).length, fotosPorRevisar: fichas.filter((x) => x.foto.estado === 'PENDIENTE').length, fotosFaltan: fichas.filter((x) => x.foto.estado === 'FALTA').length,
             datosPendientes: fichas.filter((x) => x.idsDatos.length).length,
         };
         Object.keys(PESO).forEach((k) => { conteo[k] = fichas.filter((x) => x.alertas.includes(k)).length; });
 
         // Fichas de marcas sin logo (solo con ese filtro)
+        // Fichas de proveedores sin logo: el mismo flujo que las marcas (foto, quitar fondo, guardar u omitir)
+        if (filtro === 'proveedores') {
+            const [provs] = await consulta(`SELECT pp.id, pp.nombre, pp.identificacion FROM "Proveedores" pp WHERE pp.activo AND pp.imagen IS NULL AND NOT EXISTS (SELECT 1 FROM "ImagenAuditoria" i WHERE i.tipo = 'proveedor' AND i."refId" = pp.id AND i.estado = 'OMITIDA') ORDER BY pp.nombre`);
+            const items = provs.filter((x) => !excluir.has(`proveedor:${x.id}`)).slice(0, limite).map((x) => ({
+                clave: `proveedor:${x.id}`, tipo: 'proveedor', base: x.identificacion, id: x.id, nombre: x.nombre, categoria: null, variantes: [], marcas: [], datos: null, referencia: null, notas: [], alertas: ['FOTO_FALTA'],
+                foto: { entidad: { tipo: 'proveedor', id: x.id, nombre: x.nombre }, estado: 'FALTA', origen: null, url: null, tienePropia: false, puntaje: null },
+            }));
+            return NextResponse.json({ conteo, items });
+        }
+
         if (filtro === 'marcas') {
             const [marcas] = await consulta(`SELECT mm.id, mm.nombre FROM "Marcas" mm WHERE mm.imagen IS NULL AND NOT EXISTS (SELECT 1 FROM "ImagenAuditoria" i WHERE i.tipo = 'marca' AND i."refId" = mm.id AND i.estado = 'OMITIDA') ORDER BY mm.nombre`);
             const items = marcas.filter((x) => !excluir.has(`marca:${x.id}`)).slice(0, limite).map((x) => ({
@@ -176,8 +187,8 @@ export async function POST(request) {
                 { estado: pendiente ? 'PENDIENTE' : 'APROBADO', ids: lista, uid });
         }
 
-        if (foto && ['producto', 'grupo', 'marca'].includes(foto.tipo) && ['APROBADA', 'OMITIDA'].includes(foto.estado)) {
-            const tabla = { producto: 'Productos', grupo: 'GruposEquivalencia', marca: 'Marcas' }[foto.tipo];
+        if (foto && ['producto', 'grupo', 'marca', 'proveedor'].includes(foto.tipo) && ['APROBADA', 'OMITIDA'].includes(foto.estado)) {
+            const tabla = { producto: 'Productos', grupo: 'GruposEquivalencia', marca: 'Marcas', proveedor: 'Proveedores' }[foto.tipo];
             const [[e]] = await consulta(`SELECT imagen FROM "${tabla}" WHERE id = :id`, { id: Number(foto.id) });
             if (!e) return NextResponse.json({ error: 'No existe la entidad de la foto' }, { status: 404 });
             if (foto.estado === 'APROBADA' && !e.imagen) return NextResponse.json({ error: 'No tiene foto para aprobar' }, { status: 400 });

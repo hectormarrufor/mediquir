@@ -13,3 +13,6 @@ ai-commit.js
 Respaldos/
 respaldos/
 *.json.gz
+
+# datos personales de clientes y proveedores (nunca al repositorio)
+scripts/migraciones/datos/privado/

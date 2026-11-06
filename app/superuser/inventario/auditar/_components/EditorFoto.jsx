@@ -68,7 +68,7 @@ export default function EditorFoto({ item, opened, onClose, onGuardar, soloProce
                 await onGuardar(archivo);
                 return;
             }
-            const prefijo = item.tipo === 'grupo' ? `grupo_${item.id}` : item.tipo === 'marca' ? `marca_${item.id}` : `producto_${item.id}`;
+            const prefijo = item.tipo === 'grupo' ? `grupo_${item.id}` : item.tipo === 'marca' ? `marca_${item.id}` : item.tipo === 'proveedor' ? `proveedor_${item.id}` : `producto_${item.id}`;
             const nombre = await subirImagen(archivo, prefijo);
             await onGuardar(nombre);
             notifications.show({ color: 'teal', message: 'Foto guardada' });

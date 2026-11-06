@@ -39,7 +39,7 @@ export async function GET(request) {
         const primerNombre = String(cliente.nombre || '').trim().split(/\s+/)[0] || null;
         return NextResponse.json({
             success: true,
-            cliente: { primerNombre, nombreOculto: maskNombre(cliente.nombre), telefonoOculto: maskTelefono(cliente.telefono), emailOculto: maskEmail(cliente.email) },
+            cliente: { primerNombre, nombreOculto: maskNombre(cliente.nombre), telefonoOculto: maskTelefono(cliente.telefono), emailOculto: maskEmail(cliente.email), tieneTelefono: Boolean(String(cliente.telefono || '').trim()), tieneEmail: Boolean(String(cliente.email || '').trim()) },
         }, { status: 200 });
     } catch (error) {
         console.error('Error buscando cliente:', error);

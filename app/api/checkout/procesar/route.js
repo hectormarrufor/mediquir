@@ -6,6 +6,7 @@ import { notificarTodos, notificarCabezas } from '@/app/handlers/notificar';
 import { Cliente, Producto, PagoSms, Venta, VentaDetalle, Correlativo, IntentoPago, sequelize } from '@/models';
 import { tasaVigente } from '../../_lib/tasaBcv';
 import { calcularFactura, precioVentaWeb, aBolivares } from '@/app/constants/facturacion';
+import { formatearTelefono } from '@/app/constants/identificacion';
 import { presentacionDe } from '@/app/constants/presentaciones';
 import { inicioDiaCaracas } from '@/app/constants/hora';
 import { conciliarPagoTienda, TOLERANCIA_BS } from '../../_lib/pagoTienda';
@@ -95,7 +96,7 @@ export async function POST(req) {
             where: { identificacion: cliente.identificacion },
             defaults: {
                 nombre: cliente.nombre,
-                telefono: cliente.telefono,
+                telefono: formatearTelefono(cliente.telefono).valor || cliente.telefono,
                 direccion: coordenadasGPS
                     ? `GPS: ${coordenadasGPS.lat}, ${coordenadasGPS.lng}`
                     : (cliente.direccion || 'Compra Web Online'),
@@ -107,6 +108,18 @@ export async function POST(req) {
         // Los datos enmascarados (con asteriscos) solo existen para clientes que ya están guardados: se usan los de su ficha
         if (clienteNuevo && [cliente.nombre, cliente.telefono, cliente.email].some((v) => String(v || '').includes('*'))) throw new ErrorNegocio('Revisa tus datos: no pueden llevar asteriscos');
         cliente.nombre = registroCliente.nombre;
+
+        // Teléfono y correo son obligatorios (el correo es para la factura digital). Si la ficha de un cliente que ya existía no los tiene, se completan con los de esta compra.
+        const telNuevo = String(cliente.telefono || '').includes('*') ? null : formatearTelefono(cliente.telefono).valor;
+        const correoNuevo = String(cliente.email || '').includes('*') ? null : String(cliente.email || '').trim();
+        if (correoNuevo && !/^\S+@\S+\.\S+$/.test(correoNuevo)) throw new ErrorNegocio('El correo no es válido');
+        const completar = {};
+        if (!String(registroCliente.telefono || '').trim() && telNuevo) completar.telefono = telNuevo;
+        if (!String(registroCliente.email || '').trim() && correoNuevo) completar.email = correoNuevo;
+        if (clienteNuevo && !telNuevo) throw new ErrorNegocio('Escribe un teléfono válido (por ejemplo 04141234567, o con + y el código de tu país)');
+        if (Object.keys(completar).length) await registroCliente.update(completar, { transaction });
+        if (!String(registroCliente.telefono || '').trim()) throw new ErrorNegocio('Escribe un teléfono válido (por ejemplo 04141234567) para poder contactarte con tu pedido');
+        if (!String(registroCliente.email || '').trim()) throw new ErrorNegocio('Escribe tu correo electrónico: ahí te llega tu factura digital');
 
         // 2. EL SERVIDOR CALCULA TODO: precios, IVA, total y tasa salen de la base de datos, no del navegador
         const tasaBcv = await tasaVigente({ transaction });

@@ -12,6 +12,7 @@ import { DATOS_PAGO_MOVIL } from '@/app/constants/empresa';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { notifications } from '@mantine/notifications';
 import { ZONAS_DELIVERY, UBICACION, clasificarUbicacion } from '@/app/constants/zonasDelivery';
+import { formatearTelefono } from '@/app/constants/identificacion';
 
 // Coordenadas base de Mediquir en Ciudad Ojeda
 const MEDIQUIR_LOCATION = { lat: 10.195099414915264, lng: -71.31187255102861 };
@@ -54,7 +55,9 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
     const idIntentoRef = useRef(null); // los reintentos automáticos comparten id: el servidor los cuenta como UN intento
 
     // Formulario de Cliente con Tipo de Documento y Contribuyente Especial
-    const [datosGuardados, setDatosGuardados] = useState(false); // los campos del cliente vienen enmascarados de su ficha
+    const [datosGuardados, setDatosGuardados] = useState(false);
+    const [guardadoTel, setGuardadoTel] = useState(false); // ¿su ficha ya tiene teléfono? Si no, se le pide aquí
+    const [guardadoEmail, setGuardadoEmail] = useState(false); // los campos del cliente vienen enmascarados de su ficha
     const formCliente = useForm({
         initialValues: {
             tipoDoc: 'V-',
@@ -68,7 +71,9 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
         validate: {
             numIdentificacion: (value) => (value.replace(/\D/g, '').length < 6 ? 'Número de documento inválido' : null),
             nombre: (value) => (value.length < 3 ? 'Nombre muy corto' : null),
-            telefono: (value) => (value.includes('*') ? null : value.replace(/\D/g, '').length < 10 ? 'Teléfono inválido (mínimo 10 dígitos)' : null),
+            telefono: (value) => (value.includes('*') ? null : formatearTelefono(value).valor ? null : 'Teléfono inválido (ej: 04141234567, o +57 3001234567 si es de otro país)'),
+            // Obligatorio: ahí te llega la factura digital
+            email: (value) => (value.includes('*') ? null : /^\S+@\S+\.\S+$/.test(value.trim()) ? null : 'Escribe un correo válido: ahí te enviamos tu factura'),
         },
     });
 
@@ -235,7 +240,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
 
         setBuscandoCliente(true);
         // Si había datos enmascarados de otra cédula, se limpian antes de buscar la nueva
-        if (datosGuardados) { formCliente.setValues({ ...formCliente.values, nombre: '', telefono: '', email: '' }); setDatosGuardados(false); }
+        if (datosGuardados) { formCliente.setValues({ ...formCliente.values, nombre: '', telefono: '', email: '' }); setDatosGuardados(false); setGuardadoTel(false); setGuardadoEmail(false); }
         const identificacionCompleta = obtenerIdentificacionFormateada();
 
         try {
@@ -246,8 +251,8 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                 const c = data.cliente;
                 // Los datos que ya tenemos se ponen enmascarados (el servidor usa los guardados): la persona no los reescribe ni se ven completos
                 if (c.primerNombre) {
-                    formCliente.setValues({ ...formCliente.values, nombre: c.nombreOculto || c.primerNombre, telefono: c.telefonoOculto || '', email: c.emailOculto || '' });
-                    setDatosGuardados(true);
+                    formCliente.setValues({ ...formCliente.values, nombre: c.nombreOculto || c.primerNombre, telefono: c.tieneTelefono ? (c.telefonoOculto || '****') : '', email: c.tieneEmail ? (c.emailOculto || '****') : '' });
+                    setDatosGuardados(true); setGuardadoTel(Boolean(c.tieneTelefono)); setGuardadoEmail(Boolean(c.tieneEmail));
                     const guardados = [c.telefonoOculto && `teléfono ${c.telefonoOculto}`, c.emailOculto && `correo ${c.emailOculto}`].filter(Boolean).join(' · ');
                     notifications.show({ color: 'teal', title: `¡Hola de nuevo, ${c.primerNombre}!`, message: `${guardados ? `Tenemos guardado tu ${guardados}. ` : ''}Ya tenemos tus datos y los mostramos ocultos por tu seguridad.`, autoClose: 6000 });
                 }
@@ -440,14 +445,16 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                             label="Teléfono de Contacto" 
                             placeholder="Ej: 04141234567" 
                             withAsterisk 
-                            disabled={buscandoCliente || datosGuardados}
+                            disabled={buscandoCliente || (datosGuardados && guardadoTel)}
                             {...formCliente.getInputProps('telefono')} 
                         />
                         
                         <TextInput 
-                            label="Correo Electrónico (Opcional)" 
+                            label="Correo Electrónico" 
+                            description="Aquí te enviamos tu factura digital"
                             placeholder="correo@ejemplo.com" 
-                            disabled={buscandoCliente || datosGuardados}
+                            withAsterisk
+                            disabled={buscandoCliente || (datosGuardados && guardadoEmail)}
                             {...formCliente.getInputProps('email')} 
                         />
                         {datosGuardados && (

@@ -5,7 +5,7 @@ import { puedeEditarInventario, requerirStaff } from '../_lib';
 
 export const dynamic = 'force-dynamic';
 
-const TABLAS = { producto: 'Productos', grupo: 'GruposEquivalencia', marca: 'Marcas' };
+const TABLAS = { producto: 'Productos', grupo: 'GruposEquivalencia', marca: 'Marcas', proveedor: 'Proveedores' };
 const BLOB = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
 const IMG = process.env.NEXT_PUBLIC_IMG_BASE;
 const NOMBRE_VALIDO = /^[A-Za-z0-9_.\-]{3,120}\.(jpg|jpeg|png|webp)$/i;
@@ -22,7 +22,7 @@ export async function GET(request) {
     try {
         const { searchParams } = new URL(request.url);
         const modo = searchParams.get('modo') === 'faltan' ? 'faltan' : 'revisar';
-        const excluir = (searchParams.get('excluir') || '').split(',').filter((x) => /^(producto|grupo|marca):\d+$/.test(x));
+        const excluir = (searchParams.get('excluir') || '').split(',').filter((x) => /^(producto|grupo|marca|proveedor):\d+$/.test(x));
         const limite = Math.min(Number(searchParams.get('limite')) || 25, 60);
 
         const [[conteo]] = await consulta(`SELECT

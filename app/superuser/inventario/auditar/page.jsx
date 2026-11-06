@@ -18,7 +18,7 @@ const TEXTOS = {
 const FILTROS = [
     { value: 'pendiente', label: 'Todo lo pendiente' }, { value: 'dudoso', label: 'Solo lo dudoso' }, { value: 'fotos', label: 'Fotos por revisar o que faltan' }, { value: 'sin-foto', label: 'Sin foto (incluye las que dejé para después)' },
     { value: 'datos', label: 'Solo precios y presentación' }, { value: 'SIN_P7', label: 'Sin precio 7' }, { value: 'SIN_COSTO', label: 'Sin costo' }, { value: 'P7_MENOR_P6', label: 'Precio 7 menor que 6' },
-    { value: 'POSIBLE_CAJA', label: 'Posible precio de caja' }, { value: 'DIF_REPORTE', label: 'Difiere del reporte' }, { value: 'marcas', label: 'Logos de marcas que faltan' },
+    { value: 'POSIBLE_CAJA', label: 'Posible precio de caja' }, { value: 'DIF_REPORTE', label: 'Difiere del reporte' }, { value: 'marcas', label: 'Logos de marcas que faltan' }, { value: 'proveedores', label: 'Logos de proveedores que faltan' },
 ];
 const ORIGEN = { producto: 'Foto del producto', grupo: 'Foto del grupo de equivalencia', marca: 'Logo de la marca (el producto no tiene foto propia)' };
 
@@ -187,7 +187,7 @@ export default function AuditarPage() {
     const sugerenciaP7 = p6 > 0 && !(p7 > 0) && pctReporte !== null ? p6 * (1 + pctReporte) : null;
     const nombreEditado = form?.nombre?.trim() || actual?.nombre; // si lo estás corrigiendo, se ve el nombre nuevo de una vez
     const busqueda = actual ? `https://www.google.com/search?q=${encodeURIComponent(`${nombreEditado} ${actual.marcas?.[0] || ''}`.trim())}&udm=2` : '#';
-    const etiquetaBoton = actual?.tipo === 'marca' ? (foto.estado === 'OK' ? 'Listo, siguiente' : 'Sin logo por ahora, siguiente')
+    const etiquetaBoton = ['marca', 'proveedor'].includes(actual?.tipo) ? (foto.estado === 'OK' ? 'Listo, siguiente' : 'Sin logo por ahora, siguiente')
         : hayCambios ? 'Guardar cambios y siguiente' : foto?.estado === 'FALTA' ? 'Sin foto por ahora, siguiente' : 'Todo bien, siguiente';
 
     return (
@@ -222,7 +222,7 @@ export default function AuditarPage() {
                         <Box>
                             <Text fw={800} fz={isMobile ? 'lg' : 'xl'} lh={1.2}>{nombreEditado}</Text>
                             <Text size="sm" c="dimmed">
-                                {actual.tipo === 'marca' ? 'Marca' : (
+                                {actual.tipo === 'marca' ? 'Marca' : actual.tipo === 'proveedor' ? `Proveedor · ${actual.base}` : (
                                     <Text span style={{ cursor: 'pointer' }} onClick={() => copiar(actual.base)} title="Clic para copiar el código">
                                         Código {actual.base} <IconCopy size={12} style={{ verticalAlign: -1 }} />
                                     </Text>

@@ -1,6 +1,7 @@
 import { Op, fn, col, where } from 'sequelize';
 import { Proveedor } from '@/models';
 import { normRif } from '@/app/constants/rif';
+import { formatearIdentificacion, formatearTelefono, formatearDireccion } from '@/app/constants/identificacion';
 
 const texto = (v, max) => {
     const s = String(v ?? '').trim();
@@ -20,17 +21,40 @@ export function datosProveedor(cuerpo, { creando }) {
     const viene = (k) => creando || Object.prototype.hasOwnProperty.call(c, k);
 
     if (viene('identificacion')) {
-        const rif = String(c.identificacion ?? '').trim().toUpperCase().replace(/\s+/g, '');
-        if (normRif(rif).length < 4) return { error: 'Escribe el RIF del proveedor' };
-        datos.identificacion = rif.slice(0, 30);
+        // Siempre en el formato único: J-12345678-9 / V-12345678 (se acepta como lo escriban: con o sin guiones, puntos o ceros)
+        const { valor, motivo } = formatearIdentificacion(c.identificacion);
+        if (!valor) return { error: `El RIF del proveedor no es válido (${motivo || 'revísalo'}). Ejemplo: J-12345678-9` };
+        datos.identificacion = valor;
     }
     if (viene('nombre')) {
         const nombre = texto(c.nombre, 200);
         if (!nombre || nombre.length < 2) return { error: 'Escribe la razón social del proveedor' };
         datos.nombre = nombre;
     }
-    if (viene('telefono')) datos.telefono = texto(c.telefono, 40);
-    if (viene('direccion')) datos.direccion = texto(c.direccion, 500);
+    const telefono = (campo, etiqueta) => {
+        const t = texto(c[campo], 40);
+        if (!t) return { valor: null };
+        const f = formatearTelefono(t);
+        return f.valor ? { valor: f.valor } : { error: `${etiqueta} no es válido: usa 04141234567 o, si es de otro país, +57 3001234567` };
+    };
+    if (viene('telefono')) { const t = telefono('telefono', 'El teléfono'); if (t.error) return { error: t.error }; datos.telefono = t.valor; }
+    if (viene('contactoTelefono')) { const t = telefono('contactoTelefono', 'El teléfono de la persona de contacto'); if (t.error) return { error: t.error }; datos.contactoTelefono = t.valor; }
+    if (viene('direccion')) { const d = texto(c.direccion, 500); datos.direccion = d ? formatearDireccion(d) : null; }
+    if (viene('contactoNombre')) datos.contactoNombre = texto(c.contactoNombre, 150);
+    if (viene('contactoCargo')) datos.contactoCargo = texto(c.contactoCargo, 100);
+    if (viene('contactoEmail')) {
+        const e = texto(c.contactoEmail, 150);
+        if (e && !/^\S+@\S+\.\S+$/.test(e)) return { error: 'El correo de la persona de contacto no es válido' };
+        datos.contactoEmail = e;
+    }
+    // Crédito: cuántas compras a crédito a la vez (0 = no da crédito) y los días de cada una. Por defecto 3 y 7.
+    for (const [campo, max, etiqueta] of [['maxCreditos', 100, 'La cantidad de créditos'], ['diasCredito', 365, 'Los días de crédito']]) {
+        if (!viene(campo)) continue;
+        const n = c[campo] === undefined || c[campo] === null || c[campo] === '' ? (campo === 'maxCreditos' ? 3 : 7) : Number(c[campo]);
+        if (!Number.isInteger(n) || n < 0 || n > max) return { error: `${etiqueta} debe ser un número entero entre 0 y ${max}` };
+        datos[campo] = n;
+    }
+    if (viene('imagen')) datos.imagen = texto(c.imagen, 1000); // logo
     if (viene('notas')) datos.notas = texto(c.notas, 1000);
     if (viene('email')) {
         const email = texto(c.email, 150);
