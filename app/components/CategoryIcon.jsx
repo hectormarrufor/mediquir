@@ -5,9 +5,17 @@ import {
     IconFirstAidKit,
     IconWheelchair,
     IconPill,
-    IconBoxMultiple
+    IconBoxMultiple,
+    IconBabyCarriage,
+    IconHomeHeart,
+    IconStethoscope,
+    IconSock
 } from '@tabler/icons-react';
 import IconUtero from './icons/IconUtero'; // aparato reproductor femenino (Tabler no trae uno)
+import IconCollarin from './icons/IconCollarin'; // Tabler no trae iconos de soportes ortopédicos: estos cuatro son propios
+import IconMunequera from './icons/IconMunequera';
+import IconRodillera from './icons/IconRodillera';
+import IconTobillera from './icons/IconTobillera';
 
 // Diccionario de iconos por categoría. Las claves van en minúsculas y SIN acentos
 // (el nombre de la categoría se normaliza igual, así "Ginecología" y "Ginecologia" coinciden).
@@ -18,6 +26,14 @@ const iconMap = {
     'productos farmaceuticos': IconPill,
     'ginecologia': IconUtero,
     'miscelaneo': IconBoxMultiple,
+    'bebes y ninos': IconBabyCarriage,
+    'cuidado personal y hogar': IconHomeHeart,
+    'equipos medicos': IconStethoscope,
+    'medias': IconSock,
+    'collarin': IconCollarin,
+    'munequera': IconMunequera,
+    'rodillera': IconRodillera,
+    'tobillera': IconTobillera,
 };
 
 const normalizar = (nombre) =>
