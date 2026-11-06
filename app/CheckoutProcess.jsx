@@ -16,7 +16,7 @@ import { ZONAS_DELIVERY, UBICACION, clasificarUbicacion } from '@/app/constants/
 // Coordenadas base de Mediquir en Ciudad Ojeda
 const MEDIQUIR_LOCATION = { lat: 10.195099414915264, lng: -71.31187255102861 };
 const TARIFA_BASE_DELIVERY = 1.5;
-const TARIFA_POR_KM = 0.5;
+const TARIFA_POR_KM = 0.7;
 
 export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp }) {
     const { tasa: tasaHook } = useTasaBcv();
