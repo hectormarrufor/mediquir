@@ -102,7 +102,11 @@ function subconjunto(lineas, objetivo) {
         let inv = null; let lineasNota = null;
         // 1) la nota devuelve TODO lo que quedaba por devolver de una factura
         inv = cands.find((i) => Math.abs(i.resto - b) <= 0.05) || null;
-        if (inv) lineasNota = inv.lineas.filter((l) => !l.usada);
+        if (inv) {
+            // solo vale si los renglones sin asignar suman exactamente lo de la nota (otra nota parcial pudo haber cubierto parte de la devolución)
+            const libres = inv.lineas.filter((l) => !l.usada);
+            if (Math.abs(libres.reduce((t, l) => t + l.resto, 0) - b) <= 0.05) lineasNota = libres; else inv = null;
+        }
         // 2) devuelve un grupo de renglones de una factura que aún tiene devoluciones sin asignar
         if (!inv) for (const i of cands) { const libres = i.lineas.filter((l) => !l.usada); const s = subconjunto(libres, b); if (s) { inv = i; lineasNota = s.map((k) => libres[k]); break; } }
         if (inv && lineasNota) { for (const l of lineasNota) l.usada = true; inv.resto = r2(inv.resto - b); conRenglones++; }
