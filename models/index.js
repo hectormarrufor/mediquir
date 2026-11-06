@@ -6,6 +6,8 @@ const db = {
     PagoSms: require('./PagoSms'),
     CuentaPorPagar: require('./CuentaPorPagar'),
     CuentaPorCobrar: require('./CuentaPorCobrar'),
+    VendedorComision: require('./VendedorComision'),
+    ComisionVenta: require('./ComisionVenta'),
     FacturaCompra: require('./FacturaCompra'),
     Proveedor: require('./Proveedor'),
     Venta: require('./Venta'),

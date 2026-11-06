@@ -43,6 +43,8 @@ const CuentaPorCobrar = sequelize.define('CuentaPorCobrar', {
         type: DataTypes.ENUM('Pendiente', 'Pagado', 'Vencido'),
         defaultValue: 'Pendiente'
     },
+    // Observación que lleva la administradora ('VENCIDA', 'PAGADO PENDIENTE RET', 'BCV'...): editable desde cuentas por cobrar
+    observacion: { type: DataTypes.TEXT, allowNull: true },
     // Solo si la cuenta nació de una nota de débito sobre una factura que no era a crédito (su deuda es solo la de la nota)
     notaId: { type: DataTypes.UUID, allowNull: true }
 }, {
