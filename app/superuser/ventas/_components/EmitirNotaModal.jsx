@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { IconAlertTriangle, IconPlus, IconTrash } from '@tabler/icons-react';
 import { calcularFactura } from '@/app/constants/facturacion';
 import { PreguntarNumero, useNumeracion } from '@/app/superuser/_components/NumeracionFiscal';
+import DatosDeCopia from '@/app/components/admin/DatosDeCopia';
 
 const MOTIVOS = {
     CREDITO: ['Devolución de mercancía', 'Descuento posterior a la factura', 'Error en la factura', 'Otro'],
@@ -47,6 +48,7 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
     const [otras, setOtras] = useState([]); // otras facturas del cliente que también afecta la nota de débito
     const [enviando, setEnviando] = useState(false);
     const [error, setError] = useState(null);
+    const [copia, setCopia] = useState({ numero: '', control: '', fecha: '' }); // datos de la nota si ya se emitió en el sistema anterior
 
     useEffect(() => {
         if (!opened) return;
@@ -78,6 +80,7 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     tipo, motivo: motivoFinal, devuelveInventario: esCredito && hayDevolucion && devuelve, otrasFacturasIds: esCredito ? [] : otras,
+                    numeroNota: copia.numero, numeroControl: copia.control, fecha: copia.fecha,
                     renglones: lineas.map((l) => (l.ventaDetalleId ? { ventaDetalleId: l.ventaDetalleId, cantidad: l.cantidad } : { descripcion: l.descripcion, cantidad: 1, precioUnitario: l.precioUnitario, aplicaIva: l.aplicaIva })),
                 }),
             });
@@ -160,6 +163,7 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
                             {excede && <Text size="xs" fw={700} mt={4}>Supera lo que queda por acreditar ({simbolo}{nf(data.acreditable)}).</Text>}
                         </Alert>
                     )}
+                    <DatosDeCopia valores={copia} onCambio={setCopia} etiquetaNumero={esCredito ? 'Número de la nota de crédito' : 'Número de la nota de débito'} placeholderNumero={serie?.siguienteNumero ? String(serie.siguienteNumero) : ''} />
                     {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error}</Alert>}
 
                     <Group justify="flex-end">

@@ -35,9 +35,20 @@ const aBsDoc = (monto, moneda, tasa) => (moneda === 'BS' ? r2(monto) : aBolivare
 
 // ------------------------------------------------------------------ correlativo
 // NC-00001 / ND-00001. Nunca por debajo del mayor número ya emitido (aunque falte la fila del correlativo).
-export async function siguienteNumeroNota(tipo, transaction) {
+export async function siguienteNumeroNota(tipo, transaction, manual = null) {
     const prefijo = PREFIJO[tipo];
     if (!prefijo) throw new ErrorNota('Tipo de nota no válido');
+    // `manual`: el número que ya tiene esa nota en el sistema anterior (mientras convivan los dos, la nota se copia con SU número).
+    // Si ya existe se rechaza; el correlativo avanza para que la siguiente sea la que sigue.
+    if (manual !== null && manual !== undefined && String(manual).trim() !== '') {
+        const n = parseInt(String(manual).replace(/[^0-9]/g, ''), 10);
+        if (!Number.isInteger(n) || n < 1) throw new ErrorNota('El número de la nota no es válido');
+        const corrM = await Correlativo.findOne({ where: { prefijo }, transaction, lock: transaction.LOCK.UPDATE });
+        const numeroM = `${prefijo}-${String(n).padStart(corrM?.cerosRelleno || 5, '0')}`;
+        if (await NotaFiscal.findOne({ where: { origen: 'VENTA', numeroDocumento: numeroM }, attributes: ['id'], transaction })) throw new ErrorNota(`Ya existe la nota ${numeroM}`, 409);
+        if (corrM) { corrM.siguienteNumero = Math.max(Number(corrM.siguienteNumero) || 1, n + 1); corrM.configurado = true; await corrM.save({ transaction }); }
+        return numeroM;
+    }
     const corr = await Correlativo.findOne({ where: { prefijo }, transaction, lock: transaction.LOCK.UPDATE });
     if (!corr || !corr.configurado) {
         throw new ErrorNota(`Antes de emitir la primera ${ETIQUETA[tipo].toLowerCase()} debes indicar con qué número empieza tu numeración`, 409, 'NUMERACION_PENDIENTE');
@@ -97,7 +108,7 @@ export async function otrasFacturasDelCliente(venta, transaction) {
  *                                Concepto libre (crédito o débito): [{ descripcion, precioUnitario, cantidad?, aplicaIva }]
  * @param {string[]} p.otrasFacturasIds  Solo nota de débito: otras facturas del mismo cliente que también afecta (la deuda se suma a la factura principal, `venta`)
  */
-export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario = false, otrasFacturasIds = [], usuarioId = null, transaction: t }) {
+export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario = false, otrasFacturasIds = [], usuarioId = null, transaction: t, numeroManual = null, numeroControl = null, fecha = null }) {
     if (!PREFIJO[tipo]) throw new ErrorNota('Tipo de nota no válido');
     if (venta.tipoDocumento !== 'FACTURA') throw new ErrorNota('Las notas de crédito y de débito solo se emiten sobre facturas', 409);
     if (venta.statusDespacho === 'Cancelado') throw new ErrorNota('La factura está anulada', 409);
@@ -169,9 +180,11 @@ export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelve
 
     const moneda = venta.moneda;
     const tasa = Number(venta.tasaCambio) || 1;
-    const numero = await siguienteNumeroNota(tipo, t);
+    const numero = await siguienteNumeroNota(tipo, t, numeroManual);
+    // Fecha de la nota: hoy, o la que tiene en el sistema anterior (YYYY-MM-DD, nunca futura); y su control si ya lo tiene (si no, se asigna al imprimir)
+    if (fecha && (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha)) || String(fecha) > hoyCaracas())) throw new ErrorNota('La fecha de la nota no es válida (no puede ser futura)');
     const nota = await NotaFiscal.create({
-        tipo, origen: 'VENTA', numeroDocumento: numero, fecha: hoyCaracas(), ventaId: venta.id, clienteId: venta.clienteId,
+        tipo, origen: 'VENTA', numeroDocumento: numero, numeroControl: String(numeroControl ?? '').trim().slice(0, 30) || null, fecha: fecha || hoyCaracas(), ventaId: venta.id, clienteId: venta.clienteId,
         moneda, tasaCambio: tasa, subtotal: factura.subtotal, baseImponible: factura.baseImponible, montoExento: factura.exento,
         montoIva: factura.montoIva, alicuotaIva: REGLAS.alicuotaGeneral, totalFinal: factura.totalFinal, motivo: motivoTxt,
         devuelveInventario: Boolean(devuelveInventario) && tipo === 'CREDITO', facturasAfectadas, registradoPorId: usuarioId,
