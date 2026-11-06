@@ -161,9 +161,13 @@ export default function CuentasDashboard({ tipo }) {
                                                     <Table.Td>
                                                         <Group gap={4} wrap="nowrap" justify="flex-end">
                                                             {wa && <Tooltip label="Recordar por WhatsApp"><ActionIcon variant="subtle" color="green" component="a" href={wa} target="_blank"><IconBrandWhatsapp size={18} /></ActionIcon></Tooltip>}
-                                                            <Tooltip label={cobrar ? 'Ver documento y registrar abono' : 'Ver compra y registrar pago'}>
-                                                                <ActionIcon variant="light" color="navy.9" aria-label={cobrar ? 'Ver documento' : 'Ver compra'} onClick={() => router.push(cobrar ? `/superuser/ventas/${c.docId}` : `/superuser/compras/${c.docId}`)}><IconArrowRight size={16} /></ActionIcon>
-                                                            </Tooltip>
+                                                            {c.origen === 'manual'
+                                                                ? <Tooltip label="Cuenta manual: se edita en el Libro de cobranza"><Badge size="xs" variant="light" color="grape">Manual</Badge></Tooltip>
+                                                                : (
+                                                                    <Tooltip label={cobrar ? 'Ver documento y registrar abono' : 'Ver compra y registrar pago'}>
+                                                                        <ActionIcon variant="light" color="navy.9" aria-label={cobrar ? 'Ver documento' : 'Ver compra'} onClick={() => router.push(cobrar ? `/superuser/ventas/${c.docId}` : `/superuser/compras/${c.docId}`)}><IconArrowRight size={16} /></ActionIcon>
+                                                                    </Tooltip>
+                                                                )}
                                                         </Group>
                                                     </Table.Td>
                                                 </Table.Tr>

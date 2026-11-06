@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/useAuth';
 import ClienteDrawer from './_components/ClienteDrawer';
 import AccesoModal from './_components/AccesoModal';
 import ClientesGrid from './_components/ClientesGrid';
+import { esSinRif } from '@/app/constants/identificacion';
 import { COLUMNAS, comparar } from './_components/columnasClientes';
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -59,6 +60,7 @@ export default function ClientesDashboard() {
     useEffect(() => { setPagina(1); }, [q, filtro]);
 
     const clientes = data?.clientes || [];
+    const sinRif = useMemo(() => clientes.filter((c) => esSinRif(c.identificacion)), [clientes]); // cargados de las cuentas por cobrar sin RIF
     const kpi = useMemo(() => {
         const mes = new Date(); mes.setDate(1); mes.setHours(0, 0, 0, 0);
         return {
@@ -108,6 +110,20 @@ export default function ClientesDashboard() {
                 </Group>
 
                 {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}
+
+                {sinRif.length > 0 && !esVendedor && (
+                    <Alert color="yellow" variant="light" radius="md" icon={<IconAlertTriangle size={20} />} title={`${sinRif.length} cliente${sinRif.length === 1 ? '' : 's'} sin RIF: hay que conseguirlo`}>
+                        <Text size="sm" mb={6}>
+                            Vienen de las cuentas por cobrar del Excel y quedaron con un RIF provisional (empieza con SIN-RIF). Consigue el RIF o la cédula de cada uno y corrígelo en la columna
+                            «Identificación» (haz clic en la celda y escríbelo). Mientras tanto no se les puede emitir factura con datos fiscales completos.
+                        </Text>
+                        <Group gap="xs">
+                            {sinRif.map((c) => (
+                                <Button key={c.id} size="compact-xs" variant="white" color="yellow.9" onClick={() => setBusqueda(c.nombre || c.identificacion)}>{c.nombre || c.identificacion}</Button>
+                            ))}
+                        </Group>
+                    </Alert>
+                )}
 
                 <SimpleGrid cols={{ base: 1, xs: 2, lg: esVendedor ? 3 : 4 }} spacing="md">
                     <Indicador icono={IconUsers} color="blue" titulo="Clientes" cargando={isLoading} valor={kpi.total} detalle={`${kpi.nuevos} nuevo(s) este mes`} />

@@ -24,7 +24,13 @@ const CONSULTAS = {
                v."moneda"::text, v."tasaCambio"::float, c."id", c."nombre", c."identificacion", c."telefono"
         FROM "Ventas" v JOIN "Clientes" c ON c."id" = v."clienteId"
         WHERE v."statusPago" <> 'Pagado' AND v."statusDespacho" <> 'Cancelado'
-          AND NOT EXISTS (SELECT 1 FROM "CuentasPorCobrar" x WHERE x."ventaId" = v."id")`,
+          AND NOT EXISTS (SELECT 1 FROM "CuentasPorCobrar" x WHERE x."ventaId" = v."id")
+        UNION ALL
+        -- cuentas manuales (deudas, préstamos): el saldo es el monto menos lo abonado (los ajustes, con monto negativo, lo suben)
+        SELECT 'manual', m."id"::text, NULL::text, m."concepto", m."fecha"::timestamp, m."vence"::date, m."montoUsd"::float,
+               (m."montoUsd" - COALESCE((SELECT SUM((a->>'monto')::numeric) FROM jsonb_array_elements(m."abonos") a), 0))::float,
+               'USD', 1::float, COALESCE(c."id", -m."id"), COALESCE(c."nombre", m."clienteTexto"), COALESCE(c."identificacion", ''), c."telefono"
+        FROM "CuentasManuales" m LEFT JOIN "Clientes" c ON c."id" = m."clienteId"`,
     pagar: `
         SELECT 'cuenta' AS origen, cp."id"::text AS id, cp."facturaCompraId"::text AS "docId", f."numeroDocumento" AS documento, f."fechaFactura" AS emision,
                cp."fechaVencimiento" AS vence, cp."montoTotal"::float AS total, cp."saldoPendiente"::float AS saldo, cp."moneda"::text AS moneda, cp."tasaCambio"::float AS tasa,

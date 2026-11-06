@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { ActionIcon, Alert, Badge, Box, Button, Center, Checkbox, Group, Loader, Modal, NumberInput, Paper, ScrollArea, SimpleGrid, Stack, Table, Text, TextInput, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { IconChevronDown, IconChevronRight, IconCoin, IconDownload, IconSearch, IconTrash } from '@tabler/icons-react';
+import { IconChevronDown, IconChevronRight, IconCoin, IconDownload, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
 import CeldaEditable from './CeldaEditable';
 import CambioDeudaModal from './CambioDeudaModal';
 
@@ -39,15 +39,18 @@ export default function LibroCobranza() {
     const [abiertas, setAbiertas] = useState(() => new Set()); // filas con sus abonos desplegados
     const [cambio, setCambio] = useState(null); // { cuenta, nuevoSaldo }
     const [montoModal, setMontoModal] = useState(null); // { cuenta, nuevo, motivo }
+    const [manualModal, setManualModal] = useState(null); // { cliente, concepto, monto, fecha, vence, observacion }
 
     const { data, isLoading, error } = useQuery({ queryKey: ['cxc-libro', pagadas], queryFn: () => pedir(`/api/finanzas/cxc/libro${pagadas ? '?pagadas=1' : ''}`), refetchOnWindowFocus: true });
     const refrescar = () => { queryClient.invalidateQueries({ queryKey: ['cxc-libro'] }); queryClient.invalidateQueries({ queryKey: ['cuentas'] }); };
     const avisar = (e) => { notifications.show({ color: 'red', title: 'No se guardó', message: e.message }); throw e; };
 
-    const editar = (cuenta, campos) => enviar(`/api/finanzas/cxc/${cuenta.id}`, 'PATCH', campos).then(refrescar).catch(avisar);
-    const editarAbono = (abono, campos) => enviar(`/api/finanzas/cxc/abonos/${abono.id}`, 'PUT', campos).then(refrescar).catch(avisar);
+    const urlCuenta = (cuenta) => (cuenta.manual ? `/api/finanzas/cxc/manual/${cuenta.idReal}` : `/api/finanzas/cxc/${cuenta.id}`);
+    const urlAbono = (cuenta, abono) => (cuenta.manual ? `/api/finanzas/cxc/manual/${cuenta.idReal}/abonos/${abono.id}` : `/api/finanzas/cxc/abonos/${abono.id}`);
+    const editar = (cuenta, campos) => enviar(urlCuenta(cuenta), 'PATCH', campos).then(refrescar).catch(avisar);
+    const editarAbono = (cuenta, abono, campos) => enviar(urlAbono(cuenta, abono), 'PUT', campos).then(refrescar).catch(avisar);
     const borrarAbono = useMutation({
-        mutationFn: (abono) => enviar(`/api/finanzas/cxc/abonos/${abono.id}`, 'DELETE'),
+        mutationFn: ({ cuenta, abono }) => enviar(urlAbono(cuenta, abono), 'DELETE'),
         onSuccess: () => { notifications.show({ color: 'teal', message: 'Abono borrado: la deuda se recalculó' }); refrescar(); },
         onError: (e) => notifications.show({ color: 'red', message: e.message }),
     });
@@ -86,6 +89,7 @@ export default function LibroCobranza() {
                     <Checkbox label="Solo vencidas" checked={soloVencidas} onChange={(e) => setSoloVencidas(e.currentTarget.checked)} />
                     <Checkbox label="Incluir pagadas" checked={pagadas} onChange={(e) => setPagadas(e.currentTarget.checked)} />
                     <Button variant="light" size="sm" leftSection={<IconDownload size={16} />} onClick={descargar}>Excel (CSV)</Button>
+                    <Button size="sm" color="grape" leftSection={<IconPlus size={16} />} onClick={() => setManualModal({ cliente: '', concepto: 'DEUDA', monto: '', fecha: new Date().toISOString().slice(0, 10), vence: '', observacion: '' })}>Nueva cuenta manual</Button>
                 </Group>
                 <Text size="xs" c="dimmed" mt={6}>Haz clic en una celda para editarla (Enter guarda, Esc cancela). Cambiar el <b>saldo</b> abre el registro del abono o ajuste que lo explica; el <b>monto</b> del documento se corrige con su motivo. <b>▸</b> muestra los abonos de cada documento.</Text>
             </Paper>
@@ -117,7 +121,7 @@ export default function LibroCobranza() {
                                                 <Table.Td ta="center">
                                                     <ActionIcon variant="subtle" size="sm" color="gray" onClick={() => alternar(f.id)} aria-label="Ver abonos">{abiertas.has(f.id) ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}</ActionIcon>
                                                 </Table.Td>
-                                                <Table.Td><Text size="sm" fw={600} px={6}>{f.documento}{f.vencida && <Badge ml={6} size="xs" color="red" variant="light">Vencida</Badge>}{f.saldo <= 0.005 && <Badge ml={6} size="xs" color="teal" variant="light">Pagada</Badge>}</Text></Table.Td>
+                                                <Table.Td><Text size="sm" fw={600} px={6}>{f.manual && <Badge mr={6} size="xs" color="grape" variant="light">Manual</Badge>}{f.documento}{f.vencida && <Badge ml={6} size="xs" color="red" variant="light">Vencida</Badge>}{f.saldo <= 0.005 && <Badge ml={6} size="xs" color="teal" variant="light">Pagada</Badge>}</Text></Table.Td>
                                                 <Table.Td><Text size="xs" px={6}>{fmtFecha(f.emision)}</Text></Table.Td>
                                                 <Table.Td><CeldaEditable tipo="fecha" valor={f.vence} formato={fmtFecha} onGuardar={(v) => editar(f, { fechaVencimiento: v })} color={f.vencida ? '#c92a2a' : undefined} /></Table.Td>
                                                 <Table.Td><CeldaEditable tipo="numero" valor={f.monto} align="right" formato={usd} onGuardar={(v) => { setMontoModal({ cuenta: f, nuevo: v, motivo: '' }); return Promise.resolve(); }} /></Table.Td>
@@ -139,12 +143,12 @@ export default function LibroCobranza() {
                                                                 <Table.Tbody>
                                                                     {f.abonos.map((a) => (
                                                                         <Table.Tr key={a.id}>
-                                                                            <Table.Td><CeldaEditable tipo="fecha" valor={a.fecha} formato={fmtFecha} onGuardar={(v) => editarAbono(a, { fecha: v })} /></Table.Td>
-                                                                            <Table.Td><CeldaEditable tipo="numero" valor={a.monto} align="right" formato={usd} onGuardar={(v) => editarAbono(a, { monto: v })} color={a.monto < 0 ? '#e8590c' : undefined} /></Table.Td>
-                                                                            <Table.Td><CeldaEditable valor={a.metodo} onGuardar={(v) => editarAbono(a, { metodo: v })} /></Table.Td>
-                                                                            <Table.Td><CeldaEditable valor={a.referencia} placeholder="Referencia" onGuardar={(v) => editarAbono(a, { referencia: v })} /></Table.Td>
-                                                                            <Table.Td><CeldaEditable valor={a.notas} placeholder="Notas" onGuardar={(v) => editarAbono(a, { notas: v })} /></Table.Td>
-                                                                            <Table.Td ta="center"><ActionIcon variant="subtle" color="red" size="sm" onClick={() => { if (window.confirm(`¿Borrar el abono de $${usd(a.monto)}? La deuda vuelve a subir.`)) borrarAbono.mutate(a); }} aria-label="Borrar abono"><IconTrash size={14} /></ActionIcon></Table.Td>
+                                                                            <Table.Td><CeldaEditable tipo="fecha" valor={a.fecha} formato={fmtFecha} onGuardar={(v) => editarAbono(f, a, { fecha: v })} /></Table.Td>
+                                                                            <Table.Td><CeldaEditable tipo="numero" valor={a.monto} align="right" formato={usd} onGuardar={(v) => editarAbono(f, a, { monto: v })} color={a.monto < 0 ? '#e8590c' : undefined} /></Table.Td>
+                                                                            <Table.Td><CeldaEditable valor={a.metodo} onGuardar={(v) => editarAbono(f, a, { metodo: v })} /></Table.Td>
+                                                                            <Table.Td><CeldaEditable valor={a.referencia} placeholder="Referencia" onGuardar={(v) => editarAbono(f, a, { referencia: v })} /></Table.Td>
+                                                                            <Table.Td><CeldaEditable valor={a.notas} placeholder="Notas" onGuardar={(v) => editarAbono(f, a, { notas: v })} /></Table.Td>
+                                                                            <Table.Td ta="center"><ActionIcon variant="subtle" color="red" size="sm" onClick={() => { if (window.confirm(`¿Borrar el abono de $${usd(a.monto)}? La deuda vuelve a subir.`)) borrarAbono.mutate({ cuenta: f, abono: a }); }} aria-label="Borrar abono"><IconTrash size={14} /></ActionIcon></Table.Td>
                                                                         </Table.Tr>
                                                                     ))}
                                                                 </Table.Tbody>
@@ -162,6 +166,27 @@ export default function LibroCobranza() {
                 </Table>
             </ScrollArea>
 
+            {manualModal && (
+                <Modal opened onClose={() => setManualModal(null)} centered title={<Text fw={800}>Nueva cuenta por cobrar manual</Text>}>
+                    <Stack gap="sm">
+                        <Text size="xs" c="dimmed">Para deudas y préstamos que no vienen de una venta. No afecta los libros ni las ventas; se cobra con abonos como cualquier cuenta.</Text>
+                        <TextInput label="A quién se le cobra" placeholder="Nombre del cliente o persona" value={manualModal.cliente} onChange={(e) => setManualModal({ ...manualModal, cliente: e.currentTarget.value })} data-autofocus />
+                        <Group grow align="flex-start">
+                            <TextInput label="Concepto" placeholder="DEUDA, PRÉSTAMO…" value={manualModal.concepto} onChange={(e) => setManualModal({ ...manualModal, concepto: e.currentTarget.value })} />
+                            <NumberInput label="Monto USD" min={0} decimalScale={2} value={manualModal.monto} onChange={(v) => setManualModal({ ...manualModal, monto: v })} />
+                        </Group>
+                        <Group grow align="flex-start">
+                            <TextInput type="date" label="Fecha" max={new Date().toISOString().slice(0, 10)} value={manualModal.fecha} onChange={(e) => setManualModal({ ...manualModal, fecha: e.currentTarget.value })} />
+                            <TextInput type="date" label="Vence (opcional)" value={manualModal.vence} onChange={(e) => setManualModal({ ...manualModal, vence: e.currentTarget.value })} />
+                        </Group>
+                        <TextInput label="Observación (opcional)" value={manualModal.observacion} onChange={(e) => setManualModal({ ...manualModal, observacion: e.currentTarget.value })} />
+                        <Group justify="flex-end">
+                            <Button variant="default" onClick={() => setManualModal(null)}>Cancelar</Button>
+                            <Button color="grape" disabled={manualModal.cliente.trim().length < 2 || !(Number(manualModal.monto) > 0)} onClick={() => enviar('/api/finanzas/cxc/manual', 'POST', { ...manualModal, vence: manualModal.vence || undefined }).then((r) => { notifications.show({ color: 'teal', message: r.relacionada ? 'Cuenta creada y relacionada con el cliente' : 'Cuenta creada' }); setManualModal(null); refrescar(); }).catch((e) => notifications.show({ color: 'red', message: e.message }))}>Crear cuenta</Button>
+                        </Group>
+                    </Stack>
+                </Modal>
+            )}
             {cambio && <CambioDeudaModal cuenta={cambio.cuenta} nuevoSaldo={cambio.nuevoSaldo} onCerrar={() => setCambio(null)} />}
             {montoModal && (
                 <Modal opened onClose={() => setMontoModal(null)} centered title={<Text fw={800}>Corregir el monto de {montoModal.cuenta.documento}</Text>}>

@@ -33,7 +33,7 @@ export default function CambioDeudaModal({ cuenta, nuevoSaldo = null, onCerrar }
         mutationFn: async () => {
             const importe = Number(monto);
             if (!(importe > 0)) throw new Error('Escribe el monto');
-            const res = await fetch(`/api/finanzas/cxc/${cuenta.id}/abonos`, {
+            const res = await fetch(cuenta.manual ? `/api/finanzas/cxc/manual/${cuenta.idReal}/abonos` : `/api/finanzas/cxc/${cuenta.id}/abonos`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tipo, monto: tipo === 'AJUSTE' ? -importe : importe, fecha, metodo, referencia, notas }),
             });
