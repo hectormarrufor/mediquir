@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/models';
 import { requerirNoVendedor } from '../../_lib/acceso';
-import { numeroDeDocumento } from '../route';
+import { numeroDeDocumento, porcentajeValido, PCT_MIN, PCT_MAX } from '../route';
 import { fechaCaracas } from '@/app/constants/hora';
 
 export const dynamic = 'force-dynamic';
@@ -27,6 +27,7 @@ export async function PATCH(request, { params }) {
             c[k] = b[k] || null;
         }
         for (const k of ['montoUsd', 'baseUsd', 'porcentaje', 'comisionUsd']) if (tiene(k)) c[k] = numOpt(b[k]);
+        if (tiene('porcentaje') && !porcentajeValido(c.porcentaje)) return NextResponse.json({ error: `El porcentaje de comisión debe estar entre ${PCT_MIN}% y ${PCT_MAX}%` }, { status: 400 });
         if (tiene('estatusCliente')) c.estatusCliente = String(b.estatusCliente || '').trim().slice(0, 120) || null;
         if (tiene('observacion')) c.observacion = String(b.observacion || '').trim() || null;
         if (tiene('clienteTexto')) c.clienteTexto = String(b.clienteTexto || '').trim().slice(0, 200) || null;

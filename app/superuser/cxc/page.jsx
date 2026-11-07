@@ -14,7 +14,7 @@ export default function CuentasPorCobrarPage() {
             <Title order={2} c="white">Cuentas por cobrar</Title>
             <Text size="sm" c="gray.4" mb="md">Como las lleva la administradora en Excel: cada celda se edita ahí mismo, y todo cambio de la deuda queda registrado como un abono o un ajuste.</Text>
             <Tabs defaultValue="libro" keepMounted={false} variant="pills" color="navy.9">
-                <Tabs.List mb="md">
+                <Tabs.List mb="md" p={6} style={{ background: '#fff', borderRadius: 14, border: '1px solid #ced4da', width: 'fit-content', maxWidth: '100%' }}>
                     <Tabs.Tab value="libro" leftSection={<IconTable size={16} />}>Libro de cobranza</Tabs.Tab>
                     <Tabs.Tab value="vendedores" leftSection={<IconUsers size={16} />}>Vendedores a comisión</Tabs.Tab>
                     <Tabs.Tab value="resumen" leftSection={<IconChartBar size={16} />}>Resumen y antigüedad</Tabs.Tab>

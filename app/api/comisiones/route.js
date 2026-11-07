@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import sequelize from '@/sequelize';
 import db from '@/models';
 import { requerirNoVendedor } from '../_lib/acceso';
+import { tasaVigente } from '../_lib/tasaBcv';
 
 export const dynamic = 'force-dynamic';
 const { ComisionVenta, VendedorComision, Venta } = db;
@@ -9,6 +10,10 @@ const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const numOpt = (v) => (v === '' || v === null || v === undefined || !Number.isFinite(Number(v)) ? null : r2(v));
 const fechaOpt = (v) => (FECHA.test(String(v || '')) ? v : null);
+// La comisión por venta va del 2 % al 10 %
+export const PCT_MIN = 2;
+export const PCT_MAX = 10;
+export const porcentajeValido = (v) => Number.isFinite(Number(v)) && Number(v) >= PCT_MIN && Number(v) <= PCT_MAX;
 
 // Número de documento escrito por la persona ("146288", "F-146288", "0000-5666", "NE-05666") -> el número con el que está guardado en Ventas
 export function numeroDeDocumento(texto) {
@@ -46,7 +51,9 @@ export async function GET() {
                 resumen: { lineas: ls.length, comisionPendiente: suma(ls.filter((l) => l.estatusComision !== 'PAGADA')), comisionPagada: suma(ls.filter((l) => l.estatusComision === 'PAGADA')) },
             };
         });
-        return NextResponse.json({ vendedores: salida });
+        // La comisión se paga en bolívares: la pantalla la convierte con la tasa BCV del día (null si no hay ninguna registrada)
+        const tasaBcv = await tasaVigente().catch(() => null);
+        return NextResponse.json({ vendedores: salida, tasaBcv });
     } catch (error) {
         console.error('Comisiones:', error);
         return NextResponse.json({ error: 'No se pudieron cargar las comisiones' }, { status: 500 });
@@ -65,6 +72,7 @@ export async function POST(request) {
         const venta = numero ? await Venta.findOne({ where: { numeroDocumento: numero }, attributes: ['id'] }) : null;
         const base = numOpt(b.baseUsd);
         const pct = numOpt(b.porcentaje) ?? Number(vendedor.porcentaje);
+        if (!porcentajeValido(pct)) return NextResponse.json({ error: `El porcentaje de comisión debe estar entre ${PCT_MIN}% y ${PCT_MAX}%` }, { status: 400 });
         const concepto = ['FACTURA', 'ABONO', 'NOTA'].includes(b.concepto) ? b.concepto : 'FACTURA';
         const linea = await ComisionVenta.create({
             vendedorId: vendedor.id, ventaId: venta?.id || null, concepto, fecha: fechaOpt(b.fecha), vencimiento: fechaOpt(b.vencimiento),
