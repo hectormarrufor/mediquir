@@ -26,15 +26,22 @@ export function numeroDeDocumento(texto) {
     return null;
 }
 
+// La factura (o nota de entrega) a la que pertenece un abono: su monto, su base sin IVA y su porcentaje
+export async function padreDe(vendedorId, documento) {
+    if (!documento) return null;
+    const [padre] = await sequelize.query(
+        `SELECT "montoUsd"::float AS monto, "baseUsd"::float AS base, porcentaje::float AS pct FROM "ComisionesVenta"
+          WHERE "vendedorId" = :v AND "documentoTexto" = :d AND concepto = 'FACTURA' AND "montoUsd" > 0 ORDER BY id LIMIT 1`,
+        { replacements: { v: vendedorId, d: documento }, type: sequelize.QueryTypes.SELECT },
+    );
+    return padre || null;
+}
 // Un abono genera su comisión sobre la parte SIN IVA de lo abonado: se toma la proporción sin IVA de su factura (a comisionar / monto de la factura)
 export async function baseDePago(vendedorId, documento, montoPago) {
     const importe = Math.abs(Number(montoPago));
     if (!Number.isFinite(importe)) return null;
-    const [padre] = documento ? await sequelize.query(
-        `SELECT "montoUsd"::float AS monto, "baseUsd"::float AS base FROM "ComisionesVenta" WHERE "vendedorId" = :v AND "documentoTexto" = :d AND concepto = 'FACTURA' AND "montoUsd" > 0 AND "baseUsd" IS NOT NULL ORDER BY id LIMIT 1`,
-        { replacements: { v: vendedorId, d: documento }, type: sequelize.QueryTypes.SELECT },
-    ) : [];
-    const razon = padre && padre.monto > 0 ? Math.min(1, padre.base / padre.monto) : 1;
+    const padre = await padreDe(vendedorId, documento);
+    const razon = padre && padre.monto > 0 && padre.base !== null ? Math.min(1, padre.base / padre.monto) : 1;
     return r2(importe * razon);
 }
 
@@ -82,10 +89,12 @@ export async function POST(request) {
         if (!vendedor) return NextResponse.json({ error: 'Elige un vendedor' }, { status: 400 });
         const numero = numeroDeDocumento(b.documento);
         const venta = numero ? await Venta.findOne({ where: { numeroDocumento: numero }, attributes: ['id'] }) : null;
-        const pct = numOpt(b.porcentaje) ?? Number(vendedor.porcentaje);
-        if (!porcentajeValido(pct)) return NextResponse.json({ error: `El porcentaje de comisión debe estar entre ${PCT_MIN}% y ${PCT_MAX}%` }, { status: 400 });
         const concepto = ['FACTURA', 'ABONO', 'NOTA'].includes(b.concepto) ? b.concepto : 'FACTURA';
         const documentoTexto = String(b.documento || '').trim().slice(0, 60) || null;
+        // el porcentaje se fija en la factura: un abono toma el de su factura
+        const padre = concepto === 'ABONO' ? await padreDe(vendedor.id, documentoTexto) : null;
+        const pct = padre && padre.pct !== null ? padre.pct : (numOpt(b.porcentaje) ?? Number(vendedor.porcentaje));
+        if (!porcentajeValido(pct)) return NextResponse.json({ error: `El porcentaje de comisión debe estar entre ${PCT_MIN}% y ${PCT_MAX}%` }, { status: 400 });
         let monto = numOpt(b.montoUsd);
         if (concepto === 'ABONO' && monto !== null) monto = -Math.abs(monto); // un abono baja lo que debe el cliente: se guarda restando
         let base = numOpt(b.baseUsd);

@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { Accordion, ActionIcon, Alert, Badge, Box, Button, Center, Checkbox, Group, Loader, Modal, NumberInput, Paper, ScrollArea, SegmentedControl, Select, SimpleGrid, Stack, Table, Text, TextInput, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { IconPlus, IconTrash, IconUserPlus } from '@tabler/icons-react';
+import { IconChevronDown, IconChevronRight, IconPlus, IconTrash, IconUserPlus } from '@tabler/icons-react';
 import CeldaEditable from './CeldaEditable';
 
 const nf = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -101,6 +101,7 @@ export default function HojasVendedores() {
     const [filtro, setFiltro] = useState('porpagar');
     const [sel, setSel] = useState(() => new Set());
     const [abiertos, setAbiertos] = useState([]); // clientes desplegados
+    const [plegadas, setPlegadas] = useState(() => new Set()); // facturas con sus abonos escondidos
     const [modalVendedor, setModalVendedor] = useState(false);
     const [nuevo, setNuevo] = useState({ nombre: '', porcentaje: 5 });
     const [linea, setLinea] = useState({ documento: '', cliente: '', montoUsd: '', baseUsd: '', concepto: 'FACTURA', porcentaje: '' });
@@ -123,7 +124,7 @@ export default function HojasVendedores() {
             for (const x of d.pagos) {
                 if (x.concepto !== 'ABONO' || x.comisionUsd !== null) continue;
                 const base = x.baseUsd !== null ? Number(x.baseUsd) : r2(Math.abs(Number(x.montoUsd) || 0) * razon);
-                const pct = x.porcentaje !== null && x.porcentaje !== undefined ? Number(x.porcentaje) : Number(actual?.porcentaje) || 0;
+                const pct = pa && pa.porcentaje !== null && pa.porcentaje !== undefined ? Number(pa.porcentaje) : Number(actual?.porcentaje) || 0; // el % es el de la factura
                 calculada.set(x.id, { baseUsd: base, comisionUsd: r2((base * pct) / 100), calculada: true });
             }
         }
@@ -151,7 +152,8 @@ export default function HojasVendedores() {
     const totalVendedor = useMemo(() => totales(lineasActual), [lineasActual]);
     const totalVisible = useMemo(() => totales(lineas), [lineas]);
     const deudaTotal = useMemo(() => Math.round([...todasPorCliente.values()].reduce((t, ls) => t + deudaDe(ls), 0) * 100) / 100, [todasPorCliente]);
-    const editar = (l, campos) => enviar(`/api/comisiones/${l.id}`, 'PATCH', campos).then(refrescar).catch(avisar);
+    const editar = (l, campos) => enviar(`/api/comisiones/${l.id}`, 'PATCH', campos).then((r) => { if (r?.hijosActualizados) notifications.show({ color: 'teal', message: `Porcentaje cambiado: se recalculó la comisión de ${r.hijosActualizados} abono(s) por pagar` }); refrescar(); }).catch(avisar);
+    const alternarPlegada = (k) => setPlegadas((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
 
     const marcar = async (estatus) => {
         try { await Promise.all([...sel].map((id) => enviar(`/api/comisiones/${id}`, 'PATCH', { estatusComision: estatus }))); setSel(new Set()); refrescar(); notifications.show({ color: 'teal', message: `${sel.size} comisión(es) marcadas ${estatus === 'PAGADA' ? 'pagadas' : 'pendientes'}` }); }
@@ -170,35 +172,46 @@ export default function HojasVendedores() {
     };
 
     // Una fila de la hoja: la factura (d.padre) o uno de sus pagos (hijo), con el color de su comisión: amarillo por pagar, gris pagada, blanco aún sin cobrar
-    const fila = (l, hijo, d) => (
-        <Table.Tr key={l.id} style={{ background: porPagar(l) ? COLOR_POR_PAGAR : l.estatusComision === 'PAGADA' ? '#e9ecef' : '#fff', borderLeft: hijo ? '5px solid #868e96' : undefined }}>
-            <Table.Td ta="center"><Checkbox size="xs" checked={sel.has(l.id)} onChange={(e) => setSel((st) => { const n = new Set(st); if (e.currentTarget.checked) n.add(l.id); else n.delete(l.id); return n; })} aria-label="Seleccionar" /></Table.Td>
-            <Table.Td><CeldaEditable tipo="opciones" opciones={CONCEPTOS} valor={l.concepto} formato={(v) => (v === 'NOTA' ? 'N/C' : v)} onGuardar={(v) => editar(l, { concepto: v })} /></Table.Td>
-            <Table.Td><CeldaEditable tipo="fecha" valor={l.fecha} formato={fmtFecha} onGuardar={(v) => editar(l, { fecha: v })} /></Table.Td>
-            <Table.Td><CeldaEditable tipo="fecha" valor={l.vencimiento} formato={fmtFecha} onGuardar={(v) => editar(l, { vencimiento: v })} /></Table.Td>
-            <Table.Td>
-                <CeldaEditable valor={l.documentoTexto} onGuardar={(v) => editar(l, { documentoTexto: v })} formato={(v) => (
-                    <>
-                        {hijo && <Text span c="dimmed" mr={4}>↳</Text>}{v}
-                        {!l.ventaId && <Tooltip label="No está enlazada con una factura del sistema"><Badge ml={4} size="xs" color="yellow" variant="light">sin enlazar</Badge></Tooltip>}
-                        {!hijo && d.pagos.length > 0 && <Badge ml={4} size="xs" color="gray" variant="light">{d.pagos.length} pago(s)</Badge>}
-                        {!hijo && l.ventaId && l.saldoCxc !== null && l.saldoCxc !== undefined && (Number(l.saldoCxc) > 0.005 ? <Badge ml={4} size="xs" color="red" variant="light">Debe ${usd(l.saldoCxc)}</Badge> : <Badge ml={4} size="xs" color="teal" variant="light">Pagada</Badge>)}
-                    </>
-                )} />
-            </Table.Td>
-            <Table.Td>{!esPago(l) && <CeldaEditable tipo="numero" valor={l.montoUsd} align="right" formato={usd} onGuardar={(v) => editar(l, { montoUsd: v })} />}</Table.Td>
-            <Table.Td>{esPago(l) && <CeldaEditable tipo="numero" valor={l.montoUsd === null ? null : Math.abs(Number(l.montoUsd))} align="right" formato={(v) => usd(v)} negrita color={l.concepto === 'NOTA' ? '#e8590c' : '#1971c2'} onGuardar={(v) => editar(l, { montoUsd: v === null ? null : -Math.abs(v) })} />}</Table.Td>
-            <Table.Td><CeldaEditable tipo="numero" valor={l.baseUsd} align="right" formato={usd} onGuardar={(v) => editar(l, { baseUsd: v })} /></Table.Td>
-            <Table.Td><CeldaEditable tipo="opciones" opciones={opcionesPct(l.porcentaje)} valor={l.porcentaje === null || l.porcentaje === undefined ? '' : String(Number(l.porcentaje))} align="right" formato={(v) => (v === null || v === undefined || v === '' ? '' : `${Number(v)}%`)} onGuardar={(v) => editar(l, { porcentaje: Number(v) })} /></Table.Td>
-            <Table.Td><CeldaEditable tipo="numero" valor={l.comisionUsd} align="right" formato={usd} negrita onGuardar={(v) => editar(l, { comisionUsd: v })} /></Table.Td>
-            <Table.Td><Text size="sm" ta="right" px={6} c={l.estatusComision === 'PAGADA' ? 'dimmed' : '#1a1b1e'}>{tasa > 0 && l.comisionUsd !== null && l.comisionUsd !== undefined ? usd(Number(l.comisionUsd) * tasa) : ''}</Text></Table.Td>
-            <Table.Td><CeldaEditable valor={l.estatusCliente} placeholder="Estatus del cliente" onGuardar={(v) => editar(l, { estatusCliente: v })} /></Table.Td>
-            <Table.Td><CeldaEditable tipo="opciones" opciones={ESTATUS} valor={l.estatusComision} negrita color={l.estatusComision === 'PAGADA' ? '#2b8a3e' : '#e8590c'} onGuardar={(v) => editar(l, { estatusComision: v })} /></Table.Td>
-            <Table.Td><CeldaEditable tipo="fecha" valor={l.fechaPagoComision} formato={fmtFecha} onGuardar={(v) => editar(l, { fechaPagoComision: v })} /></Table.Td>
-            <Table.Td><CeldaEditable valor={l.observacion} placeholder="Observación" onGuardar={(v) => editar(l, { observacion: v })} /></Table.Td>
-            <Table.Td ta="center"><ActionIcon variant="subtle" color="red" size="sm" aria-label="Borrar línea" onClick={() => { if (window.confirm('¿Borrar esta línea de la hoja del vendedor?')) enviar(`/api/comisiones/${l.id}`, 'DELETE').then(refrescar).catch((e) => notifications.show({ color: 'red', message: e.message })); }}><IconTrash size={14} /></ActionIcon></Table.Td>
-        </Table.Tr>
-    );
+    const fila = (l, hijo, d) => {
+        const color = porPagar(l) ? COLOR_POR_PAGAR : l.estatusComision === 'PAGADA' ? '#e9ecef' : '#fff';
+        const tamano = hijo ? 'xs' : 'sm';
+        const etiquetaPago = l.concepto === 'NOTA' ? 'N/C' : 'Abono';
+        return (
+            <Table.Tr key={l.id} style={{ background: hijo ? `color-mix(in srgb, ${color} 55%, #fff)` : color, borderLeft: hijo ? `5px solid ${porPagar(l) ? '#e0b400' : '#adb5bd'}` : '5px solid #364fc7', borderTop: !hijo ? '2px solid #ced4da' : undefined }}>
+                <Table.Td ta="center" p={0}>
+                    {!hijo && d.pagos.length > 0 && <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => alternarPlegada(d.k)} aria-label={plegadas.has(d.k) ? 'Mostrar abonos' : 'Esconder abonos'}>{plegadas.has(d.k) ? <IconChevronRight size={14} /> : <IconChevronDown size={14} />}</ActionIcon>}
+                    {hijo && <Text span c="dimmed" fz={14}>└</Text>}
+                </Table.Td>
+                <Table.Td ta="center"><Checkbox size="xs" checked={sel.has(l.id)} onChange={(e) => setSel((st) => { const n = new Set(st); if (e.currentTarget.checked) n.add(l.id); else n.delete(l.id); return n; })} aria-label="Seleccionar" /></Table.Td>
+                <Table.Td>{hijo ? <Badge size="xs" variant="light" color={l.concepto === 'NOTA' ? 'orange' : 'blue'}>{etiquetaPago}</Badge> : <CeldaEditable tipo="opciones" opciones={CONCEPTOS} valor={l.concepto} formato={(v) => (v === 'NOTA' ? 'N/C' : v)} onGuardar={(v) => editar(l, { concepto: v })} />}</Table.Td>
+                <Table.Td><CeldaEditable tipo="fecha" valor={l.fecha} formato={fmtFecha} onGuardar={(v) => editar(l, { fecha: v })} /></Table.Td>
+                <Table.Td>{!hijo && <CeldaEditable tipo="fecha" valor={l.vencimiento} formato={fmtFecha} onGuardar={(v) => editar(l, { vencimiento: v })} />}</Table.Td>
+                <Table.Td>
+                    {hijo ? <Text size="xs" c="dimmed" pl={14}>pago de la {l.documentoTexto}</Text> : (
+                        <CeldaEditable valor={l.documentoTexto} onGuardar={(v) => editar(l, { documentoTexto: v })} formato={(v) => (
+                            <>
+                                <Text span fw={800}>{v}</Text>
+                                {!l.ventaId && <Tooltip label="No está enlazada con una factura del sistema"><Badge ml={4} size="xs" color="yellow" variant="light">sin enlazar</Badge></Tooltip>}
+                                {d.pagos.length > 0 && <Badge ml={4} size="xs" color="gray" variant="light">{d.pagos.length} abono(s)</Badge>}
+                                {l.ventaId && l.saldoCxc !== null && l.saldoCxc !== undefined && (Number(l.saldoCxc) > 0.005 ? <Badge ml={4} size="xs" color="red" variant="light">Debe ${usd(l.saldoCxc)}</Badge> : <Badge ml={4} size="xs" color="teal" variant="light">Pagada</Badge>)}
+                            </>
+                        )} />
+                    )}
+                </Table.Td>
+                <Table.Td>{!esPago(l) && <CeldaEditable tipo="numero" valor={l.montoUsd} align="right" formato={usd} negrita onGuardar={(v) => editar(l, { montoUsd: v })} />}</Table.Td>
+                <Table.Td>{esPago(l) && <CeldaEditable tipo="numero" valor={l.montoUsd === null ? null : Math.abs(Number(l.montoUsd))} align="right" formato={(v) => usd(v)} negrita color={l.concepto === 'NOTA' ? '#e8590c' : '#1971c2'} onGuardar={(v) => editar(l, { montoUsd: v === null ? null : -Math.abs(v) })} />}</Table.Td>
+                <Table.Td><CeldaEditable tipo="numero" valor={l.baseUsd} align="right" formato={usd} onGuardar={(v) => editar(l, { baseUsd: v })} /></Table.Td>
+                <Table.Td>{!hijo && <CeldaEditable tipo="opciones" opciones={opcionesPct(l.porcentaje)} valor={l.porcentaje === null || l.porcentaje === undefined ? '' : String(Number(l.porcentaje))} align="right" negrita formato={(v) => (v === null || v === undefined || v === '' ? '' : `${Number(v)}%`)} onGuardar={(v) => editar(l, { porcentaje: Number(v) })} />}</Table.Td>
+                <Table.Td><CeldaEditable tipo="numero" valor={l.comisionUsd} align="right" formato={usd} negrita={!hijo} onGuardar={(v) => editar(l, { comisionUsd: v })} /></Table.Td>
+                <Table.Td><Text size={tamano} ta="right" px={6} c={l.estatusComision === 'PAGADA' ? 'dimmed' : '#1a1b1e'}>{tasa > 0 && l.comisionUsd !== null && l.comisionUsd !== undefined ? usd(Number(l.comisionUsd) * tasa) : ''}</Text></Table.Td>
+                <Table.Td>{!hijo && <CeldaEditable valor={l.estatusCliente} placeholder="Estatus del cliente" onGuardar={(v) => editar(l, { estatusCliente: v })} />}</Table.Td>
+                <Table.Td><CeldaEditable tipo="opciones" opciones={ESTATUS} valor={l.estatusComision} negrita color={l.estatusComision === 'PAGADA' ? '#2b8a3e' : '#e8590c'} onGuardar={(v) => editar(l, { estatusComision: v })} /></Table.Td>
+                <Table.Td><CeldaEditable tipo="fecha" valor={l.fechaPagoComision} formato={fmtFecha} onGuardar={(v) => editar(l, { fechaPagoComision: v })} /></Table.Td>
+                <Table.Td><CeldaEditable valor={l.observacion} placeholder={hijo ? '' : 'Observación'} onGuardar={(v) => editar(l, { observacion: v })} /></Table.Td>
+                <Table.Td ta="center"><ActionIcon variant="subtle" color="red" size="sm" aria-label="Borrar línea" onClick={() => { if (window.confirm('¿Borrar esta línea de la hoja del vendedor?')) enviar(`/api/comisiones/${l.id}`, 'DELETE').then(refrescar).catch((e) => notifications.show({ color: 'red', message: e.message })); }}><IconTrash size={14} /></ActionIcon></Table.Td>
+            </Table.Tr>
+        );
+    };
 
     if (isLoading) return <Center py={60}><Loader /></Center>;
     if (error) return <Alert color="red">{error.message}</Alert>;
@@ -226,7 +239,7 @@ export default function HojasVendedores() {
                         <Group gap={6} wrap="nowrap"><Box w={16} h={16} style={{ background: COLOR_POR_PAGAR, border: '1px solid #c9b900', borderRadius: 3 }} /><Text size="xs" c="gray.2">Amarillo: el cliente ya pagó y la comisión está <b>por pagar</b></Text></Group>
                         <Group gap={6} wrap="nowrap"><Box w={16} h={16} style={{ background: '#e9ecef', border: '1px solid #adb5bd', borderRadius: 3 }} /><Text size="xs" c="gray.2">Gris: comisión ya <b>pagada</b></Text></Group>
                         <Group gap={6} wrap="nowrap"><Box w={16} h={16} style={{ background: '#fff', border: '1px solid #adb5bd', borderRadius: 3 }} /><Text size="xs" c="gray.2">Sin color: factura aún sin cobrar (se debe la factura y la comisión)</Text></Group>
-                        <Text size="xs" c="gray.4">Los pagos parciales (↳) van debajo de su factura: cada abono genera su comisión.</Text>
+                        <Text size="xs" c="gray.4">Los abonos van dentro de su factura (└): cada abono genera su comisión. El porcentaje se cambia solo en la factura y se aplica a sus abonos por pagar.</Text>
                     </Group>
 
                     <Group gap="sm" wrap="wrap" justify="space-between">
@@ -266,10 +279,10 @@ export default function HojasVendedores() {
                                     </Accordion.Control>
                                     <Accordion.Panel>
                                         <ScrollArea type="auto" offsetScrollbars>
-                                            <Table withColumnBorders withTableBorder verticalSpacing={0} horizontalSpacing={4} fz="sm" miw={1260} style={{ background: '#fff', color: '#1a1b1e' }}>
+                                            <Table withColumnBorders withTableBorder verticalSpacing={0} horizontalSpacing={4} fz="sm" miw={1340} style={{ background: '#fff', color: '#1a1b1e' }}>
                                                 <Table.Thead style={{ background: '#e9ecef' }}>
                                                     <Table.Tr>
-                                                        <Table.Th w={30} /><Table.Th w={70}>Concepto</Table.Th><Table.Th w={100}>Fecha</Table.Th><Table.Th w={100}>Vence</Table.Th><Table.Th w={120}>Factura</Table.Th>
+                                                        <Table.Th w={26} /><Table.Th w={30} /><Table.Th w={70}>Concepto</Table.Th><Table.Th w={100}>Fecha</Table.Th><Table.Th w={100}>Vence</Table.Th><Table.Th w={120}>Factura</Table.Th>
                                                         <Table.Th ta="right" w={110}>Factura USD (con IVA)</Table.Th><Table.Th ta="right" w={110}>Abono / pago USD</Table.Th><Table.Th ta="right" w={105}>A comisionar sin IVA</Table.Th><Table.Th ta="right" w={70}>%</Table.Th><Table.Th ta="right" w={90}>Comisión</Table.Th><Table.Th ta="right" w={115}>Comisión Bs</Table.Th>
                                                         <Table.Th w={150}>Estatus cliente</Table.Th><Table.Th w={110}>Comisión</Table.Th><Table.Th w={100}>Pagada el</Table.Th><Table.Th>Observación</Table.Th><Table.Th w={34} />
                                                     </Table.Tr>
@@ -278,13 +291,13 @@ export default function HojasVendedores() {
                                                     {g.items.map((d) => (
                                                         <React.Fragment key={d.k}>
                                                             {d.padre && fila(d.padre, false, d)}
-                                                            {d.pagos.map((pg) => fila(pg, true, d))}
+                                                            {(!d.padre || !plegadas.has(d.k)) && d.pagos.map((pg) => fila(pg, !!d.padre, d))}
                                                         </React.Fragment>
                                                     ))}
                                                 </Table.Tbody>
                                                 <Table.Tfoot style={{ background: '#e9ecef' }}>
                                                     <Table.Tr>
-                                                        <Table.Td colSpan={5}><Text fw={800} size="sm" pl={6} c="#1a1b1e">Total de {g.nombre}</Text></Table.Td>
+                                                        <Table.Td colSpan={6}><Text fw={800} size="sm" pl={6} c="#1a1b1e">Total de {g.nombre}</Text></Table.Td>
                                                         <Table.Td ta="right"><Text fw={800} size="sm" pr={6} c="#1a1b1e">{usd(g.t.facturas)}</Text></Table.Td>
                                                         <Table.Td ta="right"><Text fw={800} size="sm" pr={6} c="#1971c2">{usd(g.t.abonos)}</Text></Table.Td>
                                                         <Table.Td ta="right"><Text fw={800} size="sm" pr={6} c="#1a1b1e">{usd(g.t.base)}</Text></Table.Td>

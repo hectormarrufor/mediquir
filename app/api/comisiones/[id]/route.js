@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/models';
+import sequelize from '@/sequelize';
 import { requerirNoVendedor } from '../../_lib/acceso';
 import { numeroDeDocumento, porcentajeValido, baseDePago, PCT_MIN, PCT_MAX } from '../route';
 import { fechaCaracas } from '@/app/constants/hora';
@@ -57,7 +58,18 @@ export async function PATCH(request, { params }) {
             if (c.baseUsd !== null && pct !== null) c.comisionUsd = r2((c.baseUsd * pct) / 100);
         }
         await linea.update(c);
-        return NextResponse.json({ ok: true, linea });
+        // el porcentaje se fija en la FACTURA: al cambiarlo, los abonos que aún no se han pagado (los amarillos) toman el nuevo y recalculan su comisión
+        // (los ya pagados no se tocan)
+        let hijosActualizados = 0;
+        if (tiene('porcentaje') && c.porcentaje !== null && c.porcentaje !== undefined && linea.concepto === 'FACTURA' && Number(linea.montoUsd) > 0 && linea.documentoTexto) {
+            const [, meta] = await sequelize.query(
+                `UPDATE "ComisionesVenta" SET porcentaje = :p, "comisionUsd" = CASE WHEN "baseUsd" IS NOT NULL THEN round("baseUsd" * :p / 100, 2) ELSE "comisionUsd" END, "updatedAt" = now()
+                  WHERE "vendedorId" = :v AND "documentoTexto" = :d AND id <> :id AND "estatusComision" <> 'PAGADA' AND (concepto = 'ABONO' OR ("montoUsd" < 0 AND concepto <> 'NOTA'))`,
+                { replacements: { p: c.porcentaje, v: linea.vendedorId, d: linea.documentoTexto, id: linea.id } },
+            );
+            hijosActualizados = meta?.rowCount ?? 0;
+        }
+        return NextResponse.json({ ok: true, linea, hijosActualizados });
     } catch (error) {
         console.error('Editar comisión:', error);
         return NextResponse.json({ error: 'No se pudo guardar el cambio' }, { status: 500 });
