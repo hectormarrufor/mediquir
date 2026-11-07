@@ -1,208 +1,143 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { ActionIcon, Alert, Badge, Box, Button, Center, Checkbox, Group, Loader, Modal, NumberInput, Paper, ScrollArea, SimpleGrid, Stack, Table, Text, TextInput, Tooltip } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { IconChevronDown, IconChevronRight, IconCoin, IconDownload, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
-import CeldaEditable from './CeldaEditable';
+// Las cuentas por cobrar como las lleva la administradora en Excel: una fila por documento, agrupadas por cliente.
+// El saldo no se sobrescribe: al cambiarlo se registra el abono o el ajuste que lo explica; el monto del documento se corrige con su motivo.
+// En la computadora es una tabla editable (LibroTabla); en el teléfono, tarjetas (LibroTarjetas). Los datos y las acciones son los mismos (useLibroCobranza).
+import React, { useState } from 'react';
+import { ActionIcon, Alert, Box, Button, CloseButton, Group, Menu, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
+import { IconAlertTriangle, IconArrowsSort, IconCash, IconClockExclamation, IconDotsVertical, IconDownload, IconFileInvoice, IconInbox, IconPlus, IconSearch, IconUsers } from '@tabler/icons-react';
 import CambioDeudaModal from './CambioDeudaModal';
+import LibroTabla from './LibroTabla';
+import LibroTarjetas from './LibroTarjetas';
+import { DialogoCorregirMonto, DialogoCuentaManual, DialogoEditarAbono, DialogoEditarCuenta } from './PiezasLibro';
+import { EstadoVacio, Esqueleto, Kpi, useConfirmar } from './Piezas';
+import { ORDENES_LIBRO, VISTAS_LIBRO, useLibroCobranza } from './useLibroCobranza';
+import { dolares, useAltoElemento, useVistaTarjetas } from './utilidades';
+import classes from './cxc.module.css';
 
-const nf = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const usd = (v) => (v === null || v === undefined ? '' : nf.format(Number(v) || 0));
-const fmtFecha = (v) => (v ? `${v.slice(8, 10)}/${v.slice(5, 7)}/${v.slice(2, 4)}` : '');
-
-async function pedir(url, opciones) {
-    const res = await fetch(url, opciones);
-    const cuerpo = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(cuerpo.error || 'No se pudo completar');
-    return cuerpo;
-}
-const enviar = (url, metodo, body) => pedir(url, { method: metodo, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
-
-function Dato({ titulo, valor, color }) {
-    return (
-        <Paper withBorder radius="md" p="sm">
-            <Text size="xs" c="dimmed" fw={700} tt="uppercase">{titulo}</Text>
-            <Text fz={22} fw={800} c={color || 'navy.9'}>{valor}</Text>
-        </Paper>
-    );
-}
-
-// Las cuentas por cobrar como las lleva la administradora en Excel: una fila por documento, agrupadas por cliente, y cada celda se edita ahí mismo.
-// El saldo no se sobrescribe: al cambiarlo se pide registrar el abono o el ajuste que lo explica. El monto del documento se corrige con su motivo.
 export default function LibroCobranza() {
-    const queryClient = useQueryClient();
-    const [pagadas, setPagadas] = useState(false);
-    const [soloVencidas, setSoloVencidas] = useState(false);
-    const [busqueda, setBusqueda] = useState('');
-    const [abiertas, setAbiertas] = useState(() => new Set()); // filas con sus abonos desplegados
-    const [cambio, setCambio] = useState(null); // { cuenta, nuevoSaldo }
-    const [montoModal, setMontoModal] = useState(null); // { cuenta, nuevo, motivo }
-    const [manualModal, setManualModal] = useState(null); // { cliente, concepto, monto, fecha, vence, observacion }
+    const libro = useLibroCobranza();
+    const tarjetas = useVistaTarjetas();
+    const [refBarra, altoBarra] = useAltoElemento();
+    const [dialogo, setDialogo] = useState(null); // { tipo: 'deuda' | 'monto' | 'editar' | 'abono' | 'manual', ... }
+    const { confirmar, dialogo: confirmacion } = useConfirmar();
+    const cerrar = () => setDialogo(null);
 
-    const { data, isLoading, error } = useQuery({ queryKey: ['cxc-libro', pagadas], queryFn: () => pedir(`/api/finanzas/cxc/libro${pagadas ? '?pagadas=1' : ''}`), refetchOnWindowFocus: true });
-    const refrescar = () => { queryClient.invalidateQueries({ queryKey: ['cxc-libro'] }); queryClient.invalidateQueries({ queryKey: ['cuentas'] }); };
-    const avisar = (e) => { notifications.show({ color: 'red', title: 'No se guardó', message: e.message }); throw e; };
-
-    const urlCuenta = (cuenta) => (cuenta.manual ? `/api/finanzas/cxc/manual/${cuenta.idReal}` : `/api/finanzas/cxc/${cuenta.id}`);
-    const urlAbono = (cuenta, abono) => (cuenta.manual ? `/api/finanzas/cxc/manual/${cuenta.idReal}/abonos/${abono.id}` : `/api/finanzas/cxc/abonos/${abono.id}`);
-    const editar = (cuenta, campos) => enviar(urlCuenta(cuenta), 'PATCH', campos).then(refrescar).catch(avisar);
-    const editarAbono = (cuenta, abono, campos) => enviar(urlAbono(cuenta, abono), 'PUT', campos).then(refrescar).catch(avisar);
-    const borrarAbono = useMutation({
-        mutationFn: ({ cuenta, abono }) => enviar(urlAbono(cuenta, abono), 'DELETE'),
-        onSuccess: () => { notifications.show({ color: 'teal', message: 'Abono borrado: la deuda se recalculó' }); refrescar(); },
-        onError: (e) => notifications.show({ color: 'red', message: e.message }),
-    });
-
-    const q = busqueda.trim().toLowerCase();
-    const filas = useMemo(() => (data?.filas || []).filter((f) => (!soloVencidas || f.vencida) && (!q || [f.cliente, f.documento, f.rif, f.observacion, f.vendedor].some((x) => String(x || '').toLowerCase().includes(q)))), [data, soloVencidas, q]);
-    const grupos = useMemo(() => {
-        const m = new Map();
-        for (const f of filas) {
-            if (!m.has(f.clienteId)) m.set(f.clienteId, { id: f.clienteId, nombre: f.cliente, filas: [] });
-            m.get(f.clienteId).filas.push(f);
-        }
-        return [...m.values()];
-    }, [filas]);
-
-    const alternar = (id) => setAbiertas((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-    const descargar = () => {
-        const lineas = [['Cliente', 'Documento', 'Emisión', 'Vence', 'Monto USD', 'Abonado', 'Saldo', 'Vendedor', 'Observación']];
-        for (const f of filas) lineas.push([f.cliente, f.documento, f.emision, f.vence, f.monto, f.abonado, f.saldo, f.vendedor || '', f.observacion]);
-        const csv = lineas.map((l) => l.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
-        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8' })); a.download = `cuentas-por-cobrar-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+    // Lo que se puede hacer con un documento: igual desde la tabla o desde la tarjeta
+    const acc = {
+        abonar: (cuenta, nuevoSaldo = null) => setDialogo({ tipo: 'deuda', cuenta, nuevoSaldo }),
+        ajustar: (cuenta) => setDialogo({ tipo: 'deuda', cuenta, nuevoSaldo: null, tipoInicial: 'AJUSTE' }),
+        corregirMonto: (cuenta, nuevo = null) => setDialogo({ tipo: 'monto', cuenta, nuevo }),
+        editar: (cuenta) => setDialogo({ tipo: 'editar', cuenta }),
+        editarAbono: (cuenta, abono) => setDialogo({ tipo: 'abono', cuenta, abono }),
+        guardar: libro.editarCuenta,
+        guardarAbono: libro.editarAbono,
+        borrarAbono: async (cuenta, abono) => {
+            const ok = await confirmar({
+                titulo: 'Borrar abono', textoConfirmar: 'Sí, borrar el abono',
+                mensaje: <Text size="sm">Se borra el abono de <b>{dolares(abono.monto)}</b> del {abono.fecha?.split('-').reverse().join('/')} en <b>{cuenta.documento}</b>. La deuda vuelve a subir y, si tenía su ingreso de caja, también se quita.</Text>,
+            });
+            if (ok) await libro.borrarAbono(cuenta, abono);
+            return ok;
+        },
+        borrarManual: async (cuenta) => {
+            const ok = await confirmar({ titulo: 'Borrar cuenta manual', textoConfirmar: 'Sí, borrarla', mensaje: `Se borra la cuenta «${cuenta.documento}» de ${cuenta.cliente} por ${dolares(cuenta.monto)}. Solo se puede porque no tiene abonos.` });
+            if (ok) await libro.borrarManual(cuenta);
+        },
     };
 
-    if (isLoading) return <Center py={60}><Loader /></Center>;
-    if (error) return <Alert color="red">{error.message}</Alert>;
-    const r = data.resumen;
+    if (libro.error) return <Alert color="red" icon={<IconAlertTriangle size={18} />} title="No se pudo cargar el libro">{libro.error.message}</Alert>;
+    if (libro.cargando || tarjetas === undefined) return <Esqueleto />;
+
+    const r = libro.resumen;
+    const pctVencido = r.saldo > 0 ? Math.round((r.vencido / r.saldo) * 100) : 0;
+    const nuevaManual = () => setDialogo({ tipo: 'manual' });
+    const buscador = (
+        <TextInput
+            size={tarjetas ? 'sm' : 'xs'} flex="1 1 240px" miw={0} aria-label="Buscar en el libro"
+            placeholder={tarjetas ? 'Buscar cliente o documento…' : 'Buscar cliente, documento, RIF, vendedor u observación…'}
+            leftSection={<IconSearch size={15} />} value={libro.busqueda} onChange={(e) => libro.setBusqueda(e.currentTarget.value)}
+            rightSection={libro.busqueda ? <CloseButton size="sm" aria-label="Borrar búsqueda" onClick={() => libro.setBusqueda('')} /> : null}
+        />
+    );
+    const vistas = (
+        <SegmentedControl
+            size="xs" color="navy.9" fullWidth={tarjetas} classNames={{ root: classes.segRaiz, label: classes.segEtiqueta }}
+            value={libro.vista} onChange={libro.setVista} aria-label="Qué documentos ver"
+            data={VISTAS_LIBRO.map((v) => ({ ...v, label: tarjetas && v.value === 'todas' ? 'Todas' : v.label }))}
+        />
+    );
+
     return (
-        <Stack gap="md">
-            <SimpleGrid cols={{ base: 2, md: 4 }} spacing="sm">
-                <Dato titulo="Por cobrar" valor={`$${usd(r.saldo)}`} />
-                <Dato titulo="Vencido" valor={`$${usd(r.vencido)}`} color="red.7" />
-                <Dato titulo="Documentos" valor={r.documentos} />
-                <Dato titulo="Clientes" valor={r.clientes} />
+        <Stack gap={8} style={{ '--cxc-barra': `${altoBarra + 6}px` }}>
+            <SimpleGrid cols={{ base: 2, md: 4 }} spacing={8}>
+                <Kpi titulo="Por cobrar" valor={dolares(r.saldo)} detalle={`${r.documentos} documento(s) pendientes`} icono={IconCash} />
+                <Kpi
+                    titulo="Vencido" valor={dolares(r.vencido)} color={r.vencido > 0 ? 'red.8' : 'teal.8'} icono={IconClockExclamation} colorIcono="red"
+                    detalle={r.vencido > 0 ? `${r.vencidas} documento(s) · ${pctVencido} % de lo que se debe` : 'Nada vencido'}
+                    onClick={() => libro.setVista(libro.vista === 'vencidas' ? 'pendientes' : 'vencidas')} activo={libro.vista === 'vencidas'}
+                    ayuda="Toca para ver solo las vencidas"
+                />
+                <Kpi titulo="Documentos" valor={r.documentos} icono={IconFileInvoice} colorIcono="grape" detalle={r.manuales ? `${r.manuales} cuenta(s) manual(es)` : 'Facturas y notas de entrega'} />
+                <Kpi titulo="Clientes con saldo" valor={r.clientes} icono={IconUsers} colorIcono="teal" detalle="Con algo pendiente" />
             </SimpleGrid>
 
-            <Paper withBorder radius="md" p="sm">
-                <Group gap="sm" wrap="wrap" align="flex-end">
-                    <TextInput flex="1 1 240px" placeholder="Buscar cliente, documento, RIF, vendedor u observación…" leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)} />
-                    <Checkbox label="Solo vencidas" checked={soloVencidas} onChange={(e) => setSoloVencidas(e.currentTarget.checked)} />
-                    <Checkbox label="Incluir pagadas" checked={pagadas} onChange={(e) => setPagadas(e.currentTarget.checked)} />
-                    <Button variant="light" size="sm" leftSection={<IconDownload size={16} />} onClick={descargar}>Excel (CSV)</Button>
-                    <Button size="sm" color="grape" leftSection={<IconPlus size={16} />} onClick={() => setManualModal({ cliente: '', concepto: 'DEUDA', monto: '', fecha: new Date().toISOString().slice(0, 10), vence: '', observacion: '' })}>Nueva cuenta manual</Button>
-                </Group>
-                <Text size="xs" c="dimmed" mt={6}>Haz clic en una celda para editarla (Enter guarda, Esc cancela). Cambiar el <b>saldo</b> abre el registro del abono o ajuste que lo explica; el <b>monto</b> del documento se corrige con su motivo. <b>▸</b> muestra los abonos de cada documento.</Text>
-            </Paper>
-
-            <ScrollArea h="68vh" type="auto" offsetScrollbars>
-                <Table withColumnBorders withTableBorder verticalSpacing={0} horizontalSpacing={4} fz="sm" stickyHeader miw={1100} style={{ background: '#fff', color: '#1a1b1e' }}>
-                    <Table.Thead style={{ background: '#e9ecef' }}>
-                        <Table.Tr>
-                            <Table.Th w={28} />
-                            <Table.Th>Documento</Table.Th><Table.Th w={80}>Emisión</Table.Th><Table.Th w={110}>Vence</Table.Th>
-                            <Table.Th ta="right" w={110}>Monto USD</Table.Th><Table.Th ta="right" w={100}>Abonado</Table.Th><Table.Th ta="right" w={110}>Saldo</Table.Th>
-                            <Table.Th w={120}>Vendedor</Table.Th><Table.Th>Observación</Table.Th><Table.Th w={44} />
-                        </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                        {!grupos.length && <Table.Tr><Table.Td colSpan={10}><Text ta="center" c="dimmed" py="lg">No hay cuentas por cobrar con esos filtros.</Text></Table.Td></Table.Tr>}
-                        {grupos.map((g) => {
-                            const saldoCliente = g.filas.reduce((a, f) => a + f.saldo, 0);
-                            return (
-                                <React.Fragment key={g.id}>
-                                    <Table.Tr style={{ background: '#dbe4ff' }}>
-                                        <Table.Td colSpan={6}><Text fw={800} size="sm" pl={6}>{g.nombre} <Text span size="xs" c="dimmed" fw={500}>· {g.filas.length} documento(s)</Text></Text></Table.Td>
-                                        <Table.Td ta="right"><Text fw={800} size="sm" pr={6}>{usd(saldoCliente)}</Text></Table.Td>
-                                        <Table.Td colSpan={3} />
-                                    </Table.Tr>
-                                    {g.filas.map((f) => (
-                                        <React.Fragment key={f.id}>
-                                            <Table.Tr style={{ background: f.saldo <= 0.005 ? '#f1f3f5' : f.vencida ? '#fff5f5' : '#fff' }}>
-                                                <Table.Td ta="center">
-                                                    <ActionIcon variant="subtle" size="sm" color="gray" onClick={() => alternar(f.id)} aria-label="Ver abonos">{abiertas.has(f.id) ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}</ActionIcon>
-                                                </Table.Td>
-                                                <Table.Td><Text size="sm" fw={600} px={6}>{f.manual && <Badge mr={6} size="xs" color="grape" variant="light">Manual</Badge>}{f.documento}{f.vencida && <Badge ml={6} size="xs" color="red" variant="light">Vencida</Badge>}{f.saldo <= 0.005 && <Badge ml={6} size="xs" color="teal" variant="light">Pagada</Badge>}</Text></Table.Td>
-                                                <Table.Td><Text size="xs" px={6}>{fmtFecha(f.emision)}</Text></Table.Td>
-                                                <Table.Td><CeldaEditable tipo="fecha" valor={f.vence} formato={fmtFecha} onGuardar={(v) => editar(f, { fechaVencimiento: v })} color={f.vencida ? '#c92a2a' : undefined} /></Table.Td>
-                                                <Table.Td><CeldaEditable tipo="numero" valor={f.monto} align="right" formato={usd} onGuardar={(v) => { setMontoModal({ cuenta: f, nuevo: v, motivo: '' }); return Promise.resolve(); }} /></Table.Td>
-                                                <Table.Td><Text size="sm" ta="right" px={6} c="dimmed">{usd(f.abonado)}</Text></Table.Td>
-                                                <Table.Td><CeldaEditable tipo="numero" valor={f.saldo} align="right" formato={usd} negrita onGuardar={(v) => { setCambio({ cuenta: f, nuevoSaldo: v }); return Promise.resolve(); }} /></Table.Td>
-                                                <Table.Td><Text size="xs" px={6} lineClamp={1}>{f.vendedor || ''}</Text></Table.Td>
-                                                <Table.Td><CeldaEditable valor={f.observacion} placeholder="Observación" onGuardar={(v) => editar(f, { observacion: v })} /></Table.Td>
-                                                <Table.Td ta="center">
-                                                    <Tooltip label="Registrar abono"><ActionIcon variant="light" color="teal" size="sm" onClick={() => setCambio({ cuenta: f, nuevoSaldo: null })} aria-label="Registrar abono"><IconCoin size={14} /></ActionIcon></Tooltip>
-                                                </Table.Td>
-                                            </Table.Tr>
-                                            {abiertas.has(f.id) && (
-                                                <Table.Tr style={{ background: '#f8f9fa' }}>
-                                                    <Table.Td />
-                                                    <Table.Td colSpan={9}>
-                                                        {f.abonos.length === 0 ? <Text size="xs" c="dimmed" py={6}>Sin abonos registrados.</Text> : (
-                                                            <Table withRowBorders verticalSpacing={0} fz="xs" my={4} style={{ color: '#1a1b1e' }}>
-                                                                <Table.Thead><Table.Tr><Table.Th w={110}>Fecha</Table.Th><Table.Th w={110} ta="right">Monto</Table.Th><Table.Th w={160}>Método</Table.Th><Table.Th>Referencia</Table.Th><Table.Th>Notas</Table.Th><Table.Th w={36} /></Table.Tr></Table.Thead>
-                                                                <Table.Tbody>
-                                                                    {f.abonos.map((a) => (
-                                                                        <Table.Tr key={a.id}>
-                                                                            <Table.Td><CeldaEditable tipo="fecha" valor={a.fecha} formato={fmtFecha} onGuardar={(v) => editarAbono(f, a, { fecha: v })} /></Table.Td>
-                                                                            <Table.Td><CeldaEditable tipo="numero" valor={a.monto} align="right" formato={usd} onGuardar={(v) => editarAbono(f, a, { monto: v })} color={a.monto < 0 ? '#e8590c' : undefined} /></Table.Td>
-                                                                            <Table.Td><CeldaEditable valor={a.metodo} onGuardar={(v) => editarAbono(f, a, { metodo: v })} /></Table.Td>
-                                                                            <Table.Td><CeldaEditable valor={a.referencia} placeholder="Referencia" onGuardar={(v) => editarAbono(f, a, { referencia: v })} /></Table.Td>
-                                                                            <Table.Td><CeldaEditable valor={a.notas} placeholder="Notas" onGuardar={(v) => editarAbono(f, a, { notas: v })} /></Table.Td>
-                                                                            <Table.Td ta="center"><ActionIcon variant="subtle" color="red" size="sm" onClick={() => { if (window.confirm(`¿Borrar el abono de $${usd(a.monto)}? La deuda vuelve a subir.`)) borrarAbono.mutate({ cuenta: f, abono: a }); }} aria-label="Borrar abono"><IconTrash size={14} /></ActionIcon></Table.Td>
-                                                                        </Table.Tr>
-                                                                    ))}
-                                                                </Table.Tbody>
-                                                            </Table>
-                                                        )}
-                                                    </Table.Td>
-                                                </Table.Tr>
-                                            )}
-                                        </React.Fragment>
-                                    ))}
-                                </React.Fragment>
-                            );
-                        })}
-                    </Table.Tbody>
-                </Table>
-            </ScrollArea>
-
-            {manualModal && (
-                <Modal opened onClose={() => setManualModal(null)} centered title={<Text fw={800}>Nueva cuenta por cobrar manual</Text>}>
-                    <Stack gap="sm">
-                        <Text size="xs" c="dimmed">Para deudas y préstamos que no vienen de una venta. No afecta los libros ni las ventas; se cobra con abonos como cualquier cuenta.</Text>
-                        <TextInput label="A quién se le cobra" placeholder="Nombre del cliente o persona" value={manualModal.cliente} onChange={(e) => setManualModal({ ...manualModal, cliente: e.currentTarget.value })} data-autofocus />
-                        <Group grow align="flex-start">
-                            <TextInput label="Concepto" placeholder="DEUDA, PRÉSTAMO…" value={manualModal.concepto} onChange={(e) => setManualModal({ ...manualModal, concepto: e.currentTarget.value })} />
-                            <NumberInput label="Monto USD" min={0} decimalScale={2} value={manualModal.monto} onChange={(v) => setManualModal({ ...manualModal, monto: v })} />
+            <Box ref={refBarra} className={`${classes.barra} ${classes.noImprimir}`}>
+                {tarjetas ? (
+                    <Stack gap={6}>
+                        <Group gap={6} wrap="nowrap">
+                            {buscador}
+                            <ActionIcon size={36} radius="md" color="grape" onClick={nuevaManual} aria-label="Nueva cuenta manual"><IconPlus size={20} /></ActionIcon>
+                            <Menu position="bottom-end" withinPortal shadow="md" width={240}>
+                                <Menu.Target><ActionIcon size={36} radius="md" variant="default" aria-label="Más opciones del libro"><IconDotsVertical size={20} /></ActionIcon></Menu.Target>
+                                <Menu.Dropdown>
+                                    <Menu.Label>Ordenar clientes</Menu.Label>
+                                    {ORDENES_LIBRO.map((o) => <Menu.Item key={o.value} leftSection={<IconArrowsSort size={16} />} fw={libro.orden === o.value ? 800 : 400} onClick={() => libro.setOrden(o.value)}>{o.label}{libro.orden === o.value ? ' ✓' : ''}</Menu.Item>)}
+                                    <Menu.Divider />
+                                    <Menu.Item leftSection={<IconPlus size={16} />} onClick={nuevaManual}>Nueva cuenta manual</Menu.Item>
+                                    <Menu.Item leftSection={<IconDownload size={16} />} onClick={libro.exportarCsv}>Descargar para Excel (CSV)</Menu.Item>
+                                </Menu.Dropdown>
+                            </Menu>
                         </Group>
-                        <Group grow align="flex-start">
-                            <TextInput type="date" label="Fecha" max={new Date().toISOString().slice(0, 10)} value={manualModal.fecha} onChange={(e) => setManualModal({ ...manualModal, fecha: e.currentTarget.value })} />
-                            <TextInput type="date" label="Vence (opcional)" value={manualModal.vence} onChange={(e) => setManualModal({ ...manualModal, vence: e.currentTarget.value })} />
-                        </Group>
-                        <TextInput label="Observación (opcional)" value={manualModal.observacion} onChange={(e) => setManualModal({ ...manualModal, observacion: e.currentTarget.value })} />
-                        <Group justify="flex-end">
-                            <Button variant="default" onClick={() => setManualModal(null)}>Cancelar</Button>
-                            <Button color="grape" disabled={manualModal.cliente.trim().length < 2 || !(Number(manualModal.monto) > 0)} onClick={() => enviar('/api/finanzas/cxc/manual', 'POST', { ...manualModal, vence: manualModal.vence || undefined }).then((r) => { notifications.show({ color: 'teal', message: r.relacionada ? 'Cuenta creada y relacionada con el cliente' : 'Cuenta creada' }); setManualModal(null); refrescar(); }).catch((e) => notifications.show({ color: 'red', message: e.message }))}>Crear cuenta</Button>
-                        </Group>
+                        {vistas}
                     </Stack>
-                </Modal>
-            )}
-            {cambio && <CambioDeudaModal cuenta={cambio.cuenta} nuevoSaldo={cambio.nuevoSaldo} onCerrar={() => setCambio(null)} />}
-            {montoModal && (
-                <Modal opened onClose={() => setMontoModal(null)} centered title={<Text fw={800}>Corregir el monto de {montoModal.cuenta.documento}</Text>}>
-                    <Stack gap="sm">
-                        <Text size="sm">Monto actual <b>${usd(montoModal.cuenta.monto)}</b> → nuevo <b>${usd(montoModal.nuevo)}</b>. Es una corrección del documento (no un pago): el saldo se recalcula con lo ya abonado.</Text>
-                        <TextInput label="Motivo de la corrección" placeholder="Ej: error al transcribir la factura" value={montoModal.motivo} onChange={(e) => setMontoModal({ ...montoModal, motivo: e.currentTarget.value })} data-autofocus />
-                        <Group justify="flex-end">
-                            <Button variant="default" onClick={() => setMontoModal(null)}>Cancelar</Button>
-                            <Button color="orange" disabled={montoModal.motivo.trim().length < 5} onClick={() => editar(montoModal.cuenta, { montoTotal: montoModal.nuevo, motivo: montoModal.motivo }).then(() => setMontoModal(null)).catch(() => {})}>Corregir monto</Button>
+                ) : (
+                    <Group gap={8} wrap="wrap">
+                        {buscador}
+                        {vistas}
+                        <Select size="xs" w={190} aria-label="Ordenar clientes" leftSection={<IconArrowsSort size={14} />} data={ORDENES_LIBRO} value={libro.orden} onChange={(v) => libro.setOrden(v || 'cliente')} allowDeselect={false} comboboxProps={{ withinPortal: true }} />
+                        <Group gap={6} ml="auto" wrap="nowrap">
+                            <Button size="compact-sm" variant="default" leftSection={<IconDownload size={15} />} onClick={libro.exportarCsv}>Excel (CSV)</Button>
+                            <Button size="compact-sm" color="grape" leftSection={<IconPlus size={15} />} onClick={nuevaManual}>Nueva cuenta manual</Button>
                         </Group>
-                    </Stack>
-                </Modal>
-            )}
+                    </Group>
+                )}
+                <Text fz={11.5} c="#5c6675" mt={4} lh={1.35}>
+                    {libro.actualizando ? 'Actualizando… ' : ''}
+                    Viendo <b>{libro.totales.documentos}</b> documento(s) de <b>{libro.totales.clientes}</b> cliente(s) · deben <b>{dolares(libro.totales.saldo)}</b>
+                    {!tarjetas && ' · Clic en una celda para corregirla (Enter guarda, Esc cancela)'}
+                </Text>
+            </Box>
+
+            <Box style={{ opacity: libro.actualizando && libro.consulta.isPlaceholderData ? 0.55 : 1, transition: 'opacity .2s' }}>
+                {!libro.grupos.length ? (
+                    <EstadoVacio
+                        icono={IconInbox}
+                        titulo={libro.buscando ? 'Nada coincide con la búsqueda' : libro.vista === 'vencidas' ? 'No hay documentos vencidos' : 'No hay cuentas por cobrar'}
+                        texto={libro.buscando ? 'Prueba con otra palabra (cliente, número de documento, RIF, vendedor u observación) o borra la búsqueda.' : libro.vista === 'vencidas' ? 'Todo lo pendiente está al día.' : 'Cuando una venta queda a crédito aparece aquí. Para una deuda o préstamo sin venta, crea una cuenta manual.'}
+                        accion={libro.buscando
+                            ? <Button size="xs" variant="light" onClick={() => libro.setBusqueda('')}>Borrar búsqueda</Button>
+                            : <Button size="xs" color="grape" leftSection={<IconPlus size={14} />} onClick={nuevaManual}>Nueva cuenta manual</Button>}
+                    />
+                ) : tarjetas ? <LibroTarjetas grupos={libro.grupos} acc={acc} buscando={libro.buscando} /> : <LibroTabla grupos={libro.grupos} totales={libro.totales} acc={acc} />}
+            </Box>
+
+            <DialogoCuentaManual abierto={dialogo?.tipo === 'manual'} onCerrar={cerrar} onCrear={libro.crearManual} />
+            {dialogo?.tipo === 'deuda' && <CambioDeudaModal cuenta={dialogo.cuenta} nuevoSaldo={dialogo.nuevoSaldo} tipoInicial={dialogo.tipoInicial} onCerrar={cerrar} />}
+            {dialogo?.tipo === 'monto' && <DialogoCorregirMonto cuenta={dialogo.cuenta} nuevo={dialogo.nuevo} onCerrar={cerrar} onGuardar={libro.editarCuenta} />}
+            {dialogo?.tipo === 'editar' && <DialogoEditarCuenta cuenta={dialogo.cuenta} onCerrar={cerrar} onGuardar={libro.editarCuenta} />}
+            {dialogo?.tipo === 'abono' && <DialogoEditarAbono cuenta={dialogo.cuenta} abono={dialogo.abono} onCerrar={cerrar} onGuardar={libro.editarAbono} onBorrar={acc.borrarAbono} />}
+            {confirmacion}
         </Stack>
     );
 }
