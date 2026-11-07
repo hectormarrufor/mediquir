@@ -59,7 +59,10 @@ export default function LibroCobranza() {
     const filas = useMemo(() => (data?.filas || []).filter((f) => (!soloVencidas || f.vencida) && (!q || [f.cliente, f.documento, f.rif, f.observacion, f.vendedor].some((x) => String(x || '').toLowerCase().includes(q)))), [data, soloVencidas, q]);
     const grupos = useMemo(() => {
         const m = new Map();
-        for (const f of filas) (m.get(f.clienteId) || m.set(f.clienteId, { id: f.clienteId, nombre: f.cliente, filas: [] }).get(f.clienteId)).push(f);
+        for (const f of filas) {
+            if (!m.has(f.clienteId)) m.set(f.clienteId, { id: f.clienteId, nombre: f.cliente, filas: [] });
+            m.get(f.clienteId).filas.push(f);
+        }
         return [...m.values()];
     }, [filas]);
 
