@@ -21,7 +21,7 @@ const opcionesPct = (actual) => {
     return lista.sort((a, b) => a - b).map((n) => ({ value: String(n), label: `${n}%` }));
 };
 // Segmentos con fondo claro: sobre el fondo oscuro del panel las pestañas transparentes no se distinguían
-const ESTILO_SEGMENTOS = { root: { background: '#fff', border: '1px solid #ced4da' }, label: { color: '#1a1b1e' } };
+const ESTILO_SEGMENTOS = { root: { background: '#fff', border: '1px solid #ced4da' } }; // la letra la maneja Mantine: oscura en las pestañas sin elegir y blanca sobre la elegida
 const normCliente = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\bFCIA\b/g, 'FARMACIA').replace(/[^A-Z0-9]+/g, ' ').trim();
 const claveCliente = (l) => (l.clienteIdVenta ? `c${l.clienteIdVenta}` : `t${normCliente(l.clienteTexto)}`);
 const porCliente = (lineas) => { const m = new Map(); for (const l of lineas) { const k = claveCliente(l); if (!m.has(k)) m.set(k, []); m.get(k).push(l); } return m; };
@@ -53,6 +53,7 @@ const totales = (filas) => {
     }
     return {
         monto: sumar(filas, 'montoUsd'), // la columna tal cual (las facturas suman, los abonos y notas de crédito restan)
+        abonos: r2(filas.filter((x) => esPago(x) && x.concepto !== 'NOTA').reduce((t, x) => t + Math.abs(Number(x.montoUsd) || 0), 0)), // lo abonado, en positivo
         facturas: sumar(filas.filter((x) => x.concepto === 'FACTURA' && !esPago(x)), 'montoUsd'), // total de las facturas, con IVA, tal como se facturaron
         base: sumar(filas, 'baseUsd'), // SIN IVA: sobre esto se calcula la comisión
         comision: sumar(filas, 'comisionUsd'),
@@ -114,7 +115,19 @@ export default function HojasVendedores() {
         const todas = actual?.lineas || [];
         const conPagos = new Set();
         for (const d of agruparFacturas(todas)) if (d.padre && d.pagos.length) conPagos.add(d.padre.id);
-        return todas.map((l) => (conPagos.has(l.id) ? { ...l, tienePagos: true } : l));
+        // un abono sin comisión calculada la genera sobre la parte sin IVA de lo abonado (proporción de su factura) y el % de la línea
+        const calculada = new Map();
+        for (const d of agruparFacturas(todas)) {
+            const pa = d.padre;
+            const razon = pa && Number(pa.montoUsd) > 0 && pa.baseUsd !== null ? Math.min(1, Number(pa.baseUsd) / Number(pa.montoUsd)) : 1;
+            for (const x of d.pagos) {
+                if (x.concepto !== 'ABONO' || x.comisionUsd !== null) continue;
+                const base = x.baseUsd !== null ? Number(x.baseUsd) : r2(Math.abs(Number(x.montoUsd) || 0) * razon);
+                const pct = x.porcentaje !== null && x.porcentaje !== undefined ? Number(x.porcentaje) : Number(actual?.porcentaje) || 0;
+                calculada.set(x.id, { baseUsd: base, comisionUsd: r2((base * pct) / 100), calculada: true });
+            }
+        }
+        return todas.map((l) => ({ ...l, ...(calculada.get(l.id) || {}), ...(conPagos.has(l.id) ? { tienePagos: true } : {}) }));
     }, [actual]);
     // con el filtro se ven las facturas que tengan algún renglón que lo cumpla, completas (la factura y todos sus pagos)
     const lineas = useMemo(() => {
@@ -173,7 +186,8 @@ export default function HojasVendedores() {
                     </>
                 )} />
             </Table.Td>
-            <Table.Td><CeldaEditable tipo="numero" valor={l.montoUsd} align="right" formato={usd} onGuardar={(v) => editar(l, { montoUsd: v })} color={l.montoUsd < 0 ? '#e8590c' : undefined} /></Table.Td>
+            <Table.Td>{!esPago(l) && <CeldaEditable tipo="numero" valor={l.montoUsd} align="right" formato={usd} onGuardar={(v) => editar(l, { montoUsd: v })} />}</Table.Td>
+            <Table.Td>{esPago(l) && <CeldaEditable tipo="numero" valor={l.montoUsd === null ? null : Math.abs(Number(l.montoUsd))} align="right" formato={(v) => usd(v)} negrita color={l.concepto === 'NOTA' ? '#e8590c' : '#1971c2'} onGuardar={(v) => editar(l, { montoUsd: v === null ? null : -Math.abs(v) })} />}</Table.Td>
             <Table.Td><CeldaEditable tipo="numero" valor={l.baseUsd} align="right" formato={usd} onGuardar={(v) => editar(l, { baseUsd: v })} /></Table.Td>
             <Table.Td><CeldaEditable tipo="opciones" opciones={opcionesPct(l.porcentaje)} valor={l.porcentaje === null || l.porcentaje === undefined ? '' : String(Number(l.porcentaje))} align="right" formato={(v) => (v === null || v === undefined || v === '' ? '' : `${Number(v)}%`)} onGuardar={(v) => editar(l, { porcentaje: Number(v) })} /></Table.Td>
             <Table.Td><CeldaEditable tipo="numero" valor={l.comisionUsd} align="right" formato={usd} negrita onGuardar={(v) => editar(l, { comisionUsd: v })} /></Table.Td>
@@ -242,6 +256,7 @@ export default function HojasVendedores() {
                                             <Group gap="lg" wrap="wrap">
                                                 <Cifra titulo="Debe" valor={g.deuda} color={g.deuda > 0 ? '#c92a2a' : '#2b8a3e'} />
                                                 <Cifra titulo="Facturas (con IVA)" valor={g.t.facturas} />
+                                                <Cifra titulo="Abonado" valor={g.t.abonos} color="#1971c2" />
                                                 <Cifra titulo="A comisionar sin IVA" valor={g.t.base} />
                                                 <Cifra titulo="Comisión" valor={g.t.comision} tasa={tasa} />
                                                 <Cifra titulo="Por pagar" valor={g.t.porPagar} color={g.t.porPagar > 0 ? '#e8590c' : '#2b8a3e'} tasa={tasa} />
@@ -255,7 +270,7 @@ export default function HojasVendedores() {
                                                 <Table.Thead style={{ background: '#e9ecef' }}>
                                                     <Table.Tr>
                                                         <Table.Th w={30} /><Table.Th w={70}>Concepto</Table.Th><Table.Th w={100}>Fecha</Table.Th><Table.Th w={100}>Vence</Table.Th><Table.Th w={120}>Factura</Table.Th>
-                                                        <Table.Th ta="right" w={105}>Monto USD (con IVA)</Table.Th><Table.Th ta="right" w={105}>A comisionar sin IVA</Table.Th><Table.Th ta="right" w={70}>%</Table.Th><Table.Th ta="right" w={90}>Comisión</Table.Th><Table.Th ta="right" w={115}>Comisión Bs</Table.Th>
+                                                        <Table.Th ta="right" w={110}>Factura USD (con IVA)</Table.Th><Table.Th ta="right" w={110}>Abono / pago USD</Table.Th><Table.Th ta="right" w={105}>A comisionar sin IVA</Table.Th><Table.Th ta="right" w={70}>%</Table.Th><Table.Th ta="right" w={90}>Comisión</Table.Th><Table.Th ta="right" w={115}>Comisión Bs</Table.Th>
                                                         <Table.Th w={150}>Estatus cliente</Table.Th><Table.Th w={110}>Comisión</Table.Th><Table.Th w={100}>Pagada el</Table.Th><Table.Th>Observación</Table.Th><Table.Th w={34} />
                                                     </Table.Tr>
                                                 </Table.Thead>
@@ -270,7 +285,8 @@ export default function HojasVendedores() {
                                                 <Table.Tfoot style={{ background: '#e9ecef' }}>
                                                     <Table.Tr>
                                                         <Table.Td colSpan={5}><Text fw={800} size="sm" pl={6} c="#1a1b1e">Total de {g.nombre}</Text></Table.Td>
-                                                        <Table.Td ta="right"><Text fw={800} size="sm" pr={6} c="#1a1b1e">{usd(g.t.monto)}</Text></Table.Td>
+                                                        <Table.Td ta="right"><Text fw={800} size="sm" pr={6} c="#1a1b1e">{usd(g.t.facturas)}</Text></Table.Td>
+                                                        <Table.Td ta="right"><Text fw={800} size="sm" pr={6} c="#1971c2">{usd(g.t.abonos)}</Text></Table.Td>
                                                         <Table.Td ta="right"><Text fw={800} size="sm" pr={6} c="#1a1b1e">{usd(g.t.base)}</Text></Table.Td>
                                                         <Table.Td />
                                                         <Table.Td ta="right"><Text fw={800} size="sm" pr={6} c="#1a1b1e">{usd(g.t.comision)}</Text></Table.Td>
@@ -294,6 +310,7 @@ export default function HojasVendedores() {
                                 <Group gap="lg" wrap="wrap">
                                     <Cifra titulo="Deben" valor={grupos.reduce((t, g) => t + g.deuda, 0)} color="#c92a2a" />
                                     <Cifra titulo="Facturas (con IVA)" valor={totalVisible.facturas} />
+                                    <Cifra titulo="Abonado" valor={totalVisible.abonos} color="#1971c2" />
                                     <Cifra titulo="A comisionar sin IVA" valor={totalVisible.base} />
                                     <Cifra titulo="Comisión total" valor={totalVisible.comision} tasa={tasa} />
                                     <Cifra titulo="Por pagar" valor={totalVisible.porPagar} color="#e8590c" tasa={tasa} />
@@ -308,8 +325,9 @@ export default function HojasVendedores() {
                         <Group gap="xs" align="flex-end" wrap="wrap">
                             <TextInput size="xs" label="Factura / nota" placeholder="146870 o 0000-6611" w={150} value={linea.documento} onChange={(e) => setLinea({ ...linea, documento: e.currentTarget.value })} />
                             <TextInput size="xs" label="Cliente" w={220} value={linea.cliente} onChange={(e) => setLinea({ ...linea, cliente: e.currentTarget.value })} />
-                            <NumberInput size="xs" label="Monto USD" w={110} decimalScale={2} value={linea.montoUsd} onChange={(v) => setLinea({ ...linea, montoUsd: v })} />
-                            <NumberInput size="xs" label="A comisionar sin IVA" w={140} decimalScale={2} value={linea.baseUsd} onChange={(v) => setLinea({ ...linea, baseUsd: v })} />
+                            <NumberInput size="xs" label={linea.concepto === 'ABONO' ? 'Monto abonado USD' : 'Monto USD'} w={130} decimalScale={2} value={linea.montoUsd} onChange={(v) => setLinea({ ...linea, montoUsd: v })} />
+                            <NumberInput size="xs" label="A comisionar sin IVA (opcional en un abono)" w={190} decimalScale={2} value={linea.baseUsd} onChange={(v) => setLinea({ ...linea, baseUsd: v })} />
+                            <Select size="xs" label="Tipo" w={110} allowDeselect={false} data={[{ value: 'FACTURA', label: 'Factura' }, { value: 'ABONO', label: 'Abono / pago' }]} value={linea.concepto} onChange={(v) => setLinea({ ...linea, concepto: v })} />
                             <Select size="xs" label="% comisión" w={100} allowDeselect={false} data={opcionesPct(actual.porcentaje)} value={linea.porcentaje === '' ? String(actual.porcentaje) : String(linea.porcentaje)} onChange={(v) => setLinea({ ...linea, porcentaje: v })} />
                             <Button size="xs" leftSection={<IconPlus size={14} />} disabled={!linea.documento.trim() && !linea.cliente.trim()} onClick={agregar}>Agregar</Button>
                         </Group>

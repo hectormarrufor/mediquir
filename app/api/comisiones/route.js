@@ -26,6 +26,18 @@ export function numeroDeDocumento(texto) {
     return null;
 }
 
+// Un abono genera su comisión sobre la parte SIN IVA de lo abonado: se toma la proporción sin IVA de su factura (a comisionar / monto de la factura)
+export async function baseDePago(vendedorId, documento, montoPago) {
+    const importe = Math.abs(Number(montoPago));
+    if (!Number.isFinite(importe)) return null;
+    const [padre] = documento ? await sequelize.query(
+        `SELECT "montoUsd"::float AS monto, "baseUsd"::float AS base FROM "ComisionesVenta" WHERE "vendedorId" = :v AND "documentoTexto" = :d AND concepto = 'FACTURA' AND "montoUsd" > 0 AND "baseUsd" IS NOT NULL ORDER BY id LIMIT 1`,
+        { replacements: { v: vendedorId, d: documento }, type: sequelize.QueryTypes.SELECT },
+    ) : [];
+    const razon = padre && padre.monto > 0 ? Math.min(1, padre.base / padre.monto) : 1;
+    return r2(importe * razon);
+}
+
 // Hojas de los vendedores a comisión: sus líneas (facturas, abonos y notas de crédito) con la comisión de cada una y el resumen de lo pendiente y lo pagado
 export async function GET() {
     const acceso = await requerirNoVendedor();
@@ -70,14 +82,18 @@ export async function POST(request) {
         if (!vendedor) return NextResponse.json({ error: 'Elige un vendedor' }, { status: 400 });
         const numero = numeroDeDocumento(b.documento);
         const venta = numero ? await Venta.findOne({ where: { numeroDocumento: numero }, attributes: ['id'] }) : null;
-        const base = numOpt(b.baseUsd);
         const pct = numOpt(b.porcentaje) ?? Number(vendedor.porcentaje);
         if (!porcentajeValido(pct)) return NextResponse.json({ error: `El porcentaje de comisión debe estar entre ${PCT_MIN}% y ${PCT_MAX}%` }, { status: 400 });
         const concepto = ['FACTURA', 'ABONO', 'NOTA'].includes(b.concepto) ? b.concepto : 'FACTURA';
+        const documentoTexto = String(b.documento || '').trim().slice(0, 60) || null;
+        let monto = numOpt(b.montoUsd);
+        if (concepto === 'ABONO' && monto !== null) monto = -Math.abs(monto); // un abono baja lo que debe el cliente: se guarda restando
+        let base = numOpt(b.baseUsd);
+        if (base === null && concepto === 'ABONO' && monto !== null) base = await baseDePago(vendedor.id, documentoTexto, monto);
         const linea = await ComisionVenta.create({
             vendedorId: vendedor.id, ventaId: venta?.id || null, concepto, fecha: fechaOpt(b.fecha), vencimiento: fechaOpt(b.vencimiento),
-            documentoTexto: String(b.documento || '').trim().slice(0, 60) || null, clienteTexto: String(b.cliente || '').trim().slice(0, 200) || null,
-            montoUsd: numOpt(b.montoUsd), baseUsd: base, porcentaje: pct, comisionUsd: numOpt(b.comisionUsd) ?? (base !== null ? r2((base * pct) / 100) : null),
+            documentoTexto, clienteTexto: String(b.cliente || '').trim().slice(0, 200) || null,
+            montoUsd: monto, baseUsd: base, porcentaje: pct, comisionUsd: numOpt(b.comisionUsd) ?? (base !== null ? r2((base * pct) / 100) : null),
             estatusCliente: String(b.estatusCliente || '').trim().slice(0, 120) || null, estatusComision: 'PENDIENTE', observacion: String(b.observacion || '').trim() || null,
         });
         return NextResponse.json({ ok: true, linea, enlazada: Boolean(venta) }, { status: 201 });

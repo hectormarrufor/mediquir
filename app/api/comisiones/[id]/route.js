@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/models';
 import { requerirNoVendedor } from '../../_lib/acceso';
-import { numeroDeDocumento, porcentajeValido, PCT_MIN, PCT_MAX } from '../route';
+import { numeroDeDocumento, porcentajeValido, baseDePago, PCT_MIN, PCT_MAX } from '../route';
 import { fechaCaracas } from '@/app/constants/hora';
 
 export const dynamic = 'force-dynamic';
@@ -48,6 +48,13 @@ export async function PATCH(request, { params }) {
             const base = c.baseUsd !== undefined ? c.baseUsd : (linea.baseUsd === null ? null : Number(linea.baseUsd));
             const pct = c.porcentaje !== undefined ? c.porcentaje : (linea.porcentaje === null ? null : Number(linea.porcentaje));
             if (base !== null && pct !== null) c.comisionUsd = r2((base * pct) / 100);
+        }
+        // al corregir el monto de un abono, su comisión se recalcula sola (sobre la parte sin IVA), salvo que se mande la base o la comisión
+        const esAbono = (c.concepto || linea.concepto) === 'ABONO';
+        if (tiene('montoUsd') && esAbono && c.montoUsd !== null && !tiene('baseUsd') && !tiene('comisionUsd')) {
+            c.baseUsd = await baseDePago(linea.vendedorId, c.documentoTexto ?? linea.documentoTexto, c.montoUsd);
+            const pct = c.porcentaje !== undefined ? c.porcentaje : (linea.porcentaje === null ? null : Number(linea.porcentaje));
+            if (c.baseUsd !== null && pct !== null) c.comisionUsd = r2((c.baseUsd * pct) / 100);
         }
         await linea.update(c);
         return NextResponse.json({ ok: true, linea });
