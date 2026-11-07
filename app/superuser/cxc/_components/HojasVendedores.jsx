@@ -35,6 +35,7 @@ const totales = (filas) => ({
     base: sumar(filas, 'baseUsd'), // SIN IVA: sobre esto se calcula la comisión
     comision: sumar(filas, 'comisionUsd'),
     pendiente: sumar(filas.filter((x) => x.estatusComision !== 'PAGADA'), 'comisionUsd'),
+    porPagar: sumar(filas.filter((x) => porPagar(x)), 'comisionUsd'), // la que ya se puede pagar: el cliente ya cobró
 });
 // Una cifra con su título, para el encabezado de cada cliente y el total general
 function Cifra({ titulo, valor, color = '#1a1b1e', tasa = null }) {
@@ -47,6 +48,13 @@ function Cifra({ titulo, valor, color = '#1a1b1e', tasa = null }) {
     );
 }
 const ESTILO_ACORDEON = { item: { background: '#fff', border: '1px solid #ced4da' }, control: { color: '#1a1b1e' }, chevron: { color: '#1a1b1e' } };
+// Comisión POR PAGAR (el renglón amarillo del Excel): el cliente ya pagó y al vendedor todavía no se le pagó la comisión.
+//   · un ABONO: la comisión se genera a medida que el cliente va abonando, sobre lo abonado
+//   · una factura pagada completa: queda por pagar la comisión completa de esa factura
+// Se calcula en vivo con el estado del cobro: en cuanto se registra el pago, el renglón se pone amarillo solo.
+const clienteYaPago = (l) => l.concepto === 'ABONO' || (l.ventaId ? l.pagoVenta === 'Pagado' : /PAGAD|COMPLETO/i.test(l.estatusCliente || ''));
+const porPagar = (l) => l.estatusComision !== 'PAGADA' && clienteYaPago(l);
+const COLOR_POR_PAGAR = '#fff59d';
 const CONCEPTOS = [{ value: 'FACTURA', label: 'FACTURA' }, { value: 'ABONO', label: 'ABONO' }, { value: 'NOTA', label: 'N/C' }];
 
 async function pedir(url, opciones) {
@@ -63,7 +71,7 @@ export default function HojasVendedores() {
     const queryClient = useQueryClient();
     const { data, isLoading, error } = useQuery({ queryKey: ['comisiones'], queryFn: () => pedir('/api/comisiones'), refetchOnWindowFocus: true });
     const [elegido, setElegido] = useState(null);
-    const [filtro, setFiltro] = useState('pendientes');
+    const [filtro, setFiltro] = useState('porpagar');
     const [sel, setSel] = useState(() => new Set());
     const [abiertos, setAbiertos] = useState([]); // clientes desplegados
     const [modalVendedor, setModalVendedor] = useState(false);
@@ -75,7 +83,7 @@ export default function HojasVendedores() {
     const vendedores = data?.vendedores || [];
     const actual = vendedores.find((v) => v.id === elegido) || vendedores[0] || null;
 
-    const lineas = useMemo(() => (actual?.lineas || []).filter((l) => filtro === 'todas' || (filtro === 'pendientes' ? l.estatusComision !== 'PAGADA' : l.estatusComision === 'PAGADA')), [actual, filtro]);
+    const lineas = useMemo(() => (actual?.lineas || []).filter((l) => filtro === 'todas' || (filtro === 'porpagar' ? porPagar(l) : filtro === 'pendientes' ? l.estatusComision !== 'PAGADA' : l.estatusComision === 'PAGADA')), [actual, filtro]);
     // Líneas de la hoja agrupadas por cliente, con lo que debe cada uno (sobre TODAS sus líneas, no solo las que deja ver el filtro)
     const todasPorCliente = useMemo(() => porCliente(actual?.lineas || []), [actual]);
     const grupos = useMemo(() => {
@@ -127,13 +135,15 @@ export default function HojasVendedores() {
                         <Paper withBorder p="sm" radius="md"><Text size="xs" c="dimmed" fw={700} tt="uppercase">Comisión pagada</Text><Text fz={22} fw={800} c="teal.7">${usd(actual.resumen.comisionPagada)}</Text>{tasa && <Text size="xs" c="dimmed" fw={600}>Bs {usd(actual.resumen.comisionPagada * tasa)}</Text>}</Paper>
                         <Paper withBorder p="sm" radius="md"><Text size="xs" c="dimmed" fw={700} tt="uppercase">% por defecto</Text>
                             <CeldaEditable tipo="numero" valor={actual.porcentaje} formato={(v) => `${v}%`} negrita onGuardar={(v) => enviar('/api/comisiones/vendedores', 'PATCH', { id: actual.id, porcentaje: v }).then(refrescar).catch(avisar)} /></Paper>
-                        <Paper withBorder p="sm" radius="md"><Text size="xs" c="dimmed" fw={700} tt="uppercase">Líneas</Text><Text fz={22} fw={800}>{actual.resumen.lineas}</Text></Paper>
+                        <Paper withBorder p="sm" radius="md"><Text size="xs" c="dimmed" fw={700} tt="uppercase">Comisión por pagar</Text><Text fz={22} fw={800} c="orange.8">${usd(totalVendedor.porPagar)}</Text>{tasa && <Text size="xs" c="dimmed" fw={600}>Bs {usd(totalVendedor.porPagar * tasa)}</Text>}</Paper>
                     </SimpleGrid>
 
                     {tasa ? <Alert color="blue" py={6}>Comisiones en bolívares a la <b>tasa BCV del día: Bs {usd(tasa)}</b> por dólar. Se recalculan solas cuando cambia la tasa.</Alert> : <Alert color="yellow" py={6}>No hay una tasa BCV vigente registrada: las comisiones se ven solo en dólares.</Alert>}
 
+                    <Group gap="xs" wrap="nowrap" align="center"><Box w={16} h={16} style={{ background: COLOR_POR_PAGAR, border: '1px solid #c9b900', borderRadius: 3, flex: 'none' }} /><Text size="xs" c="gray.2">Amarillo: el cliente ya pagó (la factura completa o un abono) y la comisión de ese vendedor está <b>por pagar</b>. Se pone solo al registrar el cobro.</Text></Group>
+
                     <Group gap="sm" wrap="wrap" justify="space-between">
-                        <SegmentedControl size="xs" color="navy.9" styles={ESTILO_SEGMENTOS} value={filtro} onChange={setFiltro} data={[{ value: 'pendientes', label: 'Comisión pendiente' }, { value: 'pagadas', label: 'Pagadas' }, { value: 'todas', label: 'Todas' }]} />
+                        <SegmentedControl size="xs" color="navy.9" styles={ESTILO_SEGMENTOS} value={filtro} onChange={setFiltro} data={[{ value: 'porpagar', label: 'Por pagar (amarillas)' }, { value: 'pendientes', label: 'Comisión pendiente' }, { value: 'pagadas', label: 'Pagadas' }, { value: 'todas', label: 'Todas' }]} />
                         <Group gap="xs">
                             <Text size="xs" c="dimmed">{sel.size} seleccionada(s)</Text>
                             <Button size="compact-sm" color="teal" disabled={!sel.size} onClick={() => marcar('PAGADA')}>Marcar pagadas</Button>
@@ -161,6 +171,7 @@ export default function HojasVendedores() {
                                                 <Cifra titulo="Facturas (con IVA)" valor={g.t.facturas} />
                                                 <Cifra titulo="A comisionar sin IVA" valor={g.t.base} />
                                                 <Cifra titulo="Comisión" valor={g.t.comision} tasa={tasa} />
+                                                <Cifra titulo="Por pagar" valor={g.t.porPagar} color={g.t.porPagar > 0 ? '#e8590c' : '#2b8a3e'} tasa={tasa} />
                                                 <Cifra titulo="Comisión pendiente" valor={g.t.pendiente} color={g.t.pendiente > 0 ? '#e8590c' : '#2b8a3e'} tasa={tasa} />
                                             </Group>
                                         </Group>
@@ -177,7 +188,7 @@ export default function HojasVendedores() {
                                                 </Table.Thead>
                                                 <Table.Tbody>
                                                     {g.filas.map((l) => (
-                                                        <Table.Tr key={l.id} style={{ background: l.estatusComision === 'PAGADA' ? '#f1f3f5' : '#fff' }}>
+                                                        <Table.Tr key={l.id} style={{ background: porPagar(l) ? COLOR_POR_PAGAR : l.estatusComision === 'PAGADA' ? '#f1f3f5' : '#fff' }}>
                                                             <Table.Td ta="center"><Checkbox size="xs" checked={sel.has(l.id)} onChange={(e) => setSel((st) => { const n = new Set(st); if (e.currentTarget.checked) n.add(l.id); else n.delete(l.id); return n; })} aria-label="Seleccionar" /></Table.Td>
                                                             <Table.Td><CeldaEditable tipo="opciones" opciones={CONCEPTOS} valor={l.concepto} formato={(v) => (v === 'NOTA' ? 'N/C' : v)} onGuardar={(v) => editar(l, { concepto: v })} /></Table.Td>
                                                             <Table.Td><CeldaEditable tipo="fecha" valor={l.fecha} formato={fmtFecha} onGuardar={(v) => editar(l, { fecha: v })} /></Table.Td>
@@ -227,6 +238,7 @@ export default function HojasVendedores() {
                                     <Cifra titulo="Facturas (con IVA)" valor={totalVisible.facturas} />
                                     <Cifra titulo="A comisionar sin IVA" valor={totalVisible.base} />
                                     <Cifra titulo="Comisión total" valor={totalVisible.comision} tasa={tasa} />
+                                    <Cifra titulo="Por pagar" valor={totalVisible.porPagar} color="#e8590c" tasa={tasa} />
                                     <Cifra titulo="Comisión pendiente" valor={totalVisible.pendiente} color="#e8590c" tasa={tasa} />
                                 </Group>
                             </Group>
