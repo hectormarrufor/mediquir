@@ -1,0 +1,494 @@
+/* Cuentas por cobrar: tablas densas tipo hoja de cálculo (escritorio), tarjetas (teléfono) y barras pegajosas.
+   El fondo de /superuser es azul marino oscuro: todo lo que lleva datos va sobre blanco con letra oscura.
+   Los colores de la hoja de vendedores vienen del Excel de la administradora (amarillo = comisión por pagar,
+   gris = pagada, blanco = factura sin cobrar): no cambiarlos. */
+
+/* ---------- Superficies ---------- */
+.superficie {
+  background: #fff;
+  color: #1a1b1e;
+  border: 1px solid #d5dbe5;
+  border-radius: 10px;
+}
+
+/* Barra de filtros: se queda arriba al bajar, justo debajo del encabezado de la app (que se esconde y aparece) */
+.barra {
+  position: sticky;
+  top: var(--app-shell-header-offset, 0px);
+  z-index: 20;
+  transition: top 0.2s ease;
+  background: #fff;
+  color: #1a1b1e;
+  border: 1px solid #d5dbe5;
+  border-radius: 10px;
+  box-shadow: 0 10px 22px -14px rgba(2, 8, 23, 0.7);
+  padding: 6px 8px;
+}
+
+/* Franja de la selección (comisiones marcadas): amarillo suave, el mismo lenguaje de "por pagar" */
+.franjaSeleccion {
+  background: #fff8c5;
+  border-top: 1px solid #ecd77a;
+  margin: 6px -8px -6px;
+  padding: 6px 8px;
+  border-radius: 0 0 10px 10px;
+}
+
+/* Pestañas sobre fondo claro: la elegida en azul oscuro con letra blanca */
+.pestanas {
+  background: #fff;
+  border: 1px solid #ced4da;
+  border-radius: 12px;
+  padding: 4px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+@media (max-width: 48em) {
+  .pestanas {
+    width: 100%;
+  }
+}
+
+/* Segmentos (vendedor, filtros): las opciones sin elegir legibles sobre blanco, la elegida blanca sobre azul oscuro */
+.segRaiz {
+  background: #fff;
+  border: 1px solid #ced4da;
+}
+
+.segEtiqueta {
+  color: #1a1b1e;
+  font-weight: 600;
+}
+
+.segEtiqueta[data-active] {
+  color: #fff !important;
+}
+
+/* ---------- Tabla densa ---------- */
+.tabla {
+  background: #fff;
+  color: #1a1b1e;
+  table-layout: fixed;
+  width: 100%;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabla thead th {
+  background: #e8edf5;
+  color: #2c3a4f;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  box-shadow: inset 0 -1px 0 #c5cfdd;
+}
+
+.tabla tbody td {
+  height: 30px;
+  overflow: hidden;
+}
+
+.tabla tbody tr:hover > td {
+  background-image: linear-gradient(rgba(34, 139, 230, 0.07), rgba(34, 139, 230, 0.07));
+}
+
+/* Entre 62em y 75em la hoja de vendedores no cabe: ahí (y solo ahí) se desplaza de lado */
+.desborde {
+  overflow-x: auto;
+}
+
+.desborde > table {
+  min-width: var(--min-tabla, 1000px);
+}
+
+/* Totales al pie, siempre a la vista mientras se recorre la tabla */
+.pie {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+}
+
+.pie td {
+  background: #e8edf5;
+  font-weight: 800;
+  box-shadow: inset 0 1px 0 #c5cfdd;
+  height: 32px;
+}
+
+/* Renglón del cliente en el libro */
+.filaCliente > td {
+  background: #e3eafa;
+  border-top: 2px solid #b9c7e4;
+}
+
+.filaCliente > td:first-child {
+  box-shadow: inset 4px 0 0 var(--mantine-color-navy-9);
+}
+
+/* Documento del libro: filete de color a la izquierda + fondo (además de la etiqueta con texto) */
+.filaDoc > td:first-child {
+  box-shadow: inset 4px 0 0 #93a7d1;
+}
+
+.filaDoc[data-estado='vencida'] > td {
+  background-color: #fff1f1;
+}
+
+.filaDoc[data-estado='vencida'] > td:first-child {
+  box-shadow: inset 4px 0 0 #e03131;
+}
+
+.filaDoc[data-estado='pagada'] > td {
+  background-color: #f1f3f5;
+  color: #5c6675;
+}
+
+.filaDoc[data-estado='pagada'] > td:first-child {
+  box-shadow: inset 4px 0 0 #2f9e44;
+}
+
+.filaAbonos > td {
+  background: #f8f9fb;
+}
+
+/* Línea de la hoja de un vendedor: factura (principal) o abono (hijo) */
+.linea > td {
+  background-color: #fff;
+}
+
+.linea:not([data-hijo]) > td {
+  border-top: 2px solid #ced4da;
+}
+
+.linea > td:first-child {
+  box-shadow: inset 4px 0 0 var(--mantine-color-navy-7);
+}
+
+.linea[data-estado='porpagar'] > td {
+  background-color: #fff59d;
+}
+
+.linea[data-estado='pagada'] > td {
+  background-color: #e9ecef;
+  color: #495057;
+}
+
+.linea[data-hijo] > td {
+  font-size: 12px;
+  height: 26px;
+}
+
+.linea[data-hijo] > td:first-child {
+  box-shadow: inset 4px 0 0 #adb5bd;
+}
+
+.linea[data-hijo][data-estado='porpagar'] > td {
+  background-color: #fffacd;
+}
+
+.linea[data-hijo][data-estado='porpagar'] > td:first-child {
+  box-shadow: inset 4px 0 0 #e0b400;
+}
+
+.linea[data-hijo][data-estado='pagada'] > td {
+  background-color: #f3f4f6;
+}
+
+.linea[data-sel] > td {
+  background-image: linear-gradient(rgba(25, 113, 194, 0.14), rgba(25, 113, 194, 0.14)) !important;
+}
+
+/* ---------- Estado de la comisión (siempre color + ícono + texto) ---------- */
+.estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 18px;
+  border: 1px solid #ced4da;
+  background: #fff;
+  color: #495057;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+button.estado {
+  cursor: pointer;
+  font-family: inherit;
+  margin: 0;
+}
+
+button.estado:hover {
+  filter: brightness(0.96);
+}
+
+.estado[data-estado='porpagar'] {
+  background: #ffe066;
+  border-color: #c9a400;
+  color: #4d3800;
+}
+
+.estado[data-estado='pagada'] {
+  background: #fff;
+  border-color: #8ce99a;
+  color: #2b8a3e;
+}
+
+.estado[data-estado='nota'] {
+  background: #fff4e6;
+  border-color: #ffa94d;
+  color: #a34700;
+}
+
+.estado[data-estado='vencida'] {
+  background: #fff5f5;
+  border-color: #ffa8a8;
+  color: #c92a2a;
+}
+
+/* Muestra del color en leyendas */
+.muestra {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+/* ---------- Celda editable ---------- */
+.celda {
+  display: block;
+  padding: 3px 6px;
+  min-height: 24px;
+  cursor: text;
+  border-radius: 3px;
+  outline: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.celda:hover {
+  background: rgba(34, 139, 230, 0.1);
+  box-shadow: inset 0 -1px 0 rgba(34, 139, 230, 0.6);
+}
+
+.celda:focus-visible {
+  box-shadow: inset 0 0 0 2px #228be6;
+}
+
+/* ---------- Grupos de cliente (acordeón) ---------- */
+.grupo {
+  background: #fff;
+  color: #1a1b1e;
+  border: 1px solid #d5dbe5;
+  border-radius: 10px;
+  overflow: clip; /* no "hidden": no debe romper el encabezado pegajoso de la tabla */
+}
+
+.grupoCabecera {
+  display: grid;
+  grid-template-columns: 26px minmax(200px, 1.6fr) repeat(7, minmax(84px, 1fr));
+  align-items: center;
+  gap: 2px 10px;
+  width: 100%;
+  padding: 6px 10px;
+  margin: 0;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  background: #f4f7fc;
+  color: #1a1b1e;
+  cursor: pointer;
+}
+
+.grupoCabecera:focus-visible {
+  outline: 2px solid var(--mantine-color-brand-6);
+  outline-offset: -2px;
+}
+
+.grupoCabecera:hover {
+  background: #eaf0fb;
+}
+
+.grupo[data-abierto] > .grupoCabecera {
+  background: #e3eafa;
+  border-bottom: 1px solid #c5cfdd;
+}
+
+.totalGeneral {
+  display: grid;
+  grid-template-columns: 26px minmax(200px, 1.6fr) repeat(7, minmax(84px, 1fr));
+  align-items: center;
+  gap: 2px 10px;
+  padding: 8px 10px;
+  background: #fff;
+  color: #1a1b1e;
+  border: 2px solid var(--mantine-color-navy-7);
+  border-radius: 10px;
+}
+
+@media (max-width: 87.99em) {
+  .grupoCabecera,
+  .totalGeneral {
+    grid-template-columns: 26px minmax(170px, 1.3fr) repeat(7, minmax(76px, 1fr));
+    gap: 2px 8px;
+  }
+}
+
+/* ---------- Teléfono: tarjetas ---------- */
+.grupoMovil {
+  background: #fff;
+  color: #1a1b1e;
+  border: 1px solid #d5dbe5;
+  border-radius: 12px;
+  overflow: clip;
+}
+
+.grupoMovilCabecera {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  min-height: 56px;
+  text-align: left;
+  background: #f4f7fc;
+  color: #1a1b1e;
+  cursor: pointer;
+}
+
+.grupoMovil[data-abierto] > .grupoMovilCabecera {
+  background: #e3eafa;
+  border-bottom: 1px solid #c5cfdd;
+}
+
+.tarjeta {
+  position: relative;
+  background: #fff;
+  color: #1a1b1e;
+  border: 1px solid #d5dbe5;
+  border-radius: 12px;
+  padding: 10px 10px 10px 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tarjeta::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  border-radius: 12px 0 0 12px;
+  background: var(--marca, #93a7d1);
+}
+
+.tarjeta[data-estado='porpagar'] {
+  background: #fffbd1;
+  border-color: #ecd77a;
+  --marca: #e0b400;
+}
+
+.tarjeta[data-estado='pagada'] {
+  background: #f1f3f5;
+  --marca: #adb5bd;
+}
+
+.tarjeta[data-estado='vencida'] {
+  background: #fff6f6;
+  border-color: #f5c2c2;
+  --marca: #e03131;
+}
+
+.tarjeta[data-estado='cobrada'] {
+  background: #f4f6f8;
+  --marca: #2f9e44;
+}
+
+.tarjeta[data-hijo] {
+  padding: 8px 8px 8px 14px;
+  border-radius: 10px;
+}
+
+/* Barra inferior fija del teléfono (selección de comisiones) */
+.barraInferior {
+  background: #fff;
+  color: #1a1b1e;
+  border-top: 2px solid #e0b400;
+  box-shadow: 0 -10px 24px -12px rgba(2, 8, 23, 0.6);
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+}
+
+/* ---------- Barras horizontales del resumen ---------- */
+.pista {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: #edf1f7;
+  overflow: hidden;
+}
+
+.relleno {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+}
+
+.filaBarra {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border-radius: 8px;
+  padding: 6px 8px;
+  color: #1a1b1e;
+  cursor: pointer;
+}
+
+.filaBarra:hover,
+.filaBarra[data-activa] {
+  background: #eef3fb;
+}
+
+.filaBarra[data-activa] {
+  box-shadow: inset 0 0 0 1px #93a7d1;
+}
+
+/* ---------- Impresión: sin barras ni botones, tablas completas ---------- */
+@media print {
+  .noImprimir {
+    display: none !important;
+  }
+
+  .barra,
+  .pie {
+    position: static;
+    box-shadow: none;
+  }
+
+  .tabla thead {
+    position: static !important;
+  }
+
+  .desborde {
+    overflow: visible !important;
+  }
+
+  .grupo,
+  .grupoMovil {
+    overflow: visible;
+    break-inside: avoid-page;
+  }
+}
