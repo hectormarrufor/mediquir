@@ -51,9 +51,15 @@ export async function GET() {
     if (acceso.error) return acceso.error;
     try {
         const vendedores = await VendedorComision.findAll({ order: [['nombre', 'ASC']], raw: true });
+        // De la factura enlazada también: su cliente en el sistema y lo que todavía debe (saldo de su cuenta por cobrar, en USD),
+        // para que la hoja muestre cuánto debe cada cliente y si cada factura ya se cobró
         const lineas = await sequelize.query(
-            `SELECT cv.*, v."numeroDocumento" AS "numeroVenta", v."statusPago"::text AS "pagoVenta"
-               FROM "ComisionesVenta" cv LEFT JOIN "Ventas" v ON v.id = cv."ventaId" ORDER BY cv."vendedorId", cv.fecha NULLS LAST, cv.id`,
+            `SELECT cv.*, v."numeroDocumento" AS "numeroVenta", v."statusPago"::text AS "pagoVenta",
+                    v."clienteId" AS "clienteIdVenta", cl.nombre AS "clienteNombre",
+                    (SELECT (CASE WHEN c.moneda::text = 'BS' THEN c."saldoPendiente" / NULLIF(c."tasaCambio", 0) ELSE c."saldoPendiente" END)::float
+                       FROM "CuentasPorCobrar" c WHERE c."ventaId" = cv."ventaId" ORDER BY c.id DESC LIMIT 1) AS "saldoCxc"
+               FROM "ComisionesVenta" cv LEFT JOIN "Ventas" v ON v.id = cv."ventaId" LEFT JOIN "Clientes" cl ON cl.id = v."clienteId"
+              ORDER BY cv."vendedorId", cv.fecha NULLS LAST, cv.id`,
             { type: sequelize.QueryTypes.SELECT },
         );
         const por = new Map();
