@@ -2,7 +2,7 @@
 
 // Libro de cobranza en la computadora: una tabla densa como el Excel, con el encabezado y los totales siempre a la vista.
 // Cada celda con fondo al pasar el mouse se edita ahí mismo; el saldo y el monto abren su registro (abono/ajuste o corrección con motivo).
-import React, { useState } from 'react';
+import React from 'react';
 import { ActionIcon, Badge, Box, Button, Group, Table, Text, Tooltip } from '@mantine/core';
 import { IconChevronDown, IconChevronRight, IconCoin, IconTrash } from '@tabler/icons-react';
 import CeldaEditable from './CeldaEditable';
@@ -49,13 +49,13 @@ function Abonos({ f, acc }) {
     );
 }
 
-export default function LibroTabla({ grupos, totales, acc }) {
+// Como la hoja de los vendedores: cada cliente es un renglón que se despliega con sus facturas, y cada factura trae sus abonos debajo (se pueden esconder con su flecha).
+export default function LibroTabla({ grupos, totales, acc, libro }) {
     const grande = useAnchoGrande(); // la columna del vendedor solo cuando cabe sin apretar las demás
-    const [abiertas, setAbiertas] = useState(() => new Set()); // documentos con sus abonos desplegados
+    const { abierto, alternarCliente, desplegarTodo, plegarTodo, plegadas, alternarPlegada } = libro;
     const columnas = grande ? 10 : 9;
-    const conAbonos = grupos.flatMap((g) => g.filas.filter((f) => f.abonos.length).map((f) => f.id));
-    const todasAbiertas = conAbonos.length > 0 && conAbonos.every((id) => abiertas.has(id));
-    const alternar = (id) => setAbiertas((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+    const todosAbiertos = grupos.length > 0 && grupos.every((g) => abierto(g.id));
+    const abonosVisibles = (f) => f.abonos.length > 0 && !plegadas.has(f.id);
 
     return (
         <Table
@@ -65,9 +65,9 @@ export default function LibroTabla({ grupos, totales, acc }) {
             <Table.Thead>
                 <Table.Tr>
                     <Table.Th w={34} p={0} ta="center">
-                        <Tooltip label={todasAbiertas ? 'Esconder todos los abonos' : 'Ver todos los abonos'}>
-                            <ActionIcon variant="subtle" color="gray" size="sm" aria-label={todasAbiertas ? 'Esconder todos los abonos' : 'Ver todos los abonos'} onClick={() => setAbiertas(todasAbiertas ? new Set() : new Set(conAbonos))}>
-                                {todasAbiertas ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+                        <Tooltip label={todosAbiertos ? 'Plegar todos los clientes' : 'Desplegar todos los clientes'}>
+                            <ActionIcon variant="subtle" color="gray" size="sm" aria-label={todosAbiertos ? 'Plegar todos los clientes' : 'Desplegar todos los clientes'} onClick={todosAbiertos ? plegarTodo : desplegarTodo}>
+                                {todosAbiertos ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
                             </ActionIcon>
                         </Tooltip>
                     </Table.Th>
@@ -85,12 +85,13 @@ export default function LibroTabla({ grupos, totales, acc }) {
             <Table.Tbody>
                 {grupos.map((g) => (
                     <React.Fragment key={g.id}>
-                        <Table.Tr className={classes.filaCliente}>
+                        <Table.Tr className={classes.filaCliente} style={{ cursor: 'pointer' }} onClick={() => alternarCliente(g.id)} aria-expanded={abierto(g.id)}>
                             <Table.Td colSpan={4}>
                                 <Group gap={8} wrap="nowrap" pl={4} style={{ overflow: 'hidden' }}>
+                                    {abierto(g.id) ? <IconChevronDown size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> : <IconChevronRight size={16} aria-hidden="true" style={{ flexShrink: 0 }} />}
                                     <Text fw={800} size="sm" truncate="end">{g.nombre}</Text>
                                     {g.rif && <Text fz={11} c="#5c6675" style={{ whiteSpace: 'nowrap' }}>{g.rif}</Text>}
-                                    <Text fz={11} c="#5c6675" style={{ whiteSpace: 'nowrap' }}>· {g.filas.length} doc.</Text>
+                                    <Text fz={11} c="#5c6675" style={{ whiteSpace: 'nowrap' }}>· {g.filas.length} factura{g.filas.length === 1 ? '' : 's'} · {g.filas.reduce((t, f) => t + f.abonos.length, 0)} abono(s)</Text>
                                     {g.vencido > 0 && <span className={classes.estado} data-estado="vencida" title={`${g.vencidas} documento(s) vencido(s); el más atrasado, ${g.atrasoMax} días`}>Vencido ${usd(g.vencido)}</span>}
                                 </Group>
                             </Table.Td>
@@ -99,12 +100,12 @@ export default function LibroTabla({ grupos, totales, acc }) {
                             <Table.Td ta="right"><Text size="sm" fw={800} pr={6} c={g.vencido > 0 ? 'red.8' : 'navy.9'}>{usd(g.saldo)}</Text></Table.Td>
                             <Table.Td colSpan={columnas - 7} />
                         </Table.Tr>
-                        {g.filas.map((f) => (
+                        {abierto(g.id) && g.filas.map((f) => (
                             <React.Fragment key={f.id}>
                                 <Table.Tr className={classes.filaDoc} data-estado={f.estadoFila}>
                                     <Table.Td ta="center" p={0}>
-                                        <ActionIcon variant="subtle" size="sm" color={f.abonos.length ? 'blue' : 'gray'} onClick={() => alternar(f.id)} aria-expanded={abiertas.has(f.id)} aria-label={`${abiertas.has(f.id) ? 'Esconder' : 'Ver'} los abonos de ${f.documento} (${f.abonos.length})`}>
-                                            {abiertas.has(f.id) ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+                                        <ActionIcon variant="subtle" size="sm" color={f.abonos.length ? 'blue' : 'gray'} disabled={!f.abonos.length} onClick={() => alternarPlegada(f.id)} aria-expanded={abonosVisibles(f)} aria-label={`${abonosVisibles(f) ? 'Esconder' : 'Ver'} los abonos de ${f.documento} (${f.abonos.length})`}>
+                                            {abonosVisibles(f) ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
                                         </ActionIcon>
                                     </Table.Td>
                                     <Table.Td>
@@ -125,11 +126,11 @@ export default function LibroTabla({ grupos, totales, acc }) {
                                     <Table.Td>
                                         <Group gap={2} wrap="nowrap" justify="flex-end">
                                             {!f.pagada && <Button size="compact-xs" variant="light" color="teal" leftSection={<IconCoin size={13} />} onClick={() => acc.abonar(f)} aria-label={`Registrar abono de ${f.documento}`}>Abonar</Button>}
-                                            <MenuDocumento f={f} acc={acc} abonosVisibles={abiertas.has(f.id)} onVerAbonos={() => alternar(f.id)} />
+                                            <MenuDocumento f={f} acc={acc} abonosVisibles={abonosVisibles(f)} onVerAbonos={() => alternarPlegada(f.id)} />
                                         </Group>
                                     </Table.Td>
                                 </Table.Tr>
-                                {abiertas.has(f.id) && (
+                                {abonosVisibles(f) && (
                                     <Table.Tr className={classes.filaAbonos}>
                                         <Table.Td />
                                         <Table.Td colSpan={columnas - 1} style={{ height: 'auto' }}><Box pr={6}><Abonos f={f} acc={acc} /></Box></Table.Td>

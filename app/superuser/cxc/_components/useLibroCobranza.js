@@ -27,6 +27,9 @@ export function useLibroCobranza() {
     const [orden, setOrden] = useState('cliente');
     const [busqueda, setBusqueda] = useState('');
     const [q] = useDebouncedValue(sinAcentos(busqueda.trim()), 200);
+    const [pestana, setPestana] = useState('todos'); // 'todos' | 'sin' (clientes sin grupo) | id de un grupo (los Excel de la administradora: Vendedores, Maraplus…)
+    const [abiertos, setAbiertos] = useState(() => new Set()); // clientes desplegados (con sus facturas y abonos)
+    const [plegadas, setPlegadas] = useState(() => new Set()); // facturas cuyos abonos se esconden (por defecto se ven, como en la hoja de los vendedores)
     const pagadas = vista === 'todas';
 
     // al cambiar de vista se queda la tabla anterior (atenuada) mientras llega la nueva: sin parpadeos
@@ -46,8 +49,32 @@ export function useLibroCobranza() {
         return { ...f, pagada, dias, vencida, estadoFila: pagada ? 'pagada' : vencida ? 'vencida' : 'normal' };
     }), [consulta.data, hoyCaracas]);
 
-    const filas = useMemo(() => todas.filter((f) => (vista !== 'vencidas' || f.vencida)
+    // Con la vista y la búsqueda; las pestañas (grupos) filtran sobre esto y muestran cuántos clientes y cuánto se debe en cada una
+    const filasVista = useMemo(() => todas.filter((f) => (vista !== 'vencidas' || f.vencida)
         && (!q || [f.cliente, f.documento, f.rif, f.observacion, f.vendedor].some((x) => sinAcentos(x).includes(q)))), [todas, vista, q]);
+
+    const gruposCobranza = useMemo(() => consulta.data?.grupos || [], [consulta.data]);
+    const gruposDeCliente = useMemo(() => {
+        const m = new Map();
+        for (const g of gruposCobranza) for (const id of g.clienteIds) (m.get(id) || m.set(id, new Set()).get(id)).add(g.id);
+        return m;
+    }, [gruposCobranza]);
+    const perteneceA = (clienteId, p) => (p === 'todos' ? true : p === 'sin' ? !gruposDeCliente.has(clienteId) : Boolean(gruposDeCliente.get(clienteId)?.has(p)));
+
+    const pestanas = useMemo(() => {
+        const resumenDe = (clave) => {
+            const f = filasVista.filter((x) => perteneceA(x.clienteId, clave));
+            return { clientes: new Set(f.map((x) => x.clienteId)).size, saldo: suma(f, 'saldo') };
+        };
+        const lista = [{ clave: 'todos', nombre: 'Todos', ...resumenDe('todos') }, ...gruposCobranza.map((g) => ({ clave: g.id, nombre: g.nombre, miembros: g.clienteIds.length, ...resumenDe(g.id) }))];
+        const sin = resumenDe('sin');
+        if (sin.clientes > 0) lista.push({ clave: 'sin', nombre: 'Sin grupo', ...sin });
+        return lista;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filasVista, gruposCobranza, gruposDeCliente]);
+    // si el grupo que se estaba viendo se borró (o «Sin grupo» quedó vacío), se vuelve a Todos
+    const pestanaActiva = pestanas.some((p) => p.clave === pestana) ? pestana : 'todos';
+    const filas = useMemo(() => filasVista.filter((f) => perteneceA(f.clienteId, pestanaActiva)), [filasVista, pestanaActiva, gruposDeCliente]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const grupos = useMemo(() => {
         const m = new Map();
@@ -99,6 +126,23 @@ export function useLibroCobranza() {
         .then(() => { notifications.show({ color: 'teal', message: `Cuenta «${cuenta.documento}» borrada` }); refrescar(); })
         .catch((e) => notifications.show({ color: 'red', title: 'No se borró', message: e.message }));
 
+    // Grupos (pestañas): crear, renombrar, borrar y agregar o quitar clientes. Borrar un grupo no toca a sus clientes ni sus cuentas.
+    const crearGrupo = (nombre) => enviar('/api/finanzas/cxc/grupos', 'POST', { nombre })
+        .then((r) => { notifications.show({ color: 'teal', message: `Grupo «${nombre}» creado` }); refrescar(); queryClient.invalidateQueries({ queryKey: ['cxc-grupos'] }); return r; })
+        .catch(avisar);
+    const renombrarGrupo = (id, nombre) => enviar(`/api/finanzas/cxc/grupos/${id}`, 'PATCH', { nombre }).then(() => { refrescar(); }).catch(avisar);
+    const borrarGrupo = (id) => enviar(`/api/finanzas/cxc/grupos/${id}`, 'DELETE')
+        .then(() => { notifications.show({ color: 'teal', message: 'Grupo borrado (sus clientes siguen en «Todos»)' }); refrescar(); setPestana('todos'); })
+        .catch((e) => notifications.show({ color: 'red', title: 'No se borró', message: e.message }));
+    const cambiarClientes = (id, { agregar = [], quitar = [] }) => enviar(`/api/finanzas/cxc/grupos/${id}/clientes`, 'PUT', { agregar, quitar }).then(() => { refrescar(); }).catch(avisar);
+
+    // Clientes desplegados: con una búsqueda se ven abiertos los que coinciden; si no, cada uno se abre con su flecha (o «Desplegar todo»)
+    const abierto = (id) => abiertos.has(id) || Boolean(q);
+    const alternarCliente = (id) => setAbiertos((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+    const desplegarTodo = () => setAbiertos(new Set(grupos.map((g) => g.id)));
+    const plegarTodo = () => setAbiertos(new Set());
+    const alternarPlegada = (id) => setPlegadas((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+
     // Descarga lo que se está viendo (con filtros y búsqueda) para abrirlo en Excel
     const exportarCsv = () => {
         const lineas = [['Cliente', 'RIF', 'Documento', 'Emisión', 'Vence', 'Días de atraso', 'Monto USD', 'Abonado', 'Saldo', 'Vendedor', 'Observación']];
@@ -115,6 +159,8 @@ export function useLibroCobranza() {
         consulta, cargando: consulta.isLoading, error: consulta.error, actualizando: consulta.isFetching && !consulta.isLoading,
         vista, setVista, orden, setOrden, busqueda, setBusqueda, buscando: Boolean(q),
         filas, grupos, totales, resumen,
+        pestanas, pestana: pestanaActiva, setPestana, gruposCobranza, crearGrupo, renombrarGrupo, borrarGrupo, cambiarClientes,
+        abierto, alternarCliente, desplegarTodo, plegarTodo, plegadas, alternarPlegada,
         editarCuenta, editarAbono, borrarAbono, crearManual, borrarManual, exportarCsv,
     };
 }

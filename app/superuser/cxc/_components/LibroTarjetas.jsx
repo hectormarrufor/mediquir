@@ -11,7 +11,7 @@ import { dolares, fmtFecha, usd, vencimientoEnPalabras } from './utilidades';
 import classes from './cxc.module.css';
 
 function TarjetaDocumento({ f, acc }) {
-    const [verAbonos, setVerAbonos] = useState(false);
+    const [verAbonos, setVerAbonos] = useState(f.abonos.length > 0); // los abonos se ven debajo de su factura, como en la hoja de los vendedores
     const venc = vencimientoEnPalabras(f.vence, f.saldo, f.dias);
     const colorVenc = venc.tono === 'vencida' ? 'red.8' : venc.tono === 'pronto' ? 'orange.9' : venc.tono === 'pagada' ? 'teal.8' : '#5c6675';
     return (

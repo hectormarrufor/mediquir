@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import sequelize from '@/sequelize';
 import { requerirNoVendedor } from '../../../_lib/acceso';
+import { listarGrupos } from '../../../_lib/cxcGrupos';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,8 +59,10 @@ export async function GET(request) {
         }
         filas.sort((a, b) => String(a.cliente).localeCompare(String(b.cliente)) || String(a.vence || '').localeCompare(String(b.vence || '')));
         const pendientes = filas.filter((f) => f.saldo > 0.005);
+        // Grupos (pestañas) con sus clientes; si todavía no existen las tablas el libro sigue funcionando, solo sin pestañas
+        const grupos = await listarGrupos().catch(() => []);
         return NextResponse.json({
-            filas,
+            filas, grupos,
             resumen: {
                 documentos: pendientes.length, saldo: r2(pendientes.reduce((a, f) => a + f.saldo, 0)),
                 vencido: r2(pendientes.filter((f) => f.vencida).reduce((a, f) => a + f.saldo, 0)), clientes: new Set(pendientes.map((f) => f.clienteId)).size,

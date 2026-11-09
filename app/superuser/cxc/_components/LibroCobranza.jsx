@@ -7,6 +7,8 @@ import React, { useState } from 'react';
 import { ActionIcon, Alert, Box, Button, CloseButton, Group, Menu, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { IconAlertTriangle, IconArrowsSort, IconCash, IconClockExclamation, IconDotsVertical, IconDownload, IconFileInvoice, IconInbox, IconPlus, IconSearch, IconUsers } from '@tabler/icons-react';
 import CambioDeudaModal from './CambioDeudaModal';
+import { IconFold } from '@tabler/icons-react';
+import { DialogoGrupos, PestanasGrupos } from './GruposLibro';
 import LibroTabla from './LibroTabla';
 import LibroTarjetas from './LibroTarjetas';
 import { DialogoCorregirMonto, DialogoCuentaManual, DialogoEditarAbono, DialogoEditarCuenta } from './PiezasLibro';
@@ -21,6 +23,7 @@ export default function LibroCobranza() {
     const [refBarra, altoBarra] = useAltoElemento();
     const [dialogo, setDialogo] = useState(null); // { tipo: 'deuda' | 'monto' | 'editar' | 'abono' | 'manual', ... }
     const { confirmar, dialogo: confirmacion } = useConfirmar();
+    const [gruposAbierto, setGruposAbierto] = useState(false); // diálogo «Administrar grupos»
     const cerrar = () => setDialogo(null);
 
     // Lo que se puede hacer con un documento: igual desde la tabla o desde la tarjeta
@@ -83,6 +86,7 @@ export default function LibroCobranza() {
             </SimpleGrid>
 
             <Box ref={refBarra} className={`${classes.barra} ${classes.noImprimir}`}>
+                <Box mb={6}><PestanasGrupos libro={libro} onAdministrar={() => setGruposAbierto(true)} /></Box>
                 {tarjetas ? (
                     <Stack gap={6}>
                         <Group gap={6} wrap="nowrap">
@@ -107,6 +111,8 @@ export default function LibroCobranza() {
                         {vistas}
                         <Select size="xs" w={190} aria-label="Ordenar clientes" leftSection={<IconArrowsSort size={14} />} data={ORDENES_LIBRO} value={libro.orden} onChange={(v) => libro.setOrden(v || 'cliente')} allowDeselect={false} comboboxProps={{ withinPortal: true }} />
                         <Group gap={6} ml="auto" wrap="nowrap">
+                            <Button size="compact-sm" variant="default" leftSection={<IconFold size={15} />} onClick={libro.desplegarTodo}>Desplegar todo</Button>
+                            <Button size="compact-sm" variant="default" onClick={libro.plegarTodo}>Plegar todo</Button>
                             <Button size="compact-sm" variant="default" leftSection={<IconDownload size={15} />} onClick={libro.exportarCsv}>Excel (CSV)</Button>
                             <Button size="compact-sm" color="grape" leftSection={<IconPlus size={15} />} onClick={nuevaManual}>Nueva cuenta manual</Button>
                         </Group>
@@ -129,7 +135,7 @@ export default function LibroCobranza() {
                             ? <Button size="xs" variant="light" onClick={() => libro.setBusqueda('')}>Borrar búsqueda</Button>
                             : <Button size="xs" color="grape" leftSection={<IconPlus size={14} />} onClick={nuevaManual}>Nueva cuenta manual</Button>}
                     />
-                ) : tarjetas ? <LibroTarjetas grupos={libro.grupos} acc={acc} buscando={libro.buscando} /> : <LibroTabla grupos={libro.grupos} totales={libro.totales} acc={acc} />}
+                ) : tarjetas ? <LibroTarjetas grupos={libro.grupos} acc={acc} buscando={libro.buscando} /> : <LibroTabla grupos={libro.grupos} totales={libro.totales} acc={acc} libro={libro} />}
             </Box>
 
             <DialogoCuentaManual abierto={dialogo?.tipo === 'manual'} onCerrar={cerrar} onCrear={libro.crearManual} />
@@ -137,6 +143,7 @@ export default function LibroCobranza() {
             {dialogo?.tipo === 'monto' && <DialogoCorregirMonto cuenta={dialogo.cuenta} nuevo={dialogo.nuevo} onCerrar={cerrar} onGuardar={libro.editarCuenta} />}
             {dialogo?.tipo === 'editar' && <DialogoEditarCuenta cuenta={dialogo.cuenta} onCerrar={cerrar} onGuardar={libro.editarCuenta} />}
             {dialogo?.tipo === 'abono' && <DialogoEditarAbono cuenta={dialogo.cuenta} abono={dialogo.abono} onCerrar={cerrar} onGuardar={libro.editarAbono} onBorrar={acc.borrarAbono} />}
+            <DialogoGrupos abierto={gruposAbierto} onCerrar={() => setGruposAbierto(false)} libro={libro} confirmar={confirmar} />
             {confirmacion}
         </Stack>
     );
