@@ -22,8 +22,23 @@ export const CONCEPTOS = [{ value: 'FACTURA', label: 'Factura' }, { value: 'ABON
 // Clientes: por el nombre escrito en la hoja (normalizado: «FCIA» = «FARMACIA», sin acentos), que es como los agrupa la administradora;
 // si la línea no trae nombre, por el del cliente de su factura en el sistema. (Agrupar por la ficha del sistema separaba al mismo
 // cliente en dos cuando unas líneas están enlazadas y otras no.)
-export const normCliente = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\bFCIA\b/g, 'FARMACIA').replace(/[^A-Z0-9]+/g, ' ').trim();
-export const claveCliente = (l) => `t${normCliente(l.clienteTexto || l.clienteNombre)}`;
+// Sin la forma legal al final («C.A», «S.A»): la hoja escribe «FCIA VENFARMA» y el sistema «FARMACIA VENFARMA C.A»; eran dos clientes y la deuda salía duplicada.
+export const normCliente = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\bFCIA\b/g, 'FARMACIA').replace(/[^A-Z0-9]+/g, ' ').trim().replace(/ (C A|CA|S A|SA|C\.A|S\.A)$/, '');
+// `claveCli` la pone prepararLineas (cliente real de la factura enlazada); sin ella, por el nombre.
+export const claveCliente = (l) => l.claveCli || `t${normCliente(l.clienteTexto || l.clienteNombre)}`;
+// Una clave de cliente por línea: las enlazadas a una factura van con el cliente de esa factura; las que solo traen nombre se unen a ese cliente si el nombre (de la hoja o del
+// sistema) coincide con el de alguna línea enlazada. Así el mismo cliente nunca queda partido en dos tarjetas (y su deuda no se cuenta dos veces).
+export function marcarClientes(lineas) {
+    const idPorNombre = new Map();
+    for (const l of lineas) {
+        if (!l.clienteIdVenta) continue;
+        for (const n of [normCliente(l.clienteTexto), normCliente(l.clienteNombre)]) if (n && !idPorNombre.has(n)) idPorNombre.set(n, l.clienteIdVenta);
+    }
+    return lineas.map((l) => {
+        const id = l.clienteIdVenta || idPorNombre.get(normCliente(l.clienteTexto || l.clienteNombre));
+        return id ? { ...l, claveCli: `c${id}` } : l;
+    });
+}
 export const porCliente = (lineas) => { const m = new Map(); for (const l of lineas) { const k = claveCliente(l); if (!m.has(k)) m.set(k, []); m.get(k).push(l); } return m; };
 // Lo que debe un cliente: el saldo de cada factura enlazada (una sola vez aunque tenga varias líneas)
 export const deudaDe = (lineas) => { const vistas = new Set(); let t = 0; for (const l of lineas) { if (!l.ventaId || vistas.has(l.ventaId)) continue; vistas.add(l.ventaId); t += Number(l.saldoCxc) > 0.005 ? Number(l.saldoCxc) : 0; } return r2(t); };
@@ -97,7 +112,8 @@ export function totales(filas) {
 
 // Las líneas de un vendedor listas para mostrar: las facturas con abonos quedan marcadas (`tienePagos`) y un abono sin comisión
 // calculada la genera sobre la parte sin IVA de lo abonado (proporción de su factura) con el % de su factura.
-export function prepararLineas(todas, porcentajeVendedor) {
+export function prepararLineas(todasSinClave, porcentajeVendedor) {
+    const todas = marcarClientes(todasSinClave);
     const grupos = agruparFacturas(todas);
     const conPagos = new Set();
     const conAbonos = new Set(); // para la etiqueta «En sus abonos» (no cambia qué se pinta de amarillo)
