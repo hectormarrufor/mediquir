@@ -3,8 +3,9 @@
 import React, { useState } from 'react';
 import { ActionIcon, Alert, Button, Group, Menu, Modal, NumberInput, Select, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconBan, IconCash, IconDotsVertical, IconHash, IconPrinter } from '@tabler/icons-react';
+import { IconBan, IconCash, IconDotsVertical, IconHash, IconPrinter, IconArrowsSplit2 } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
+import CompensarNotaModal from './CompensarNotaModal';
 
 async function pedirJson(url, opciones) {
     const res = await fetch(url, opciones);
@@ -26,7 +27,8 @@ export default function NotaAcciones({ nota, onCambio }) {
     const [error, setError] = useState(null);
 
     const vigente = nota.estado === 'EMITIDA';
-    const porReintegrar = Math.max(0, Number(nota.saldoAFavorUsd || 0) - Number(nota.reintegradoUsd || 0));
+    // Saldo a favor que falta por devolver o compensar (lo ya compensado en otras facturas no se puede reintegrar)
+    const porReintegrar = Math.max(0, Number(nota.saldoAFavorUsd || 0) - Number(nota.reintegradoUsd || 0) - Number(nota.compensadoUsd || 0));
     const puedeReintegrar = vigente && nota.tipo === 'CREDITO' && nota.origen === 'VENTA' && porReintegrar > 0.005;
 
     const abrir = (m) => {
@@ -58,10 +60,13 @@ export default function NotaAcciones({ nota, onCambio }) {
                         <Menu.Item leftSection={<IconPrinter size={14} />} component="a" href={`/superuser/notas/${nota.id}/imprimir`} target="_blank">Imprimir</Menu.Item>
                     )}
                     {vigente && <Menu.Item leftSection={<IconHash size={14} />} onClick={() => abrir('control')}>Número de control</Menu.Item>}
+                    {puedeReintegrar && <Menu.Item leftSection={<IconArrowsSplit2 size={14} />} onClick={() => abrir('compensar')}>Compensar con otras facturas del cliente</Menu.Item>}
                     {puedeReintegrar && <Menu.Item leftSection={<IconCash size={14} />} onClick={() => abrir('reintegro')}>Reintegrar dinero al cliente</Menu.Item>}
                     {vigente && rolUsuario === 'admin' && <Menu.Item color="red" leftSection={<IconBan size={14} />} onClick={() => abrir('anular')}>Anular nota</Menu.Item>}
                 </Menu.Dropdown>
             </Menu>
+
+            {modal === 'compensar' && <CompensarNotaModal nota={nota} onClose={() => setModal(null)} onCambio={onCambio} />}
 
             <Modal opened={modal === 'control'} onClose={() => setModal(null)} centered title={<Text fw={800}>Número de control · {nota.numeroDocumento}</Text>}>
                 <Stack>

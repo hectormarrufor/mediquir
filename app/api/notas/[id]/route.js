@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { Cliente, NotaFiscal, NotaFiscalDetalle, Proveedor, Venta, FacturaCompra, sequelize } from '@/models';
 import { requerirAdmin, requerirNoVendedor } from '@/app/api/_lib/acceso';
 import { tasaVigente } from '@/app/api/_lib/tasaBcv';
-import { ErrorNota, anularNota, registrarReintegro } from '@/app/api/_lib/notasFiscales';
+import { ErrorNota, anularNota, registrarReintegro, compensarSaldoAFavor } from '@/app/api/_lib/notasFiscales';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +35,7 @@ export async function GET(request, { params }) {
 // Acciones sobre una nota: NUMERO_CONTROL (dato fiscal) · REINTEGRO (devolver dinero al cliente) · ANULAR (solo administrador)
 export async function PUT(request, { params }) {
     const t = await sequelize.transaction();
+    let compensacion = null;
     try {
         const { id } = await params;
         const body = await request.json();
@@ -54,13 +55,17 @@ export async function PUT(request, { params }) {
         } else if (accion === 'REINTEGRO') {
             const tasa = await tasaVigente({ transaction: t });
             await registrarReintegro({ nota, montoUsd: body.montoUsd, tasa, metodoPago: body.metodoPago, referencia: body.referencia, transaction: t });
+        } else if (accion === 'COMPENSAR') {
+            // Usa el saldo a favor de la nota para pagar otras facturas pendientes del cliente (las más antiguas primero, o las de `ventaIds`)
+            const tasa = await tasaVigente({ transaction: t });
+            compensacion = await compensarSaldoAFavor({ nota, ventaIds: Array.isArray(body.ventaIds) ? body.ventaIds.filter((x) => UUID.test(String(x))) : null, tasa, transaction: t });
         } else if (accion === 'ANULAR') {
             await anularNota({ nota, transaction: t });
         } else {
             throw new ErrorNota('Acción no válida');
         }
         await t.commit();
-        return NextResponse.json({ success: true, nota });
+        return NextResponse.json({ success: true, nota, compensacion });
     } catch (error) {
         if (!t.finished) await t.rollback();
         if (error instanceof ErrorNota) return NextResponse.json({ error: error.message }, { status: error.status });

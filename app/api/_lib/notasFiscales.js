@@ -77,8 +77,10 @@ export async function notasDeVenta(venta, transaction) {
         for (const d of n.detalles) if (d.ventaDetalleId) acreditado.set(d.ventaDetalleId, (acreditado.get(d.ventaDetalleId) || 0) + Number(d.cantidad));
     }
     const totalAcreditado = r2(emitidas.filter((n) => n.tipo === 'CREDITO').reduce((a, n) => a + Number(n.totalFinal), 0));
+    // Lo que cada nota ya compensó en otras facturas del cliente (la pantalla lo resta de lo que queda por reintegrar)
+    const notasJson = await Promise.all(notas.map(async (n) => ({ ...n.toJSON(), compensadoUsd: n.tipo === 'CREDITO' && n.origen === 'VENTA' ? await compensadoDeNota(n, transaction) : 0 })));
     return {
-        notas,
+        notas: notasJson,
         acreditable: r2(Math.max(0, Number(venta.totalFinal) - totalAcreditado)),
         renglones: detalles.map((d) => ({
             id: d.id, productoId: d.productoId, nombre: d.isFicticio ? d.nombreFicticio : (d.producto?.nombre || 'Producto'), codigo: d.producto?.codigo || null,
@@ -323,6 +325,7 @@ export async function registrarNotaCompra({ factura, tipo, numeroDocumento, nume
 export async function anularNota({ nota, transaction: t }) {
     if (nota.estado !== 'EMITIDA') throw new ErrorNota('Esta nota ya está anulada', 409);
     if (Number(nota.reintegradoUsd) > 0) throw new ErrorNota('Ya se le reintegró dinero al cliente por esta nota: no se puede anular', 409);
+    if (nota.tipo === 'CREDITO' && nota.origen === 'VENTA' && (await compensadoDeNota(nota, t)) > 0) throw new ErrorNota('El saldo a favor de esta nota ya se compensó en otras facturas del cliente: no se puede anular', 409);
     const detalles = await NotaFiscalDetalle.findAll({ where: { notaId: nota.id }, transaction: t });
 
     if (nota.origen === 'VENTA') {
@@ -399,7 +402,7 @@ export async function anularNota({ nota, transaction: t }) {
 // Devuelve dinero al cliente por una nota de crédito que superó lo que debía: es un GASTO real (sale dinero)
 export async function registrarReintegro({ nota, montoUsd, tasa, metodoPago, referencia, transaction: t }) {
     if (nota.estado !== 'EMITIDA' || nota.tipo !== 'CREDITO' || nota.origen !== 'VENTA') throw new ErrorNota('Solo las notas de crédito de venta vigentes admiten reintegro', 409);
-    const pendiente = r2(Number(nota.saldoAFavorUsd) - Number(nota.reintegradoUsd));
+    const pendiente = r2(Number(nota.saldoAFavorUsd) - Number(nota.reintegradoUsd) - await compensadoDeNota(nota, t));
     const monto = r2(montoUsd);
     if (!(monto > 0)) throw new ErrorNota('Indica el monto a reintegrar');
     if (monto > pendiente + 0.005) throw new ErrorNota(`Solo hay ${pendiente.toFixed(2)} USD por reintegrar en esta nota`, 409);
@@ -415,6 +418,71 @@ export async function registrarReintegro({ nota, montoUsd, tasa, metodoPago, ref
     nota.reintegradoUsd = r2(Number(nota.reintegradoUsd) + monto);
     await nota.save({ transaction: t });
     return nota;
+}
+
+// ------------------------------------------------------------------ compensación del saldo a favor
+// Una nota de crédito sobre una factura que el cliente YA había pagado le deja un saldo a favor. Hay dos caminos: devolverle el dinero (reintegro, arriba) o COMPENSARLO: usar ese
+// saldo para pagar otras facturas pendientes del mismo cliente (las más antiguas primero, o las que se elijan). No sale ni entra dinero: en cada factura se asienta un abono con
+// referencia = la nota, y lo que el cliente debe baja justo lo que se compensó. Así lo que el cliente debe en total queda igual a lo que lleva la administradora en el Excel (la nota
+// resta de la deuda total del cliente) y las cuentas por cobrar no quedan infladas con una deuda que el cliente ya pagó.
+// Lo compensado se reconoce por los abonos con este método y la referencia de la nota (no hay columna propia), y cuenta junto al reintegro para saber cuánto queda por usar.
+export const METODO_COMPENSACION = 'Nota de crédito (saldo a favor)';
+
+/** Dólares de la nota ya compensados en otras facturas. */
+export async function compensadoDeNota(nota, transaction) {
+    const filas = await Abono.findAll({ where: { referencia: nota.numeroDocumento, metodoPago: METODO_COMPENSACION }, attributes: ['montoUsd'], transaction });
+    return r2(filas.reduce((a, x) => a + Number(x.montoUsd), 0));
+}
+
+/** Dólares del saldo a favor de la nota que todavía no se han devuelto ni compensado. */
+export async function saldoDisponibleDeNota(nota, transaction) {
+    return r2(Math.max(0, Number(nota.saldoAFavorUsd) - Number(nota.reintegradoUsd) - await compensadoDeNota(nota, transaction)));
+}
+
+/** Facturas pendientes del mismo cliente donde se puede compensar, de la más antigua a la más reciente (por vencimiento). */
+export async function facturasParaCompensar(nota, transaction) {
+    if (!nota.clienteId) return [];
+    const filas = await sequelize.query(
+        `SELECT c.id AS "cxcId", c."ventaId", v."numeroDocumento" AS documento, c."fechaVencimiento"::text AS vence, c.moneda::text AS moneda, c."saldoPendiente"::float AS saldo, c."tasaCambio"::float AS tasa
+           FROM "CuentasPorCobrar" c JOIN "Ventas" v ON v.id = c."ventaId"
+          WHERE c."clienteId" = :clienteId AND c.estado <> 'Pagado' AND c."notaId" IS NULL AND c."saldoPendiente" > 0.005 AND c."ventaId" <> :ventaId
+          ORDER BY c."fechaVencimiento" NULLS LAST, v."numeroDocumento"`,
+        { replacements: { clienteId: nota.clienteId, ventaId: nota.ventaId }, type: sequelize.QueryTypes.SELECT, transaction },
+    );
+    return filas.map((f) => ({ ...f, saldoUsd: f.moneda === 'BS' ? aDolares(f.saldo, f.tasa || 1) : r2(f.saldo) }));
+}
+
+/**
+ * Compensa el saldo a favor de la nota en las facturas pendientes del cliente (las de `ventaIds`, o todas), de la más antigua a la más reciente.
+ * @returns {{ aplicado: number, reparto: Array<{ documento: string, montoUsd: number, saldoNuevoUsd: number }> }}
+ */
+export async function compensarSaldoAFavor({ nota, ventaIds = null, tasa, transaction: t }) {
+    if (nota.estado !== 'EMITIDA' || nota.tipo !== 'CREDITO' || nota.origen !== 'VENTA') throw new ErrorNota('Solo las notas de crédito de venta vigentes admiten compensación', 409);
+    let restante = await saldoDisponibleDeNota(nota, t);
+    if (!(restante > 0.005)) throw new ErrorNota('Esta nota no tiene saldo a favor por compensar (ya se reintegró o ya se compensó)', 409);
+    if (!(Number(tasa) > 0)) throw new ErrorNota('Tasa de cambio inválida');
+    let facturas = await facturasParaCompensar(nota, t);
+    if (Array.isArray(ventaIds) && ventaIds.length) facturas = facturas.filter((f) => ventaIds.includes(f.ventaId));
+    if (!facturas.length) throw new ErrorNota('El cliente no tiene otras facturas pendientes donde compensar', 409);
+
+    const reparto = [];
+    for (const f of facturas) {
+        if (restante <= 0.005) break;
+        const venta = await Venta.findByPk(f.ventaId, { transaction: t, lock: t.LOCK.UPDATE });
+        const monto = r2(Math.min(restante, f.saldoUsd));
+        if (!(monto > 0)) continue;
+        const tasaAbono = f.moneda === 'BS' ? Number(f.tasa) || Number(tasa) : Number(tasa); // en una cuenta en Bs el saldo baja con los Bs a la tasa de la cuenta
+        const bs = aBolivares(monto, tasaAbono);
+        await Abono.create({
+            ventaId: f.ventaId, fechaPago: nota.fecha || hoyCaracas(), metodoPago: METODO_COMPENSACION, referencia: nota.numeroDocumento,
+            montoUsd: monto, montoVes: bs, montoBs: bs, tasaBcvAplicada: tasaAbono, tasaCambio: tasaAbono,
+            notas: `Saldo a favor de la ${ETIQUETA[nota.tipo].toLowerCase()} ${nota.numeroDocumento} (la factura que afectaba ya estaba pagada) compensado en esta factura`.slice(0, 250),
+        }, { transaction: t });
+        await recalcularCobro(venta, t);
+        reparto.push({ documento: f.documento, montoUsd: monto, saldoNuevoUsd: r2(f.saldoUsd - monto) });
+        restante = r2(restante - monto);
+    }
+    return { aplicado: r2(reparto.reduce((a, x) => a + x.montoUsd, 0)), reparto };
 }
 
 // ------------------------------------------------------------------ diferencial cambiario (factura emitida a crédito, pagada a otra tasa)

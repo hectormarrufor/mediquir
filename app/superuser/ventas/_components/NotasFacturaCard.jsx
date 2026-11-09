@@ -7,6 +7,7 @@ import { IconFileDiff } from '@tabler/icons-react';
 import EmitirNotaModal from './EmitirNotaModal';
 import NotaAcciones from './NotaAcciones';
 import DiferencialCambiarioModal from './DiferencialCambiarioModal';
+import CompensarNotaModal from './CompensarNotaModal';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 const fmtFecha = (v) => (v ? `${String(v).slice(8, 10)}/${String(v).slice(5, 7)}/${String(v).slice(0, 4)}` : '');
@@ -16,6 +17,7 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
     const queryClient = useQueryClient();
     const [emitiendo, setEmitiendo] = useState(null); // 'CREDITO' | 'DEBITO'
     const [diferencial, setDiferencial] = useState(false);
+    const [compensar, setCompensar] = useState(null); // nota de crédito recién emitida que dejó saldo a favor: se ofrece compensarlo
     const { data, refetch } = useQuery({
         queryKey: ['notas-venta', pedido.id],
         queryFn: async () => {
@@ -54,8 +56,11 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
                                 <Text size="xs" c="dimmed" lineClamp={2}>{fmtFecha(n.fecha)} · {n.motivo}</Text>
                                 {n.facturasAfectadas?.length > 1 && <Text size="xs" c="dimmed">Afecta a: {n.facturasAfectadas.map((f) => f.numeroDocumento).join(', ')}</Text>}
                                 {!n.numeroControl && n.estado === 'EMITIDA' && <Text size="xs" c="dimmed">Sin imprimir: el número de control se asigna al imprimirla</Text>}
-                                {Number(n.saldoAFavorUsd) - Number(n.reintegradoUsd) > 0.005 && n.estado === 'EMITIDA' && (
-                                    <Text size="xs" c="teal.8">Por reintegrar al cliente: ${nf(Number(n.saldoAFavorUsd) - Number(n.reintegradoUsd))}</Text>
+                                {Number(n.saldoAFavorUsd) - Number(n.reintegradoUsd) - Number(n.compensadoUsd || 0) > 0.005 && n.estado === 'EMITIDA' && (
+                                    <Text size="xs" c="teal.8">Saldo a favor del cliente por reintegrar o compensar: ${nf(Number(n.saldoAFavorUsd) - Number(n.reintegradoUsd) - Number(n.compensadoUsd || 0))}</Text>
+                                )}
+                                {Number(n.compensadoUsd) > 0.005 && n.estado === 'EMITIDA' && (
+                                    <Text size="xs" c="dimmed">Compensado en otras facturas del cliente: ${nf(n.compensadoUsd)}</Text>
                                 )}
                             </div>
                             <Group gap={4} wrap="nowrap">
@@ -70,7 +75,8 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
             )}
 
             {diferencial && <DiferencialCambiarioModal opened onClose={() => setDiferencial(false)} factura={pedido} onEmitida={refrescar} />}
-            {emitiendo && <EmitirNotaModal opened onClose={() => setEmitiendo(null)} factura={pedido} tipo={emitiendo} onEmitida={refrescar} />}
+            {emitiendo && <EmitirNotaModal opened onClose={() => setEmitiendo(null)} factura={pedido} tipo={emitiendo} onEmitida={(nota) => { refrescar(); if (nota?.tipo === 'CREDITO' && Number(nota.saldoAFavorUsd) > 0.005) setCompensar(nota); }} />}
+            {compensar && <CompensarNotaModal nota={compensar} desdeEmision onClose={() => setCompensar(null)} onCambio={refrescar} />}
         </Paper>
     );
 }
