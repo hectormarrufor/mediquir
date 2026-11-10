@@ -1,6 +1,6 @@
 import db from '@/models';
 import { recalcularCobro, declararRetencion, MARCA_CIERRE } from './retencionesVenta';
-import { generarComisionPorPago } from './comisionesPago';
+import { generarComisionPorPago, completarComisionAlSaldar } from './comisionesPago';
 import { registrarAbono, ErrorAbono } from './abonos';
 import { tasaDelDia, tasaVigente } from './tasaBcv';
 import { fechaCaracas } from '@/app/constants/hora';
@@ -75,6 +75,7 @@ export async function registrarAbonoCxc({ cuentaId, fecha, monto, metodo, refere
         }
     }
     await recalcularCobro(venta, t);
+    await completarComisionAlSaldar({ ventaId: venta.id, transaction: t });
     await cuenta.reload({ transaction: t });
     return { abono, cuenta, retencion: retencionDeclarada };
 }

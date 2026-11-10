@@ -3,7 +3,7 @@
 // Imports relativos con extensión (sin alias "@/") para poder probarlo con un script de Node.
 import db from '../../../models/index.js';
 import { aBolivares, aDolares } from '../../constants/facturacion.js';
-import { generarComisionPorPago } from './comisionesPago.js';
+import { completarComisionAlSaldar } from './comisionesPago.js';
 
 const { Abono, CuentaPorCobrar, RetencionIva, Cliente, VentaDetalle, MovimientoFinanciero } = db;
 
@@ -79,7 +79,6 @@ export async function declararRetencion({ venta, porcentaje = 75, fecha = null, 
         montoUsd: c.retenidoUsd, montoVes: c.retenidoBs, montoBs: c.retenidoBs, tasaBcvAplicada: c.tasa, tasaCambio: c.tasa,
         notas: `Retención de IVA ${c.pct}% declarada; falta el comprobante del cliente`,
     }, { transaction: t });
-    await generarComisionPorPago({ abono, transaction: t });
     const retencion = await RetencionIva.create({
         tipo: 'VENTA', estado: 'PENDIENTE', fecha: dia, periodo: dia.slice(0, 7), comprobante: null,
         facturaAfectada: venta.numeroDocumento, numeroControlFactura: venta.numeroControl,
@@ -88,5 +87,6 @@ export async function declararRetencion({ venta, porcentaje = 75, fecha = null, 
         tasaCambio: c.tasa, ventaId: venta.id, abonoId: abono.id,
     }, { transaction: t });
     await recalcularCobro(venta, t);
+    await completarComisionAlSaldar({ ventaId: venta.id, transaction: t }); // la retención no comisiona, pero si con ella se salda la factura la comisión debe quedar completa
     return retencion;
 }

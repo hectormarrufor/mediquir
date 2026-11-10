@@ -3,7 +3,7 @@
 // Imports relativos con extensión (sin alias "@/") para poder probarlo con un script de Node.
 import db from '../../../models/index.js';
 import { aBolivares, aDolares } from '../../constants/facturacion.js';
-import { generarComisionPorPago } from './comisionesPago.js';
+import { generarComisionPorPago, completarComisionAlSaldar } from './comisionesPago.js';
 
 const { Abono, CuentaPorCobrar, MovimientoFinanciero, CategoriaFinanciera, RetencionIva, NotaFiscal } = db;
 
@@ -101,6 +101,7 @@ export async function registrarAbono({ venta, monto, moneda, tasa, metodoPago, r
         await venta.save({ transaction: t });
     }
     await cxc.save({ transaction: t });
+    await completarComisionAlSaldar({ ventaId: venta.id, transaction: t });
 
     if (pagoSms) {
         pagoSms.procesado = true;
