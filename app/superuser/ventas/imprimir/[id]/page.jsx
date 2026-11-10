@@ -62,9 +62,9 @@ export default function ImprimirRecibo() {
     const totalBs = venta.moneda === 'BS' ? Number(venta.totalFinal) : Number(venta.totalFinal) * Number(venta.tasaCambio);
     const totalUsd = venta.moneda === 'USD' ? Number(venta.totalFinal) : Number(venta.totalFinal) / Number(venta.tasaCambio);
     
-    // La nota de entrega SÍ lleva IVA, pero el cliente solo paga la base imponible: el IVA se muestra como referencia (no se cobra ni entra a libros)
+    // En la nota de entrega las líneas se guardan sin IVA (aplicaIva=false): el IVA referencial sale de la alícuota de cada producto. La nota de entrega SÍ lleva IVA, pero el cliente solo paga la base imponible: el IVA se muestra como referencia (no se cobra ni entra a libros)
     const ivaReferencial = esNotaEntrega
-        ? Math.round((venta.detalles || []).reduce((a, d) => a + Number(d.subtotal) * (d.aplicaIva === false || d.isFicticio ? 0 : Number(d.producto?.porcentajeIva ?? 16)) / 100, 0) * 100) / 100
+        ? Math.round((venta.detalles || []).reduce((a, d) => a + Number(d.subtotal) * (d.isFicticio ? 0 : Number(d.producto?.porcentajeIva ?? 16)) / 100, 0) * 100) / 100
         : 0;
     const ivaDoc = esNotaEntrega ? ivaReferencial : Number(venta.montoIva);
     const ivaBs = venta.moneda === 'BS' ? ivaDoc : ivaDoc * Number(venta.tasaCambio);
