@@ -14,7 +14,7 @@ const hoy = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas'
 async function pedirJson(url, opciones) {
     const res = await fetch(url, opciones);
     const cuerpo = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(cuerpo?.error || 'No se pudo completar la solicitud');
+    if (!res.ok) throw Object.assign(new Error(cuerpo?.error || 'No se pudo completar la solicitud'), { datos: cuerpo });
     return cuerpo;
 }
 
@@ -29,23 +29,25 @@ export default function RetencionIvaCard({ pedido, onCambio }) {
     const [porcentaje, setPorcentaje] = useState('75');
     const [monto, setMonto] = useState('');
     const [montoEditado, setMontoEditado] = useState(false); // si se escribió a mano, deja de recalcularse
+    const [difAviso, setDifAviso] = useState(null); // el comprobante no coincide con lo esperado: se pide confirmar
+    const [controlModal, setControlModal] = useState('');
 
     const tasa = Number(pedido.tasaCambio) || 1;
     const ivaBs = pedido.moneda === 'BS' ? Number(pedido.montoIva) : aBolivares(Number(pedido.montoIva), tasa);
     const retencion = pedido.retenciones?.[0] || null;
-    const especial = Boolean(pedido.cliente?.esContribuyenteEspecial);
     const porRevisar = retencion?.estado === 'POR_REVISAR'; // el cliente ya subió su comprobante desde el portal
 
     useEffect(() => { setControl(pedido.numeroControl || ''); }, [pedido.numeroControl]);
     useEffect(() => {
         if (!abierto) return;
-        const p = (retencion ? Number(retencion.porcentajeRetencion) === 100 : especial && Number(pedido.cliente?.retencionIvaPorDefecto) === 100) ? '100' : '75';
+        const p = retencion && Number(retencion.porcentajeRetencion) === 100 ? '100' : '75'; // a todos nos retienen el 75 %
+        setControlModal(pedido.numeroControl || ''); setDifAviso(null);
         setPorcentaje(p);
         // Si el cliente ya subió su comprobante, se parte de lo que declaró (administración lo confirma o lo corrige)
         setComprobante(porRevisar ? (retencion.comprobante || '') : '');
         setFecha(porRevisar && retencion.fecha ? String(retencion.fecha).slice(0, 10) : hoy());
         if (porRevisar && Number(retencion.montoDeclarado) > 0) { setMontoEditado(true); setMonto(Number(retencion.montoDeclarado)); } else setMontoEditado(false);
-    }, [abierto, especial, pedido.cliente?.retencionIvaPorDefecto, retencion?.porcentajeRetencion, porRevisar]);
+    }, [abierto, retencion?.porcentajeRetencion, porRevisar]);
     useEffect(() => { if (!montoEditado) setMonto(Math.round(ivaBs * Number(porcentaje)) / 100); }, [porcentaje, ivaBs, montoEditado]);
 
     if (pedido.tipoDocumento !== 'FACTURA' || !(Number(pedido.montoIva) > 0)) return null;
@@ -60,7 +62,7 @@ export default function RetencionIvaCard({ pedido, onCambio }) {
         notifications.show({ color: 'teal', message: 'Número de control guardado' });
     });
     const registrar = () => llamar(async () => {
-        await pedirJson(`/api/ventas/${pedido.id}/retencion`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comprobante, fecha, porcentaje: Number(porcentaje), ivaRetenidoBs: Number(monto) }) });
+        await pedirJson(`/api/ventas/${pedido.id}/retencion`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comprobante, fecha, porcentaje: Number(porcentaje), ivaRetenidoBs: Number(monto), numeroControl: controlModal, aceptarDiferencia: Boolean(difAviso?.aceptada) }) }).catch((e) => { if (e.datos?.diferencia) { setDifAviso({ ...e.datos, mensaje: e.message, aceptada: false }); throw new Error(e.message); } throw e; });
         notifications.show({ color: 'teal', title: 'Retención registrada', message: retencion ? 'Comprobante confirmado: la retención ya entra al libro de ventas.' : 'Se descontó del saldo por cobrar de la factura.' });
         setAbierto(false);
     });
@@ -110,7 +112,6 @@ export default function RetencionIvaCard({ pedido, onCambio }) {
                 </Alert>
             ) : (
                 <Box mt="xs">
-                    {especial && <Badge size="sm" color="grape" variant="light" mb={6}>Cliente contribuyente especial: suele retener</Badge>}
                     <Button fullWidth size="xs" variant="light" color="grape" onClick={() => setAbierto(true)}>Registrar retención de IVA</Button>
                 </Box>
             )}
@@ -118,12 +119,25 @@ export default function RetencionIvaCard({ pedido, onCambio }) {
             <Modal opened={abierto} onClose={() => setAbierto(false)} title={<Text fw={800}>Retención de IVA del cliente</Text>} centered>
                 <Stack gap="sm">
                     <Text size="sm" c="dimmed">Factura <b>{pedido.numeroDocumento}</b> · IVA Bs {bs(ivaBs)}. El cliente retiene parte de ese IVA y se lo paga al SENIAT; a ti te descuenta ese monto del pago.</Text>
-                    <TextInput label="N° de comprobante de retención" placeholder="20260700001835" withAsterisk value={comprobante} onChange={(e) => setComprobante(e.currentTarget.value)} data-autofocus />
+                    {/* Orden del comprobante: fecha, RIF, razón social, nº de comprobante, nº de control, nº de factura y monto retenido */}
+                    <TextInput type="date" label="1. Fecha del comprobante" value={fecha} onChange={(e) => setFecha(e.currentTarget.value)} data-autofocus />
                     <Group grow>
-                        <TextInput type="date" label="Fecha del comprobante" value={fecha} onChange={(e) => setFecha(e.currentTarget.value)} />
-                        <Select label="Porcentaje" data={[{ value: '75', label: '75 %' }, { value: '100', label: '100 %' }]} value={porcentaje} onChange={(v) => setPorcentaje(v || '75')} allowDeselect={false} />
+                        <TextInput label="2. RIF" value={pedido.cliente?.identificacion || ''} readOnly variant="filled" />
+                        <TextInput label="3. Razón social" value={pedido.cliente?.nombre || ''} readOnly variant="filled" />
                     </Group>
-                    <NumberInput label="IVA retenido (Bs)" description="Se calcula solo; edítalo si el comprobante trae otro monto" value={monto} onChange={(v) => { setMontoEditado(true); setMonto(v); }} decimalScale={2} thousandSeparator="." decimalSeparator="," hideControls />
+                    <TextInput label="4. N° de comprobante de retención" description="Lo emite y lo pasa el cliente" placeholder="20260700001835" withAsterisk value={comprobante} onChange={(e) => setComprobante(e.currentTarget.value)} />
+                    <Group grow>
+                        <TextInput label="5. N° de control de la factura" value={controlModal} onChange={(e) => setControlModal(e.currentTarget.value)} readOnly={Boolean(pedido.numeroControl)} variant={pedido.numeroControl ? 'filled' : 'default'} placeholder="00-000000" />
+                        <TextInput label="6. N° de factura" value={pedido.numeroDocumento} readOnly variant="filled" />
+                    </Group>
+                    <Select label="Porcentaje" data={[{ value: '75', label: '75 %' }, { value: '100', label: '100 %' }]} value={porcentaje} onChange={(v) => setPorcentaje(v || '75')} allowDeselect={false} />
+                    <NumberInput label="7. Monto retenido (Bs)" description={`Esperado: Bs ${bs(Math.round(ivaBs * Number(porcentaje)) / 100)} (${porcentaje} % del IVA a la tasa de la factura)`} value={monto} onChange={(v) => { setMontoEditado(true); setMonto(v); setDifAviso(null); }} decimalScale={2} thousandSeparator="." decimalSeparator="," hideControls />
+                    {difAviso && (
+                        <Alert color="orange" variant="light" p="xs" title="No coincide con lo esperado">
+                            <Text size="xs">{difAviso.mensaje}</Text>
+                            <Button size="compact-xs" mt={6} color="orange" variant={difAviso.aceptada ? 'filled' : 'light'} onClick={() => setDifAviso({ ...difAviso, aceptada: true })}>{difAviso.aceptada ? 'Confirmado: se registra con ese monto' : 'Es correcto, registrar con ese monto'}</Button>
+                        </Alert>
+                    )}
                     <Group justify="flex-end" mt="xs">
                         <Button variant="default" onClick={() => setAbierto(false)}>Cancelar</Button>
                         <Button color="grape" onClick={registrar} loading={guardando} disabled={!comprobante.trim() || !(Number(monto) > 0)}>Registrar retención</Button>

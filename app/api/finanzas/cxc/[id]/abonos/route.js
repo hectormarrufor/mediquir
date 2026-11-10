@@ -17,10 +17,10 @@ export async function POST(request, { params }) {
         const b = await request.json();
         const r = await registrarAbonoCxc({
             cuentaId: Number(id), fecha: b.fecha, monto: b.monto, metodo: b.metodo, referencia: b.referencia, notas: b.notas,
-            tipo: b.tipo === 'AJUSTE' ? 'AJUSTE' : 'ABONO', transaction: t,
+            tipo: b.tipo === 'AJUSTE' ? 'AJUSTE' : 'ABONO', retencion: Boolean(b.retencion), cierraFactura: Boolean(b.cierraFactura), transaction: t,
         });
         await t.commit();
-        return NextResponse.json({ ok: true, abono: r.abono, saldo: Number(r.cuenta.saldoPendiente), estado: r.cuenta.estado }, { status: 201 });
+        return NextResponse.json({ ok: true, abono: r.abono, saldo: Number(r.cuenta.saldoPendiente), estado: r.cuenta.estado, retencion: Boolean(r.retencion), quedaDebiendo: Boolean(b.cierraFactura) && Number(r.cuenta.saldoPendiente) > 0.005 }, { status: 201 });
     } catch (error) {
         if (!t.finished) await t.rollback();
         if (error instanceof ErrorCxc) return NextResponse.json({ error: error.message }, { status: error.status });

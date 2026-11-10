@@ -5,7 +5,6 @@ import db from '@/models';
 const { Venta, VentaDetalle, Producto, Marca, Correlativo, CategoriaFinanciera, MovimientoFinanciero, Cliente, User, Empleado, SalidaInventario, CuentaPorCobrar } = db;
 import { requerirStaff } from '../inventario/_lib';
 import { tasaVigente, tasaDelDia } from '../_lib/tasaBcv';
-import { crearRetencionPendiente } from '../_lib/retencionesVenta';
 import { calcularFactura, aBolivares, aDolares, REGLAS, precioPorTarifa, TARIFAS_VENDEDOR } from '@/app/constants/facturacion';
 import { rolDe } from '@/app/constants/roles';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
@@ -283,9 +282,7 @@ export async function POST(request) {
             }, { transaction: t });
         }
 
-        // Factura a crédito a un contribuyente especial: la retención de IVA queda calculada (falta el comprobante del cliente)
-        // y se descuenta del saldo. En una venta de contado el cobro ya se asentó completo, ahí la retención se carga a mano.
-        if (condicionPago === 'Credito') await crearRetencionPendiente({ venta: nuevaVenta, transaction: t });
+        // La retención de IVA ya no se calcula sola: se declara por factura al registrar un abono (o desde la venta) cuando el cliente retiene
 
         // --- 5. FINANZAS CONTADO (se separa el ingreso propio del IVA que se le debe al SENIAT) ---
         if (condicionPago === 'Contado') {

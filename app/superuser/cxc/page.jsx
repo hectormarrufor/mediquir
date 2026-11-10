@@ -2,15 +2,16 @@
 
 import React, { useEffect, useState } from 'react';
 import { Box, Button, Group, Tabs, Text, Title } from '@mantine/core';
-import { IconChartBar, IconHelpCircle, IconTable, IconUsers } from '@tabler/icons-react';
+import { IconChartBar, IconHelpCircle, IconReceiptTax, IconTable, IconUsers } from '@tabler/icons-react';
 import CuentasDashboard from '../_components/CuentasDashboard';
 import LibroCobranza from './_components/LibroCobranza';
 import HojasVendedores from './_components/HojasVendedores';
+import SeguimientoCobros from './_components/SeguimientoCobros';
 import TutorialCxc, { tutorialYaVisto } from './_components/TutorialCxc';
 import { guardarLocal, leerLocal, useEsTelefono } from './_components/utilidades';
 import classes from './_components/cxc.module.css';
 
-const PESTANAS = ['libro', 'vendedores', 'resumen'];
+const PESTANAS = ['libro', 'vendedores', 'seguimiento', 'resumen'];
 const LLAVE_PESTANA = 'mq:cxc:pestana';
 
 // Cuentas por cobrar: el libro de cobranza (editable como en Excel), las hojas de los vendedores a comisión y el resumen con la antigüedad.
@@ -49,10 +50,12 @@ export default function CuentasPorCobrarPage() {
                 <Tabs.List mb={8} className={`${classes.pestanas} ${classes.noImprimir}`} grow={Boolean(telefono)}>
                     <Tabs.Tab value="libro" leftSection={telefono ? null : <IconTable size={16} />}>{telefono ? 'Libro' : 'Libro de cobranza'}</Tabs.Tab>
                     <Tabs.Tab value="vendedores" leftSection={telefono ? null : <IconUsers size={16} />}>{telefono ? 'Vendedores' : 'Vendedores a comisión'}</Tabs.Tab>
+                    <Tabs.Tab value="seguimiento" leftSection={telefono ? null : <IconReceiptTax size={16} />}>{telefono ? 'Seguimiento' : 'Retenciones y seguimiento'}</Tabs.Tab>
                     <Tabs.Tab value="resumen" leftSection={telefono ? null : <IconChartBar size={16} />}>{telefono ? 'Resumen' : 'Resumen y antigüedad'}</Tabs.Tab>
                 </Tabs.List>
                 <Tabs.Panel value="libro"><LibroCobranza /></Tabs.Panel>
                 <Tabs.Panel value="vendedores"><HojasVendedores /></Tabs.Panel>
+                <Tabs.Panel value="seguimiento"><SeguimientoCobros /></Tabs.Panel>
                 <Tabs.Panel value="resumen"><CuentasDashboard tipo="cobrar" embebido /></Tabs.Panel>
             </Tabs>
 

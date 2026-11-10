@@ -89,3 +89,38 @@ export async function crearRetencionPendiente({ venta, transaction: t }) {
     await recalcularCobro(venta, t);
     return retencion;
 }
+
+// Marca que lleva el abono cuando el cliente dijo que con ese pago cerraba la factura (para la lista «dicen que pagaron completo y deben»)
+export const MARCA_CIERRE = '[CIERRE DECLARADO]';
+// Las retenciones se llevan desde la primera quincena de noviembre de 2026; antes de esa fecha no se piden ni se listan
+export const RETENCIONES_DESDE = '2026-11-01';
+
+/**
+ * La administradora declara que el cliente retuvo el IVA de ESTA factura (casi siempre el 75 %). No depende de ningún dato del cliente.
+ * Queda PENDIENTE de comprobante, y ese IVA baja la deuda desde ya (el cliente se lo paga al SENIAT). Los bolívares son a la tasa de la factura.
+ * Devuelve la retención creada, o la que ya existía.
+ */
+export async function declararRetencion({ venta, porcentaje = 75, fecha = null, transaction: t }) {
+    if (venta.tipoDocumento !== 'FACTURA' || venta.statusDespacho === 'Cancelado') throw new Error('Solo una factura admite retención de IVA');
+    if (!(Number(venta.montoIva) > 0)) throw new Error('Esta factura no tiene IVA que retener');
+    const existente = await RetencionIva.findOne({ where: { ventaId: venta.id }, transaction: t });
+    if (existente) return existente;
+    const cliente = await Cliente.findByPk(venta.clienteId, { attributes: ['identificacion', 'nombre'], transaction: t });
+    const detalles = await VentaDetalle.findAll({ where: { ventaId: venta.id }, attributes: ['subtotal', 'aplicaIva'], transaction: t });
+    const c = calcularRetencion(venta, detalles, porcentaje);
+    const dia = fecha || hoyCaracas();
+    const abono = await Abono.create({
+        ventaId: venta.id, fechaPago: dia, metodoPago: 'Retención IVA', referencia: 'PENDIENTE DE COMPROBANTE',
+        montoUsd: c.retenidoUsd, montoVes: c.retenidoBs, montoBs: c.retenidoBs, tasaBcvAplicada: c.tasa, tasaCambio: c.tasa,
+        notas: `Retención de IVA ${c.pct}% declarada; falta el comprobante del cliente`,
+    }, { transaction: t });
+    const retencion = await RetencionIva.create({
+        tipo: 'VENTA', estado: 'PENDIENTE', fecha: dia, periodo: dia.slice(0, 7), comprobante: null,
+        facturaAfectada: venta.numeroDocumento, numeroControlFactura: venta.numeroControl,
+        contraparteRif: cliente?.identificacion || null, contraparteNombre: cliente?.nombre || null,
+        baseImponible: c.baseBs, alicuota: 16, montoIva: c.ivaBs, porcentajeRetencion: c.pct, ivaRetenido: c.retenidoBs,
+        tasaCambio: c.tasa, ventaId: venta.id, abonoId: abono.id,
+    }, { transaction: t });
+    await recalcularCobro(venta, t);
+    return retencion;
+}

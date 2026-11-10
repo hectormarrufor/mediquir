@@ -175,6 +175,7 @@ export default function DetallePedidoMayorPage() {
                 </Button>
                 <Title order={isMobile ? 3 : 2} c="white">{pedido.tipoDocumento === 'FACTURA' ? 'Factura' : pedido.tipoDocumento === 'NOTA_ENTREGA' ? 'Nota de entrega' : 'Recibo'} {pedido.numeroDocumento}</Title>
                 {pedido.numeroDocumentoAnterior && <Badge size="lg" variant="outline" color="gray">Antes: {pedido.numeroDocumentoAnterior}</Badge>}
+                {pedido.reemplazadaPor && <Button size="xs" variant="light" color="orange" onClick={() => router.push(`/superuser/ventas/${pedido.reemplazadaPor.id}`)}>Anulada: pasó a la factura {pedido.reemplazadaPor.numero} →</Button>}
                 {rolUsuario === 'admin' && pedido.tipoDocumento === 'NOTA_ENTREGA' && pedido.condicionPago === 'Credito' && pedido.clienteId && pedido.statusDespacho !== 'Cancelado' && pedido.revisionStock !== 'PENDIENTE' && (
                     <Button size="xs" variant="light" color="indigo" leftSection={<IconReceiptTax size={16} />} onClick={() => setModalNotaAFactura(true)}>Pasar a factura</Button>
                 )}

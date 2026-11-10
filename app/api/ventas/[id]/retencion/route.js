@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { Abono, Cliente, RetencionIva, Venta, VentaDetalle, sequelize } from '@/models';
+import { Abono, Cliente, CuentaPorCobrar, RetencionIva, Venta, VentaDetalle, sequelize } from '@/models';
 import { requerirAdmin, requerirNoVendedor } from '../../../_lib/acceso';
 import { calcularRetencion, hoyCaracas, recalcularCobro } from '../../../_lib/retencionesVenta';
 import { avisarCliente } from '../../../_lib/avisosCliente';
@@ -10,7 +10,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 class ErrorRetencion extends Error {
-    constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
+    constructor(mensaje, status = 400, extra = null) { super(mensaje); this.status = status; this.extra = extra; }
 }
 
 export async function GET(request, { params }) {
@@ -33,7 +33,7 @@ export async function POST(request, { params }) {
     try {
         const { id } = await params;
         if (!UUID.test(id)) throw new ErrorRetencion('Venta no encontrada', 404);
-        const { comprobante, fecha, porcentaje, ivaRetenidoBs } = await request.json();
+        const { comprobante, fecha, porcentaje, ivaRetenidoBs, numeroControl, aceptarDiferencia } = await request.json();
 
         const numeroComprobante = String(comprobante || '').trim().slice(0, 30);
         if (!numeroComprobante) throw new ErrorRetencion('Indica el número del comprobante de retención');
@@ -55,6 +55,15 @@ export async function POST(request, { params }) {
 
         const c = calcularRetencion(venta, venta.detalles, porcentaje, ivaRetenidoBs);
         if (c.retenidoBs > c.ivaBs + 0.005) throw new ErrorRetencion('La retención no puede ser mayor que el IVA de la factura');
+        // Lo que el sistema esperaba (el % del IVA a la tasa de la factura) contra lo que trae el comprobante: si difiere, hay que confirmarlo
+        const esperado = calcularRetencion(venta, venta.detalles, porcentaje);
+        const diferenciaBs = Math.round((c.retenidoBs - esperado.retenidoBs) * 100) / 100;
+        if (Math.abs(diferenciaBs) > 0.02 && !aceptarDiferencia) {
+            throw new ErrorRetencion(`El comprobante trae Bs ${c.retenidoBs.toFixed(2)} y el sistema esperaba Bs ${esperado.retenidoBs.toFixed(2)} (${esperado.pct} % del IVA a la tasa de la factura): diferencia de Bs ${diferenciaBs.toFixed(2)}`, 409, { diferencia: true, esperadoBs: esperado.retenidoBs, diferenciaBs });
+        }
+        // El número de control de la factura se puede completar aquí si todavía no lo tiene
+        const control = String(numeroControl ?? '').trim().slice(0, 30);
+        if (control && !venta.numeroControl) { venta.numeroControl = control; await venta.save({ transaction: t }); }
 
         // La retención cuenta como un abono: el cliente le paga ese IVA al SENIAT y no a la empresa
         const datosAbono = {
@@ -85,12 +94,22 @@ export async function POST(request, { params }) {
         }
 
         await recalcularCobro(venta, t);
+        // Cuadre: lo que el cliente pagó en dinero + la retención contra el total de la factura (solo si ya quedó saldada)
+        let aviso = null;
+        const cxcVenta = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, transaction: t });
+        if (cxcVenta && cxcVenta.estado === 'Pagado') {
+            const abonos = await Abono.findAll({ where: { ventaId: venta.id }, attributes: ['montoUsd', 'metodoPago'], transaction: t });
+            const dinero = abonos.filter((a) => a.metodoPago !== 'Retención IVA').reduce((x, a) => x + Number(a.montoUsd), 0);
+            const totalUsd = venta.moneda === 'BS' ? Number(venta.totalFinal) / (Number(venta.tasaCambio) || 1) : Number(venta.totalFinal);
+            const dif = Math.round((totalUsd - dinero - c.retenidoUsd) * 100) / 100;
+            if (Math.abs(dif) > 0.5) aviso = `Lo pagado (${dinero.toFixed(2)}) más la retención (${c.retenidoUsd.toFixed(2)}) no cuadra con la factura (${totalUsd.toFixed(2)}): diferencia de ${dif.toFixed(2)}.`;
+        }
         await t.commit();
         if (venta.tipoVenta === 'MAYOR') await avisarCliente(venta, 'RETENCION_CONFIRMADA', { comprobante: numeroComprobante });
-        return NextResponse.json({ success: true, retencion }, { status: 201 });
+        return NextResponse.json({ success: true, retencion, aviso }, { status: 201 });
     } catch (error) {
         if (!t.finished) await t.rollback();
-        if (error instanceof ErrorRetencion) return NextResponse.json({ error: error.message }, { status: error.status });
+        if (error instanceof ErrorRetencion) return NextResponse.json({ error: error.message, ...(error.extra || {}) }, { status: error.status });
         console.error('Retención de venta:', error);
         return NextResponse.json({ error: 'No se pudo registrar la retención' }, { status: 500 });
     }

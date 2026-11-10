@@ -6,7 +6,7 @@
 //  · El IVA que la tienda había dejado como ingreso pasa a la categoría "IVA Recaudado": queda reservado para pagar al SENIAT.
 import db from '../../../models/index.js';
 import { calcularFactura, aDolares, aBolivares, REGLAS } from '../../constants/facturacion.js';
-import { recalcularCobro, crearRetencionPendiente } from './retencionesVenta.js';
+import { recalcularCobro } from './retencionesVenta.js';
 import { fechaCaracas } from '../../constants/hora.js';
 
 const { sequelize, Correlativo, CategoriaFinanciera, MovimientoFinanciero, VentaDetalle, Producto, CuentaPorCobrar, Venta } = db;
@@ -68,8 +68,6 @@ export async function convertirAFactura({ venta, transaction: t, numeroManual = 
     venta.fechaEmision = emision;
     if (controlDe(numeroControl)) venta.numeroControl = controlDe(numeroControl);
     await venta.save({ transaction: t });
-    // Pedido B2B (o venta a crédito) de un contribuyente especial: la retención de IVA queda calculada desde ya (falta su comprobante). En la tienda de contado no se hace.
-    if (venta.tipoVenta === 'MAYOR' || venta.condicionPago === 'Credito') await crearRetencionPendiente({ venta, transaction: t });
 
     // El IVA cobrado deja de ser ingreso de la tienda y pasa a estar reservado para el SENIAT
     let catIva = await CategoriaFinanciera.findOne({ where: { nombre: CAT_IVA }, transaction: t });
@@ -125,30 +123,54 @@ export async function vistaPreviaConversion({ venta, tasaHoy, transaction }) {
     };
 }
 
-/** Convierte la nota de entrega `venta` (ya cargada y bloqueada dentro de `transaction`) en factura con la tasa de hoy. No hace commit. */
+/**
+ * Pasa la nota de entrega `venta` (ya cargada y bloqueada dentro de `transaction`) a una FACTURA NUEVA con la tasa de hoy. No hace commit.
+ *  · La nota NO desaparece: conserva su número y queda anulada (histórica). La factura toma el siguiente F- y enlaza a la nota en `numeroDocumentoAnterior`.
+ *  · El inventario no se mueve: los productos ya salieron con la nota; las salidas y la evidencia de empaque pasan a la factura.
+ *  · Los dólares se mantienen (más el IVA); los bolívares se recalculan con la tasa del día de la factura.
+ *  · La cuenta por cobrar, los abonos, los ingresos de caja y las comisiones de vendedores siguen a la factura. La comisión no cambia: se calcula sobre la base sin IVA.
+ *  · La retención de IVA NO se crea sola: se declara después, por factura, al registrar un abono.
+ */
 export async function convertirNotaEntregaAFactura({ venta, tasaHoy, transaction: t, numeroManual = null, numeroControl = null, fecha = null }) {
     if (!(Number(tasaHoy) > 0)) throw new ErrorConversion('No hay una tasa BCV vigente registrada', 409);
     const p = await planConversionNE(venta, t);
     const anterior = venta.numeroDocumento;
     const emision = fechaEmisionDe(fecha);
     const numero = await siguienteNumeroFactura(t, numeroManual);
+    const sql = (texto, reemplazos) => sequelize.query(texto, { replacements: reemplazos, transaction: t });
 
-    for (const l of p.lineas) { l.d.aplicaIva = l.aplicaIva; await l.d.save({ transaction: t }); }
-    venta.numeroDocumentoAnterior = anterior;
-    venta.numeroDocumento = numero;
-    venta.tipoDocumento = 'FACTURA';
-    venta.fechaEmision = emision;
-    if (controlDe(numeroControl)) venta.numeroControl = controlDe(numeroControl);
-    venta.tasaCambio = tasaHoy;
-    venta.montoIva = p.ivaNuevo;
-    venta.totalFinal = p.totalNuevo;
+    // 1. La factura nueva: copia de la nota con su número, su fecha, la tasa de hoy y el IVA
+    const datos = venta.get({ plain: true });
+    for (const k of ['id', 'createdAt', 'updatedAt', 'detalles']) delete datos[k];
+    const factura = await Venta.create({
+        ...datos, numeroDocumento: numero, numeroDocumentoAnterior: anterior, tipoDocumento: 'FACTURA', fechaEmision: emision,
+        numeroControl: controlDe(numeroControl), tasaCambio: tasaHoy, montoIva: p.ivaNuevo, totalFinal: p.totalNuevo,
+    }, { transaction: t });
+
+    // 2. Sus renglones (el IVA de cada producto gravado queda marcado); se recuerda cuál es cuál para pasar la evidencia de empaque
+    const mapa = new Map();
+    for (const l of p.lineas) {
+        const copia = l.d.get({ plain: true });
+        for (const k of ['id', 'createdAt', 'updatedAt']) delete copia[k];
+        const nuevo = await VentaDetalle.create({ ...copia, ventaId: factura.id, aplicaIva: l.aplicaIva }, { transaction: t });
+        mapa.set(l.d.id, nuevo.id);
+    }
+    for (const [viejo, nuevo] of mapa) await sql('UPDATE "VentaEmpaqueItems" SET "ventaId" = :f, "ventaDetalleId" = :nuevo WHERE "ventaDetalleId" = :viejo', { f: factura.id, nuevo, viejo });
+
+    // 3. Todo lo que seguía a la nota sigue a la factura (el inventario no se vuelve a tocar: las salidas ya hechas pasan con ella)
+    await sql('UPDATE "CuentasPorCobrar" SET "ventaId" = :f, "tasaCambio" = :tasa, "montoTotal" = "montoTotal" + :delta WHERE "ventaId" = :n', { f: factura.id, n: venta.id, tasa: tasaHoy, delta: p.deltaIva });
+    for (const tabla of ['Abonos', 'MovimientosFinancieros', 'NotasFiscales', 'SalidasInventario', 'PagoSms']) {
+        await sql(`UPDATE "${tabla}" SET "ventaId" = :f WHERE "ventaId" = :n`, { f: factura.id, n: venta.id });
+    }
+    // Comisiones: siguen al documento nuevo. La comisión (base sin IVA) no cambia; el monto de la factura sí, y de él depende cómo se prorratean los abonos futuros
+    await sql(`UPDATE "ComisionesVenta" SET "ventaId" = :f, "documentoTexto" = :num, "montoUsd" = CASE WHEN concepto = 'FACTURA' THEN :total ELSE "montoUsd" END WHERE "ventaId" = :n`, { f: factura.id, n: venta.id, num: numero, total: p.totalNuevo });
+
+    // 4. La nota queda anulada y sin fotos propias (las usa la factura); conserva su número y sus renglones como historia
+    venta.statusDespacho = 'Cancelado';
+    venta.fotoCajaAbiertaUrl = null;
+    venta.fotoCajaSelladaUrl = null;
     await venta.save({ transaction: t });
 
-    p.cxc.tasaCambio = tasaHoy;
-    p.cxc.montoTotal = Number((Number(p.cxc.montoTotal) + p.deltaIva).toFixed(2));
-    await p.cxc.save({ transaction: t });
-    await recalcularCobro(venta, t);
-    // Si el cliente es contribuyente especial, la retención de IVA queda calculada desde ya (falta su comprobante)
-    await crearRetencionPendiente({ venta, transaction: t });
-    return { numeroDocumento: numero, numeroAnterior: anterior, tasaHoy: Number(tasaHoy), ivaAgregadoUsd: p.deltaIva, totalUsd: p.totalNuevo };
+    await recalcularCobro(factura, t);
+    return { numeroDocumento: numero, numeroAnterior: anterior, tasaHoy: Number(tasaHoy), ivaAgregadoUsd: p.deltaIva, totalUsd: p.totalNuevo, ventaId: factura.id };
 }

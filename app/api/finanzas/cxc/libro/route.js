@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import sequelize from '@/sequelize';
 import { requerirNoVendedor } from '../../../_lib/acceso';
 import { listarGrupos } from '../../../_lib/cxcGrupos';
+import { MARCA_CIERRE } from '../../../_lib/retencionesVenta';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,10 @@ export async function GET(request) {
         const [cuentas, abonos, comisiones, manuales] = await Promise.all([
             q(`SELECT c.id, c."ventaId", c."clienteId", c."montoTotal"::float AS monto, c."saldoPendiente"::float AS saldo, c.moneda::text AS moneda, c."tasaCambio"::float AS tasa,
                     c."fechaVencimiento" AS vence, c.estado::text AS estado, c.observacion, v."numeroDocumento" AS documento, v."tipoDocumento"::text AS "tipoDoc",
-                    (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date AS emision, cl.nombre AS cliente, cl.identificacion AS rif
+                    (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date AS emision, cl.nombre AS cliente, cl.identificacion AS rif,
+                    v."montoIva"::float AS "ivaVenta", v.moneda::text AS "monedaVenta", v."tasaCambio"::float AS "tasaVenta",
+                    (SELECT r.estado FROM "RetencionesIva" r WHERE r."ventaId" = c."ventaId" LIMIT 1) AS "retEstado",
+                    EXISTS (SELECT 1 FROM "Abonos" a WHERE a."ventaId" = c."ventaId" AND a.notas LIKE '%${MARCA_CIERRE}%') AS "cierreDeclarado"
                FROM "CuentasPorCobrar" c JOIN "Ventas" v ON v.id = c."ventaId" JOIN "Clientes" cl ON cl.id = c."clienteId"
                ${filtro} ORDER BY cl.nombre, c."fechaVencimiento", v."numeroDocumento"`),
             q(`SELECT a.id, a."ventaId", a."fechaPago" AS fecha, a."montoUsd"::float AS monto, a."metodoPago" AS metodo, a.referencia, a.notas FROM "Abonos" a
@@ -39,7 +43,11 @@ export async function GET(request) {
             const monto = usd(c.monto, c.moneda, c.tasa);
             const saldo = usd(c.saldo, c.moneda, c.tasa);
             const vence = iso(c.vence);
+            // Retención de IVA que se esperaría (75 %) a la tasa de la factura, en dólares: con ella el abono sabe si «parece que el cliente retuvo»
+            const ivaUsd = c.monedaVenta === 'BS' ? Number(c.ivaVenta) / (Number(c.tasaVenta) || 1) : Number(c.ivaVenta);
+            const retEsperada = c.tipoDoc === 'FACTURA' && ivaUsd > 0 ? r2(ivaUsd * 0.75) : 0;
             return {
+                retEstado: c.retEstado || null, retEsperada, cierreDeclarado: Boolean(c.cierreDeclarado),
                 id: c.id, ventaId: c.ventaId, clienteId: c.clienteId, cliente: c.cliente, rif: c.rif, documento: c.documento, tipoDoc: c.tipoDoc, emision: iso(c.emision), vence,
                 monto, abonado: r2(monto - saldo), saldo, estado: c.estado, vencida: saldo > 0.005 && Boolean(vence) && vence < hoy, observacion: c.observacion || '',
                 vendedor: vendedorPorVenta.get(c.ventaId) || null, abonos: abonosPorVenta.get(c.ventaId) || [],

@@ -147,6 +147,11 @@ export async function GET(request, { params }) {
             return NextResponse.json(j);
         }
 
+        // Nota de entrega que pasó a factura: queda anulada en el historial y se enlaza a su factura
+        if (venta.tipoDocumento === 'NOTA_ENTREGA' && venta.statusDespacho === 'Cancelado') {
+            const f = await Venta.findOne({ where: { numeroDocumentoAnterior: venta.numeroDocumento, tipoDocumento: 'FACTURA' }, attributes: ['id', 'numeroDocumento'] });
+            if (f) return NextResponse.json({ ...venta.toJSON(), reemplazadaPor: { id: f.id, numero: f.numeroDocumento } });
+        }
         return NextResponse.json(venta);
     } catch (error) {
         console.error('Error obteniendo detalle de venta:', error);

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import { Alert, Button, Group, Loader, Modal, Stack, Table, Text } from '@mantine/core';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
@@ -10,6 +11,7 @@ const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, max
 
 // Nota de entrega a crédito -> factura el día que el cliente paga: suma el IVA, toma la tasa de hoy y entra al libro de ventas con la fecha de hoy
 export default function ConvertirNotaEntregaModal({ opened, onClose, pedido, onListo }) {
+    const router = useRouter();
     const [copia, setCopia] = React.useState({ numero: '', control: '', fecha: '' }); // datos de la factura si ya se emitió en el sistema anterior
     const { data, isLoading, error } = useQuery({
         queryKey: ['convertir-factura', pedido.id],
@@ -31,9 +33,10 @@ export default function ConvertirNotaEntregaModal({ opened, onClose, pedido, onL
             return cuerpo;
         },
         onSuccess: (r) => {
-            notifications.show({ title: 'Factura emitida', message: `${r.numeroAnterior} pasó a ser la factura ${r.numeroDocumento}, con la tasa de hoy.`, color: 'green' });
+            notifications.show({ title: 'Factura emitida', message: `${r.numeroAnterior} quedó anulada (se conserva en el historial) y se creó la factura ${r.numeroDocumento} con la tasa de hoy.`, color: 'green' });
             onClose();
             onListo?.();
+            if (r.ventaId) router.push(`/superuser/ventas/${r.ventaId}`);
         },
         onError: (e) => notifications.show({ title: 'Error', message: e.message, color: 'red' }),
     });
@@ -42,7 +45,7 @@ export default function ConvertirNotaEntregaModal({ opened, onClose, pedido, onL
         <Modal opened={opened} onClose={onClose} title="Pasar la nota de entrega a factura" centered>
             {isLoading ? <Group justify="center" py="md"><Loader /></Group> : error ? <Alert color="red">{error.message}</Alert> : (
                 <Stack gap="sm">
-                    <Text size="sm">La nota <b>{data.numeroActual}</b> pasará a ser una <b>factura</b> con número F- nuevo y fecha de emisión <b>de hoy</b>: entra al libro de ventas de este periodo y los bolívares se actualizan a la tasa de hoy.</Text>
+                    <Text size="sm">La nota <b>{data.numeroActual}</b> se <b>anula</b> (conserva su número y queda en el historial) y se crea una <b>factura nueva</b> con el siguiente número F- y fecha de emisión <b>de hoy</b>. El inventario no se mueve, la deuda, los abonos y las comisiones pasan a la factura; los dólares se mantienen (más el IVA) y los bolívares se calculan con la tasa de hoy.</Text>
                     <Table withRowBorders={false} fz="sm">
                         <Table.Tbody>
                             <Table.Tr><Table.Td c="dimmed">Tasa del pedido → tasa de hoy</Table.Td><Table.Td ta="right">{nf(data.tasaAntes)} → <b>{nf(data.tasaHoy)}</b></Table.Td></Table.Tr>
@@ -53,7 +56,7 @@ export default function ConvertirNotaEntregaModal({ opened, onClose, pedido, onL
                         </Table.Tbody>
                     </Table>
                     <DatosDeCopia valores={copia} onCambio={setCopia} />
-                    <Text size="xs" c="dimmed">Si el cliente es contribuyente especial, la retención de IVA queda calculada. El número de control se asigna al imprimir. Esta acción no se puede deshacer.</Text>
+                    <Text size="xs" c="dimmed">Si el cliente te retiene el IVA, lo declaras después al registrar su abono. La comisión de los vendedores no cambia (se calcula sin IVA). El número de control se asigna al imprimir. Esta acción no se puede deshacer.</Text>
                     <Button loading={convertir.isPending} fullWidth color="indigo" onClick={() => convertir.mutate()}>Sí, emitir la factura</Button>
                 </Stack>
             )}

@@ -1,5 +1,5 @@
 import db from '@/models';
-import { recalcularCobro } from './retencionesVenta';
+import { recalcularCobro, declararRetencion, MARCA_CIERRE } from './retencionesVenta';
 import { tasaDelDia, tasaVigente } from './tasaBcv';
 import { fechaCaracas } from '@/app/constants/hora';
 
@@ -14,11 +14,18 @@ export const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 // Todo cambio de la deuda de una cuenta por cobrar pasa por un ABONO (o un AJUSTE) registrado: con fecha, monto, método y referencia; nunca se sobrescribe el saldo.
 //   monto > 0: el cliente pagó (baja la deuda) · monto < 0 (solo tipo AJUSTE): sube la deuda (cargo adicional o corrección)
-export async function registrarAbonoCxc({ cuentaId, fecha, monto, metodo, referencia, notas, tipo = 'ABONO', transaction: t }) {
+export async function registrarAbonoCxc({ cuentaId, fecha, monto, metodo, referencia, notas, tipo = 'ABONO', retencion = false, cierraFactura = false, transaction: t }) {
     const cuenta = await CuentaPorCobrar.findByPk(cuentaId, { transaction: t, lock: t.LOCK.UPDATE });
     if (!cuenta) throw new ErrorCxc('Esa cuenta por cobrar ya no existe', 404);
     const venta = await Venta.findByPk(cuenta.ventaId, { transaction: t, lock: t.LOCK.UPDATE });
     if (!venta) throw new ErrorCxc('La venta de esa cuenta ya no existe', 404);
+
+    // El cliente retuvo el IVA de esta factura: se declara primero para que el saldo ya lo descuente y el abono se compare con lo que de verdad falta
+    let retencionDeclarada = null;
+    if (retencion && tipo === 'ABONO') {
+        try { retencionDeclarada = await declararRetencion({ venta, porcentaje: 75, fecha: fecha || fechaCaracas(), transaction: t }); } catch (e) { throw new ErrorCxc(e.message, 409); }
+        await cuenta.reload({ transaction: t });
+    }
 
     const fechaPago = fecha || fechaCaracas();
     if (!FECHA.test(fechaPago) || fechaPago > fechaCaracas()) throw new ErrorCxc('La fecha del abono no es válida (no puede ser futura)');
@@ -32,7 +39,7 @@ export async function registrarAbonoCxc({ cuentaId, fecha, monto, metodo, refere
     const abono = await Abono.create({
         ventaId: venta.id, fechaPago, metodoPago, referencia: String(referencia || '').trim().slice(0, 100) || null,
         montoUsd: importe, tasaBcvAplicada: tasa, montoVes: r2(importe * tasa), montoBs: r2(importe * tasa), tasaCambio: tasa,
-        notas: String(notas || '').trim().slice(0, 250) || null,
+        notas: [String(notas || '').trim().slice(0, 230), cierraFactura && tipo === 'ABONO' ? MARCA_CIERRE : ''].filter(Boolean).join(' ') || null,
     }, { transaction: t });
 
     // Ingreso de caja: solo si la venta todavía no tiene su ingreso (las migradas del sistema anterior ya lo tienen asentado al emitirse: no se duplica).
@@ -51,7 +58,7 @@ export async function registrarAbonoCxc({ cuentaId, fecha, monto, metodo, refere
     }
     await recalcularCobro(venta, t);
     await cuenta.reload({ transaction: t });
-    return { abono, cuenta };
+    return { abono, cuenta, retencion: retencionDeclarada };
 }
 
 // Cuenta por cobrar con sus abonos, en dólares, lista para la cuadrícula
