@@ -8,6 +8,7 @@
 //                  una sola vez por documento; si la forma se daña se puede pedir el siguiente.
 import db from '../../../models/index.js';
 import { fechaCaracas } from '../../constants/hora.js';
+import { primerLibre } from './correlativoLibre.js';
 
 const { sequelize, Correlativo, Venta, NotaFiscal, RetencionIva } = db;
 
@@ -50,6 +51,19 @@ export async function ultimoUsado(clave, transaction) {
     return fila?.n === null || fila?.n === undefined ? null : Number(fila.n);
 }
 
+// Primer número de control libre desde `desde`: una factura copiada con su control adelantado no mueve el correlativo; al llegar a él se salta.
+async function primerControlLibre(desde, transaction) {
+    const filas = await sequelize.query(
+        `SELECT CAST(substring("numeroControl" from 4) AS bigint) AS n FROM "Ventas" WHERE "numeroControl" ~ '^00-[0-9]+$'
+         UNION SELECT CAST(substring("numeroControl" from 4) AS bigint) FROM "NotasFiscales" WHERE "origen" = 'VENTA' AND "numeroControl" ~ '^00-[0-9]+$'`,
+        { type: sequelize.QueryTypes.SELECT, transaction },
+    );
+    const usados = new Set(filas.map((f) => Number(f.n)));
+    let n = Number(desde) || 1;
+    while (usados.has(n)) n += 1;
+    return n;
+}
+
 // Estado de todas las series, para mostrarlo y para saber cuáles faltan por configurar
 export async function estadoNumeracion(transaction) {
     const filas = await Correlativo.findAll({ where: { prefijo: Object.keys(CLAVES) }, transaction });
@@ -60,7 +74,7 @@ export async function estadoNumeracion(transaction) {
         const ceros = c?.cerosRelleno || meta.ceros;
         const ultimo = await ultimoUsado(clave, transaction);
         // El siguiente nunca baja del mayor ya usado (aunque la fila del correlativo esté atrasada)
-        const siguiente = Math.max(c?.siguienteNumero || 1, (ultimo || 0) + 1);
+        const siguiente = clave === 'CONTROL' ? await primerControlLibre(c?.siguienteNumero || 1, transaction) : clave === 'F' ? await primerLibre({ prefijo: 'F', desde: c?.siguienteNumero || 1, transaction }) : Math.max(c?.siguienteNumero || 1, (ultimo || 0) + 1);
         resultado.push({
             clave, etiqueta: meta.etiqueta, pregunta: meta.pregunta, ejemplo: meta.ejemplo, prefijo: meta.prefijo,
             configurado: c ? Boolean(c.configurado) : false, siguienteNumero: siguiente, ceros,
@@ -94,7 +108,7 @@ export async function configurarNumeracion({ clave, siguiente, transaction: t })
     if (!CLAVES[clave]) throw new ErrorNumeracion('Numeración no válida');
     const { n, digitos } = interpretarNumero(clave, siguiente);
     const ultimo = await ultimoUsado(clave, t);
-    if (ultimo !== null && n <= ultimo) {
+    if (clave === 'F' ? (await primerLibre({ prefijo: 'F', desde: n, transaction: t })) !== n : (ultimo !== null && n <= ultimo)) {
         throw new ErrorNumeracion(`Ya se usó el ${formatear(clave, ultimo, CLAVES[clave].ceros)}: el siguiente debe ser mayor`, 409);
     }
     let c = await Correlativo.findOne({ where: { prefijo: clave }, transaction: t, lock: t.LOCK.UPDATE });
@@ -110,9 +124,8 @@ export async function siguienteControl(t) {
     if (!c || !c.configurado) {
         throw new ErrorNumeracion('Antes de imprimir debes indicar el número de control de la forma libre con la que empiezas', 409, 'CONTROL_PENDIENTE');
     }
-    const ultimo = await ultimoUsado('CONTROL', t);
-    const n = Math.max(c.siguienteNumero, (ultimo || 0) + 1);
-    c.siguienteNumero = n + 1;
+    const n = await primerControlLibre(c.siguienteNumero, t);
+    c.siguienteNumero = await primerControlLibre(n + 1, t);
     await c.save({ transaction: t });
     return formatear('CONTROL', n, c.cerosRelleno || CLAVES.CONTROL.ceros);
 }

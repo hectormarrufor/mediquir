@@ -8,6 +8,7 @@ import db from '../../../models/index.js';
 import { calcularFactura, aDolares, aBolivares, REGLAS } from '../../constants/facturacion.js';
 import { recalcularCobro } from './retencionesVenta.js';
 import { fechaCaracas } from '../../constants/hora.js';
+import { primerLibre } from './correlativoLibre.js';
 
 const { sequelize, Correlativo, CategoriaFinanciera, MovimientoFinanciero, VentaDetalle, Producto, CuentaPorCobrar, Venta } = db;
 const { Op } = db.Sequelize;
@@ -30,17 +31,13 @@ async function siguienteNumeroFactura(t, manual = null) {
         if (!Number.isInteger(n) || n < 1) throw new ErrorConversion('El número de factura no es válido', 400);
         const numero = `F-${String(n).padStart(ceros, '0')}`;
         if (await Venta.findOne({ where: { numeroDocumento: numero }, attributes: ['id'], transaction: t })) throw new ErrorConversion(`Ya existe la factura ${numero}`, 409);
-        corr.siguienteNumero = Math.max(Number(corr.siguienteNumero) || 1, n + 1);
+        // Una factura copiada con su número NO mueve el correlativo: solo si era justo el siguiente, avanza al próximo libre
+        corr.siguienteNumero = await primerLibre({ prefijo: 'F', desde: Number(corr.siguienteNumero) || 1, ocupados: [n], transaction: t });
         await corr.save({ transaction: t });
         return numero;
     }
-    const [{ maximo }] = await sequelize.query(
-        `SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace("numeroDocumento", '[^0-9]', '', 'g'), '') AS bigint)), 0) AS maximo
-         FROM "Ventas" WHERE "numeroDocumento" LIKE 'F-%'`,
-        { type: sequelize.QueryTypes.SELECT, transaction: t }
-    );
-    const n = Math.max(corr.siguienteNumero, Number(maximo) + 1);
-    corr.siguienteNumero = n + 1;
+    const n = await primerLibre({ prefijo: 'F', desde: Number(corr.siguienteNumero) || 1, transaction: t });
+    corr.siguienteNumero = await primerLibre({ prefijo: 'F', desde: n + 1, transaction: t });
     await corr.save({ transaction: t });
     return `F-${String(n).padStart(ceros, '0')}`;
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { primerLibre } from '../../_lib/correlativoLibre';
 import { Cliente, Correlativo, CuentaPorCobrar, Producto, SalidaInventario, Venta, VentaDetalle, sequelize } from '@/models';
 import { notificarCabezas, notificarTodos, notificarUsuario } from '@/app/handlers/notificar';
 import { calcularFactura, precioParaCliente } from '@/app/constants/facturacion';
@@ -144,9 +145,9 @@ export async function POST(request) {
              FROM "Ventas" WHERE "numeroDocumento" LIKE :patron`,
             { replacements: { patron: `${prefijo}-%` }, type: sequelize.QueryTypes.SELECT, transaction: t }
         );
-        const numeroSiguiente = Math.max(corr.siguienteNumero, Number(maximo) + 1);
+        const numeroSiguiente = prefijo === 'F' ? await primerLibre({ prefijo, desde: corr.siguienteNumero, transaction: t }) : Math.max(corr.siguienteNumero, Number(maximo) + 1);
         const numeroDocumento = `${prefijo}-${String(numeroSiguiente).padStart(corr.cerosRelleno || 5, '0')}`;
-        corr.siguienteNumero = numeroSiguiente + 1;
+        corr.siguienteNumero = prefijo === 'F' ? await primerLibre({ prefijo, desde: numeroSiguiente + 1, transaction: t }) : numeroSiguiente + 1;
         await corr.save({ transaction: t });
 
         const venta = await Venta.create({

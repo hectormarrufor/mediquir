@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { primerLibre } from '../_lib/correlativoLibre';
 import sequelize from '@/sequelize';
 import Correlativo from '@/models/Correlativo';
 import { requerirStaff } from '../inventario/_lib';
@@ -22,8 +23,10 @@ export async function GET() {
             ),
         ]);
         const maxPorPrefijo = new Map(maximos.map((m) => [m.prefijo, Number(m.maximo) || 0]));
+        const libreF = await primerLibre({ prefijo: 'F', desde: Number(correlativos.find((c) => c.prefijo === 'F')?.siguienteNumero) || 1 });
         const lista = correlativos.map((c) => {
             const j = c.toJSON();
+            if (j.prefijo === 'F') return { ...j, siguienteNumero: libreF }; // el primero libre: una factura adelantada no mueve el correlativo
             const maximo = maxPorPrefijo.get(j.prefijo);
             return maximo !== undefined ? { ...j, siguienteNumero: Math.max(Number(j.siguienteNumero) || 1, maximo + 1) } : j;
         });

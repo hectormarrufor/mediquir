@@ -5,6 +5,7 @@ import db from '@/models';
 const { Venta, VentaDetalle, Producto, Marca, Correlativo, CategoriaFinanciera, MovimientoFinanciero, Cliente, User, Empleado, SalidaInventario, CuentaPorCobrar } = db;
 import { requerirStaff } from '../inventario/_lib';
 import { tasaVigente, tasaDelDia } from '../_lib/tasaBcv';
+import { primerLibre } from '../_lib/correlativoLibre';
 import { calcularFactura, aBolivares, aDolares, REGLAS, precioPorTarifa, TARIFAS_VENDEDOR } from '@/app/constants/facturacion';
 import { rolDe } from '@/app/constants/roles';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
@@ -187,7 +188,8 @@ export async function POST(request) {
              FROM "Ventas" WHERE "numeroDocumento" LIKE :patron`,
             { replacements: { patron: `${prefijo}-%` }, type: sequelize.QueryTypes.SELECT, transaction: t }
         );
-        const siguienteLibre = Math.max(corr.siguienteNumero, Number(maximo) + 1);
+        // Facturas: el siguiente es el primero libre desde el correlativo (una factura copiada con número adelantado no lo mueve; al llegar a ella se salta)
+        const siguienteLibre = prefijo === 'F' ? await primerLibre({ prefijo, desde: corr.siguienteNumero, transaction: t }) : Math.max(corr.siguienteNumero, Number(maximo) + 1);
 
         // El número escrito a mano siempre queda con el prefijo del documento ("123" -> "F-00123"): sin prefijo no lo
         // encontraban la numeración fiscal ni el correlativo, y una factura podía quedar con el prefijo de otro documento
@@ -201,7 +203,8 @@ export async function POST(request) {
             numeroBase = siguienteLibre;
             numeroDocumento = `${prefijo}-${String(numeroBase).padStart(corr.cerosRelleno || 5, '0')}`;
         }
-        corr.siguienteNumero = Math.max(corr.siguienteNumero, numeroBase + 1);
+        if (prefijo === 'F') corr.siguienteNumero = await primerLibre({ prefijo, desde: Math.max(corr.siguienteNumero, numeroBase < corr.siguienteNumero ? corr.siguienteNumero : 0), ocupados: [numeroBase], transaction: t });
+        else corr.siguienteNumero = Math.max(corr.siguienteNumero, numeroBase + 1);
         await corr.save({ transaction: t });
 
         // --- 3. VENTA ---
