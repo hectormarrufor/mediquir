@@ -18,6 +18,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import PrecioVisual from '@/app/components/ui/PrecioVisual';
 import RetencionIvaCard from '../_components/RetencionIvaCard';
+import CambioDeudaModal from '@/app/superuser/cxc/_components/CambioDeudaModal';
 import EvidenciaEmpaque from '../_components/EvidenciaEmpaque';
 import RevisionExistencias from '../_components/RevisionExistencias';
 import EnvioCard from '../_components/EnvioCard';
@@ -37,6 +38,7 @@ export default function DetallePedidoMayorPage() {
     const [modalEmpacar, setModalEmpacar] = useState(false);
     const [modalDespacho, setModalDespacho] = useState(false);
     const [modalAbono, setModalAbono] = useState(false);
+    const [modalAbonoCxc, setModalAbonoCxc] = useState(false); // el mismo registro de abonos que usa Cuentas por cobrar
     const [modalCobroTienda, setModalCobroTienda] = useState(false);
     const [cobroTienda, setCobroTienda] = useState({ metodoPago: 'Efectivo ($)', referencia: '' });
     const [modalFactura, setModalFactura] = useState(false);
@@ -147,6 +149,8 @@ export default function DetallePedidoMayorPage() {
     };
 
     const abrirAbono = () => {
+        // Una factura con cuenta por cobrar se abona con el MISMO formulario y el mismo registro que en Cuentas por cobrar
+        if (cuentaPorCobrar && cuentaPorCobrar.moneda === 'USD' && !cuentaPorCobrar.notaId) { setModalAbonoCxc(true); return; }
         // Por defecto se propone pagar todo el saldo, en la moneda de la cuenta
         formAbono.setValues({ montoAbono: saldoCuenta, metodoPago: 'Transferencia', referencia: '', monedaAbono: monedaCuenta, retuvo: false, cierra: false });
         setModalAbono(true);
@@ -680,6 +684,16 @@ export default function DetallePedidoMayorPage() {
                     </Stack>
                 </form>
             </Modal>
+            {modalAbonoCxc && cuentaPorCobrar && (
+                <CambioDeudaModal
+                    cuenta={{
+                        id: cuentaPorCobrar.id, documento: pedido.numeroDocumento, cliente: pedido.cliente?.nombre || '', saldo: Number(cuentaPorCobrar.saldoPendiente) || 0,
+                        tipoDoc: pedido.tipoDocumento, manual: false, retEstado: (pedido.retenciones || [])[0]?.estado || null,
+                        retEsperada: pedido.tipoDocumento === 'FACTURA' && Number(pedido.montoIva) > 0 ? Math.round((pedido.moneda === 'BS' ? Number(pedido.montoIva) / tasaDoc : Number(pedido.montoIva)) * 75) / 100 : 0,
+                    }}
+                    onCerrar={(guardado) => { setModalAbonoCxc(false); if (guardado) refetch(); }}
+                />
+            )}
             {/* MODAL DE GALERÍA CON CARRUSEL MANUAL */}
             <Modal
                 opened={galeriaModal.imagenes.length > 0}

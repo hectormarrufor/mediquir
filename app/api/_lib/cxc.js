@@ -1,6 +1,7 @@
 import db from '@/models';
 import { recalcularCobro, declararRetencion, MARCA_CIERRE } from './retencionesVenta';
 import { generarComisionPorPago } from './comisionesPago';
+import { registrarAbono, ErrorAbono } from './abonos';
 import { tasaDelDia, tasaVigente } from './tasaBcv';
 import { fechaCaracas } from '@/app/constants/hora';
 
@@ -37,6 +38,20 @@ export async function registrarAbonoCxc({ cuentaId, fecha, monto, metodo, refere
 
     const tasa = (await tasaDelDia(fechaPago, { transaction: t })) || (await tasaVigente({ transaction: t })) || Number(venta.tasaCambio) || 1;
     const metodoPago = String(metodo || (tipo === 'AJUSTE' ? 'Ajuste de saldo' : 'Abono')).trim().slice(0, 60);
+    const notasAbono = [String(notas || '').trim().slice(0, 230), cierraFactura && tipo === 'ABONO' ? MARCA_CIERRE : ''].filter(Boolean).join(' ') || null;
+    // Un pago en dinero de una factura usa EXACTAMENTE el mismo registro que el abono desde el detalle de la venta (saldo, estado de pago,
+    // ingreso de caja repartido con el IVA y comisión del vendedor): hay una sola forma de abonar, venga de donde venga.
+    if (tipo === 'ABONO' && importe > 0 && !/retenci|nota de cr/i.test(metodoPago) && cuenta.moneda === 'USD' && !cuenta.notaId) {
+        try {
+            await registrarAbono({ venta, monto: importe, moneda: 'USD', tasa, metodoPago, referencia: String(referencia || '').trim().slice(0, 100) || null, fecha: fechaPago, notasAbono, transaction: t });
+        } catch (e) {
+            if (e instanceof ErrorAbono) throw new ErrorCxc(e.message, e.status);
+            throw e;
+        }
+        const registrado = await Abono.findOne({ where: { ventaId: venta.id }, order: [['id', 'DESC']], transaction: t });
+        await cuenta.reload({ transaction: t });
+        return { abono: registrado, cuenta, retencion: retencionDeclarada };
+    }
     const abono = await Abono.create({
         ventaId: venta.id, fechaPago, metodoPago, referencia: String(referencia || '').trim().slice(0, 100) || null,
         montoUsd: importe, tasaBcvAplicada: tasa, montoVes: r2(importe * tasa), montoBs: r2(importe * tasa), tasaCambio: tasa,

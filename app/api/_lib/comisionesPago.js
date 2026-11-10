@@ -26,9 +26,12 @@ export async function generarComisionPorPago({ abono, transaction: t }) {
         const razon = Number(p.montoUsd) > 0 && p.baseUsd !== null ? Math.min(1, Number(p.baseUsd) / Number(p.montoUsd)) : 1;
         const base = r2(monto * razon);
         const pct = Number(p.porcentaje) || 0;
+        // Tope: entre todos sus pagos, el vendedor nunca cobra más que la comisión de la factura (base sin IVA × %); el redondeo no la excede
+        const previas = await ComisionVenta.sum('comisionUsd', { where: { vendedorId: p.vendedorId, ventaId: abono.ventaId, concepto: 'ABONO' }, transaction: t });
+        const disponible = Math.max(0, r2(Number(p.comisionUsd) - Number(previas || 0)));
         creadas.push(await ComisionVenta.create({
             vendedorId: p.vendedorId, ventaId: abono.ventaId, concepto: 'ABONO', fecha: abono.fechaPago, documentoTexto: p.documentoTexto || venta?.numeroDocumento || null,
-            clienteTexto: p.clienteTexto || cliente?.nombre || null, montoUsd: -r2(monto), baseUsd: base, porcentaje: pct, comisionUsd: r2(base * pct / 100),
+            clienteTexto: p.clienteTexto || cliente?.nombre || null, montoUsd: -r2(monto), baseUsd: base, porcentaje: pct, comisionUsd: Math.min(r2(base * pct / 100), disponible),
             estatusComision: 'PENDIENTE', observacion: `${marca} (${abono.metodoPago || 'pago'})`,
         }, { transaction: t }));
     }

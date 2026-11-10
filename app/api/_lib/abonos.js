@@ -57,7 +57,7 @@ export async function asegurarCuentaContado({ venta, transaction: t }) {
  * @param {number}  [p.toleranciaUsd] Si el pago supera el saldo por menos de esto (en dólares), se ajusta al saldo en vez de
  *                                   rechazarlo (la tasa cambia de un día para otro)
  */
-export async function registrarAbono({ venta, monto, moneda, tasa, metodoPago, referencia, pagoSms = null, toleranciaUsd = 0, transaction: t }) {
+export async function registrarAbono({ venta, monto, moneda, tasa, metodoPago, referencia, pagoSms = null, toleranciaUsd = 0, fecha: fechaPago = null, notasAbono = null, transaction: t }) {
     const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, transaction: t, lock: t.LOCK.UPDATE });
     if (!cxc) throw new ErrorAbono('Esta venta no tiene una Cuenta por Cobrar asociada', 404);
     if (cxc.estado === 'Pagado') throw new ErrorAbono('Esta cuenta ya está pagada en su totalidad', 400);
@@ -85,9 +85,9 @@ export async function registrarAbono({ venta, monto, moneda, tasa, metodoPago, r
         enMonedaCuenta = saldo;
     }
 
-    const fecha = hoyCaracas();
+    const fecha = fechaPago || hoyCaracas();
     const abono = await Abono.create({
-        ventaId: venta.id, fechaPago: fecha, metodoPago: metodoPago || 'No especificado', referencia: referencia || null,
+        ventaId: venta.id, fechaPago: fecha, metodoPago: metodoPago || 'No especificado', referencia: referencia || null, notas: notasAbono || null,
         montoUsd: abonoUsd, montoVes: abonoBs, montoBs: abonoBs, tasaBcvAplicada: tasaNum, tasaCambio: tasaNum,
     }, { transaction: t });
 

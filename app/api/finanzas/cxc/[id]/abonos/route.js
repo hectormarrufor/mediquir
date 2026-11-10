@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/models';
+import { avisarCliente } from '../../../../_lib/avisosCliente';
 import { requerirNoVendedor } from '../../../../_lib/acceso';
 import { ErrorCxc, registrarAbonoCxc } from '../../../../_lib/cxc';
 
@@ -20,6 +21,12 @@ export async function POST(request, { params }) {
             tipo: b.tipo === 'AJUSTE' ? 'AJUSTE' : 'ABONO', retencion: Boolean(b.retencion), cierraFactura: Boolean(b.cierraFactura), transaction: t,
         });
         await t.commit();
+        if (b.tipo !== 'AJUSTE' && Number(b.monto) > 0 && !/retenci|nota de cr/i.test(String(b.metodo || ''))) {
+            try {
+                const venta = await db.Venta.findByPk(r.cuenta.ventaId);
+                if (venta?.tipoVenta === 'MAYOR') await avisarCliente(venta, 'PAGO_RECIBIDO', { abonoUsd: Number(r.abono.montoUsd), liquidada: Number(r.cuenta.saldoPendiente) <= 0.005, saldoRestante: Number(r.cuenta.saldoPendiente), monedaCuenta: r.cuenta.moneda, tasa: Number(venta.tasaCambio) });
+            } catch (e) { console.error('No se pudo avisar el pago al cliente:', e.message); }
+        }
         return NextResponse.json({ ok: true, abono: r.abono, saldo: Number(r.cuenta.saldoPendiente), estado: r.cuenta.estado, retencion: Boolean(r.retencion), quedaDebiendo: Boolean(b.cierraFactura) && Number(r.cuenta.saldoPendiente) > 0.005 }, { status: 201 });
     } catch (error) {
         if (!t.finished) await t.rollback();
