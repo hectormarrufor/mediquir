@@ -45,8 +45,26 @@ function rangoDe(periodo) {
     const hoy = dayjs();
     if (periodo === 'HOY') return [hoy.startOf('day').toDate(), hoy.endOf('day').toDate()];
     if (periodo === 'SEMANA') { const ini = hoy.subtract((hoy.day() + 6) % 7, 'day').startOf('day'); return [ini.toDate(), ini.add(6, 'day').toDate()]; }
+    if (periodo === 'MES1') return [hoy.subtract(1, 'month').startOf('day').toDate(), hoy.endOf('day').toDate()];
+    if (periodo === 'MES3') return [hoy.subtract(3, 'month').startOf('day').toDate(), hoy.endOf('day').toDate()];
+    if (periodo === 'ANIO') return [hoy.startOf('year').toDate(), hoy.endOf('day').toDate()];
     return [hoy.startOf('month').toDate(), hoy.endOf('month').toDate()];
 }
+
+const PERIODOS = [
+    { value: 'HOY', label: 'Hoy' }, { value: 'SEMANA', label: 'Esta semana' }, { value: 'MES', label: 'Este mes' },
+    { value: 'MES1', label: 'Hace 1 mes' }, { value: 'MES3', label: 'Hace 3 meses' }, { value: 'ANIO', label: 'Este año' }, { value: 'RANGO', label: 'Rango' },
+];
+const DOCUMENTOS = [
+    { value: 'FACTURA', label: 'Facturas' }, { value: 'NOTA_ENTREGA', label: 'Notas de entrega' }, { value: 'VENTA_RAPIDA', label: 'Ventas rápidas' },
+    { value: 'NOTA_CREDITO', label: 'Notas de crédito' }, { value: 'NOTA_DEBITO', label: 'Notas de débito' },
+];
+const DOC = {
+    FACTURA: { etiqueta: 'Factura', color: 'navy' }, NOTA_ENTREGA: { etiqueta: 'N. entrega', color: 'gray' }, VENTA_RAPIDA: { etiqueta: 'V. rápida', color: 'lime' },
+    NOTA_CREDITO: { etiqueta: 'N. crédito', color: 'red' }, NOTA_DEBITO: { etiqueta: 'N. débito', color: 'blue' },
+};
+const esNota = (v) => v.tipoDocumento === 'NOTA_CREDITO' || v.tipoDocumento === 'NOTA_DEBITO';
+const COLOR_NOTA = { Emitida: 'teal', Anulada: 'gray' };
 
 function Indicador({ icono: Icono, color, titulo, valor, detalle, cargando }) {
     return (
@@ -72,20 +90,21 @@ function TarjetaVenta({ v, esVendedor, isAdmin, onAbrir, onEliminar }) {
                 <Box style={{ minWidth: 0 }}>
                     <Group gap={6} wrap="nowrap">
                         <Text fw={800} size="sm">{v.numero}</Text>
-                        <Badge size="xs" variant="light" color={TIPOS[v.tipo]?.color}>{TIPOS[v.tipo]?.etiqueta}</Badge>
+                        <Badge size="xs" variant="light" color={DOC[v.tipoDocumento]?.color}>{DOC[v.tipoDocumento]?.etiqueta}</Badge>
+                        {v.tipo && <Badge size="xs" variant="light" color={TIPOS[v.tipo]?.color}>{TIPOS[v.tipo]?.etiqueta}</Badge>}
                     </Group>
                     <Text size="sm" fw={600} lineClamp={1}>{v.cliente}</Text>
-                    <Text size="xs" c="dimmed" lineClamp={1}>{fmtFecha(v.fecha)} · {v.articulos} art.{!esVendedor && v.vendedor ? ` · ${v.vendedor}` : ''}</Text>
+                    <Text size="xs" c="dimmed" lineClamp={1}>{fmtFecha(v.fecha)}{esNota(v) ? '' : ` · ${v.articulos} art.`}{!esVendedor && v.vendedor ? ` · ${v.vendedor}` : ''}</Text>
                 </Box>
                 <Box ta="right" style={{ flexShrink: 0 }}>
-                    <Text fw={800} size="md" style={{ whiteSpace: 'nowrap' }}>{fmtUsd(v.totalUsd)}</Text>
+                    <Text fw={800} size="md" c={v.tipoDocumento === 'NOTA_CREDITO' ? 'red.7' : undefined} style={{ whiteSpace: 'nowrap' }}>{fmtUsd(v.totalUsd)}</Text>
                     {v.moneda === 'BS' && <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>{fmtBs(v.total)}</Text>}
                 </Box>
             </Group>
             <Group justify="space-between" wrap="nowrap" mt={8} gap="xs">
                 <Group gap={6} wrap="wrap" style={{ minWidth: 0 }}>
-                    <Badge variant="light" color={COLOR_DESPACHO[v.estado] || 'gray'}>{v.estado}</Badge>
-                    <Badge variant="light" color={COLOR_PAGO[v.pago] || 'gray'}>{v.pago}</Badge>
+                    <Badge variant="light" color={(esNota(v) ? COLOR_NOTA : COLOR_DESPACHO)[v.estado] || 'gray'}>{v.estado}</Badge>
+                    {v.pago && <Badge variant="light" color={COLOR_PAGO[v.pago] || 'gray'}>{v.pago}</Badge>}
                     {v.tipo === 'MAYOR' && v.empacadorId && (
                         <Group gap={2} wrap="nowrap" aria-label={`Empaque ${v.empacadoAt ? 'firmado' : 'pendiente'} · Etiquetado ${v.etiquetadoAt ? 'firmado' : 'pendiente'}`}>
                             <IconPackage size={16} color={v.empacadoAt ? 'var(--mantine-color-teal-6)' : 'var(--mantine-color-gray-5)'} />
@@ -93,10 +112,12 @@ function TarjetaVenta({ v, esVendedor, isAdmin, onAbrir, onEliminar }) {
                         </Group>
                     )}
                 </Group>
-                <Group gap={2} wrap="nowrap" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                    <ActionIcon size="lg" variant="subtle" color="gray" aria-label="Imprimir" onClick={() => window.open(`/superuser/ventas/imprimir/${v.id}`, '_blank')}><IconPrinter size={18} /></ActionIcon>
-                    {isAdmin && <ActionIcon size="lg" variant="subtle" color="red" aria-label="Eliminar" onClick={onEliminar}><IconTrash size={18} /></ActionIcon>}
-                </Group>
+                {!esNota(v) && (
+                    <Group gap={2} wrap="nowrap" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                        <ActionIcon size="lg" variant="subtle" color="gray" aria-label="Imprimir" onClick={() => window.open(`/superuser/ventas/imprimir/${v.id}`, '_blank')}><IconPrinter size={18} /></ActionIcon>
+                        {isAdmin && <ActionIcon size="lg" variant="subtle" color="red" aria-label="Eliminar" onClick={onEliminar}><IconTrash size={18} /></ActionIcon>}
+                    </Group>
+                )}
             </Group>
         </Paper>
     );
@@ -158,6 +179,7 @@ export default function VentasDashboard() {
     const [busqueda, setBusqueda] = useState('');
     const [q] = useDebouncedValue(busqueda.trim(), 350);
     const [tipo, setTipo] = useState('todos');
+    const [doc, setDoc] = useState(null);
     const [estado, setEstado] = useState(null);
     const [pago, setPago] = useState(null);
     const [orden, setOrden] = useState({ sort: 'fecha', dir: 'desc' });
@@ -169,7 +191,7 @@ export default function VentasDashboard() {
     useEffect(() => { if (periodo !== 'RANGO') setRango(rangoDe(periodo)); }, [periodo]);
     // Enlaces antiguos a "nuevo pedido" llegan con ?nueva=1: se abre el POS
     useEffect(() => { if (new URLSearchParams(window.location.search).get('nueva')) setPosAbierto(true); }, []);
-    useEffect(() => { setPagina(1); }, [rango, q, tipo, estado, pago, orden]);
+    useEffect(() => { setPagina(1); }, [rango, q, tipo, doc, estado, pago, orden]);
 
     const [d1, d2] = rango;
     const listo = Boolean(d1 && d2);
@@ -184,10 +206,11 @@ export default function VentasDashboard() {
     const params = new URLSearchParams({ desde: desde || '', hasta: hasta || '', page: String(pagina), sort: orden.sort, dir: orden.dir });
     if (q) params.set('q', q);
     if (tipo !== 'todos') params.set('tipo', tipo);
+    if (doc) params.set('doc', doc);
     if (estado) params.set('estado', estado);
     if (pago) params.set('pago', pago);
     const lista = useQuery({
-        queryKey: ['ventas', 'lista', desde, hasta, q, tipo, estado, pago, orden, pagina], enabled: listo,
+        queryKey: ['ventas', 'lista', desde, hasta, q, tipo, doc, estado, pago, orden, pagina], enabled: listo,
         queryFn: () => pedirJson(`/api/ventas/lista?${params}`),
         placeholderData: keepPreviousData,
     });
@@ -196,7 +219,17 @@ export default function VentasDashboard() {
     const serie = useMemo(() => {
         if (!listo) return [];
         const porDia = new Map((resumen.data?.porDia || []).map((d) => [d.dia, d.total]));
-        const dias = Math.min(dayjs(d2).diff(dayjs(d1), 'day') + 1, 92);
+        const dias = dayjs(d2).diff(dayjs(d1), 'day') + 1;
+        // Más de ~3 meses: una barra por mes para que el gráfico siga legible
+        if (dias > 92) {
+            const meses = new Map();
+            for (let i = 0; i < dias; i++) {
+                const dia = dayjs(d1).add(i, 'day');
+                const clave = dia.format('MM/YYYY');
+                meses.set(clave, (meses.get(clave) || 0) + (porDia.get(dia.format('YYYY-MM-DD')) || 0));
+            }
+            return [...meses].map(([dia, total]) => ({ dia, total: Number(total.toFixed(2)) }));
+        }
         return Array.from({ length: dias }, (_, i) => {
             const dia = dayjs(d1).add(i, 'day');
             return { dia: dia.format('DD/MM'), total: Number((porDia.get(dia.format('YYYY-MM-DD')) || 0).toFixed(2)) };
@@ -238,8 +271,9 @@ export default function VentasDashboard() {
                 </Group>
 
                 <Group gap="sm" wrap="wrap">
-                    <SegmentedControl color="navy.9" value={periodo} onChange={setPeriodo} fullWidth={telefono} style={telefono ? { width: '100%' } : undefined}
-                        data={[{ value: 'HOY', label: 'Hoy' }, { value: 'SEMANA', label: telefono ? 'Semana' : 'Esta semana' }, { value: 'MES', label: telefono ? 'Mes' : 'Este mes' }, { value: 'RANGO', label: 'Rango' }]} />
+                    {telefono
+                        ? <Select aria-label="Periodo" allowDeselect={false} data={PERIODOS} value={periodo} onChange={(v) => v && setPeriodo(v)} w="100%" />
+                        : <SegmentedControl color="navy.9" value={periodo} onChange={setPeriodo} data={PERIODOS} />}
                     {periodo === 'RANGO' && (
                         <DatePickerInput type="range" valueFormat="DD/MM/YYYY" value={rango} onChange={setRango} placeholder="Elige el rango" maxDate={new Date()} clearable w={{ base: '100%', sm: 280 }}
                             dropdownType={telefono ? 'modal' : 'popover'} />
@@ -294,6 +328,7 @@ export default function VentasDashboard() {
                             <SegmentedControl fullWidth color="navy.9" value={tipo} onChange={setTipo} data={[{ value: 'todos', label: 'Todas' }, { value: 'DETAL', label: 'Detal' }, { value: 'MAYOR', label: 'Mayor' }, { value: 'ONLINE', label: 'Online' }]} />
                             <TextInput placeholder="Documento, cliente o RIF…" leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)} inputMode="search" enterKeyHint="search" />
                             <SimpleGrid cols={2} spacing="xs">
+                                <Select placeholder="Documento" clearable data={DOCUMENTOS} value={doc} onChange={setDoc} />
                                 <Select placeholder="Despacho" clearable data={['Pendiente', 'Empacado', 'Parcial', 'Completado', 'Cancelado']} value={estado} onChange={setEstado} />
                                 <Select placeholder="Pago" clearable data={['Pagado', 'Pendiente', 'Vencido']} value={pago} onChange={setPago} />
                             </SimpleGrid>
@@ -304,17 +339,18 @@ export default function VentasDashboard() {
                         <Group gap="sm" mb="md" wrap="wrap" align="flex-end">
                             <SegmentedControl color="navy.9" value={tipo} onChange={setTipo} data={[{ value: 'todos', label: 'Todas' }, { value: 'DETAL', label: 'Detal' }, { value: 'MAYOR', label: 'Mayor' }, { value: 'ONLINE', label: 'Online' }]} />
                             <TextInput flex="1 1 220px" placeholder="Buscar por documento, cliente o RIF…" leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)} />
+                            <Select placeholder="Documento" clearable data={DOCUMENTOS} value={doc} onChange={setDoc} w={170} />
                             <Select placeholder="Despacho" clearable data={['Pendiente', 'Empacado', 'Parcial', 'Completado', 'Cancelado']} value={estado} onChange={setEstado} w={150} />
                             <Select placeholder="Pago" clearable data={['Pagado', 'Pendiente', 'Vencido']} value={pago} onChange={setPago} w={140} />
                         </Group>
                     )}
 
                     {lista.isLoading ? <Stack gap="xs">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} h={telefono ? 96 : 44} />)}</Stack>
-                        : !lista.data?.ventas?.length ? <Center py={50}><Text c="dimmed">No hay ventas con estos filtros.</Text></Center>
+                        : !lista.data?.ventas?.length ? <Center py={50}><Text c="dimmed">No hay documentos con estos filtros.</Text></Center>
                         : telefono ? (
                             <Stack gap="xs" style={{ opacity: lista.isFetching ? 0.7 : 1 }}>
                                 {lista.data.ventas.map((v) => (
-                                    <TarjetaVenta key={v.id} v={v} esVendedor={esVendedor} isAdmin={isAdmin} onAbrir={() => router.push(`/superuser/ventas/${v.id}`)} onEliminar={() => setPorEliminar(v)} />
+                                    <TarjetaVenta key={`${v.tipoDocumento}-${v.id}`} v={v} esVendedor={esVendedor} isAdmin={isAdmin} onAbrir={() => router.push(`/superuser/ventas/${v.ventaId || v.id}`)} onEliminar={() => setPorEliminar(v)} />
                                 ))}
                             </Stack>
                         ) : (
@@ -335,19 +371,19 @@ export default function VentasDashboard() {
                                     </Table.Thead>
                                     <Table.Tbody>
                                         {lista.data.ventas.map((v) => (
-                                            <Table.Tr key={v.id} style={{ cursor: 'pointer' }} onClick={() => router.push(`/superuser/ventas/${v.id}`)}>
-                                                <Table.Td><Group gap={6} wrap="nowrap"><Text fw={700} size="sm">{v.numero}</Text><Badge size="xs" variant="light" color={TIPOS[v.tipo]?.color}>{TIPOS[v.tipo]?.etiqueta}</Badge></Group></Table.Td>
+                                            <Table.Tr key={`${v.tipoDocumento}-${v.id}`} style={{ cursor: 'pointer' }} onClick={() => router.push(`/superuser/ventas/${v.ventaId || v.id}`)}>
+                                                <Table.Td><Group gap={6} wrap="nowrap"><Text fw={700} size="sm">{v.numero}</Text><Badge size="xs" variant="light" color={DOC[v.tipoDocumento]?.color}>{DOC[v.tipoDocumento]?.etiqueta}</Badge>{v.tipo && <Badge size="xs" variant="light" color={TIPOS[v.tipo]?.color}>{TIPOS[v.tipo]?.etiqueta}</Badge>}</Group></Table.Td>
                                                 <Table.Td><Text size="xs">{fmtFecha(v.fecha)}</Text></Table.Td>
                                                 <Table.Td><Text size="sm" lineClamp={1} maw={180}>{v.cliente}</Text></Table.Td>
                                                 {!esVendedor && <Table.Td><Text size="sm" c="dimmed" lineClamp={1} maw={140}>{v.vendedor || '—'}</Text></Table.Td>}
-                                                <Table.Td ta="right"><Text size="sm">{v.articulos}</Text></Table.Td>
+                                                <Table.Td ta="right"><Text size="sm">{esNota(v) ? '—' : v.articulos}</Text></Table.Td>
                                                 <Table.Td ta="right">
-                                                    <Text size="sm" fw={800}>{fmtUsd(v.totalUsd)}</Text>
+                                                    <Text size="sm" fw={800} c={v.tipoDocumento === 'NOTA_CREDITO' ? 'red.7' : undefined}>{fmtUsd(v.totalUsd)}</Text>
                                                     {v.moneda === 'BS' && <Text size="xs" c="dimmed">{fmtBs(v.total)}</Text>}
                                                 </Table.Td>
                                                 <Table.Td>
                                                     <Group gap={6} wrap="nowrap">
-                                                        <Badge variant="light" color={COLOR_DESPACHO[v.estado] || 'gray'}>{v.estado}</Badge>
+                                                        <Badge variant="light" color={(esNota(v) ? COLOR_NOTA : COLOR_DESPACHO)[v.estado] || 'gray'}>{v.estado}</Badge>
                                                         {v.tipo === 'MAYOR' && v.empacadorId && (
                                                             <Tooltip label={`Empaque ${v.empacadoAt ? 'firmado' : 'pendiente'} · Etiquetado ${v.etiquetadoAt ? 'firmado' : 'pendiente'}`}>
                                                                 <Group gap={2} wrap="nowrap">
@@ -358,12 +394,14 @@ export default function VentasDashboard() {
                                                         )}
                                                     </Group>
                                                 </Table.Td>
-                                                <Table.Td><Badge variant="light" color={COLOR_PAGO[v.pago] || 'gray'}>{v.pago}</Badge></Table.Td>
+                                                <Table.Td>{v.pago ? <Badge variant="light" color={COLOR_PAGO[v.pago] || 'gray'}>{v.pago}</Badge> : <Text size="sm" c="dimmed">—</Text>}</Table.Td>
                                                 <Table.Td onClick={(e) => e.stopPropagation()}>
-                                                    <Group gap={4} wrap="nowrap" justify="flex-end">
-                                                        <Tooltip label="Imprimir"><ActionIcon variant="subtle" color="gray" onClick={() => window.open(`/superuser/ventas/imprimir/${v.id}`, '_blank')}><IconPrinter size={16} /></ActionIcon></Tooltip>
-                                                        {isAdmin && <Tooltip label="Eliminar"><ActionIcon variant="subtle" color="red" onClick={() => setPorEliminar(v)}><IconTrash size={16} /></ActionIcon></Tooltip>}
-                                                    </Group>
+                                                    {!esNota(v) && (
+                                                        <Group gap={4} wrap="nowrap" justify="flex-end">
+                                                            <Tooltip label="Imprimir"><ActionIcon variant="subtle" color="gray" onClick={() => window.open(`/superuser/ventas/imprimir/${v.id}`, '_blank')}><IconPrinter size={16} /></ActionIcon></Tooltip>
+                                                            {isAdmin && <Tooltip label="Eliminar"><ActionIcon variant="subtle" color="red" onClick={() => setPorEliminar(v)}><IconTrash size={16} /></ActionIcon></Tooltip>}
+                                                        </Group>
+                                                    )}
                                                 </Table.Td>
                                             </Table.Tr>
                                         ))}
