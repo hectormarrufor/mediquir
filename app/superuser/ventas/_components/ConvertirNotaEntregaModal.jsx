@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Alert, Button, Group, Loader, Modal, Stack, Table, Text } from '@mantine/core';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
+import { PANTALLA_COMPLETA_MOVIL } from '@/app/components/ui/modalMovil';
 import DatosDeCopia from '@/app/components/admin/DatosDeCopia';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
@@ -42,7 +43,7 @@ export default function ConvertirNotaEntregaModal({ opened, onClose, pedido, onL
     });
 
     return (
-        <Modal opened={opened} onClose={onClose} title="Pasar la nota de entrega a factura" centered>
+        <Modal {...PANTALLA_COMPLETA_MOVIL} opened={opened} onClose={onClose} title={<Text fw={800}>Pasar la nota de entrega a factura</Text>} centered>
             {isLoading ? <Group justify="center" py="md"><Loader /></Group> : error ? <Alert color="red">{error.message}</Alert> : (
                 <Stack gap="sm">
                     <Text size="sm">La nota <b>{data.numeroActual}</b> se <b>anula</b> (conserva su número y queda en el historial) y se crea una <b>factura nueva</b> con el siguiente número F- y fecha de emisión <b>de hoy</b>. El inventario no se mueve, la deuda, los abonos y las comisiones pasan a la factura; los dólares se mantienen (más el IVA) y los bolívares se calculan con la tasa de hoy.</Text>

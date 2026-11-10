@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { IconAlertTriangle, IconFileDiff, IconListNumbers, IconSearch } from '@tabler/icons-react';
 import NotaAcciones from '../ventas/_components/NotaAcciones';
 import NumeracionFiscalModal, { useNumeracion } from '../_components/NumeracionFiscal';
+import { useEsTelefono } from '@/app/components/ui/modalMovil';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 const fmtFecha = (v) => (v ? `${String(v).slice(8, 10)}/${String(v).slice(5, 7)}/${String(v).slice(0, 4)}` : '');
@@ -16,6 +17,7 @@ const fmtFecha = (v) => (v ? `${String(v).slice(8, 10)}/${String(v).slice(5, 7)}
 export default function NotasPage() {
     const router = useRouter();
     const queryClient = useQueryClient();
+    const telefono = useEsTelefono();
     const [origen, setOrigen] = useState('');
     const [tipo, setTipo] = useState('');
     const [busqueda, setBusqueda] = useState('');
@@ -41,14 +43,14 @@ export default function NotasPage() {
     const refrescar = () => queryClient.invalidateQueries({ queryKey: ['notas'] });
 
     return (
-        <Box maw={1400} mx="auto" px="md" py="md">
+        <Box maw={1400} mx="auto" px={{ base: 'xs', sm: 'md' }} py="md">
             <Stack gap="md">
                 <Group justify="space-between" align="flex-end" wrap="wrap">
                     <Box>
-                        <Title order={2} c="white"><IconFileDiff size={26} style={{ verticalAlign: 'middle' }} /> Notas de crédito y débito</Title>
+                        <Title order={telefono ? 3 : 2} c="white"><IconFileDiff size={telefono ? 22 : 26} style={{ verticalAlign: 'middle' }} /> Notas de crédito y débito</Title>
                         <Text size="sm" c="gray.4">Las notas de venta se emiten desde el detalle de cada factura; las de compra, desde el historial de compras.</Text>
                     </Box>
-                    <Button variant="white" leftSection={<IconListNumbers size={18} />} onClick={() => setVerNumeracion(true)}>Numeración fiscal</Button>
+                    <Button variant="white" leftSection={<IconListNumbers size={18} />} onClick={() => setVerNumeracion(true)} fullWidth={telefono}>Numeración fiscal</Button>
                 </Group>
 
                 {pendientes.length > 0 && (
@@ -59,14 +61,46 @@ export default function NotasPage() {
 
                 {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}
 
-                <Paper withBorder radius="lg" p="md">
+                <Paper withBorder radius="lg" p={{ base: 'sm', sm: 'md' }}>
                     <Group gap="sm" mb="md" wrap="wrap" align="flex-end">
-                        <SegmentedControl color="navy.9" value={origen} onChange={setOrigen} data={[{ value: '', label: 'Todas' }, { value: 'VENTA', label: 'Emitidas a clientes' }, { value: 'COMPRA', label: 'Recibidas de proveedores' }]} />
-                        <Select w={170} placeholder="Tipo" clearable data={[{ value: 'CREDITO', label: 'Crédito' }, { value: 'DEBITO', label: 'Débito' }]} value={tipo || null} onChange={(v) => setTipo(v || '')} />
-                        <TextInput flex="1 1 240px" placeholder="Buscar por número, cliente, proveedor o factura…" leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)} />
+                        <SegmentedControl color="navy.9" value={origen} onChange={setOrigen} fullWidth={telefono} style={telefono ? { width: '100%' } : undefined}
+                            data={[{ value: '', label: 'Todas' }, { value: 'VENTA', label: telefono ? 'A clientes' : 'Emitidas a clientes' }, { value: 'COMPRA', label: telefono ? 'De proveedores' : 'Recibidas de proveedores' }]} />
+                        <Select w={telefono ? '100%' : 170} placeholder="Tipo" clearable data={[{ value: 'CREDITO', label: 'Crédito' }, { value: 'DEBITO', label: 'Débito' }]} value={tipo || null} onChange={(v) => setTipo(v || '')} />
+                        <TextInput flex="1 1 240px" placeholder={telefono ? 'Número, cliente, proveedor o factura…' : 'Buscar por número, cliente, proveedor o factura…'} leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)} />
                     </Group>
 
-                    {isLoading ? <Center py={50}><Text c="dimmed">Cargando…</Text></Center> : !notas.length ? <Center py={50}><Text c="dimmed">No hay notas con esos filtros.</Text></Center> : (
+                    {isLoading ? <Center py={50}><Text c="dimmed">Cargando…</Text></Center> : !notas.length ? <Center py={50}><Text c="dimmed">No hay notas con esos filtros.</Text></Center> : telefono ? (
+                        // En el teléfono, una tarjeta por nota (la tabla de ocho columnas se desplazaba de lado)
+                        <Stack gap={6}>
+                            {notas.map((n) => (
+                                <Paper key={n.id} withBorder radius="md" p={10} bg="white" opacity={n.estado === 'ANULADA' ? 0.55 : 1}>
+                                    <Group justify="space-between" wrap="nowrap" align="flex-start" gap="xs">
+                                        <Box style={{ minWidth: 0 }}>
+                                            <Group gap={6}>
+                                                <Text fw={700} size="sm">{n.numeroDocumento}</Text>
+                                                <Badge size="xs" color={n.tipo === 'CREDITO' ? 'red' : 'blue'} variant="light">{n.tipo === 'CREDITO' ? 'Crédito' : 'Débito'}</Badge>
+                                                {n.origen === 'COMPRA' && <Badge size="xs" color="grape" variant="outline">Proveedor</Badge>}
+                                                {n.estado === 'ANULADA' && <Badge size="xs" color="gray">Anulada</Badge>}
+                                            </Group>
+                                            <Text size="sm" lineClamp={1}>{n.contraparte || '—'}</Text>
+                                        </Box>
+                                        <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
+                                            <Text fw={800} size="sm" c={n.tipo === 'CREDITO' ? 'red.7' : 'blue.7'} style={{ whiteSpace: 'nowrap' }}>{n.tipo === 'CREDITO' ? '−' : '+'}{n.moneda === 'BS' ? 'Bs ' : '$'}{nf(n.total)}</Text>
+                                            <NotaAcciones nota={n} onCambio={refrescar} />
+                                        </Group>
+                                    </Group>
+                                    <Text size="xs" c="dimmed" mt={2}>
+                                        {fmtFecha(n.fecha)} · Factura{' '}
+                                        {n.origen === 'VENTA' && n.ventaId
+                                            ? <Anchor size="xs" onClick={() => router.push(`/superuser/ventas/${n.ventaId}`)}>{n.facturaAfectada}</Anchor>
+                                            : n.facturaAfectada}
+                                        {' · '}{n.numeroControl ? `Control ${n.numeroControl}` : 'Sin imprimir'}
+                                    </Text>
+                                    {n.motivo && <Text size="xs" lineClamp={2} mt={2}>{n.motivo}</Text>}
+                                </Paper>
+                            ))}
+                        </Stack>
+                    ) : (
                         <Table.ScrollContainer minWidth={980}>
                             <Table verticalSpacing="xs" highlightOnHover fz="sm">
                                 <Table.Thead><Table.Tr>

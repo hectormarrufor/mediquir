@@ -52,7 +52,7 @@ export default function EnvioCard({ pedido, onCambio }) {
                 value={transporte} onChange={(e) => setTransporte(e.currentTarget.value)} maxLength={120}
             />
             <NumberInput
-                size="xs" label={`Flete cobrado al cliente (${simbolo})`} decimalScale={2} min={0} hideControls value={flete} onChange={setFlete} disabled={pagada}
+                size="xs" label={`Flete cobrado al cliente (${simbolo})`} decimalScale={2} min={0} allowNegative={false} inputMode="decimal" hideControls value={flete} onChange={setFlete} disabled={pagada}
                 description={pagada ? 'La factura ya está pagada: el flete no se puede cambiar' : 'Se suma al total (sin IVA) y a lo que debe el cliente'}
             />
             <Button mt="sm" fullWidth size="xs" variant="light" onClick={guardar} loading={guardando} disabled={!cambio}>Guardar envío</Button>

@@ -208,3 +208,13 @@ html { scroll-behavior: smooth; }
 .mantine-Badge-root[data-variant='white'] {
     color: var(--mantine-color-navy-9) !important;
 }
+
+/* Teléfonos y tabletas (pantalla táctil): con letra menor de 16 px el iPhone acerca la página al tocar un campo y la deja ampliada.
+   Sin !important: un campo que fija su propio tamaño (en línea) lo conserva. */
+@media (pointer: coarse) and (max-width: 61.99em) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

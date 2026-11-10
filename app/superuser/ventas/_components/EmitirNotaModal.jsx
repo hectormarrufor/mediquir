@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Checkbox, Group, Loader, Modal, MultiSelect, NumberInput, Select, Stack, Switch, Table, Text, TextInput, Textarea } from '@mantine/core';
+import { Alert, Button, Checkbox, Group, Loader, Modal, MultiSelect, NumberInput, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { PANTALLA_COMPLETA_MOVIL, useEsTelefono } from '@/app/components/ui/modalMovil';
 import { useQuery } from '@tanstack/react-query';
 import { IconAlertTriangle, IconPlus, IconTrash } from '@tabler/icons-react';
 import { calcularFactura } from '@/app/constants/facturacion';
@@ -28,6 +29,7 @@ async function pedirJson(url, opciones) {
 // Emite una nota de crédito (devolver renglones de la factura y/o otros conceptos) o de débito (conceptos adicionales).
 // El servidor vuelve a calcular todo: aquí solo se ve el total antes de emitir.
 export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmitida }) {
+    const telefono = useEsTelefono();
     const esCredito = tipo === 'CREDITO';
     const simbolo = factura.moneda === 'BS' ? 'Bs' : '$';
     const { data, isLoading } = useQuery({
@@ -97,7 +99,7 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
     const actualizarLibre = (clave, cambio) => setLibres((ls) => ls.map((l) => (l.clave === clave ? { ...l, ...cambio } : l)));
 
     return (
-        <Modal opened={opened} onClose={onClose} size="xl" centered title={<Text fw={800}>{esCredito ? 'Nota de crédito' : 'Nota de débito'} · factura {factura.numeroDocumento}</Text>}>
+        <Modal {...PANTALLA_COMPLETA_MOVIL} opened={opened} onClose={onClose} size="xl" centered title={<Text fw={800}>{esCredito ? 'Nota de crédito' : 'Nota de débito'} · factura {factura.numeroDocumento}</Text>}>
             {isLoading || !numeracion ? <Group justify="center" p="xl"><Loader /></Group> : (serie && !serie.configurado) ? (
                 <PreguntarNumero serie={serie} puedeEditar={numeracion.puedeEditar} />
             ) : (
@@ -108,7 +110,23 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
                             : 'Sube lo que el cliente debe por esta factura (intereses, cargos adicionales, diferencias). Lleva IVA salvo que sea un concepto exento.'}
                     </Text>
 
-                    {esCredito && (
+                    {esCredito && telefono && (
+                        // En el teléfono, cada producto de la factura en su tarjeta con la cantidad a acreditar a la derecha
+                        <Stack gap={6}>
+                            <Text size="sm" fw={700}>Productos de la factura</Text>
+                            {(data?.renglones || []).map((r) => (
+                                <Group key={r.id} wrap="nowrap" gap="sm" p={8} style={{ border: '1px solid #e9ecef', borderRadius: 8, opacity: r.restante === 0 ? 0.6 : 1 }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <Text size="sm" fw={600} lh={1.25} lineClamp={2}>{r.nombre}{!r.aplicaIva && <Text span size="xs" c="dimmed"> · exento</Text>}</Text>
+                                        <Text size="xs" c="dimmed">{simbolo}{nf(r.precioUnitario)} c/u · facturado {r.cantidad} · por acreditar {r.restante}</Text>
+                                    </div>
+                                    <NumberInput w={76} min={0} max={r.restante} allowDecimal={false} allowNegative={false} hideControls disabled={r.restante === 0} inputMode="numeric"
+                                        aria-label={`Cantidad a acreditar de ${r.nombre}`} value={cantidades[r.id] ?? ''} onChange={(v) => setCantidades((c) => ({ ...c, [r.id]: v }))} placeholder="0" />
+                                </Group>
+                            ))}
+                        </Stack>
+                    )}
+                    {esCredito && !telefono && (
                         <Table.ScrollContainer minWidth={560}><Table verticalSpacing={4} fz="sm">
                             <Table.Thead><Table.Tr><Table.Th>Producto de la factura</Table.Th><Table.Th ta="right">Precio</Table.Th><Table.Th ta="right">Facturado</Table.Th><Table.Th ta="right">Por acreditar</Table.Th><Table.Th w={110}>A acreditar</Table.Th></Table.Tr></Table.Thead>
                             <Table.Tbody>
@@ -131,11 +149,12 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
                     <Stack gap="xs">
                         <Text size="sm" fw={700}>{esCredito ? 'Otros conceptos (descuentos, ajustes)' : 'Conceptos'}</Text>
                         {libres.map((l) => (
-                            <Group key={l.clave} gap="xs" align="flex-end" wrap="nowrap">
-                                <TextInput style={{ flex: 1 }} size="xs" label="Descripción" placeholder="Ej: Intereses por mora" value={l.descripcion} onChange={(e) => actualizarLibre(l.clave, { descripcion: e.currentTarget.value })} maxLength={200} />
-                                <NumberInput w={130} size="xs" label={`Monto (${simbolo})`} min={0} decimalScale={2} hideControls value={l.precioUnitario} onChange={(v) => actualizarLibre(l.clave, { precioUnitario: v })} />
-                                <Switch size="sm" label="IVA" checked={l.aplicaIva} onChange={(e) => actualizarLibre(l.clave, { aplicaIva: e.currentTarget.checked })} mb={4} />
-                                <Button size="compact-sm" variant="subtle" color="red" onClick={() => setLibres((ls) => ls.filter((x) => x.clave !== l.clave))} aria-label="Quitar"><IconTrash size={14} /></Button>
+                            // En el teléfono la descripción va sola en su línea y el monto, el IVA y quitar debajo
+                            <Group key={l.clave} gap="xs" align="flex-end" wrap={telefono ? 'wrap' : 'nowrap'} p={telefono ? 8 : 0} style={telefono ? { border: '1px solid #e9ecef', borderRadius: 8 } : undefined}>
+                                <TextInput style={{ flex: telefono ? '1 1 100%' : 1 }} size={telefono ? 'sm' : 'xs'} label="Descripción" placeholder="Ej: Intereses por mora" value={l.descripcion} onChange={(e) => actualizarLibre(l.clave, { descripcion: e.currentTarget.value })} maxLength={200} />
+                                <NumberInput w={telefono ? undefined : 130} style={telefono ? { flex: 1 } : undefined} size={telefono ? 'sm' : 'xs'} label={`Monto (${simbolo})`} min={0} allowNegative={false} decimalScale={2} hideControls inputMode="decimal" value={l.precioUnitario} onChange={(v) => actualizarLibre(l.clave, { precioUnitario: v })} />
+                                <Switch size="sm" label="IVA" checked={l.aplicaIva} onChange={(e) => actualizarLibre(l.clave, { aplicaIva: e.currentTarget.checked })} mb={telefono ? 8 : 4} />
+                                <Button size={telefono ? 'compact-md' : 'compact-sm'} variant="subtle" color="red" onClick={() => setLibres((ls) => ls.filter((x) => x.clave !== l.clave))} aria-label="Quitar"><IconTrash size={telefono ? 18 : 14} /></Button>
                             </Group>
                         ))}
                         <Button size="compact-sm" variant="light" leftSection={<IconPlus size={14} />} w="fit-content" onClick={() => setLibres((ls) => [...ls, LIBRE()])}>Agregar concepto</Button>
@@ -148,10 +167,10 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
                             value={otras} onChange={setOtras} />
                     )}
 
-                    <Group grow align="flex-start">
+                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
                         <Select label="Motivo" data={MOTIVOS[tipo]} value={motivo} onChange={(v) => setMotivo(v || MOTIVOS[tipo][0])} allowDeselect={false} />
                         <Textarea label="Detalle (opcional)" placeholder="Más información para el cliente" autosize minRows={1} value={detalle} onChange={(e) => setDetalle(e.currentTarget.value)} maxLength={200} />
-                    </Group>
+                    </SimpleGrid>
 
                     {esCredito && hayDevolucion && (
                         <Checkbox label="Devolver la mercancía al inventario" description="Suma al stock las unidades de los productos acreditados (solo si ya salieron del almacén)" checked={devuelve} onChange={(e) => setDevuelve(e.currentTarget.checked)} />
@@ -166,7 +185,7 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
                     <DatosDeCopia valores={copia} onCambio={setCopia} etiquetaNumero={esCredito ? 'Número de la nota de crédito' : 'Número de la nota de débito'} placeholderNumero={serie?.siguienteNumero ? String(serie.siguienteNumero) : ''} />
                     {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error}</Alert>}
 
-                    <Group justify="flex-end">
+                    <Group justify="flex-end" style={telefono ? { flexDirection: 'column-reverse', alignItems: 'stretch' } : undefined}>
                         <Button variant="default" onClick={onClose}>Cancelar</Button>
                         <Button color={esCredito ? 'red' : 'blue'} onClick={emitir} loading={enviando} disabled={!totales || excede || motivoFinal.length < 5}>
                             Emitir {esCredito ? 'nota de crédito' : 'nota de débito'}

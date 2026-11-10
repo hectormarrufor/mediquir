@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { ActionIcon, Alert, Badge, Button, Group, NumberInput, Paper, Stack, Table, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconAlertTriangle, IconCheck, IconTrash } from '@tabler/icons-react';
+import { useEsTelefono } from '@/app/components/ui/modalMovil';
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -13,6 +14,7 @@ const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFr
 export default function RevisionExistencias({ pedido, onCambio }) {
     const [edits, setEdits] = useState({});
     const [ocupado, setOcupado] = useState(false);
+    const telefono = useEsTelefono();
     if (pedido.revisionStock !== 'PENDIENTE') return null;
 
     const detalles = pedido.detalles || [];
@@ -39,14 +41,44 @@ export default function RevisionExistencias({ pedido, onCambio }) {
         }
     };
 
+    const textoPiden = (d) => (esPres(d) ? `${d.cantidadPresentacion} × ${d.presentacionPedida === 'CAJA' ? 'caja' : 'bulto'} x${d.unidadesPorPresentacion}` : Number(d.cantidad));
+    // Cantidad nueva, guardar y quitar (iguales en la tabla y en la tarjeta del teléfono; ahí más grandes para el dedo)
+    const controlesAjuste = (d, nuevo, actual, grande) => (
+        <>
+            <NumberInput size={grande ? 'sm' : 'xs'} w={80} min={1} allowDecimal={false} allowNegative={false} hideControls inputMode="numeric" value={nuevo} onChange={(v) => setEdits((e) => ({ ...e, [d.id]: v }))} aria-label="Cantidad" />
+            <Button size={grande ? 'compact-md' : 'compact-xs'} variant="light" disabled={ocupado || Number(nuevo) === actual || !(Number(nuevo) >= 1)} onClick={() => enviar({ accion: 'CAMBIAR_CANTIDAD', detalleId: d.id, cantidadPresentacion: Number(nuevo) }, 'Cantidad ajustada; el total se recalculó')}>Guardar</Button>
+            <ActionIcon size={grande ? 'lg' : 'sm'} color="red" variant="subtle" disabled={ocupado || detalles.length < 2} title={detalles.length < 2 ? 'Es el único renglón: cancela el pedido' : 'Quitar renglón'} aria-label="Quitar renglón" onClick={() => enviar({ accion: 'QUITAR', detalleId: d.id }, 'Renglón quitado; el total se recalculó')}><IconTrash size={grande ? 18 : 16} /></ActionIcon>
+        </>
+    );
+
     return (
-        <Paper withBorder p="md" radius="md" bg="yellow.0" mb="md" style={{ borderColor: 'var(--mantine-color-yellow-5)' }}>
+        <Paper withBorder p={{ base: 'sm', sm: 'md' }} radius="md" bg="yellow.0" mb="md" style={{ borderColor: 'var(--mantine-color-yellow-5)' }}>
             <Stack gap="sm">
                 <Group gap="xs"><IconAlertTriangle size={20} color="var(--mantine-color-yellow-8)" /><Title order={5}>Pedido en revisión de existencias</Title></Group>
                 <Text size="sm">
                     El cliente pidió más de lo que hay en almacén. Confirma si puedes conseguir las cantidades en 1 o pocos días; si no, reduce o quita el renglón (el IVA, el total y la retención se recalculan solos).
                     Hasta que confirmes, el cliente no paga ni hace la retención y el pedido no se puede asignar ni empacar.
                 </Text>
+                {telefono ? (
+                    // En el teléfono, una tarjeta por renglón con lo que piden, lo que hay y el ajuste debajo
+                    <Stack gap={6}>
+                        {detalles.map((d) => {
+                            const falta = faltaDe(d);
+                            const actual = valorDe(d);
+                            const nuevo = edits[d.id] ?? actual;
+                            return (
+                                <Paper key={d.id} withBorder radius="md" p={8} bg="white">
+                                    <Group justify="space-between" wrap="nowrap" align="flex-start" gap="xs">
+                                        <Text size="sm" fw={600} lh={1.25} style={{ minWidth: 0 }}>{d.producto?.nombre || d.nombreFicticio}</Text>
+                                        {falta > 0 ? <Badge color="red" variant="light" style={{ flexShrink: 0 }}>Falta {falta} und</Badge> : <Badge color="teal" variant="light" style={{ flexShrink: 0 }}>Alcanza</Badge>}
+                                    </Group>
+                                    <Text size="xs" c="dimmed" mt={2}>Piden {textoPiden(d)}{esPres(d) ? ` (${Number(d.cantidad)} und)` : ''} · en almacén {Number(d.producto?.stockAlmacen) || 0}</Text>
+                                    <Group gap={6} wrap="nowrap" mt={6} justify="flex-end">{controlesAjuste(d, nuevo, actual, true)}</Group>
+                                </Paper>
+                            );
+                        })}
+                    </Stack>
+                ) : (
                 <Table.ScrollContainer minWidth={520}><Table verticalSpacing={4} fz="sm">
                     <Table.Thead><Table.Tr><Table.Th>Producto</Table.Th><Table.Th ta="right">Piden</Table.Th><Table.Th ta="right">En almacén</Table.Th><Table.Th ta="right">Falta</Table.Th><Table.Th ta="right">Ajustar</Table.Th></Table.Tr></Table.Thead>
                     <Table.Tbody>
@@ -58,23 +90,20 @@ export default function RevisionExistencias({ pedido, onCambio }) {
                                 <Table.Tr key={d.id}>
                                     <Table.Td>{d.producto?.nombre || d.nombreFicticio}</Table.Td>
                                     <Table.Td ta="right">
-                                        {esPres(d) ? `${d.cantidadPresentacion} × ${d.presentacionPedida === 'CAJA' ? 'caja' : 'bulto'} x${d.unidadesPorPresentacion}` : Number(d.cantidad)}
+                                        {textoPiden(d)}
                                         {esPres(d) && <Text size="xs" c="dimmed">{Number(d.cantidad)} und</Text>}
                                     </Table.Td>
                                     <Table.Td ta="right">{Number(d.producto?.stockAlmacen) || 0}</Table.Td>
                                     <Table.Td ta="right">{falta > 0 ? <Badge color="red" variant="light">{falta} und</Badge> : <Badge color="teal" variant="light">Alcanza</Badge>}</Table.Td>
                                     <Table.Td>
-                                        <Group gap={4} justify="flex-end" wrap="nowrap">
-                                            <NumberInput size="xs" w={80} min={1} allowDecimal={false} allowNegative={false} hideControls value={nuevo} onChange={(v) => setEdits((e) => ({ ...e, [d.id]: v }))} aria-label="Cantidad" />
-                                            <Button size="compact-xs" variant="light" disabled={ocupado || Number(nuevo) === actual || !(Number(nuevo) >= 1)} onClick={() => enviar({ accion: 'CAMBIAR_CANTIDAD', detalleId: d.id, cantidadPresentacion: Number(nuevo) }, 'Cantidad ajustada; el total se recalculó')}>Guardar</Button>
-                                            <ActionIcon size="sm" color="red" variant="subtle" disabled={ocupado || detalles.length < 2} title={detalles.length < 2 ? 'Es el único renglón: cancela el pedido' : 'Quitar renglón'} onClick={() => enviar({ accion: 'QUITAR', detalleId: d.id }, 'Renglón quitado; el total se recalculó')}><IconTrash size={16} /></ActionIcon>
-                                        </Group>
+                                        <Group gap={4} justify="flex-end" wrap="nowrap">{controlesAjuste(d, nuevo, actual, false)}</Group>
                                     </Table.Td>
                                 </Table.Tr>
                             );
                         })}
                     </Table.Tbody>
                 </Table></Table.ScrollContainer>
+                )}
                 <Group justify="space-between" wrap="wrap">
                     <Text size="sm" fw={700}>Total actual del pedido: ${usd.format(Number(pedido.totalFinal) || 0)}</Text>
                     <Button color="teal" loading={ocupado} leftSection={<IconCheck size={16} />} onClick={() => enviar({ accion: 'CONFIRMAR' }, 'Pedido confirmado: se avisó al cliente')}>

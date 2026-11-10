@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Button, Checkbox, Group, Modal, Stack, Table, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { PANTALLA_COMPLETA_MOVIL, useEsTelefono } from '@/app/components/ui/modalMovil';
 import { IconInfoCircle } from '@tabler/icons-react';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
@@ -18,6 +19,7 @@ async function pedirJson(url, opciones) {
 // Compensar el saldo a favor de una nota de crédito en otras facturas pendientes del mismo cliente (ver compensarSaldoAFavor en app/api/_lib/notasFiscales.js).
 // `desdeEmision`: se abre solo al emitir una nota; si el cliente no tiene otras facturas pendientes (o no sobra saldo), no muestra nada.
 export default function CompensarNotaModal({ nota, onClose, onCambio, desdeEmision = false }) {
+    const telefono = useEsTelefono();
     const [datos, setDatos] = useState(null);
     const [elegidas, setElegidas] = useState(new Set());
     const [error, setError] = useState(null);
@@ -65,7 +67,7 @@ export default function CompensarNotaModal({ nota, onClose, onCambio, desdeEmisi
     };
 
     return (
-        <Modal opened onClose={onClose} size="lg" centered title={<Text fw={800}>Compensar saldo a favor · {nota.numeroDocumento}</Text>}>
+        <Modal {...PANTALLA_COMPLETA_MOVIL} opened onClose={onClose} size="lg" centered title={<Text fw={800}>Compensar saldo a favor · {nota.numeroDocumento}</Text>}>
             {!datos && !error ? <Text size="sm" c="dimmed">Cargando…</Text> : (
                 <Stack>
                     {datos && (
@@ -82,6 +84,31 @@ export default function CompensarNotaModal({ nota, onClose, onCambio, desdeEmisi
                                     Si en cambio quieres devolverle el dinero, no compenses: usa «Reintegrar dinero al cliente». Una vez compensado no se puede reintegrar esa parte ni anular la nota.
                                 </Text>
                             </Alert>
+                            {telefono ? (
+                                // En el teléfono, una tarjeta por factura (la tabla de seis columnas no cabe)
+                                <Stack gap={6}>
+                                    {datos.facturas.map((f) => {
+                                        const a = reparto.get(f.ventaId) || 0;
+                                        const marcada = elegidas.has(f.ventaId);
+                                        return (
+                                            <Group key={f.ventaId} wrap="nowrap" gap="sm" align="flex-start" p={8} style={{ border: `1px solid ${marcada ? 'var(--mantine-color-teal-4)' : '#e9ecef'}`, borderRadius: 8 }}>
+                                                <Checkbox mt={2} checked={marcada} onChange={(e) => { const n = new Set(elegidas); if (e.currentTarget.checked) n.add(f.ventaId); else n.delete(f.ventaId); setElegidas(n); }} aria-label={`Compensar en ${f.documento}`} />
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <Group justify="space-between" wrap="nowrap" gap="xs">
+                                                        <Text size="sm" fw={700}>{f.documento}</Text>
+                                                        <Text size="sm">Debe ${nf(f.saldoUsd)}</Text>
+                                                    </Group>
+                                                    <Text size="xs" c="dimmed">Vence {fmtFecha(f.vence)}</Text>
+                                                    <Group justify="space-between" wrap="nowrap" gap="xs" mt={2}>
+                                                        <Text size="xs" c={a > 0 ? 'teal.8' : 'dimmed'} fw={a > 0 ? 700 : 400}>Se le aplica {a > 0 ? `−$${nf(a)}` : '—'}</Text>
+                                                        <Text size="xs">Quedaría debiendo ${nf(f.saldoUsd - a)}</Text>
+                                                    </Group>
+                                                </div>
+                                            </Group>
+                                        );
+                                    })}
+                                </Stack>
+                            ) : (
                             <Table withTableBorder verticalSpacing={4}>
                                 <Table.Thead>
                                     <Table.Tr><Table.Th /><Table.Th>Factura</Table.Th><Table.Th>Vence</Table.Th><Table.Th ta="right">Debe</Table.Th><Table.Th ta="right">Se le aplica</Table.Th><Table.Th ta="right">Quedaría debiendo</Table.Th></Table.Tr>
@@ -102,11 +129,12 @@ export default function CompensarNotaModal({ nota, onClose, onCambio, desdeEmisi
                                     })}
                                 </Table.Tbody>
                             </Table>
+                            )}
                             <Text size="sm">Se compensarán <b>${nf(total)}</b>{datos.disponibleUsd - total > 0.005 ? ` y quedarán $${nf(datos.disponibleUsd - total)} de saldo a favor (por reintegrar o compensar después)` : ''}.</Text>
                         </>
                     )}
                     {error && <Alert color="red">{error}</Alert>}
-                    <Group justify="flex-end">
+                    <Group justify="flex-end" style={telefono ? { flexDirection: 'column-reverse', alignItems: 'stretch' } : undefined}>
                         <Button variant="default" onClick={onClose}>{desdeEmision ? 'Ahora no' : 'Cancelar'}</Button>
                         {datos && <Button color="teal" loading={enviando} disabled={!(total > 0.005)} onClick={compensar}>Compensar ${nf(total)}</Button>}
                     </Group>

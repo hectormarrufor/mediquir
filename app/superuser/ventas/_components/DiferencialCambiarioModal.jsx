@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Alert, Button, Group, Loader, Modal, NumberInput, Stack, Table, Text } from '@mantine/core';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
+import { PANTALLA_COMPLETA_MOVIL } from '@/app/components/ui/modalMovil';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 
@@ -43,7 +44,7 @@ export default function DiferencialCambiarioModal({ opened, onClose, factura, on
     });
 
     return (
-        <Modal opened={opened} onClose={onClose} title="Nota de débito por diferencial cambiario" centered>
+        <Modal {...PANTALLA_COMPLETA_MOVIL} opened={opened} onClose={onClose} title={<Text fw={800}>Nota de débito por diferencial cambiario</Text>} centered>
             {isLoading ? <Group justify="center" py="md"><Loader /></Group> : error ? <Alert color="red">{error.message}</Alert> : !data ? <Alert color="orange">No se pudo calcular el diferencial (¿hay tasa BCV registrada?).</Alert> : (
                 <Stack gap="sm">
                     <Text size="sm">Nota de débito correspondiente a diferencial cambiario que afecta a la factura número <b>{factura.numeroDocumento}</b></Text>
@@ -54,7 +55,7 @@ export default function DiferencialCambiarioModal({ opened, onClose, factura, on
                             <Table.Tr><Table.Td c="dimmed">Ya cubierto con otras notas (USD)</Table.Td><Table.Td ta="right">${nf(data.cubiertoUsd)}</Table.Td></Table.Tr>
                         </Table.Tbody>
                     </Table>
-                    <NumberInput label="Tramo de la factura que se paga (USD)" description="Por defecto, todo el saldo por cobrar" value={usd === '' ? (data.usd ?? '') : usd} onChange={setUsd} min={0} decimalScale={2} hideControls />
+                    <NumberInput label="Tramo de la factura que se paga (USD)" description="Por defecto, todo el saldo por cobrar" value={usd === '' ? (data.usd ?? '') : usd} onChange={setUsd} min={0} allowNegative={false} decimalScale={2} hideControls inputMode="decimal" />
                     {!data.puede ? <Alert color="orange">{data.motivoNo}</Alert> : (
                         <Table withRowBorders={false} fz="sm">
                             <Table.Tbody>

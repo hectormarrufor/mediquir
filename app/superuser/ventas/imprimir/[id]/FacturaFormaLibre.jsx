@@ -4,6 +4,7 @@ import React from 'react';
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { numeroALetras } from '@/app/utils/numeroALetras';
+import { useZoomHoja } from '@/app/components/ui/useZoomHoja';
 
 // Factura impresa SOBRE LA FORMA LIBRE PREIMPRESA (media carta horizontal: 8 in x 5.5 in).
 // La forma ya trae el logo, el membrete, el N° de control en rojo, la marca de agua y, abajo, la franja de la imprenta:
@@ -28,6 +29,7 @@ const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-VE', { timeZone: 'A
 // que afecta y `condicionTexto` reemplaza las condiciones de pago; `sinVence` oculta la fecha de vencimiento.
 // `lineasExtra`: textos libres que salen como filas de descripción después de los artículos (facturas que afecta la nota, tasa BCV, etc.).
 export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factura', referencia = null, etiquetaCondicion = 'Condiciones de la Transacción', condicionTexto = null, sinVence = false, lineasExtra = [], onReasignarControl = null, vistaPrevia = false, onToggleGuia = null }) {
+    const zoom = useZoomHoja(768, 24); // media carta horizontal (8 in): en el teléfono se achica al ancho de la pantalla
     const tasa = Number(venta.tasaCambio) || 1;
     const esBs = venta.moneda === 'BS';
     const aBs = (v) => (esBs ? Number(Number(v).toFixed(2)) : aBolivares(Number(v), tasa));
@@ -62,7 +64,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
             </div>
             {demasiados && <div className="fl-aviso">Esta hoja tiene {totalFilas} renglones y la forma libre admite {CONFIG_FISCAL.maxRenglonesFactura}: los que sobran se saldrán de la hoja.</div>}
 
-            <div id="print-section" className="fl-hoja">
+            <div id="print-section" className="fl-hoja" style={{ zoom }}>
                 {guia && <img className={vistaPrevia ? 'fl-guia fl-guia-imprime' : 'fl-guia'} src="/tenants/mediquir/forma-libre.png" alt="" />}
 
                 {/* Cliente */}
@@ -117,8 +119,15 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
             <style dangerouslySetInnerHTML={{ __html: `
                 * { box-sizing: border-box; }
                 .fl-envoltura { background: #525659; min-height: 100vh; padding: 12px; font-family: Arial, Helvetica, sans-serif; overflow: auto; }
-                .fl-barra { max-width: 8in; margin: 0 auto 8px; display: flex; justify-content: space-between; gap: 10px; color: #fff; font-size: 12px; }
+                .fl-barra { max-width: 8in; margin: 0 auto 8px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 10px; color: #fff; font-size: 12px; }
+                .fl-barra > span:last-child { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
                 .fl-barra button { padding: 4px 14px; font-weight: 700; cursor: pointer; }
+                /* Teléfono: botones más grandes para el dedo */
+                @media (max-width: 8.4in) {
+                    .fl-envoltura { padding: 8px; }
+                    .fl-barra button { padding: 8px 14px; font-size: 13px; border-radius: 6px; border: 0; }
+                    .fl-barra button:first-child { background: #fff; color: #0b1b3d; }
+                }
                 .fl-barra a { color: #9ecbff; }
                 .fl-aviso { max-width: 8in; margin: 0 auto 8px; background: #ffe08a; color: #5c3b00; padding: 6px 10px; font-size: 12px; font-weight: 700; }
 
@@ -167,7 +176,6 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                 .fl-centro { justify-content: center; }
                 .fl-gran { font-size: 11.5px; font-weight: 800; margin-top: 0; text-align: right; padding-right: 8px; }
 
-                @media (max-width: 8.4in) { .fl-hoja { transform: scale(.85); transform-origin: top left; } }
 
                 /* Impresión: media carta horizontal, sin márgenes; el diálogo ya propone este tamaño de hoja */
                 @media print {
@@ -177,7 +185,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                     #print-section, #print-section * { visibility: visible !important; }
                     .fl-guia:not(.fl-guia-imprime) { display: none !important; } /* en la vista previa la guía sí se imprime */
                     .fl-envoltura { padding: 0 !important; background: transparent !important; min-height: 0; }
-                    #print-section { position: absolute !important; left: 0 !important; top: 0 !important; margin: 0 !important; box-shadow: none !important; transform: none !important; }
+                    #print-section { position: absolute !important; left: 0 !important; top: 0 !important; margin: 0 !important; box-shadow: none !important; transform: none !important; zoom: 1 !important; }
                     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                 }
             ` }} />

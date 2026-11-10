@@ -4,16 +4,18 @@ import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { 
     Modal, Button, Group, Title, TextInput, NumberInput, 
     Select, Paper, Stack, Grid, Table, ActionIcon, 
-    Text, Divider, Badge, Checkbox, Box, ScrollArea, Avatar, ThemeIcon, Textarea
+    Text, Divider, Badge, Checkbox, Box, ScrollArea, Avatar, ThemeIcon, Textarea,
+    SegmentedControl, SimpleGrid, CloseButton, UnstyledButton
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query'; // 🔥 AÑADIDO useQueryClient
-import { useMediaQuery } from '@mantine/hooks';
+import { useMediaQuery, useViewportSize } from '@mantine/hooks';
 import { useRouter } from 'next/navigation';
 import {
     IconTrash, IconPlus, IconMinus, IconExchange,
     IconPackage, IconReceiptTax, IconCheck, IconTag,
-    IconZoomIn, IconZoomOut, IconEdit, IconArrowBackUp, IconFileInvoice
+    IconZoomIn, IconZoomOut, IconEdit, IconArrowBackUp, IconFileInvoice,
+    IconSearch, IconShoppingCart, IconChevronRight
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import PrecioVisual from '../ui/PrecioVisual'; 
@@ -25,11 +27,12 @@ import { calcularFactura, aBolivares, aDolares, precioPorTarifa, precioUnitario 
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
 import { presentacionesDe, presentacionDe } from '@/app/constants/presentaciones';
-import { formatearFecha } from '@/app/constants/hora';
+import { fechaCaracas, formatearFecha } from '@/app/constants/hora';
+import { CONTENIDO_SIN_RELLENO } from '@/app/components/ui/modalMovil';
 
 // Precio unitario editable de un renglón (solo administración). Se confirma al salir del campo o con Enter; no cambia el precio del producto,
 // solo el de esta venta. Resaltado en naranja cuando difiere del precio del sistema.
-function PrecioEditable({ valor, simbolo, editado, onCommit, onRestablecer }) {
+function PrecioEditable({ valor, simbolo, editado, onCommit, onRestablecer, size = 'xs' }) {
     const [txt, setTxt] = useState(String(valor));
     useEffect(() => { setTxt(String(valor)); }, [valor]);
     const confirmar = () => {
@@ -39,14 +42,14 @@ function PrecioEditable({ valor, simbolo, editado, onCommit, onRestablecer }) {
     return (
         <Group gap={2} wrap="nowrap" justify="flex-end">
             <NumberInput
-                size="xs" w={100} hideControls decimalScale={3} min={0} value={txt} onChange={setTxt}
+                size={size} w={size === 'xs' ? 100 : 112} hideControls decimalScale={3} min={0} allowNegative={false} inputMode="decimal" aria-label="Precio unitario" value={txt} onChange={setTxt}
                 prefix={simbolo === 'Bs' ? 'Bs ' : '$'} onBlur={confirmar}
                 onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                 styles={{ input: { textAlign: 'right', fontWeight: 600, ...(editado ? { borderColor: '#f08c00', backgroundColor: '#fff9db' } : {}) } }}
             />
             {editado && (
-                <ActionIcon size="sm" variant="subtle" color="orange" title="Volver al precio del sistema" onClick={onRestablecer}>
-                    <IconArrowBackUp size={14} />
+                <ActionIcon size={size === 'xs' ? 'sm' : 'lg'} variant="subtle" color="orange" title="Volver al precio del sistema" aria-label="Volver al precio del sistema" onClick={onRestablecer}>
+                    <IconArrowBackUp size={size === 'xs' ? 14 : 18} />
                 </ActionIcon>
             )}
         </Group>
@@ -86,11 +89,17 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
         }
     });
 
-    const [zoomPreview, setZoomPreview] = useState(true);
+    const [zoomPreview, setZoomPreview] = useState(false); // teléfono: false = hoja completa (achicada), true = tamaño real para leer de cerca
+    const [vista, setVista] = useState('productos'); // teléfono: 'productos' | 'carrito' | 'datos'
 
     const { userId, esVendedor, rolUsuario } = useAuth();
     const puedeEditarPrecio = rolUsuario === 'admin'; // el servidor ya obliga a un vendedor a cobrar por tarifa
-    const isMobile = useMediaQuery('(max-width: 768px)');
+    // Por debajo de 62em (donde ya no caben las dos columnas) se usa el diseño de teléfono, a pantalla completa.
+    // Se lee en el primer render (este componente solo se pinta en el navegador) para que no abra con el diseño de escritorio y salte.
+    const isMobile = useMediaQuery('(max-width: 61.99em)', false, { getInitialValueInEffect: false });
+    const { width: anchoVentana } = useViewportSize();
+    // La vista previa es tamaño carta (8,5 in = 816 px): en el teléfono se achica al ancho de la pantalla
+    const escalaHoja = Math.min(1, Math.max(0.3, ((anchoVentana || 816) - 16) / 816));
 
     const getImageUrl = (path) => {
         if (!path) return null;
@@ -216,19 +225,19 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
         const info = calcularPrecioInfo(producto, formVenta.values.tipoPrecio);
         const pres = presentacionDe(producto, presentacion) || presentacionDe(producto, 'UNIDAD');
         const clave = `${producto.id}:${pres.clave}`;
-        const existe = carrito.find(item => item.clave === clave);
         const imgProducto = getImageUrl(producto.imagen);
         const imgMarca = getImageUrl(producto.marca?.imagen);
 
-        if (existe) {
-            setCarrito(carrito.map(item => item.clave === clave ? { 
+        // Con la función de actualización: dos toques rápidos en el teléfono suman dos (el segundo no pisa al primero)
+        setCarrito((prev) => {
+            const existe = prev.find(item => item.clave === clave);
+            if (existe) return prev.map(item => item.clave === clave ? {
                 ...item, cantidadPres: item.cantidadPres + n, cantidad: (item.cantidadPres + n) * pres.unidades, precio: item.precioManual ? item.precio : info.precio, simbolo: info.simbolo,
                 tieneDescuento: info.tieneDescuento, porcentajeDescuento: info.porcentajeDescuento,
                 porcentajeIva: Number(producto.porcentajeIva) || 0,
                 imagen: imgProducto, marcaImagen: imgMarca, marcaNombre: producto.marca?.nombre
-            } : item));
-        } else {
-            setCarrito([...carrito, { 
+            } : item);
+            return [...prev, {
                 id: producto.id, nombre: producto.nombre, codigo: producto.codigo, 
                 precio: info.precio, simbolo: info.simbolo, 
                 tieneDescuento: info.tieneDescuento, porcentajeDescuento: info.porcentajeDescuento,
@@ -237,8 +246,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
                 imagen: imgProducto, marcaImagen: imgMarca, marcaNombre: producto.marca?.nombre,
                 isFicticio: false,
                 afectaInventario: true
-            }]);
-        }
+            }];
+        });
     };
 
     const handleAgregarFicticio = (values) => {
@@ -310,14 +319,15 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
     const simboloMoneda = esMonedaBs ? 'Bs' : '$';
 
     const handleRevisarVenta = () => {
-        if (carrito.length === 0) return notifications.show({ message: 'El carrito está vacío', color: 'orange' });
-        if (tipoVenta === 'MAYOR' && !formVenta.values.clienteId) return notifications.show({ message: 'Debe seleccionar un cliente mayorista', color: 'red' });
-        if (!formVenta.values.numeroDocumento) return notifications.show({ message: 'El número de documento es obligatorio', color: 'red' });
+        // En el teléfono, si falta algo se abre la parte de la pantalla donde se arregla
+        if (carrito.length === 0) { setVista('productos'); return notifications.show({ message: 'El carrito está vacío', color: 'orange' }); }
+        if (tipoVenta === 'MAYOR' && !formVenta.values.clienteId) { setVista('datos'); return notifications.show({ message: 'Debe seleccionar un cliente mayorista', color: 'red' }); }
+        if (!formVenta.values.numeroDocumento) { setVista('datos'); return notifications.show({ message: 'El número de documento es obligatorio', color: 'red' }); }
         if (tipoDocumentoActual === 'FACTURA' && carrito.length > CONFIG_FISCAL.maxRenglonesFactura) {
             return notifications.show({ title: 'Demasiados renglones', message: `Una factura admite hasta ${CONFIG_FISCAL.maxRenglonesFactura} renglones (es lo que cabe en la forma libre). Divide la venta en dos facturas.`, color: 'orange' });
         }
         
-        setZoomPreview(true);
+        setZoomPreview(false);
         setPreviewAbierto(true);
     };
 
@@ -437,6 +447,12 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
     // La búsqueda difusa recorre todo el catálogo: se calcula solo cuando cambia el texto, no en cada cambio del formulario o del carrito
     const busquedaDiferida = useDeferredValue(busquedaProducto);
     const productosFiltrados = useMemo(() => buscarProductos(productos, busquedaDiferida).slice(0, 20), [productos, busquedaDiferida]);
+    // Unidades de cada producto que ya están en el carrito: la lista las marca para que se vea que el toque sirvió
+    const unidadesEnCarrito = useMemo(() => {
+        const m = new Map();
+        carrito.forEach((i) => { if (!i.isFicticio) m.set(i.id, (m.get(i.id) || 0) + i.cantidad); });
+        return m;
+    }, [carrito]);
     const opcionesClientes = useMemo(
         () => clientes?.map(c => ({ value: c.id.toString(), label: `${c.nombre} (${tipoVenta === 'MAYOR' ? 'RIF' : 'C.I./RIF'}: ${c.identificacion})` })) || [],
         [clientes, tipoVenta]
@@ -463,414 +479,571 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
     const cantidadArticulos = carrito.length || 0;
     const altoPapel = cantidadArticulos <= limiteMediaCarta ? '5.5in' : '10.5in';
 
+    // ---------------- Piezas de la pantalla (las mismas en el teléfono y en la computadora) ----------------
+    const esFactura = tipoDocumentoActual === 'FACTURA';
+    const tamCampo = isMobile ? 'md' : 'sm'; // en el teléfono, campos más altos (se tocan con el dedo y la letra no obliga a acercar)
+    const opcionesTarifa = [
+        { value: 'precio7', label: 'P7 (Detal USD)' },
+        { value: 'precio6', label: 'P6 (Mayor USD)' },
+        // El presupuesto se guarda en $ (y muestra el equivalente en Bs a la tasa): solo tarifas en $
+        ...(esPresupuesto ? [] : [
+            { value: 'precio4', label: 'P4 (P7 en Bs)' },
+            { value: 'precio5', label: 'P5 (P6 en Bs)' },
+            ...(esVendedor ? [] : [{ value: 'precio1', label: 'P1 (35% en Bs)' }]), // deriva del costo: solo administración
+        ]),
+    ];
+    const etiquetaTarifa = opcionesTarifa.find((o) => o.value === formVenta.values.tipoPrecio)?.label || '';
+    const esEfectivo = ['Efectivo ($)', 'Efectivo (Bs)'].includes(formVenta.values.metodoPago);
+    const unidadesCarrito = carrito.reduce((a, i) => a + i.cantidad, 0);
+    // Lo que se cobra en la otra moneda (a la tasa de hoy): la persona en caja lo ve sin hacer la cuenta
+    const equivalenteTotal = tasaBcv > 0 && totalFinal > 0 ? (esMonedaBs ? `≈ $${formatoNumero(prevTotalUsd)}` : `≈ Bs ${formatoNumero(prevTotalBs)}`) : null;
+    const esExento = (item) => (item.isFicticio ? !item.aplicaIva : item.porcentajeIva === 0);
+
+    const selectorTipoVenta = !esPresupuesto && (isMobile ? (
+        <SegmentedControl fullWidth size="md" value={tipoVenta} onChange={setTipoVenta} color={tipoVenta === 'MAYOR' ? 'grape' : 'blue'}
+            data={[{ value: 'DETAL', label: 'Al detal' }, { value: 'MAYOR', label: 'Al mayor' }]} />
+    ) : (
+        <Button.Group mb="sm">
+            <Button fullWidth variant={tipoVenta === 'DETAL' ? 'filled' : 'light'} onClick={() => setTipoVenta('DETAL')}>Detal</Button>
+            <Button fullWidth variant={tipoVenta === 'MAYOR' ? 'filled' : 'light'} color="grape" onClick={() => setTipoVenta('MAYOR')}>Mayor</Button>
+        </Button.Group>
+    ));
+
+    const buscador = (
+        <Group wrap="nowrap" gap="xs" mb={isMobile ? 0 : 'sm'}>
+            <TextInput
+                style={{ flex: 1, minWidth: 0 }} size={tamCampo} placeholder="Buscar producto…" inputMode="search" enterKeyHint="search" autoComplete="off"
+                leftSection={<IconSearch size={16} />} value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.currentTarget.value)}
+                rightSectionPointerEvents="all"
+                rightSection={busquedaProducto ? <CloseButton size="sm" onClick={() => setBusquedaProducto('')} aria-label="Borrar la búsqueda" /> : null}
+                // En el teléfono no se enfoca solo: el teclado taparía media pantalla apenas se abre la venta
+                data-autofocus={isMobile ? undefined : true}
+            />
+            {/* El producto genérico (precio escrito a mano) es solo de administración */}
+            {!esVendedor && (
+                <Button color="grape" variant="light" size={tamCampo} px="sm" onClick={() => setModalFicticio(true)} title="Agregar ítem ficticio (1010)" style={{ flexShrink: 0 }}>
+                    + Ficticio
+                </Button>
+            )}
+        </Group>
+    );
+
+    const filaProducto = (prod) => {
+        const info = calcularPrecioInfo(prod, formVenta.values.tipoPrecio);
+        const imgFinal = getImageUrl(prod.imagen) || getImageUrl(prod.marca?.imagen);
+        const enCarrito = unidadesEnCarrito.get(prod.id) || 0;
+        const botonesPresentacion = presentacionesDe(prod).filter((p) => p.clave !== 'UNIDAD').map((p) => (
+            <Button key={p.clave} size={isMobile ? 'compact-sm' : 'compact-xs'} color="grape" variant="light" onClick={(e) => { e.stopPropagation(); agregarAlCarrito(prod, p.clave); }}>
+                + {p.etiqueta}
+            </Button>
+        ));
+        return (
+            <Paper
+                key={prod.id} p={isMobile ? 8 : 'sm'} withBorder radius="md" role="button" tabIndex={0}
+                onClick={() => agregarAlCarrito(prod)} onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) agregarAlCarrito(prod); }}
+                style={{ cursor: 'pointer', ...(enCarrito ? { borderColor: 'var(--mantine-color-blue-4)', background: 'var(--mantine-color-blue-0)' } : {}) }}
+            >
+                <Group wrap="nowrap" justify="space-between" gap="sm" align="flex-start">
+                    <Group wrap="nowrap" gap="sm" style={{ minWidth: 0, flex: 1 }}>
+                        <Avatar src={imgFinal} size={isMobile ? 44 : 'md'} radius="sm" color="blue">
+                            <IconPackage size={16} />
+                        </Avatar>
+                        <Box style={{ minWidth: 0 }}>
+                            <Group gap={4} wrap="nowrap" align="flex-start">
+                                <Text fw={600} size="sm" lineClamp={2} lh={1.25}>{prod.nombre}</Text>
+                                {info.tieneDescuento && <IconTag size={14} color="#FF6B6B" style={{ flexShrink: 0, marginTop: 2 }} />}
+                            </Group>
+                            <Text size="xs" c="dimmed" lineClamp={1}>
+                                SKU: {prod.codigo} {prod.marca?.nombre ? `| ${prod.marca.nombre}` : ''}
+                            </Text>
+                            {enCarrito > 0 && <Badge size="xs" color="blue" variant="filled" mt={2} tt="none">{enCarrito} und en el carrito</Badge>}
+                        </Box>
+                    </Group>
+
+                    <Stack gap={4} align="flex-end" style={{ flexShrink: 0 }}>
+                        <Badge color={info.simbolo === 'Bs' ? 'teal' : 'blue'} variant="light" size="lg" px={isMobile ? 6 : 8}>
+                            <PrecioVisual valor={info.precio} simbolo={info.simbolo} size="sm" fw={700} />
+                        </Badge>
+                        {!isMobile && botonesPresentacion}
+                    </Stack>
+                </Group>
+                {/* En el teléfono «+ Caja» y «+ Bulto» van en su propia línea: así el nombre del producto no queda cortado */}
+                {isMobile && botonesPresentacion.length > 0 && <Group gap={6} mt={6} justify="flex-end">{botonesPresentacion}</Group>}
+            </Paper>
+        );
+    };
+
+    const sinResultados = productos && !productosFiltrados.length && (
+        <Text c="dimmed" ta="center" size="sm" py="lg">{busquedaProducto.trim() ? `No hay productos que coincidan con «${busquedaProducto.trim()}».` : 'No hay productos.'}</Text>
+    );
+
+    const bloqueDocumento = esPresupuesto ? (
+        <Paper p="sm" mb="sm" bg="teal.0" radius="md" withBorder>
+            <Group justify="space-between" align="center" wrap="nowrap" gap="xs">
+                <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+                    <ThemeIcon size={isMobile ? 'md' : 'lg'} variant="light" color="teal"><IconFileInvoice size={isMobile ? 16 : 20} /></ThemeIcon>
+                    <Box style={{ minWidth: 0 }}>
+                        <Text size={isMobile ? 'md' : 'lg'} fw={800} c="teal.9">PRESUPUESTO</Text>
+                        <Text size="xs" c="dimmed" lh={1.2}>Con IVA · no es documento fiscal ni toca el inventario</Text>
+                    </Box>
+                </Group>
+                <NumberInput label="Válido (días)" size={tamCampo} w={isMobile ? 96 : 110} min={1} max={365} allowDecimal={false} allowNegative={false} inputMode="numeric" style={{ flexShrink: 0 }} {...formVenta.getInputProps('validoDias')} />
+            </Group>
+        </Paper>
+    ) : (
+        <Paper p="sm" mb="sm" bg={esFactura ? 'red.0' : 'gray.1'} radius="md" withBorder>
+            <Group justify="space-between" align="center" wrap="nowrap" gap="xs">
+                <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+                    <ThemeIcon size={isMobile ? 'md' : 'lg'} variant="light" color={esFactura ? 'red' : 'blue'}>
+                        <IconReceiptTax size={isMobile ? 16 : 20} />
+                    </ThemeIcon>
+                    <Box style={{ minWidth: 0 }}>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Emitir:</Text>
+                        <Text size={isMobile ? 'md' : 'lg'} fw={800} lh={1.2} c={esFactura ? 'red.9' : 'blue.9'}>{tipoDocumentoActual}</Text>
+                    </Box>
+                </Group>
+                <TextInput label="Correlativo" size={tamCampo} w={isMobile ? 128 : 150} fw={700} autoComplete="off" style={{ flexShrink: 0 }} {...formVenta.getInputProps('numeroDocumento')} />
+            </Group>
+            {/* En la computadora van lado a lado (la explicación debajo del campo) para que el carrito tenga espacio */}
+            {(esFactura || puedeEditarPrecio) && (
+                <SimpleGrid cols={!isMobile && esFactura && puedeEditarPrecio ? 2 : 1} spacing="xs" mt="xs">
+                    {esFactura && (
+                        <TextInput label="N° de control" placeholder="00-000000" size={tamCampo} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
+                    )}
+                    {puedeEditarPrecio && (
+                        <TextInput type="date" label="Fecha de emisión" description="Vacía = hoy. Si copias una factura de otro día, elige esa fecha (toma la tasa BCV de ese día)"
+                            inputWrapperOrder={isMobile ? undefined : ['label', 'input', 'description', 'error']}
+                            size={tamCampo} max={fechaCaracas()} {...formVenta.getInputProps('fechaEmision')} />
+                    )}
+                </SimpleGrid>
+            )}
+        </Paper>
+    );
+
+    // Al mayor el cliente es obligatorio; al detal es opcional (venta sola, sin cliente) y se puede crear uno nuevo con cédula, nombre y teléfono
+    const campoCliente = (
+        <Group wrap="nowrap" gap="xs" align="flex-end">
+            <Select
+                style={{ flex: 1, minWidth: 0 }} size={tamCampo}
+                label={esPresupuesto ? 'Cliente (opcional)' : (tipoVenta === 'MAYOR' ? 'Cliente mayorista' : 'Cliente (opcional)')}
+                placeholder={tipoVenta === 'MAYOR' && !esPresupuesto ? 'Seleccione…' : 'Sin cliente'}
+                withAsterisk={tipoVenta === 'MAYOR' && !esPresupuesto}
+                searchable
+                clearable={tipoVenta !== 'MAYOR' || esPresupuesto}
+                nothingFoundMessage="No hay coincidencias: crea uno con el botón +"
+                data={opcionesClientes}
+                {...formVenta.getInputProps('clienteId')}
+            />
+            <ActionIcon size={isMobile ? 42 : 36} radius="md" variant="light" color="grape" onClick={() => setModalCrearCliente(true)} title="Crear cliente nuevo" aria-label="Crear cliente nuevo">
+                <IconPlus size={20} />
+            </ActionIcon>
+        </Group>
+    );
+
+    const campoTarifa = (
+        <Select label="Tarifa" size={tamCampo} data={opcionesTarifa} allowDeselect={false} {...formVenta.getInputProps('tipoPrecio')} />
+    );
+
+    const filaIvaCondicion = !esPresupuesto && (
+        <Group mb="sm" justify="space-between" align="center" wrap="nowrap" gap="sm">
+            <Checkbox size={isMobile ? 'md' : 'sm'} label={<Text fw={600} size="sm">IVA (16%)</Text>} {...formVenta.getInputProps('conIva', { type: 'checkbox' })} />
+            {tipoVenta === 'MAYOR' && (
+                <Select size={isMobile ? 'md' : 'xs'} w={isMobile ? 150 : 120} aria-label="Condición de pago" allowDeselect={false}
+                    data={[{ value: 'Contado', label: 'Contado' }, { value: 'Credito', label: 'Crédito' }]} {...formVenta.getInputProps('condicionPago')} />
+            )}
+        </Group>
+    );
+
+    const filaPago = !esPresupuesto && formVenta.values.condicionPago === 'Contado' && (
+        <SimpleGrid cols={isMobile && esEfectivo ? 1 : 2} spacing="sm" mb="sm">
+            <Select label="Método de pago" size={tamCampo} data={opcionesMetodoPago} allowDeselect={false} {...formVenta.getInputProps('metodoPago')} />
+            {!esEfectivo ? (
+                <TextInput label="Referencia" placeholder="Últimos 6 dígitos" size={tamCampo} autoComplete="off" {...formVenta.getInputProps('referencia')} />
+            ) : (!isMobile && <Box />)}
+        </SimpleGrid>
+    );
+
+    const filaMayor = !esPresupuesto && tipoVenta === 'MAYOR' && (
+        <SimpleGrid cols={isMobile ? 1 : 2} spacing="sm" mb="sm">
+            <TextInput placeholder="(Opcional)" label="¿Chofer que retira?" size={tamCampo} {...formVenta.getInputProps('quienRetira')} />
+            <NumberInput placeholder="(Opcional)" label={`Flete (${simboloMoneda})`} size={tamCampo} decimalScale={2} min={0} allowNegative={false} inputMode="decimal" hideControls {...formVenta.getInputProps('costoFlete')} />
+        </SimpleGrid>
+    );
+
+    const campoObservaciones = esPresupuesto && (
+        <Textarea mb="sm" size={tamCampo} label="Observaciones (opcional, salen en el presupuesto)" autosize minRows={isMobile ? 2 : 1} maxRows={4} {...formVenta.getInputProps('notas')} />
+    );
+
+    const etiquetasRenglon = (item) => (
+        <>
+            {item.tieneDescuento && <Badge size="xs" color="red" variant="filled">-{item.porcentajeDescuento}%</Badge>}
+            {esExento(item) && conIva && <Badge size="xs" color="gray" variant="light">EXENTO</Badge>}
+        </>
+    );
+
+    // Carrito del teléfono: una tarjeta por renglón, con botones grandes para la cantidad
+    const tarjetasCarrito = (
+        <Stack gap={8}>
+            {carrito.map((item, idxItem) => (
+                <Paper key={item.clave} withBorder radius="md" p="sm" bg="white" style={{ borderLeft: `4px solid ${!item.isFicticio && item.presentacion !== 'UNIDAD' ? '#7048e8' : '#1971c2'}` }}>
+                    <Group wrap="nowrap" align="flex-start" gap="xs">
+                        {item.isFicticio ? <Avatar color="grape" size={40} radius="sm"><IconEdit size={16} /></Avatar> : <Avatar src={item.imagen || item.marcaImagen} size={40} radius="sm"><IconPackage size={16} /></Avatar>}
+                        <Box style={{ flex: 1, minWidth: 0 }}>
+                            <Text fw={700} size="sm" lineClamp={2} lh={1.25}>{item.nombre}</Text>
+                            <Group gap={4} mt={2}>
+                                {etiquetasRenglon(item)}
+                                {!item.isFicticio && item.presentacion !== 'UNIDAD' && <Badge size="xs" color="grape.7" variant="filled" tt="none">{item.presentacionEtiqueta} · {item.cantidad} und</Badge>}
+                                {item.isFicticio && <Badge size="xs" color="grape" variant="light">Ficticio 1010</Badge>}
+                                {!item.isFicticio && item.marcaNombre && <Text size="xs" c="dimmed">{item.marcaNombre}</Text>}
+                            </Group>
+                        </Box>
+                        <ActionIcon size="lg" color="red" variant="subtle" onClick={() => eliminarItem(item.clave)} aria-label="Quitar del carrito"><IconTrash size={18} /></ActionIcon>
+                    </Group>
+                    <Group justify="space-between" align="flex-end" mt={8} wrap="nowrap" gap={6}>
+                        <Group gap={4} wrap="nowrap">
+                            <ActionIcon size={40} radius="md" color="gray" variant="light" onClick={() => cambiarCantidad(item.clave, -1)} aria-label="Uno menos"><IconMinus size={18} /></ActionIcon>
+                            <NumberInput value={item.cantidadPres} onChange={(val) => setCantidadAbsoluta(item.clave, val)} min={1} allowDecimal={false} allowNegative={false} size="md" w={64} hideControls inputMode="numeric"
+                                aria-label="Cantidad" styles={{ input: { textAlign: 'center', fontWeight: 900, color: '#1971c2', backgroundColor: '#f8f9fa', paddingInline: 4 } }} />
+                            <ActionIcon size={40} radius="md" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)} aria-label="Uno más"><IconPlus size={18} /></ActionIcon>
+                        </Group>
+                        <Box ta="right" style={{ minWidth: 0 }}>
+                            {puedeEditarPrecio ? (
+                                <PrecioEditable valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)} size="sm" onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)} />
+                            ) : (
+                                <Text size="xs" c="dimmed">c/u <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="xs" fw={600} /></Text>
+                            )}
+                            <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="lg" fw={800} />
+                        </Box>
+                    </Group>
+                    {!item.isFicticio && !esPresupuesto && (
+                        <Checkbox size="sm" mt={8} color="teal" label="Afectar inventario" checked={item.afectaInventario} onChange={(e) => toggleAfectaInventario(item.clave, e.currentTarget.checked)} />
+                    )}
+                </Paper>
+            ))}
+        </Stack>
+    );
+
+    const tablaCarrito = (
+        <Table striped highlightOnHover verticalSpacing="xs">
+            <Table.Thead>
+                <Table.Tr>
+                    <Table.Th style={{ width: '36%' }}>Producto</Table.Th>
+                    <Table.Th style={{ width: '28%', textAlign: 'center' }}>Cantidad</Table.Th>
+                    <Table.Th style={{ width: puedeEditarPrecio ? '18%' : '12%', textAlign: 'right' }}>Unit.</Table.Th>
+                    <Table.Th style={{ width: '13%', textAlign: 'right' }}>Total</Table.Th>
+                    <Table.Th style={{ width: '5%' }}></Table.Th>
+                </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+                {carrito.map((item, idxItem) => (
+                    <Table.Tr key={item.clave}>
+                        <Table.Td>
+                            <Group gap="xs" wrap="nowrap">
+                                {item.isFicticio ? (
+                                    <Avatar color="grape" size="sm" radius="sm"><IconEdit size={14} /></Avatar>
+                                ) : (
+                                    <Avatar src={item.imagen || item.marcaImagen} size="sm" radius="sm"><IconPackage size={14} /></Avatar>
+                                )}
+                                <Box>
+                                    <Group gap={4}>
+                                        <Text fw={600} size="sm" lineClamp={2}>{item.nombre}</Text>
+                                        {etiquetasRenglon(item)}
+                                    </Group>
+                                    {!item.isFicticio && item.marcaNombre && <Text size="xs" c="dimmed">{item.marcaNombre}</Text>}
+                                    {!item.isFicticio && item.presentacion !== 'UNIDAD' && (
+                                        <Badge size="sm" color="grape" variant="filled" tt="none" mt={2}>{item.presentacionEtiqueta} · {item.cantidad} unidades</Badge>
+                                    )}
+                                    {item.isFicticio && <Text size="xs" c="dimmed">Código: 1010</Text>}
+
+                                    {!item.isFicticio && !esPresupuesto && (
+                                        <Checkbox
+                                            size="xs" mt={4} color="teal" label="Afectar inventario"
+                                            checked={item.afectaInventario}
+                                            onChange={(e) => toggleAfectaInventario(item.clave, e.currentTarget.checked)}
+                                        />
+                                    )}
+                                </Box>
+                            </Group>
+                        </Table.Td>
+
+                        <Table.Td>
+                            <Group gap="xs" wrap="nowrap" justify="center">
+                                <ActionIcon size="md" color="gray" variant="light" onClick={() => cambiarCantidad(item.clave, -1)} aria-label="Uno menos">
+                                    <IconMinus size={16} />
+                                </ActionIcon>
+                                <NumberInput
+                                    value={item.cantidadPres}
+                                    onChange={(val) => setCantidadAbsoluta(item.clave, val)}
+                                    min={1} allowDecimal={false} allowNegative={false} size="sm" w={75} hideControls aria-label="Cantidad"
+                                    styles={{ input: { textAlign: 'center', fontWeight: 900, fontSize: '1rem', color: '#1971c2', backgroundColor: '#f8f9fa' } }}
+                                />
+                                <ActionIcon size="md" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)} aria-label="Uno más">
+                                    <IconPlus size={16} />
+                                </ActionIcon>
+                            </Group>
+                        </Table.Td>
+
+                        <Table.Td style={{ textAlign: 'right' }}>
+                            {puedeEditarPrecio ? (
+                                <PrecioEditable
+                                    valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)}
+                                    onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)}
+                                />
+                            ) : (
+                                <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="sm" fw={500} />
+                            )}
+                        </Table.Td>
+                        <Table.Td style={{ textAlign: 'right' }}>
+                            <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="sm" fw={800} />
+                        </Table.Td>
+                        <Table.Td style={{ textAlign: 'right' }}>
+                            <ActionIcon color="red" variant="subtle" onClick={() => eliminarItem(item.clave)} aria-label="Quitar del carrito">
+                                <IconTrash size={18} />
+                            </ActionIcon>
+                        </Table.Td>
+                    </Table.Tr>
+                ))}
+            </Table.Tbody>
+        </Table>
+    );
+
+    // ---------------- Computadora: productos a la izquierda, documento y carrito a la derecha ----------------
+    const contenidoEscritorio = (
+        <>
+            <Paper p="xs" mb="sm" bg="blue.0" radius="md">
+                <Group gap="xs">
+                    <IconExchange size={20} color="#1971C2" />
+                    <Text fw={600} c="blue.9">Tasa BCV:</Text>
+                    <Badge size="lg" color="blue" variant="filled">{tasaBcv} Bs/$</Badge>
+                </Group>
+            </Paper>
+
+            <Grid gutter="md" m={0}>
+                <Grid.Col span={5} p={0} pr="md">
+                    <Paper withBorder p="md" radius="md" h="75vh" style={{ display: 'flex', flexDirection: 'column' }}>
+                        {selectorTipoVenta}
+                        {buscador}
+                        <ScrollArea style={{ flex: 1 }} type="auto">
+                            <Stack gap="xs">
+                                {productosFiltrados.map(filaProducto)}
+                                {sinResultados}
+                            </Stack>
+                        </ScrollArea>
+                    </Paper>
+                </Grid.Col>
+
+                <Grid.Col span={7} p={0}>
+                    {/* Si la pantalla es baja, el panel se desplaza entero en vez de dejar el carrito sin espacio */}
+                    <Paper withBorder p="md" radius="md" h="75vh" style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+                        {bloqueDocumento}
+                        <Group grow mb="sm" align="flex-end">
+                            {campoCliente}
+                            {campoTarifa}
+                        </Group>
+                        {filaIvaCondicion}
+                        {filaPago}
+
+                        <ScrollArea style={{ flex: '1 0 200px' }} offsetScrollbars type="auto" mb="sm">
+                            {carrito.length ? tablaCarrito : <Text c="dimmed" ta="center" size="sm" py="xl">Haz clic en un producto de la lista para agregarlo.</Text>}
+                        </ScrollArea>
+
+                        {campoObservaciones}
+                        {filaMayor}
+
+                        <Divider mb="xs" />
+
+                        <Group justify="space-between" align="flex-end">
+                            <Stack gap={2}>
+                                <Group gap="xs">
+                                    <Text size="xs" c="dimmed">Subtotal:</Text>
+                                    <PrecioVisual valor={subtotal} simbolo={simboloMoneda} size="xs" c="dimmed" />
+                                </Group>
+                                <Group gap="xs">
+                                    <Text size="xs" c="dimmed">IVA (16%):</Text>
+                                    <PrecioVisual valor={montoIva} simbolo={simboloMoneda} size="xs" c="dimmed" />
+                                </Group>
+                                {costoFleteNum > 0 && (
+                                    <Group gap="xs">
+                                        <Text size="xs" c="dimmed">Flete:</Text>
+                                        <PrecioVisual valor={costoFleteNum} simbolo={simboloMoneda} size="xs" c="dimmed" />
+                                    </Group>
+                                )}
+                                <Group gap="xs" mt={2}>
+                                    <Text fw={900} size="md" c="blue.9">Total a Pagar:</Text>
+                                    <PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="lg" fw={900} c="blue.9" />
+                                    {equivalenteTotal && <Text size="xs" c="dimmed">{equivalenteTotal}</Text>}
+                                </Group>
+                            </Stack>
+
+                            {esPresupuesto ? (
+                                <Button size="md" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}>
+                                    Guardar presupuesto
+                                </Button>
+                            ) : (
+                                <Group gap="xs">
+                                    <Button size="md" variant="light" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0} title="Guarda el carrito como presupuesto (con IVA, cliente opcional) sin registrar la venta">
+                                        Presupuesto
+                                    </Button>
+                                    <Button size="md" color="blue.8" leftSection={<IconReceiptTax size={20} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>
+                                        Revisar
+                                    </Button>
+                                </Group>
+                            )}
+                        </Group>
+                    </Paper>
+                </Grid.Col>
+            </Grid>
+        </>
+    );
+
+    // ---------------- Teléfono: pantalla completa en tres partes (productos, carrito, datos) y el total siempre abajo ----------------
+    const faltaCliente = !esPresupuesto && tipoVenta === 'MAYOR' && !formVenta.values.clienteId;
+    const contenidoTelefono = (
+        <Box style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: '#f1f3f7' }}>
+            <Box style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', borderBottom: '1px solid #e3e7ee', padding: 'calc(8px + env(safe-area-inset-top, 0px)) 12px 8px', boxShadow: '0 4px 12px -8px rgba(0,0,0,0.25)' }}>
+                <Group justify="space-between" wrap="nowrap" gap="xs" mb={8}>
+                    <Box style={{ minWidth: 0 }}>
+                        <Text fw={800} size="lg" c="blue.9" lh={1.2} truncate="end">{esPresupuesto ? 'Nuevo presupuesto' : 'Nueva venta'}</Text>
+                        <Group gap={4} wrap="nowrap">
+                            <IconExchange size={14} color="#1971C2" />
+                            <Text size="xs" c="dimmed" lh={1.2}>Tasa BCV: <b>{tasaBcv ? `${tasaBcv} Bs/$` : '…'}</b></Text>
+                        </Group>
+                    </Box>
+                    <CloseButton size="xl" onClick={onClose} aria-label="Cerrar" />
+                </Group>
+                <SegmentedControl
+                    fullWidth value={vista} onChange={setVista} color="blue.8"
+                    data={[
+                        { value: 'productos', label: 'Productos' },
+                        { value: 'carrito', label: carrito.length ? `Carrito (${carrito.length})` : 'Carrito' },
+                        { value: 'datos', label: esPresupuesto ? 'Datos' : 'Datos y pago' },
+                    ]}
+                />
+            </Box>
+
+            <Box p="sm" style={{ flex: 1 }}>
+                {vista === 'productos' && (
+                    <Stack gap={8}>
+                        {/* Qué se va a emitir y para quién: se cambia en «Datos y pago» */}
+                        <UnstyledButton onClick={() => setVista('datos')} p={10} bg="white" style={{ borderRadius: 8, border: `1px solid ${faltaCliente ? 'var(--mantine-color-red-4)' : '#dee2e6'}` }}>
+                            <Group justify="space-between" wrap="nowrap" gap="xs">
+                                <Box style={{ minWidth: 0 }}>
+                                    <Text size="sm" fw={700} lh={1.3} truncate="end">
+                                        {esPresupuesto ? 'Presupuesto' : `${tipoDocumentoActual} ${formVenta.values.numeroDocumento}`} · {etiquetaTarifa}
+                                    </Text>
+                                    <Text size="xs" lh={1.3} c={faltaCliente ? 'red.7' : 'dimmed'} fw={faltaCliente ? 700 : 400} truncate="end">
+                                        {!esPresupuesto && `${tipoVenta === 'MAYOR' ? 'Al mayor' : 'Al detal'} · `}{clienteSeleccionado ? clienteSeleccionado.nombre : (faltaCliente ? 'Falta elegir el cliente' : 'Sin cliente')}
+                                    </Text>
+                                </Box>
+                                <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
+                                    <Text size="xs" fw={700} c="blue.7">Cambiar</Text>
+                                    <IconChevronRight size={16} color="var(--mantine-color-blue-7)" />
+                                </Group>
+                            </Group>
+                        </UnstyledButton>
+                        {buscador}
+                        {!productos && <Text c="dimmed" ta="center" size="sm" py="lg">Cargando productos…</Text>}
+                        {productosFiltrados.map(filaProducto)}
+                        {sinResultados}
+                    </Stack>
+                )}
+
+                {vista === 'carrito' && (
+                    carrito.length === 0 ? (
+                        <Stack align="center" gap="sm" py={48}>
+                            <ThemeIcon size={56} radius="xl" variant="light" color="blue"><IconShoppingCart size={30} /></ThemeIcon>
+                            <Text fw={700}>El carrito está vacío</Text>
+                            <Button variant="light" onClick={() => setVista('productos')}>Agregar productos</Button>
+                        </Stack>
+                    ) : (
+                        <Stack gap={8}>
+                            <Group justify="space-between">
+                                <Text size="sm" fw={700} c="blue.9">{carrito.length} {carrito.length === 1 ? 'producto' : 'productos'} · {unidadesCarrito} und</Text>
+                                <Button size="compact-sm" variant="subtle" leftSection={<IconPlus size={14} />} onClick={() => setVista('productos')}>Agregar más</Button>
+                            </Group>
+                            {tarjetasCarrito}
+                        </Stack>
+                    )
+                )}
+
+                {vista === 'datos' && (
+                    <Stack gap={0}>
+                        {selectorTipoVenta && <Box mb="sm">{selectorTipoVenta}</Box>}
+                        {bloqueDocumento}
+                        <Paper withBorder radius="md" p="sm" mb="sm" bg="white">
+                            <Stack gap="sm">
+                                {campoCliente}
+                                {campoTarifa}
+                            </Stack>
+                        </Paper>
+                        {!esPresupuesto && (
+                            <Paper withBorder radius="md" p="sm" mb="sm" bg="white">
+                                <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb={6}>Cobro</Text>
+                                {filaIvaCondicion}
+                                {filaPago}
+                                {formVenta.values.condicionPago !== 'Contado' && <Text size="xs" c="dimmed">A crédito: el cliente queda debiendo y los abonos se registran después en Cuentas por cobrar.</Text>}
+                            </Paper>
+                        )}
+                        {filaMayor && (
+                            <Paper withBorder radius="md" p="sm" mb="sm" bg="white">
+                                <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb={6}>Despacho</Text>
+                                {filaMayor}
+                            </Paper>
+                        )}
+                        {campoObservaciones}
+                    </Stack>
+                )}
+            </Box>
+
+            {/* Total y botones siempre a la vista; los botones a todo el ancho porque en una sola fila no caben */}
+            <Box style={{ position: 'sticky', bottom: 0, zIndex: 15, background: '#fff', padding: '8px 12px calc(10px + env(safe-area-inset-bottom, 0px))', boxShadow: '0 -6px 16px rgba(0,0,0,0.12)', borderTop: '1px solid #e9ecef' }}>
+                <Group justify="space-between" align="flex-end" wrap="nowrap" gap="xs" mb={8}>
+                    <Box style={{ minWidth: 0 }}>
+                        <Text size="xs" c="dimmed" lh={1.35}>Subtotal <PrecioVisual valor={subtotal} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} /></Text>
+                        <Text size="xs" c="dimmed" lh={1.35}>IVA <PrecioVisual valor={montoIva} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} />{costoFleteNum > 0 && <> · Flete <PrecioVisual valor={costoFleteNum} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} /></>}</Text>
+                    </Box>
+                    <Box ta="right" style={{ flexShrink: 0 }}>
+                        <Text size="xs" fw={800} c="blue.9" tt="uppercase" lh={1}>Total</Text>
+                        <PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="xl" fw={900} c="blue.9" />
+                        {equivalenteTotal && <Text size="xs" c="dimmed" lh={1.1}>{equivalenteTotal}</Text>}
+                    </Box>
+                </Group>
+                {esPresupuesto ? (
+                    <Button fullWidth size="md" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}>Guardar presupuesto</Button>
+                ) : (
+                    <Group gap={8} wrap="nowrap">
+                        <Button size="sm" h={46} px="sm" variant="light" color="teal" onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}
+                            title="Guarda el carrito como presupuesto (con IVA, cliente opcional) sin registrar la venta" style={{ flexShrink: 0 }}>
+                            Presupuesto
+                        </Button>
+                        <Button size="sm" h={46} style={{ flex: 1 }} color="blue.8" leftSection={<IconReceiptTax size={18} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>
+                            Revisar venta
+                        </Button>
+                    </Group>
+                )}
+            </Box>
+        </Box>
+    );
+
     return (
         <>
-            <Modal 
-                opened={opened} onClose={onClose} size="95%" fullScreen={isMobile} 
-                title={<Title order={isMobile ? 5 : 3} c="blue.9" component="div">{esPresupuesto ? 'Nuevo presupuesto' : (isMobile ? 'Nueva venta (POS)' : 'Terminal POS - Nueva Venta')}</Title>} 
-                centered
-                styles={{
-                    inner: { padding: isMobile ? 0 : '16px' }, content: { borderRadius: isMobile ? 0 : '8px', ...(isMobile ? { padding: 0 } : {}) },
-                    body: { padding: isMobile ? '4px 4px 0' : '20px' }, header: { padding: isMobile ? '6px 8px' : '20px', ...(isMobile ? { position: 'sticky', top: 0, zIndex: 20, background: '#fff', borderBottom: '1px solid #e9ecef', minHeight: 44 } : {}) }
-                }}
-            >
-                <Paper p={{ base: 6, md: 'xs' }} mb="sm" bg="blue.0" radius={{ base: 4, md: 'md' }}>
-                    <Group justify="space-between">
-                        <Group>
-                            <IconExchange size={20} color="#1971C2" />
-                            <Text fw={600} size={isMobile ? "sm" : "md"} c="blue.9">Tasa BCV:</Text>
-                            <Badge size={isMobile ? "md" : "lg"} color="blue" variant="filled">{tasaBcv} Bs/$</Badge>
-                        </Group>
-                    </Group>
-                </Paper>
+            {isMobile ? (
+                <Modal opened={opened} onClose={onClose} fullScreen withCloseButton={false} classNames={{ content: CONTENIDO_SIN_RELLENO }} transitionProps={{ transition: 'fade', duration: 120 }}
+                    styles={{ body: { padding: 0 }, content: { background: '#f1f3f7' } }}>
+                    {contenidoTelefono}
+                </Modal>
+            ) : (
+                <Modal
+                    opened={opened} onClose={onClose} size="95%" centered
+                    title={<Title order={3} c="blue.9" component="div">{esPresupuesto ? 'Nuevo presupuesto' : 'Terminal POS - Nueva Venta'}</Title>}
+                    styles={{ inner: { padding: '16px' }, content: { borderRadius: '8px' }, body: { padding: '20px' }, header: { padding: '20px' } }}
+                >
+                    {contenidoEscritorio}
+                </Modal>
+            )}
 
-                <Grid gutter={{ base: 4, md: 'md' }} m={0}>
-                    <Grid.Col span={{ base: 12, md: 5 }} p={0} pr={{ md: 'md' }}>
-                        <Paper withBorder p={{ base: 6, md: 'md' }} radius={{ base: 4, md: 'md' }} h={isMobile ? 'auto' : '75vh'} style={{ display: 'flex', flexDirection: 'column' }}>
-                            {!esPresupuesto && (
-                                <Button.Group mb="sm">
-                                    <Button fullWidth variant={tipoVenta === 'DETAL' ? 'filled' : 'light'} onClick={() => setTipoVenta('DETAL')}>Detal</Button>
-                                    <Button fullWidth variant={tipoVenta === 'MAYOR' ? 'filled' : 'light'} color="grape" onClick={() => setTipoVenta('MAYOR')}>Mayor</Button>
-                                </Button.Group>
-                            )}
-
-                            <Group wrap="nowrap" mb="sm" gap="xs">
-                                <TextInput style={{ flex: 1 }} placeholder="Buscar producto..." value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.currentTarget.value)} data-autofocus />
-                                {/* El producto genérico (precio escrito a mano) es solo de administración */}
-                                {!esVendedor && (
-                                    <Button color="grape" variant="light" px="sm" onClick={() => setModalFicticio(true)} title="Agregar Ítem Ficticio (1010)">
-                                        + Ficticio
-                                    </Button>
-                                )}
-                            </Group>
-
-                            <ScrollArea style={{ flex: 1, maxHeight: isMobile ? 240 : 'none' }} type="auto">
-                                <Stack gap={isMobile ? 4 : 'xs'}>
-                                    {productosFiltrados.map(prod => {
-                                        const infoPreview = calcularPrecioInfo(prod, formVenta.values.tipoPrecio);
-                                        const imgFinal = getImageUrl(prod.imagen) || getImageUrl(prod.marca?.imagen);
-
-                                        return (
-                                            <Paper key={prod.id} p={isMobile ? 6 : 'sm'} withBorder radius="sm" style={{ cursor: 'pointer' }} onClick={() => agregarAlCarrito(prod)}>
-                                                <Group wrap="nowrap" justify="space-between">
-                                                    
-                                                    <Group wrap="nowrap" maw="75%" gap="sm">
-                                                        <Avatar src={imgFinal} size="md" radius="sm" color="blue">
-                                                            <IconPackage size={16} />
-                                                        </Avatar>
-                                                        <Box>
-                                                            <Group gap={4}>
-                                                                <Text fw={600} size="sm" lineClamp={1}>{prod.nombre}</Text>
-                                                                {infoPreview.tieneDescuento && (
-                                                                    <IconTag size={14} color="#FF6B6B" />
-                                                                )}
-                                                            </Group>
-                                                            <Text size="xs" c="dimmed" lineClamp={1}>
-                                                                SKU: {prod.codigo} {prod.marca?.nombre ? `| ${prod.marca.nombre}` : ''}
-                                                            </Text>
-                                                        </Box>
-                                                    </Group>
-
-                                                    <Stack gap={4} align="flex-end">
-                                                        <Badge color={infoPreview.simbolo === 'Bs' ? 'teal' : 'blue'} variant="light" size="lg" px={isMobile ? 4 : 8}>
-                                                            <PrecioVisual valor={infoPreview.precio} simbolo={infoPreview.simbolo} size="sm" fw={700} />
-                                                        </Badge>
-                                                        {presentacionesDe(prod).filter((p) => p.clave !== 'UNIDAD').map((p) => (
-                                                            <Button key={p.clave} size="compact-xs" color="grape" variant="light" onClick={(e) => { e.stopPropagation(); agregarAlCarrito(prod, p.clave); }}>
-                                                                + {p.etiqueta}
-                                                            </Button>
-                                                        ))}
-                                                    </Stack>
-                                                </Group>
-                                            </Paper>
-                                        );
-                                    })}
-                                </Stack>
-                            </ScrollArea>
-                        </Paper>
-                    </Grid.Col>
-
-                    <Grid.Col span={{ base: 12, md: 7 }} p={0}>
-                        <Paper withBorder p={{ base: 6, md: 'md' }} radius={{ base: 4, md: 'md' }} h={isMobile ? 'auto' : '75vh'} style={{ display: 'flex', flexDirection: 'column' }}>
-                            
-                            {esPresupuesto ? (
-                                <Paper p={{ base: 8, md: 'sm' }} mb="sm" bg="teal.0" radius="md" withBorder>
-                                    <Group justify="space-between" align="center" wrap="nowrap">
-                                        <Group gap="xs" wrap="nowrap">
-                                            <ThemeIcon size={isMobile ? 'md' : 'lg'} variant="light" color="teal"><IconFileInvoice size={isMobile ? 16 : 20} /></ThemeIcon>
-                                            <Box>
-                                                <Text size={isMobile ? 'md' : 'lg'} fw={800} c="teal.9">PRESUPUESTO</Text>
-                                                <Text size="xs" c="dimmed" lh={1.2}>Con IVA · no es documento fiscal ni toca el inventario</Text>
-                                            </Box>
-                                        </Group>
-                                        <NumberInput label="Válido (días)" size={isMobile ? 'xs' : 'sm'} w={isMobile ? 90 : 110} min={1} max={365} allowDecimal={false} {...formVenta.getInputProps('validoDias')} />
-                                    </Group>
-                                </Paper>
-                            ) : (
-                            <Paper p={{ base: 8, md: 'sm' }} mb="sm" bg={tipoDocumentoActual === 'FACTURA' ? 'red.0' : 'gray.1'} radius="md" withBorder>
-                                <Group justify="space-between" align="center">
-                                    <Group gap="xs">
-                                        <ThemeIcon size={isMobile ? "md" : "lg"} variant="light" color={tipoDocumentoActual === 'FACTURA' ? 'red' : 'blue'}>
-                                            <IconReceiptTax size={isMobile ? 16 : 20} />
-                                        </ThemeIcon>
-                                        <Box>
-                                            <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Emitir:</Text>
-                                            <Text size={isMobile ? "md" : "lg"} fw={800} c={tipoDocumentoActual === 'FACTURA' ? 'red.9' : 'blue.9'}>
-                                                {tipoDocumentoActual}
-                                            </Text>
-                                        </Box>
-                                    </Group>
-
-                                    <TextInput
-                                        label="Correlativo"
-                                        size={isMobile ? "xs" : "sm"}
-                                        w={isMobile ? 100 : 150}
-                                        fw={700}
-                                        {...formVenta.getInputProps('numeroDocumento')}
-                                    />
-                                </Group>
-                                {tipoDocumentoActual === 'FACTURA' && (
-                                    <TextInput mt="xs" label="N° de control" placeholder="00-000000" size={isMobile ? 'xs' : 'sm'} {...formVenta.getInputProps('numeroControl')} />
-                                )}
-                                {puedeEditarPrecio && (
-                                    <TextInput mt="xs" type="date" label="Fecha de emisión" description="Vacía = hoy. Si copias una factura de otro día, elige esa fecha (toma la tasa BCV de ese día)"
-                                        size={isMobile ? 'xs' : 'sm'} max={new Date().toISOString().slice(0, 10)} {...formVenta.getInputProps('fechaEmision')} />
-                                )}
-                            </Paper>
-                            )}
-
-                            <Group grow mb="sm" align="flex-end">
-                                {/* 🔥 SECCIÓN CLIENTE MODIFICADA CON BOTÓN DE AGREGAR 🔥 */}
-                                {/* Al mayor el cliente es obligatorio; al detal es opcional (venta sola, sin cliente) y se puede crear uno nuevo con cédula, nombre y teléfono */}
-                                <Group wrap="nowrap" gap="xs" align="flex-end">
-                                    <Select
-                                        style={{ flex: 1 }}
-                                        label={tipoVenta === 'MAYOR' ? 'Cliente Mayorista' : 'Cliente (opcional)'}
-                                        placeholder={tipoVenta === 'MAYOR' ? 'Seleccione...' : 'Sin cliente'}
-                                        searchable
-                                        clearable={tipoVenta !== 'MAYOR'}
-                                        nothingFoundMessage="No hay coincidencias: crea uno con el botón +"
-                                        data={opcionesClientes}
-                                        {...formVenta.getInputProps('clienteId')}
-                                    />
-                                    <Button variant="light" color="grape" onClick={() => setModalCrearCliente(true)} px="xs" title="Crear cliente nuevo">
-                                        <IconPlus size={18} />
-                                    </Button>
-                                </Group>
-                                <Select 
-                                    label="Tarifa" 
-                                    data={[
-                                        { value: 'precio7', label: 'P7 (Detal USD)' },
-                                        { value: 'precio6', label: 'P6 (Mayor USD)' },
-                                        // El presupuesto se guarda en $ (y muestra el equivalente en Bs a la tasa): solo tarifas en $
-                                        ...(esPresupuesto ? [] : [
-                                            { value: 'precio4', label: 'P4 (P7 en Bs)' },
-                                            { value: 'precio5', label: 'P5 (P6 en Bs)' },
-                                            ...(esVendedor ? [] : [{ value: 'precio1', label: 'P1 (35% en Bs)' }]), // deriva del costo: solo administración
-                                        ]),
-                                    ]}
-                                    {...formVenta.getInputProps('tipoPrecio')}
-                                />
-                            </Group>
-
-                            {!esPresupuesto && (
-                                <Group mb="sm" justify="space-between">
-                                    <Checkbox label={<Text fw={600} size="sm">IVA (16%)</Text>} {...formVenta.getInputProps('conIva', { type: 'checkbox' })} />
-                                    {tipoVenta === 'MAYOR' && <Select size="xs" w={120} data={['Contado', 'Credito']} {...formVenta.getInputProps('condicionPago')} />}
-                                </Group>
-                            )}
-
-                            {!esPresupuesto && formVenta.values.condicionPago === 'Contado' && (
-                                <Group mb="sm" grow>
-                                    <Select 
-                                        label="Método" 
-                                        data={opcionesMetodoPago} 
-                                        {...formVenta.getInputProps('metodoPago')} 
-                                    />
-                                    {formVenta.values.metodoPago !== 'Efectivo ($)' && formVenta.values.metodoPago !== 'Efectivo (Bs)' ? (
-                                        <TextInput label="Referencia" placeholder="Últimos 6 dígitos" {...formVenta.getInputProps('referencia')} />
-                                    ) : (<Box />)}
-                                </Group>
-                            )}
-
-                            {isMobile ? (
-                                <Stack gap={6} mb="sm" style={{ order: -1 }}>
-                                    <Group justify="space-between">
-                                        <Text fw={800} size="sm" c="blue.9">Carrito ({carrito.length})</Text>
-                                        {carrito.length > 0 && <Text size="xs" c="dimmed">{carrito.reduce((a, i) => a + i.cantidad, 0)} unidades</Text>}
-                                    </Group>
-                                    {carrito.length === 0 && <Text c="dimmed" ta="center" size="sm" py="md">Toca un producto de la lista para agregarlo</Text>}
-                                    {carrito.map((item, idxItem) => (
-                                        <Paper key={item.clave} withBorder radius="md" p="xs" style={{ borderLeft: `4px solid ${!item.isFicticio && item.presentacion !== 'UNIDAD' ? '#7048e8' : '#1971c2'}` }}>
-                                            <Group wrap="nowrap" align="flex-start" gap="xs">
-                                                {item.isFicticio ? <Avatar color="grape" size="sm" radius="sm"><IconEdit size={14} /></Avatar> : <Avatar src={item.imagen || item.marcaImagen} size="sm" radius="sm"><IconPackage size={14} /></Avatar>}
-                                                <Box style={{ flex: 1, minWidth: 0 }}>
-                                                    <Text fw={700} size="sm" lineClamp={2} lh={1.2}>{item.nombre}</Text>
-                                                    <Group gap={4} mt={2}>
-                                                        {item.tieneDescuento && <Badge size="xs" color="red" variant="filled">-{item.porcentajeDescuento}%</Badge>}
-                                                        {((item.isFicticio && !item.aplicaIva) || (!item.isFicticio && item.porcentajeIva === 0)) && conIva && <Badge size="xs" color="gray" variant="light">EXENTO</Badge>}
-                                                        {!item.isFicticio && item.presentacion !== 'UNIDAD' && <Badge size="xs" color="grape.7" variant="filled" tt="none">{item.presentacionEtiqueta} · {item.cantidad} und</Badge>}
-                                                        {item.isFicticio && <Badge size="xs" color="grape" variant="light">Ficticio 1010</Badge>}
-                                                    </Group>
-                                                </Box>
-                                                <ActionIcon color="red" variant="subtle" onClick={() => eliminarItem(item.clave)} aria-label="Quitar del carrito"><IconTrash size={18} /></ActionIcon>
-                                            </Group>
-                                            <Group justify="space-between" align="center" mt={6} wrap="nowrap" gap={6}>
-                                                <Group gap={4} wrap="nowrap">
-                                                    <ActionIcon size="lg" color="gray" variant="light" onClick={() => cambiarCantidad(item.clave, -1)} aria-label="Menos"><IconMinus size={16} /></ActionIcon>
-                                                    <NumberInput value={item.cantidadPres} onChange={(val) => setCantidadAbsoluta(item.clave, val)} min={1} allowDecimal={false} size="sm" w={60} hideControls
-                                                        styles={{ input: { textAlign: 'center', fontWeight: 900, fontSize: '1rem', color: '#1971c2', backgroundColor: '#f8f9fa' } }} />
-                                                    <ActionIcon size="lg" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)} aria-label="Más"><IconPlus size={16} /></ActionIcon>
-                                                </Group>
-                                                <Box ta="right">
-                                                    {puedeEditarPrecio ? (
-                                                        <PrecioEditable valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)} onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)} />
-                                                    ) : (
-                                                        <Text size="xs" c="dimmed">c/u <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="xs" fw={600} /></Text>
-                                                    )}
-                                                    <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="md" fw={800} />
-                                                </Box>
-                                            </Group>
-                                            {!item.isFicticio && !esPresupuesto && (
-                                                <Checkbox size="xs" mt={6} color="teal" label="Afectar inventario" checked={item.afectaInventario} onChange={(e) => toggleAfectaInventario(item.clave, e.currentTarget.checked)} />
-                                            )}
-                                        </Paper>
-                                    ))}
-                                </Stack>
-                            ) : (
-                                <ScrollArea style={{ flex: isMobile ? 'none' : 1 }} offsetScrollbars type="auto" mb="sm">
-                                    <Table striped highlightOnHover verticalSpacing="xs" style={{ minWidth: isMobile ? 550 : '100%' }}>
-                                        <Table.Thead>
-                                            <Table.Tr>
-                                                <Table.Th style={{ width: '36%' }}>Producto</Table.Th>
-                                                <Table.Th style={{ width: '28%', textAlign: 'center' }}>Cantidad</Table.Th>
-                                                <Table.Th style={{ width: puedeEditarPrecio ? '18%' : '12%', textAlign: 'right' }}>Unit.</Table.Th>
-                                                <Table.Th style={{ width: '13%', textAlign: 'right' }}>Total</Table.Th>
-                                                <Table.Th style={{ width: '5%' }}></Table.Th>
-                                            </Table.Tr>
-                                        </Table.Thead>
-                                        <Table.Tbody>
-                                            {carrito.map((item, idxItem) => (
-                                                <Table.Tr key={item.clave}>
-                                                    <Table.Td>
-                                                        <Group gap="xs" wrap="nowrap">
-                                                            {item.isFicticio ? (
-                                                                <Avatar color="grape" size="sm" radius="sm"><IconEdit size={14} /></Avatar>
-                                                            ) : (
-                                                                <Avatar src={item.imagen || item.marcaImagen} size="sm" radius="sm"><IconPackage size={14} /></Avatar>
-                                                            )}
-                                                            <Box>
-                                                                <Group gap={4}>
-                                                                    <Text fw={600} size="sm" lineClamp={2}>{item.nombre}</Text>
-                                                                    {item.tieneDescuento && (
-                                                                        <Badge size="xs" color="red" variant="filled">-{item.porcentajeDescuento}%</Badge>
-                                                                    )}
-                                                                    {((item.isFicticio && !item.aplicaIva) || (!item.isFicticio && item.porcentajeIva === 0)) && conIva && (
-                                                                        <Badge size="xs" color="gray" variant="light">EXENTO</Badge>
-                                                                    )}
-                                                                </Group>
-                                                                {!item.isFicticio && item.marcaNombre && <Text size="xs" c="dimmed">{item.marcaNombre}</Text>}
-                                                                {!item.isFicticio && item.presentacion !== 'UNIDAD' && (
-                                                                    <Badge size="sm" color="grape" variant="filled" tt="none" mt={2}>{item.presentacionEtiqueta} · {item.cantidad} unidades</Badge>
-                                                                )}
-                                                                {item.isFicticio && <Text size="xs" c="dimmed">Código: 1010</Text>}
-                                                                
-                                                                {!item.isFicticio && !esPresupuesto && (
-                                                                    <Checkbox
-                                                                        size="xs"
-                                                                        mt={4}
-                                                                        color="teal"
-                                                                        label="Afectar inventario"
-                                                                        checked={item.afectaInventario}
-                                                                        onChange={(e) => toggleAfectaInventario(item.clave, e.currentTarget.checked)}
-                                                                    />
-                                                                )}
-                                                            </Box>
-                                                        </Group>
-                                                    </Table.Td>
-                                                    
-                                                    <Table.Td>
-                                                        <Group gap="xs" wrap="nowrap" justify="center">
-                                                            <ActionIcon size="md" color="gray" variant="light" onClick={() => cambiarCantidad(item.clave, -1)}>
-                                                                <IconMinus size={16} />
-                                                            </ActionIcon>
-                                                            
-                                                            <NumberInput
-                                                                value={item.cantidadPres}
-                                                                onChange={(val) => setCantidadAbsoluta(item.clave, val)}
-                                                                min={1} allowDecimal={false} size="sm" w={75} hideControls
-                                                                styles={{ input: { textAlign: 'center', fontWeight: 900, fontSize: '1rem', color: '#1971c2', backgroundColor: '#f8f9fa' } }}
-                                                            />
-                                                            
-                                                            <ActionIcon size="md" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)}>
-                                                                <IconPlus size={16} />
-                                                            </ActionIcon>
-                                                        </Group>
-                                                    </Table.Td>
-
-                                                    <Table.Td style={{ textAlign: 'right' }}>
-                                                        {puedeEditarPrecio ? (
-                                                            <PrecioEditable
-                                                                valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)}
-                                                                onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)}
-                                                            />
-                                                        ) : (
-                                                            <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="sm" fw={500} />
-                                                        )}
-                                                    </Table.Td>
-                                                    <Table.Td style={{ textAlign: 'right' }}>
-                                                        <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="sm" fw={800} />
-                                                    </Table.Td>
-                                                    <Table.Td style={{ textAlign: 'right' }}>
-                                                        <ActionIcon color="red" variant="subtle" onClick={() => eliminarItem(item.clave)}>
-                                                            <IconTrash size={18} />
-                                                        </ActionIcon>
-                                                    </Table.Td>
-                                                </Table.Tr>
-                                            ))}
-                                        </Table.Tbody>
-                                    </Table>
-                                </ScrollArea>
-                            )}
-
-                            {esPresupuesto && (
-                                <Textarea mb="sm" label="Observaciones (opcional, salen en el presupuesto)" autosize minRows={1} maxRows={4} {...formVenta.getInputProps('notas')} />
-                            )}
-
-                            {!esPresupuesto && tipoVenta === 'MAYOR' && (
-                                <Group mb="sm" grow>
-                                    <TextInput placeholder="(Opcional)" label="¿Chofer que retira?" {...formVenta.getInputProps('quienRetira')} />
-                                    <NumberInput placeholder="(Opcional)" label={`Flete (${simboloMoneda})`} decimalScale={2} {...formVenta.getInputProps('costoFlete')} />
-                                </Group>
-                            )}
-
-                            {!isMobile && (
-                                <>
-                                    <Divider mb="xs" />
-
-                                    <Group justify="space-between" align="flex-end">
-                                        <Stack gap={2}>
-                                            <Group gap="xs">
-                                                <Text size="xs" c="dimmed">Subtotal:</Text>
-                                                <PrecioVisual valor={subtotal} simbolo={simboloMoneda} size="xs" c="dimmed" />
-                                            </Group>
-                                            <Group gap="xs">
-                                                <Text size="xs" c="dimmed">IVA (16%):</Text>
-                                                <PrecioVisual valor={montoIva} simbolo={simboloMoneda} size="xs" c="dimmed" />
-                                            </Group>
-                                            {costoFleteNum > 0 && (
-                                                <Group gap="xs">
-                                                    <Text size="xs" c="dimmed">Flete:</Text>
-                                                    <PrecioVisual valor={costoFleteNum} simbolo={simboloMoneda} size="xs" c="dimmed" />
-                                                </Group>
-                                            )}
-                                            <Group gap="xs" mt={2}>
-                                                <Text fw={900} size="md" c="blue.9">Total a Pagar:</Text>
-                                                <PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="lg" fw={900} c="blue.9" />
-                                            </Group>
-                                        </Stack>
-
-                                        {esPresupuesto ? (
-                                            <Button size="md" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}>
-                                                Guardar presupuesto
-                                            </Button>
-                                        ) : (
-                                            <Group gap="xs">
-                                                <Button size="md" variant="light" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0} title="Guarda el carrito como presupuesto (con IVA, cliente opcional) sin registrar la venta">
-                                                    Presupuesto
-                                                </Button>
-                                                <Button size="md" color="blue.8" leftSection={<IconReceiptTax size={20} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>
-                                                    Revisar
-                                                </Button>
-                                            </Group>
-                                        )}
-                                    </Group>
-                                </>
-                            )}
-                        </Paper>
-                    </Grid.Col>
-                </Grid>
-                {isMobile && (
-                    <Box style={{ position: 'sticky', bottom: 0, zIndex: 15, background: '#fff', margin: '6px -4px 0', padding: '8px 12px calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -6px 16px rgba(0,0,0,0.12)', borderTop: '1px solid #e9ecef' }}>
-                        {/* Totales arriba y botones abajo a todo el ancho: en un teléfono no caben en una sola fila */}
-                        <Group justify="space-between" align="flex-end" wrap="nowrap" gap="xs" mb={8}>
-                            <Text size="xs" c="dimmed" lh={1.3} style={{ minWidth: 0 }}>Subtotal <PrecioVisual valor={subtotal} simbolo={simboloMoneda} size="xs" c="dimmed" /> · IVA <PrecioVisual valor={montoIva} simbolo={simboloMoneda} size="xs" c="dimmed" />{costoFleteNum > 0 && <> · Flete <PrecioVisual valor={costoFleteNum} simbolo={simboloMoneda} size="xs" c="dimmed" /></>}</Text>
-                            <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}><Text fw={900} size="sm" c="blue.9">Total:</Text><PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="xl" fw={900} c="blue.9" /></Group>
-                        </Group>
-                        {esPresupuesto ? (
-                            <Button fullWidth size="md" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}>Guardar presupuesto</Button>
-                        ) : (
-                            <Group grow gap={8} wrap="nowrap">
-                                <Button size="md" px="xs" variant="outline" color="teal" leftSection={<IconFileInvoice size={18} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}>Presupuesto</Button>
-                                <Button size="md" px="xs" color="blue.8" leftSection={<IconReceiptTax size={18} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>Revisar venta</Button>
-                            </Group>
-                        )}
-                    </Box>
-                )}
-            </Modal>
-
-            {/* 🔥 MODAL SECUNDARIO: CREAR CLIENTE EN CALIENTE 🔥 */}
-            <Modal opened={modalCrearCliente} onClose={() => setModalCrearCliente(false)} size="lg" title={<Title order={4} c="grape">{tipoVenta === 'MAYOR' ? 'Registrar Nuevo Cliente' : 'Cliente nuevo al detal'}</Title>} centered zIndex={2000}>
+            {/* MODAL SECUNDARIO: CREAR CLIENTE EN CALIENTE */}
+            <Modal opened={modalCrearCliente} onClose={() => setModalCrearCliente(false)} size="lg" fullScreen={isMobile} classNames={isMobile ? { content: CONTENIDO_SIN_RELLENO } : undefined} title={<Title order={4} c="grape" component="div">{tipoVenta === 'MAYOR' ? 'Registrar Nuevo Cliente' : 'Cliente nuevo al detal'}</Title>} centered zIndex={2000}>
                 <form onSubmit={formNuevoCliente.onSubmit(async (values) => {
                     try {
                         if (!String(values.identificacion || '').trim() || !String(values.nombre || '').trim()) throw new Error('La cédula y el nombre son obligatorios');
@@ -892,70 +1065,86 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
                     }
                 })}>
                     <Stack gap="sm">
-                        <TextInput size="md" label={tipoVenta === 'MAYOR' ? 'RIF / Cédula' : 'Cédula'} placeholder={tipoVenta === 'MAYOR' ? 'Ej: J-12345678-9 o V-12345678' : 'Ej: V-12345678'} withAsterisk data-autofocus {...formNuevoCliente.getInputProps('identificacion')} />
-                        <TextInput size="md" label={tipoVenta === 'MAYOR' ? 'Razón Social / Nombre' : 'Nombre'} placeholder={tipoVenta === 'MAYOR' ? 'Ej: Farmacia San Pedro' : 'Ej: María Pérez'} withAsterisk {...formNuevoCliente.getInputProps('nombre')} />
-                        <TextInput size="md" label="Teléfono" placeholder="Ej: 0414-1234567 (opcional)" {...formNuevoCliente.getInputProps('telefono')} />
+                        <TextInput size="md" label={tipoVenta === 'MAYOR' ? 'RIF / Cédula' : 'Cédula'} placeholder={tipoVenta === 'MAYOR' ? 'Ej: J-12345678-9 o V-12345678' : 'Ej: V-12345678'} withAsterisk autoComplete="off" data-autofocus {...formNuevoCliente.getInputProps('identificacion')} />
+                        <TextInput size="md" label={tipoVenta === 'MAYOR' ? 'Razón Social / Nombre' : 'Nombre'} placeholder={tipoVenta === 'MAYOR' ? 'Ej: Farmacia San Pedro' : 'Ej: María Pérez'} withAsterisk autoComplete="off" {...formNuevoCliente.getInputProps('nombre')} />
+                        <TextInput size="md" type="tel" inputMode="tel" label="Teléfono" placeholder="Ej: 0414-1234567 (opcional)" {...formNuevoCliente.getInputProps('telefono')} />
                         {tipoVenta === 'MAYOR' && (
                             <>
-                                <TextInput size="md" label="Correo Electrónico" placeholder="contacto@cliente.com" {...formNuevoCliente.getInputProps('email')} />
+                                <TextInput size="md" type="email" inputMode="email" label="Correo Electrónico" placeholder="contacto@cliente.com" {...formNuevoCliente.getInputProps('email')} />
                                 <TextInput size="md" label="Dirección Fiscal" placeholder="Ej: Av. Principal, Local 4..." {...formNuevoCliente.getInputProps('direccion')} />
                                 <TextInput size="md" label="Notas Adicionales" placeholder="(Opcional)" {...formNuevoCliente.getInputProps('notas')} />
                             </>
                         )}
-                        <Button size="md" type="submit" color="grape" mt="md">Guardar y Seleccionar Cliente</Button>
+                        <Button size="md" type="submit" color="grape" mt="md" loading={formNuevoCliente.submitting}>Guardar y Seleccionar Cliente</Button>
                     </Stack>
                 </form>
             </Modal>
 
-            {/* MODALES EXTRA Y VISTA PREVIA (FICTICIO) */}
-            <Modal opened={modalFicticio} onClose={() => setModalFicticio(false)} title={<Title order={4} c="grape">Agregar Ítem Ficticio (1010)</Title>} centered>
+            {/* PRODUCTO FICTICIO (1010): descripción y precio escritos a mano */}
+            <Modal opened={modalFicticio} onClose={() => setModalFicticio(false)} fullScreen={isMobile} classNames={isMobile ? { content: CONTENIDO_SIN_RELLENO } : undefined} title={<Title order={4} c="grape" component="div">Agregar Ítem Ficticio (1010)</Title>} centered zIndex={2000}>
                 <form onSubmit={formFicticio.onSubmit(handleAgregarFicticio)}>
                     <Stack gap="md">
-                        <TextInput label="Descripción del artículo" withAsterisk {...formFicticio.getInputProps('nombre')} />
-                        <NumberInput 
-                            label={`Precio Unitario (${esMonedaBs ? 'Bs' : 'USD'})`} 
-                            withAsterisk decimalScale={3} 
+                        <TextInput size={tamCampo} label="Descripción del artículo" withAsterisk autoComplete="off" {...formFicticio.getInputProps('nombre')} />
+                        <NumberInput
+                            size={tamCampo}
+                            label={`Precio Unitario (${esMonedaBs ? 'Bs' : 'USD'})`}
+                            withAsterisk decimalScale={3} min={0} allowNegative={false} inputMode="decimal" hideControls={isMobile}
                             description="Ingresa el precio en la moneda seleccionada."
-                            {...formFicticio.getInputProps('precio')} 
+                            data-autofocus
+                            {...formFicticio.getInputProps('precio')}
                         />
-                        <NumberInput label="Cantidad" withAsterisk min={1} allowDecimal={false} {...formFicticio.getInputProps('cantidad')} />
-                        <Checkbox 
-                            label={<Text fw={600}>Lleva IVA (16%)</Text>} 
+                        <NumberInput size={tamCampo} label="Cantidad" withAsterisk min={1} allowDecimal={false} allowNegative={false} inputMode="numeric" {...formFicticio.getInputProps('cantidad')} />
+                        <Checkbox
+                            size={isMobile ? 'md' : 'sm'}
+                            label={<Text fw={600}>Lleva IVA (16%)</Text>}
                             description="Si desmarcas, será EXENTO."
                             color="grape"
                             {...formFicticio.getInputProps('aplicaIva', { type: 'checkbox' })}
                         />
-                        <Button type="submit" fullWidth color="grape" mt="sm">Agregar al carrito</Button>
+                        <Button type="submit" fullWidth size={tamCampo} color="grape" mt="sm">Agregar al carrito</Button>
                     </Stack>
                 </form>
             </Modal>
 
-            {/* MODAL DE VISTA PREVIA */}
+            {/* VISTA PREVIA: la hoja tal como saldrá, para confirmar antes de asentar */}
             <Modal
-                opened={previewAbierto} onClose={() => setPreviewAbierto(false)} size="1000px" fullScreen={isMobile} 
+                opened={previewAbierto} onClose={() => setPreviewAbierto(false)} size="1000px" fullScreen={isMobile} classNames={isMobile ? { content: CONTENIDO_SIN_RELLENO } : undefined}
                 title={<Title order={4} c="blue.9" component="div">Confirme el Documento</Title>}
                 centered zIndex={2000}
                 styles={{
-                    inner: { padding: isMobile ? 0 : '16px' }, content: { borderRadius: isMobile ? 0 : '8px', margin: 0 },
-                    body: { padding: 0, display: 'flex', flexDirection: 'column', height: isMobile ? 'calc(100vh - 60px)' : 'auto' },
-                    header: { padding: isMobile ? '12px 8px' : '20px' }
+                    inner: { padding: isMobile ? 0 : '16px' }, content: { borderRadius: isMobile ? 0 : '8px', margin: 0, ...(isMobile ? { display: 'flex', flexDirection: 'column', overflow: 'hidden' } : {}) },
+                    body: { padding: 0, display: 'flex', flexDirection: 'column', ...(isMobile ? { flex: 1, minHeight: 0 } : {}) },
+                    header: { padding: isMobile ? '10px 12px' : '20px', ...(isMobile ? { minHeight: 52, flexShrink: 0 } : {}) }
                 }}
             >
                 {isMobile && (
-                    <Box p="xs" bg="#f1f3f5" style={{ borderBottom: '1px solid #ddd' }}>
-                        <Button 
-                            variant="light" color={zoomPreview ? "blue" : "gray"} fullWidth size="sm"
-                            leftSection={zoomPreview ? <IconZoomOut size={18}/> : <IconZoomIn size={18}/>}
+                    <Box p="sm" bg="#f1f3f5" style={{ borderBottom: '1px solid #ddd', flexShrink: 0 }}>
+                        {/* La hoja es tamaño carta: en el teléfono se ve achicada, así que lo importante se repite arriba en grande */}
+                        <Group justify="space-between" wrap="nowrap" gap="xs" mb={8}>
+                            <Box style={{ minWidth: 0 }}>
+                                <Text size="sm" fw={800} c={esFactura ? 'red.9' : 'blue.9'} lh={1.2}>{tituloDocumento} {formVenta.values.numeroDocumento}</Text>
+                                <Text size="xs" lh={1.3} truncate="end">{clienteSeleccionado?.nombre || 'Sin cliente'}</Text>
+                                <Text size="xs" c="dimmed" lh={1.3}>{formVenta.values.condicionPago === 'Contado' ? `Contado · ${formVenta.values.metodoPago}` : 'Crédito'}</Text>
+                            </Box>
+                            <Box ta="right" style={{ flexShrink: 0 }}>
+                                <PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="lg" fw={900} c="blue.9" />
+                                {equivalenteTotal && <Text size="xs" c="dimmed">{equivalenteTotal}</Text>}
+                            </Box>
+                        </Group>
+                        <Button
+                            variant="light" color={zoomPreview ? 'blue' : 'gray'} fullWidth size="sm"
+                            leftSection={zoomPreview ? <IconZoomOut size={18} /> : <IconZoomIn size={18} />}
                             onClick={() => setZoomPreview(!zoomPreview)}
                         >
-                            {zoomPreview ? 'Alejar (Ver hoja completa)' : 'Acercar Factura (Ver Detalles)'}
+                            {zoomPreview ? 'Ver la hoja completa' : 'Acercar para leer'}
                         </Button>
                     </Box>
                 )}
 
-                <Box className={`preview-scale-wrapper ${zoomPreview ? 'is-zoomed' : ''}`} bg={isMobile ? "white" : "#525659"} style={{ flex: 1, overflow: 'auto', padding: isMobile ? '0' : '20px' }}>
-                    <div className="print-preview-container">
-                        
+                <Box className="preview-scale-wrapper" bg={isMobile ? '#e9ecef' : '#525659'} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: isMobile ? 8 : 20 }}>
+                    {/* En el teléfono la hoja se encoge (zoom) al ancho de la pantalla o se ve a tamaño real para leerla de cerca */}
+                    <div className="print-preview-container" style={isMobile ? { zoom: zoomPreview ? 1 : escalaHoja } : undefined}>
+
                         <img src={MEMBRETE_MEDIQUIR?.logo || "/tenants/mediquir/logo.png"} alt="Fondo Mediquir" className="watermark" />
 
                         <header className="header-grid">
@@ -980,7 +1169,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
                                 <table className="doc-meta">
                                     <tbody>
                                         <tr><td className="text-right fw-bold" style={{ width: '60%' }}>ORDEN DE COMPRA</td><td>Emisión: {fechaEmision}</td></tr>
-                                        <tr><td className="text-right">Condiciones de la Transacción<br/><strong>{formVenta.values.condicionPago}</strong></td><td className="valign-bottom">Vence: {fechaEmision}</td></tr>
+                                        <tr><td className="text-right">Condiciones de la Transacción<br/><strong>{formVenta.values.condicionPago === 'Credito' ? 'Crédito' : formVenta.values.condicionPago}</strong></td><td className="valign-bottom">Vence: {fechaEmision}</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -998,11 +1187,11 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
                             </thead>
                             <tbody>
                                 {carrito.map((d, index) => (
-                                    <tr key={index}>
+                                    <tr key={d.clave}>
                                         <td>{d.codigo || 'S/C'}</td>
                                         <td style={{textAlign: 'left'}}>
-                                            {d.nombre} 
-                                            {((d.isFicticio && !d.aplicaIva) || (!d.isFicticio && d.porcentajeIva === 0)) && formVenta.values.conIva && (
+                                            {d.nombre}
+                                            {esExento(d) && formVenta.values.conIva && (
                                                 <span style={{fontSize: '8px', color: '#666', marginLeft: 4}}>(E)</span>
                                             )}
                                         </td>
@@ -1075,21 +1264,21 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
                     </div>
                 </Box>
 
-                <Group justify="flex-end" p="md" bg="gray.1" style={{ borderTop: '1px solid #ddd' }}>
-                    <Button variant="outline" color="gray" onClick={() => setPreviewAbierto(false)}>Volver a Editar</Button>
-                    <Button size="md" color="green.8" leftSection={<IconCheck size={20} />} onClick={handleProcesarVenta} loading={isSubmitting}>Asentar Venta</Button>
+                <Group justify="flex-end" gap="sm" wrap="nowrap" bg="gray.1"
+                    style={{ borderTop: '1px solid #ddd', flexShrink: 0, padding: isMobile ? '10px 12px calc(10px + env(safe-area-inset-bottom, 0px))' : 'var(--mantine-spacing-md)' }}>
+                    <Button variant="outline" color="gray" onClick={() => setPreviewAbierto(false)} size={isMobile ? 'sm' : 'md'} h={isMobile ? 46 : undefined} style={isMobile ? { flex: 1 } : undefined}>
+                        {isMobile ? 'Editar' : 'Volver a Editar'}
+                    </Button>
+                    <Button color="green.8" leftSection={<IconCheck size={20} />} onClick={handleProcesarVenta} loading={isSubmitting} size={isMobile ? 'sm' : 'md'} h={isMobile ? 46 : undefined} style={isMobile ? { flex: 2 } : undefined}>
+                        Asentar venta
+                    </Button>
                 </Group>
 
                 <style dangerouslySetInnerHTML={{ __html: `
                     .preview-scale-wrapper { display: flex; justify-content: center; align-items: flex-start; width: 100%; }
-                    .preview-scale-wrapper.is-zoomed { justify-content: flex-start; }
                     .print-preview-container * { box-sizing: border-box; }
-                    .print-preview-container { background: white; color: black; width: 8.5in; min-height: ${altoPapel}; height: max-content; padding: 0.2in 0.3in; position: relative; font-family: Arial, Helvetica, sans-serif; font-size: 11px; display: flex; flex-direction: column; transform-origin: top left; }
-                    @media (max-width: 850px) {
-                        .preview-scale-wrapper.is-zoomed .print-preview-container { transform: scale(1); margin-bottom: 0; }
-                        .preview-scale-wrapper:not(.is-zoomed) .print-preview-container { transform: scale(0.42); margin-bottom: -50%; }
-                        .preview-scale-wrapper:not(.is-zoomed) { overflow: hidden !important; }
-                    }
+                    .print-preview-container { background: white; color: black; width: 8.5in; flex-shrink: 0; min-height: ${altoPapel}; height: max-content; padding: 0.2in 0.3in; position: relative; font-family: Arial, Helvetica, sans-serif; font-size: 11px; display: flex; flex-direction: column; box-shadow: 0 0 8px rgba(0,0,0,.25); }
+                    @media (max-width: 61.99em) { .preview-scale-wrapper { justify-content: flex-start; } }
                     .label-red { color: #d32f2f !important; font-weight: bold; }
                     .label-blue { color: #1976d2 !important; font-weight: bold; }
                     .text-black { color: #000 !important; }

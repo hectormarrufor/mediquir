@@ -1,0 +1,27 @@
+/* Contenido de una ventana a pantalla completa (fullScreen) sin el relleno del tema: llega de borde a borde */
+.sinRelleno {
+  padding: 0 !important;
+}
+
+/* Ventana (Modal de Mantine) que en el teléfono ocupa toda la pantalla y en la computadora sigue centrada.
+   Se hace con CSS (las mismas variables que usa Mantine con fullScreen) para que no parpadee al abrir. */
+@media (max-width: 48em) {
+  .inner {
+    --modal-inner-y-offset: 0px;
+    --modal-inner-x-offset: 0px;
+  }
+
+  /* Sin el relleno que el tema le pone a todo Paper: el encabezado y el cuerpo ya tienen el suyo (en el teléfono sobraba espacio a los lados) */
+  .content {
+    --modal-content-flex: 0 0 100%;
+    --modal-content-max-height: none;
+    --modal-content-height: 100dvh;
+    border-radius: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Los botones del final no quedan debajo de la barra del sistema (iPhone) */
+  .body {
+    padding-bottom: calc(var(--mantine-spacing-md) + env(safe-area-inset-bottom, 0px));
+  }
+}

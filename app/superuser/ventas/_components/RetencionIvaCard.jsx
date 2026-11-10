@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Alert, Badge, Box, Button, Group, Modal, NumberInput, Paper, Select, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Badge, Box, Button, Group, Modal, NumberInput, Paper, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { PANTALLA_COMPLETA_MOVIL } from '@/app/components/ui/modalMovil';
 import { IconReceiptTax, IconTrash } from '@tabler/icons-react';
 import { aBolivares } from '@/app/constants/facturacion';
 import { useAuth } from '@/hooks/useAuth';
@@ -109,22 +110,22 @@ export default function RetencionIvaCard({ pedido, onCambio }) {
                 </Box>
             )}
 
-            <Modal opened={abierto} onClose={() => setAbierto(false)} title={<Text fw={800}>Retención de IVA del cliente</Text>} centered>
+            <Modal {...PANTALLA_COMPLETA_MOVIL} opened={abierto} onClose={() => setAbierto(false)} title={<Text fw={800}>Retención de IVA del cliente</Text>} centered>
                 <Stack gap="sm">
                     <Text size="sm" c="dimmed">Factura <b>{pedido.numeroDocumento}</b> · IVA Bs {bs(ivaBs)}. El cliente retiene parte de ese IVA y se lo paga al SENIAT; a ti te descuenta ese monto del pago.</Text>
                     {/* Orden del comprobante: fecha, RIF, razón social, nº de comprobante, nº de control, nº de factura y monto retenido */}
                     <TextInput type="date" label="1. Fecha del comprobante" value={fecha} onChange={(e) => setFecha(e.currentTarget.value)} data-autofocus />
-                    <Group grow>
+                    <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm">
                         <TextInput label="2. RIF" value={pedido.cliente?.identificacion || ''} readOnly variant="filled" />
                         <TextInput label="3. Razón social" value={pedido.cliente?.nombre || ''} readOnly variant="filled" />
-                    </Group>
+                    </SimpleGrid>
                     <TextInput label="4. N° de comprobante de retención" description="Lo emite y lo pasa el cliente" placeholder="20260700001835" withAsterisk value={comprobante} onChange={(e) => setComprobante(e.currentTarget.value)} />
-                    <Group grow>
+                    <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm">
                         <TextInput label="5. N° de control de la factura" value={controlModal} onChange={(e) => setControlModal(e.currentTarget.value)} readOnly={Boolean(pedido.numeroControl)} variant={pedido.numeroControl ? 'filled' : 'default'} placeholder="00-000000" />
                         <TextInput label="6. N° de factura" value={pedido.numeroDocumento} readOnly variant="filled" />
-                    </Group>
+                    </SimpleGrid>
                     <Select label="Porcentaje" data={[{ value: '75', label: '75 %' }, { value: '100', label: '100 %' }]} value={porcentaje} onChange={(v) => setPorcentaje(v || '75')} allowDeselect={false} />
-                    <NumberInput label="7. Monto retenido (Bs)" description={`Esperado: Bs ${bs(Math.round(ivaBs * Number(porcentaje)) / 100)} (${porcentaje} % del IVA a la tasa de la factura)`} value={monto} onChange={(v) => { setMontoEditado(true); setMonto(v); setDifAviso(null); }} decimalScale={2} thousandSeparator="." decimalSeparator="," hideControls />
+                    <NumberInput label="7. Monto retenido (Bs)" description={`Esperado: Bs ${bs(Math.round(ivaBs * Number(porcentaje)) / 100)} (${porcentaje} % del IVA a la tasa de la factura)`} value={monto} onChange={(v) => { setMontoEditado(true); setMonto(v); setDifAviso(null); }} decimalScale={2} thousandSeparator="." decimalSeparator="," hideControls inputMode="decimal" />
                     {difAviso && (
                         <Alert color="orange" variant="light" p="xs" title="No coincide con lo esperado">
                             <Text size="xs">{difAviso.mensaje}</Text>

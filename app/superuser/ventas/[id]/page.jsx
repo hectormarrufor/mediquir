@@ -3,18 +3,18 @@
 import React, { useState } from 'react';
 import {
     Box, Title, Paper, Group, Text, Badge, Grid, Stack, Divider, Alert,
-    Table, Stepper, Button, Select, TextInput, NumberInput, Modal, Tabs, Switch
+    Table, Stepper, Button, Select, TextInput, NumberInput, Modal, Tabs, Switch, ActionIcon, SimpleGrid
 } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from '@mantine/form';
-import { useMediaQuery } from '@mantine/hooks';
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import {
     IconArrowLeft, IconPackage, IconTruck, IconCheck,
-    IconUser, IconCurrencyDollar, IconReceiptTax, IconCash, IconListDetails, IconReportMoney, IconUsers
+    IconUser, IconCurrencyDollar, IconReceiptTax, IconCash, IconListDetails, IconReportMoney, IconUsers, IconPrinter
 } from '@tabler/icons-react';
+import { PANTALLA_COMPLETA_MOVIL, useEsTelefono } from '@/app/components/ui/modalMovil';
 import { notifications } from '@mantine/notifications';
 import PrecioVisual from '@/app/components/ui/PrecioVisual';
 import RetencionIvaCard from '../_components/RetencionIvaCard';
@@ -45,7 +45,7 @@ export default function DetallePedidoMayorPage() {
     const [copiaFactura, setCopiaFactura] = useState({ numero: '', control: '', fecha: '' }); // datos de la factura si ya se emitió en el sistema anterior
     const [modalNotaAFactura, setModalNotaAFactura] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const isMobile = useMediaQuery('(max-width: 48em)');
+    const isMobile = useEsTelefono();
     // Tasa BCV de hoy: con ella se convierte un abono hecho en otra moneda que la de la cuenta
     const { tasa: precioBCV } = useTasaBcv();
 
@@ -175,46 +175,100 @@ export default function DetallePedidoMayorPage() {
         return lista;
     };
 
+    const tituloDoc = `${pedido.tipoDocumento === 'FACTURA' ? 'Factura' : pedido.tipoDocumento === 'NOTA_ENTREGA' ? 'Nota de entrega' : 'Recibo'} ${pedido.numeroDocumento}`;
+    const volver = () => router.push('/superuser/ventas');
+    const tamAccion = isMobile ? 'sm' : 'xs';
+    // Acciones sobre el documento (en el teléfono van a todo el ancho, debajo del título)
+    const accionesDoc = [
+        rolUsuario === 'admin' && pedido.tipoDocumento === 'NOTA_ENTREGA' && pedido.condicionPago === 'Credito' && pedido.clienteId && pedido.statusDespacho !== 'Cancelado' && pedido.revisionStock !== 'PENDIENTE' && (
+            <Button key="pasar" size={tamAccion} variant="light" color="indigo" leftSection={<IconReceiptTax size={16} />} onClick={() => setModalNotaAFactura(true)}>Pasar a factura</Button>
+        ),
+        rolUsuario === 'admin' && pedido.tipoDocumento === 'VENTA_RAPIDA' && pedido.clienteId && pedido.statusDespacho !== 'Cancelado' && (
+            <Button key="convertir" size={tamAccion} variant="light" color="indigo" leftSection={<IconReceiptTax size={16} />} onClick={() => setModalFactura(true)}>Convertir en factura</Button>
+        ),
+        <Button key="imprimir" size={tamAccion} variant="white" leftSection={<IconPrinter size={16} />} onClick={() => window.open(`/superuser/ventas/imprimir/${pedido.id}`, '_blank')}>Imprimir</Button>,
+    ].filter(Boolean);
+    const avisoReemplazo = pedido.reemplazadaPor && (
+        <Button size={tamAccion} variant="light" color="orange" fullWidth={isMobile} onClick={() => router.push(`/superuser/ventas/${pedido.reemplazadaPor.id}`)}>Anulada: pasó a la factura {pedido.reemplazadaPor.numero} →</Button>
+    );
+    const etiquetasEstado = (
+        <>
+            {/* Estado de pago (los valores vienen como 'Pagado' / 'Pendiente': antes se comparaba en mayúsculas y siempre salía naranja) */}
+            <Badge size="lg" color={cancelado ? 'gray' : pagado ? 'green' : 'orange'}>
+                Pago: {cancelado ? 'Anulado' : (pedido.statusPago || 'Pendiente')}
+            </Badge>
+
+            {/* Estado de despacho */}
+            <Badge size="lg" color={cancelado ? 'red' : pedido.statusDespacho === 'Completado' ? 'blue' : 'yellow'}>
+                Despacho: {pedido.statusDespacho || 'Pendiente'}
+            </Badge>
+
+            {/* Tipo de Entrega */}
+            <Badge size="lg" variant="outline" color={pedido.tipoEntrega === 'pickup' ? 'grape' : 'cyan'}>
+                {pedido.tipoEntrega === 'pickup' ? '🏪 Pickup (Retiro)' : (esNacional ? '📦 Envío nacional (Zoom)' : '🚚 Delivery')}
+            </Badge>
+        </>
+    );
+    const abonosOrdenados = [...(pedido.abonos || [])].sort((a, b) => String(a.fechaPago).localeCompare(String(b.fechaPago)) || a.id - b.id);
+    const nombreRenglon = (d) => (d.isFicticio ? d.nombreFicticio : d.producto?.nombre);
+    const presentacionRenglon = (d) => (d.presentacionPedida && d.presentacionPedida !== 'UNIDAD' && d.cantidadPresentacion ? `${d.cantidadPresentacion} × ${d.presentacionPedida === 'CAJA' ? 'Caja' : 'Bulto'} x${d.unidadesPorPresentacion}` : null);
+    const miniatura = (imagenes, tam) => (imagenes[0]?.url ? (
+        <Box pos="relative" display="inline-block" style={{ flexShrink: 0 }}>
+            <Box
+                component="img" src={imagenes[0].url} alt="Producto" w={tam} h={tam}
+                style={{ objectFit: 'cover', borderRadius: '4px', cursor: 'pointer', display: 'block' }}
+                onClick={() => setGaleriaModal({ imagenes, indice: 0 })}
+                title="Haz clic para ver galería de imágenes"
+            />
+            {imagenes.length > 1 && (
+                <Badge size="xs" variant="filled" color="dark" style={{ position: 'absolute', bottom: -4, right: -4, fontSize: '9px', padding: '0 4px' }}>
+                    {imagenes.length}
+                </Badge>
+            )}
+        </Box>
+    ) : (
+        <Box w={tam} h={tam} bg="gray.2" style={{ borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Text size="xs" c="dimmed">S/I</Text>
+        </Box>
+    ));
+    const renglonTarjeta = { border: '1px solid #e9ecef', borderRadius: 8, background: '#fff' };
+
 
     return (
-        <Box p="md" maw={1400} mx="auto">
-            {/* 👈 BLOQUE MODIFICADO EN LA CABECERA */}
-            <Group mb="md" gap="sm">
-                <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={() => router.push('/superuser/ventas')}>
-                    Volver
-                </Button>
-                <Title order={isMobile ? 3 : 2} c="white">{pedido.tipoDocumento === 'FACTURA' ? 'Factura' : pedido.tipoDocumento === 'NOTA_ENTREGA' ? 'Nota de entrega' : 'Recibo'} {pedido.numeroDocumento}</Title>
-                {pedido.numeroDocumentoAnterior && <Badge size="lg" variant="outline" color="gray">Antes: {pedido.numeroDocumentoAnterior}</Badge>}
-                {pedido.reemplazadaPor && <Button size="xs" variant="light" color="orange" onClick={() => router.push(`/superuser/ventas/${pedido.reemplazadaPor.id}`)}>Anulada: pasó a la factura {pedido.reemplazadaPor.numero} →</Button>}
-                {rolUsuario === 'admin' && pedido.tipoDocumento === 'NOTA_ENTREGA' && pedido.condicionPago === 'Credito' && pedido.clienteId && pedido.statusDespacho !== 'Cancelado' && pedido.revisionStock !== 'PENDIENTE' && (
-                    <Button size="xs" variant="light" color="indigo" leftSection={<IconReceiptTax size={16} />} onClick={() => setModalNotaAFactura(true)}>Pasar a factura</Button>
-                )}
-                {rolUsuario === 'admin' && pedido.tipoDocumento === 'VENTA_RAPIDA' && pedido.clienteId && pedido.statusDespacho !== 'Cancelado' && (
-                    <Button size="xs" variant="light" color="indigo" leftSection={<IconReceiptTax size={16} />} onClick={() => setModalFactura(true)}>Convertir en factura</Button>
-                )}
-
-                {/* Estado de pago (los valores vienen como 'Pagado' / 'Pendiente': antes se comparaba en mayúsculas y siempre salía naranja) */}
-                <Badge size="lg" color={cancelado ? 'gray' : pagado ? 'green' : 'orange'}>
-                    Pago: {cancelado ? 'Anulado' : (pedido.statusPago || 'Pendiente')}
-                </Badge>
-
-                {/* Estado de despacho */}
-                <Badge size="lg" color={cancelado ? 'red' : pedido.statusDespacho === 'Completado' ? 'blue' : 'yellow'}>
-                    Despacho: {pedido.statusDespacho || 'Pendiente'}
-                </Badge>
-
-                {/* Tipo de Entrega */}
-                <Badge size="lg" variant="outline" color={pedido.tipoEntrega === 'pickup' ? 'grape' : 'cyan'}>
-                    {pedido.tipoEntrega === 'pickup' ? '🏪 Pickup (Retiro)' : (esNacional ? '📦 Envío nacional (Zoom)' : '🚚 Delivery')}
-                </Badge>
-            </Group>
+        <Box p={{ base: 'xs', sm: 'md' }} maw={1400} mx="auto">
+            {isMobile ? (
+                <Stack gap={8} mb="md">
+                    <Group gap={6} wrap="nowrap" align="center">
+                        <ActionIcon variant="subtle" color="gray.3" size="lg" onClick={volver} aria-label="Volver a ventas"><IconArrowLeft size={22} /></ActionIcon>
+                        <Box style={{ minWidth: 0 }}>
+                            <Title order={3} c="white" lh={1.15} pb={0}>{tituloDoc}</Title>
+                            {pedido.numeroDocumentoAnterior && <Text size="xs" c="gray.4">Antes: {pedido.numeroDocumentoAnterior}</Text>}
+                        </Box>
+                    </Group>
+                    <Group gap={6}>{etiquetasEstado}</Group>
+                    {avisoReemplazo}
+                    {accionesDoc.length > 0 && <Group gap={6} grow>{accionesDoc}</Group>}
+                </Stack>
+            ) : (
+                <Group mb="md" gap="sm">
+                    <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={volver}>
+                        Volver
+                    </Button>
+                    <Title order={2} c="white">{tituloDoc}</Title>
+                    {pedido.numeroDocumentoAnterior && <Badge size="lg" variant="outline" color="gray">Antes: {pedido.numeroDocumentoAnterior}</Badge>}
+                    {avisoReemplazo}
+                    {accionesDoc}
+                    {etiquetasEstado}
+                </Group>
+            )}
 
             <Tabs defaultValue="logistica" color="blue" variant="pills" radius="xl">
-                <Paper radius="xl" p={4} mb="md" w="fit-content" maw="100%" style={{ overflowX: 'auto' }}>
-                <Tabs.List style={{ flexWrap: 'nowrap' }}>
-                    <Tabs.Tab value="logistica" leftSection={<IconPackage size={16} />}>Logística y resumen</Tabs.Tab>
-                    {(esCredito || cuentaPorCobrar || cobrableSinCuenta) && !esVendedor && <Tabs.Tab value="cxc" leftSection={<IconCash size={16} />}>Estado de cuenta</Tabs.Tab>}
-                    {!esVendedor && <Tabs.Tab value="finanzas" leftSection={<IconReportMoney size={16} />}>Movimientos</Tabs.Tab>}
+                <Paper radius="xl" p={4} mb="md" w={isMobile ? '100%' : 'fit-content'} maw="100%" style={{ overflowX: 'auto' }}>
+                <Tabs.List style={{ flexWrap: 'nowrap' }} grow={isMobile}>
+                    {/* En el teléfono, nombres cortos y sin ícono: las tres pestañas caben sin desplazarse de lado */}
+                    <Tabs.Tab value="logistica" px={isMobile ? 'xs' : undefined} leftSection={isMobile ? null : <IconPackage size={16} />}>{isMobile ? 'Resumen' : 'Logística y resumen'}</Tabs.Tab>
+                    {(esCredito || cuentaPorCobrar || cobrableSinCuenta) && !esVendedor && <Tabs.Tab value="cxc" px={isMobile ? 'xs' : undefined} leftSection={isMobile ? null : <IconCash size={16} />}>{isMobile ? 'Cuenta' : 'Estado de cuenta'}</Tabs.Tab>}
+                    {!esVendedor && <Tabs.Tab value="finanzas" px={isMobile ? 'xs' : undefined} leftSection={isMobile ? null : <IconReportMoney size={16} />}>Movimientos</Tabs.Tab>}
                 </Tabs.List>
                 </Paper>
 
@@ -246,23 +300,23 @@ export default function DetallePedidoMayorPage() {
                                         </Badge>
                                     </Group>
                                 )}
-                                <Group mt="xl" justify="center" gap="sm">
+                                <Group mt={isMobile ? "md" : "xl"} justify="center" gap="sm">
                                     {Number(pedido.empacadorId) === Number(userId) && !pedido.empacadoAt && pedido.statusDespacho !== 'Cancelado' && (
-                                        <Button size="md" color="blue" loading={isSubmitting} leftSection={<IconPackage size={18} />} onClick={() => router.push(`/superuser/ventas/${params.id}/empacar`)}>Empacar paso a paso</Button>
+                                        <Button size="md" fullWidth={isMobile} color="blue" loading={isSubmitting} leftSection={<IconPackage size={18} />} onClick={() => router.push(`/superuser/ventas/${params.id}/empacar`)}>Empacar paso a paso</Button>
                                     )}
                                     {Number(pedido.etiquetadorId) === Number(userId) && !pedido.etiquetadoAt && pedido.statusDespacho !== 'Cancelado' && (
-                                        <Button size="md" color="grape" loading={isSubmitting} disabled={!pedido.empacadoAt} leftSection={<IconPackage size={18} />} onClick={() => handleFirmar('FIRMAR_ETIQUETADO', 'Etiquetado firmado.')}>
+                                        <Button size="md" fullWidth={isMobile} color="grape" loading={isSubmitting} disabled={!pedido.empacadoAt} leftSection={<IconPackage size={18} />} onClick={() => handleFirmar('FIRMAR_ETIQUETADO', 'Etiquetado firmado.')}>
                                             {pedido.empacadoAt ? 'Firmar etiquetado' : 'Etiquetado (esperando empaque)'}
                                         </Button>
                                     )}
                                     {!esVendedor && !pedido.empacadoAt && !['Completado', 'Cancelado'].includes(pedido.statusDespacho) && (
-                                        <Button size="md" color="blue" variant={pedido.empacadorId ? 'light' : 'filled'} leftSection={<IconPackage size={18} />}
+                                        <Button size="md" fullWidth={isMobile} color="blue" variant={pedido.empacadorId ? 'light' : 'filled'} leftSection={<IconPackage size={18} />}
                                             onClick={() => { formEmpacar.setValues({ empacadorId: pedido.empacadorId ? String(pedido.empacadorId) : '', etiquetadorId: pedido.etiquetadorId ? String(pedido.etiquetadorId) : '' }); setModalEmpacar(true); }}>
                                             {pedido.empacadorId ? 'Cambiar personal asignado' : 'Asignar personal'}
                                         </Button>
                                     )}
                                     {!esVendedor && pasoActual === 1 && (
-                                        <Button size="md" color="grape" leftSection={<IconTruck size={18} />} onClick={() => { formDespacho.setFieldValue('quienRetira', pedido.quienRetira || ''); setModalDespacho(true); }}>{pedido.tipoEntrega === 'pickup' ? 'Marcar como retirado' : 'Registrar despacho'}</Button>
+                                        <Button size="md" fullWidth={isMobile} color="grape" leftSection={<IconTruck size={18} />} onClick={() => { formDespacho.setFieldValue('quienRetira', pedido.quienRetira || ''); setModalDespacho(true); }}>{pedido.tipoEntrega === 'pickup' ? 'Marcar como retirado' : 'Registrar despacho'}</Button>
                                     )}
                                 </Group>
                             </Paper>
@@ -271,8 +325,34 @@ export default function DetallePedidoMayorPage() {
 
                             <EvidenciaEmpaque ventaId={pedido.id} puedeLiberar={!esVendedor} />
 
-                            <Paper withBorder p="md" radius="md" bg="white">
-                                <Text fw={700} size="lg" mb="md">Contenido del pedido</Text>
+                            <Paper withBorder p={{ base: 'sm', sm: 'md' }} radius="md" bg="white">
+                                <Text fw={700} size="lg" mb={isMobile ? 'xs' : 'md'}>Contenido del pedido</Text>
+                                {isMobile ? (
+                                    <Stack gap={6}>
+                                        {pedido.detalles?.map((d) => {
+                                            const pres = presentacionRenglon(d);
+                                            return (
+                                                <Group key={d.id} wrap="nowrap" align="flex-start" gap="sm" p={8} style={renglonTarjeta}>
+                                                    {miniatura(obtenerTodasLasImagenes(d.producto), 44)}
+                                                    <Box style={{ flex: 1, minWidth: 0 }}>
+                                                        <Text size="sm" fw={600} lh={1.25} lineClamp={2}>{nombreRenglon(d)}</Text>
+                                                        <Text size="xs" c="dimmed" lineClamp={1}>{d.producto?.codigo || 'S/C'} · {d.producto?.marca?.nombre || 'Genérica'}</Text>
+                                                        <Group justify="space-between" align="flex-end" wrap="nowrap" mt={4} gap="xs">
+                                                            <Box style={{ minWidth: 0 }}>
+                                                                <Text size="sm"><b>{d.cantidad}</b> × <PrecioVisual valor={d.precioUnitario} simbolo={pedido.moneda} size="sm" fw={500} /></Text>
+                                                                {pres && <Text size="xs" c="dimmed">{pres}</Text>}
+                                                            </Box>
+                                                            <Box ta="right" style={{ flexShrink: 0 }}>
+                                                                <PrecioVisual valor={d.subtotal ?? d.precioUnitario * d.cantidad} simbolo={pedido.moneda} size="sm" fw={800} />
+                                                                {!d.aplicaIva && pedido.tipoDocumento === 'FACTURA' && <Text size="xs" c="dimmed">Exento</Text>}
+                                                            </Box>
+                                                        </Group>
+                                                    </Box>
+                                                </Group>
+                                            );
+                                        })}
+                                    </Stack>
+                                ) : (
                                 <Table.ScrollContainer minWidth={620}>
                                 <Table striped highlightOnHover verticalSpacing="sm">
                                     <Table.Thead>
@@ -287,57 +367,22 @@ export default function DetallePedidoMayorPage() {
                                     </Table.Thead>
                                     <Table.Tbody>
                                         {pedido.detalles?.map(d => {
-                                            const imagenesDisponibles = obtenerTodasLasImagenes(d.producto);
-                                            const imgPrincipal = imagenesDisponibles[0]?.url;
                                             const nombreMarca = d.producto?.marca?.nombre || 'Genérica';
+                                            const pres = presentacionRenglon(d);
 
                                             return (
                                                 <Table.Tr key={d.id}>
-                                                    <Table.Td>
-                                                        {(() => {
-                                                            const imagenesDisponibles = obtenerTodasLasImagenes(d.producto);
-                                                            const imgPrincipal = imagenesDisponibles[0]?.url;
-
-                                                            return imgPrincipal ? (
-                                                                <Box pos="relative" display="inline-block">
-                                                                    <Box
-                                                                        component="img"
-                                                                        src={imgPrincipal}
-                                                                        alt="Producto"
-                                                                        w={40}
-                                                                        h={40}
-                                                                        style={{ objectFit: 'cover', borderRadius: '4px', cursor: 'pointer' }}
-                                                                        onClick={() => setGaleriaModal({ imagenes: imagenesDisponibles, indice: 0 })}
-                                                                        title="Haz clic para ver galería de imágenes"
-                                                                    />
-                                                                    {imagenesDisponibles.length > 1 && (
-                                                                        <Badge
-                                                                            size="xs"
-                                                                            variant="filled"
-                                                                            color="dark"
-                                                                            style={{ position: 'absolute', bottom: -4, right: -4, fontSize: '9px', padding: '0 4px' }}
-                                                                        >
-                                                                            {imagenesDisponibles.length}
-                                                                        </Badge>
-                                                                    )}
-                                                                </Box>
-                                                            ) : (
-                                                                <Box w={40} h={40} bg="gray.2" style={{ borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                                    <Text size="xs" c="dimmed">S/I</Text>
-                                                                </Box>
-                                                            );
-                                                        })()}
-                                                    </Table.Td>
+                                                    <Table.Td>{miniatura(obtenerTodasLasImagenes(d.producto), 40)}</Table.Td>
                                                     <Table.Td>{d.producto?.codigo || 'N/A'}</Table.Td>
                                                     <Table.Td>
                                                         <Stack gap={0}>
-                                                            <Text size="sm" fw={600}>{d.isFicticio ? d.nombreFicticio : d.producto?.nombre}</Text>
+                                                            <Text size="sm" fw={600}>{nombreRenglon(d)}</Text>
                                                             <Badge size="xs" variant="light" color="blue" w="fit-content" mt={2}>
                                                                 {nombreMarca}
                                                             </Badge>
                                                         </Stack>
                                                     </Table.Td>
-                                                    <Table.Td ta="center"><Text fw={900}>{d.cantidad}</Text>{d.presentacionPedida && d.presentacionPedida !== 'UNIDAD' && d.cantidadPresentacion && <Text size="xs" c="dimmed">{d.cantidadPresentacion} × {d.presentacionPedida === 'CAJA' ? 'Caja' : 'Bulto'} x{d.unidadesPorPresentacion}</Text>}</Table.Td>
+                                                    <Table.Td ta="center"><Text fw={900}>{d.cantidad}</Text>{pres && <Text size="xs" c="dimmed">{pres}</Text>}</Table.Td>
                                                     <Table.Td ta="right"><PrecioVisual valor={d.precioUnitario} simbolo={pedido.moneda} size="sm" /></Table.Td>
                                                     <Table.Td ta="right"><PrecioVisual valor={d.subtotal ?? d.precioUnitario * d.cantidad} simbolo={pedido.moneda} size="sm" fw={700} />{!d.aplicaIva && pedido.tipoDocumento === 'FACTURA' && <Text size="xs" c="dimmed">(E)</Text>}</Table.Td>
                                                 </Table.Tr>
@@ -346,9 +391,10 @@ export default function DetallePedidoMayorPage() {
                                     </Table.Tbody>
                                 </Table>
                                 </Table.ScrollContainer>
+                                )}
 
                                 {/* Totales del documento: lo que se cobra (y su equivalente con la tasa del documento) */}
-                                <Stack gap={4} mt="md" ml="auto" maw={360}>
+                                <Stack gap={4} mt="md" ml="auto" maw={isMobile ? undefined : 360}>
                                     <Group justify="space-between"><Text size="sm" c="dimmed">Subtotal</Text><PrecioVisual valor={pedido.subtotal} simbolo={pedido.moneda} size="sm" fw={600} /></Group>
                                     {Number(pedido.montoIva) > 0 && <Group justify="space-between"><Text size="sm" c="dimmed">IVA</Text><PrecioVisual valor={pedido.montoIva} simbolo={pedido.moneda} size="sm" fw={600} /></Group>}
                                     {Number(pedido.costoFlete) > 0 && <Group justify="space-between"><Text size="sm" c="dimmed">{pedido.tipoVenta === 'ONLINE' ? 'Delivery' : 'Flete'}</Text><PrecioVisual valor={pedido.costoFlete} simbolo={pedido.moneda} size="sm" fw={600} /></Group>}
@@ -497,8 +543,27 @@ export default function DetallePedidoMayorPage() {
                                 </Paper>
                             </Grid.Col>
                             <Grid.Col span={{ base: 12, md: 8 }}>
-                                <Paper withBorder p="md" radius="md">
-                                    <Text fw={700} mb="md">Historial de abonos (pagos)</Text>
+                                <Paper withBorder p={{ base: 'sm', sm: 'md' }} radius="md">
+                                    <Text fw={700} mb={isMobile ? 'xs' : 'md'}>Historial de abonos (pagos)</Text>
+                                    {isMobile ? (
+                                        !abonosOrdenados.length ? <Text size="sm" c="dimmed" ta="center" py="md">No hay abonos registrados.</Text> : (
+                                            <Stack gap={6}>
+                                                {abonosOrdenados.map((abono) => (
+                                                    <Group key={abono.id} justify="space-between" wrap="nowrap" gap="xs" p={8} style={renglonTarjeta}>
+                                                        <Box style={{ minWidth: 0 }}>
+                                                            <Text size="sm" fw={700}>{formatearFecha(abono.fechaPago)}</Text>
+                                                            {abono.metodoPago === 'Retención IVA' ? <Badge size="sm" variant="light" color="grape">Retención IVA</Badge> : <Text size="xs">{abono.metodoPago}</Text>}
+                                                            <Text size="xs" c="dimmed" lineClamp={1}>Ref.: {abono.referencia || 'S/N'}</Text>
+                                                        </Box>
+                                                        <Box ta="right" style={{ flexShrink: 0 }}>
+                                                            <PrecioVisual valor={abono.montoUsd} simbolo="$" size="sm" fw={800} c="green.7" />
+                                                            <Box><PrecioVisual valor={abono.montoVes} simbolo="Bs" size="xs" fw={600} c="dimmed" /></Box>
+                                                        </Box>
+                                                    </Group>
+                                                ))}
+                                            </Stack>
+                                        )
+                                    ) : (
                                     <Table.ScrollContainer minWidth={560}>
                                     <Table striped>
                                         <Table.Thead>
@@ -511,10 +576,10 @@ export default function DetallePedidoMayorPage() {
                                             </Table.Tr>
                                         </Table.Thead>
                                         <Table.Tbody>
-                                            {!pedido.abonos?.length ? (
+                                            {!abonosOrdenados.length ? (
                                                 <Table.Tr><Table.Td colSpan={5} ta="center">No hay abonos registrados.</Table.Td></Table.Tr>
                                             ) : (
-                                                [...pedido.abonos].sort((a, b) => String(a.fechaPago).localeCompare(String(b.fechaPago)) || a.id - b.id).map(abono => (
+                                                abonosOrdenados.map(abono => (
                                                     <Table.Tr key={abono.id}>
                                                         <Table.Td>{formatearFecha(abono.fechaPago)}</Table.Td>
                                                         <Table.Td>{abono.metodoPago === 'Retención IVA' ? <Badge size="sm" variant="light" color="grape">Retención IVA</Badge> : abono.metodoPago}</Table.Td>
@@ -527,6 +592,7 @@ export default function DetallePedidoMayorPage() {
                                         </Table.Tbody>
                                     </Table>
                                     </Table.ScrollContainer>
+                                    )}
                                 </Paper>
                             </Grid.Col>
                         </Grid>
@@ -537,8 +603,30 @@ export default function DetallePedidoMayorPage() {
                 {/* PESTAÑA 3: MOVIMIENTOS FINANCIEROS (INGRESOS Y GASTOS) */}
                 {/* ============================================================== */}
                 <Tabs.Panel value="finanzas">
-                    <Paper withBorder p="md" radius="md">
-                        <Text fw={700} mb="md">Movimientos de caja de este pedido</Text>
+                    <Paper withBorder p={{ base: 'sm', sm: 'md' }} radius="md">
+                        <Text fw={700} mb={isMobile ? 'xs' : 'md'}>Movimientos de caja de este pedido</Text>
+                        {isMobile ? (
+                            !pedido.movimientos?.length ? <Text size="sm" c="dimmed" ta="center" py="md">No hay movimientos financieros.</Text> : (
+                                <Stack gap={6}>
+                                    {pedido.movimientos.map((mov) => (
+                                        <Box key={mov.id} p={8} style={renglonTarjeta}>
+                                            <Group justify="space-between" wrap="nowrap" gap="xs" align="flex-start">
+                                                <Group gap={6} wrap="nowrap">
+                                                    <Badge color={mov.tipo === 'INGRESO' ? 'green' : 'red'} variant="light">{mov.tipo}</Badge>
+                                                    <Text size="xs" c="dimmed">{formatearFecha(mov.fecha)}</Text>
+                                                </Group>
+                                                <Box ta="right" style={{ flexShrink: 0 }}>
+                                                    <PrecioVisual valor={mov.montoUsd} simbolo="$" size="sm" c={mov.tipo === 'INGRESO' ? 'green.7' : 'red.7'} fw={800} />
+                                                    <Box><PrecioVisual valor={mov.montoVes} simbolo="Bs" size="xs" c="dimmed" fw={600} /></Box>
+                                                </Box>
+                                            </Group>
+                                            <Text size="sm" mt={4} lh={1.3}>{mov.descripcion}</Text>
+                                            {mov.metodoPago && <Text size="xs" c="dimmed">{mov.metodoPago}</Text>}
+                                        </Box>
+                                    ))}
+                                </Stack>
+                            )
+                        ) : (
                         <Table.ScrollContainer minWidth={720}>
                         <Table striped highlightOnHover>
                             <Table.Thead>
@@ -571,6 +659,7 @@ export default function DetallePedidoMayorPage() {
                             </Table.Tbody>
                         </Table>
                         </Table.ScrollContainer>
+                        )}
                     </Paper>
                 </Tabs.Panel>
 
@@ -578,7 +667,7 @@ export default function DetallePedidoMayorPage() {
 
             {/* =================== MODALES =================== */}
 
-            <Modal opened={modalEmpacar} onClose={() => setModalEmpacar(false)} title={<Title order={4} c="blue.9">Asignar personal de logística</Title>} centered>
+            <Modal {...PANTALLA_COMPLETA_MOVIL} opened={modalEmpacar} onClose={() => setModalEmpacar(false)} title={<Title order={4} c="blue.9">Asignar personal de logística</Title>} centered>
                 <form onSubmit={formEmpacar.onSubmit(handleConfirmarEmpaque)}>
                     <Stack gap="md">
                         <Select label="Empacador" data={opcionesEmpleados} withAsterisk {...formEmpacar.getInputProps('empacadorId')} />
@@ -597,7 +686,7 @@ export default function DetallePedidoMayorPage() {
             </Modal>
 
             {/* 👈 MODAL DE DESPACHO / ENTREGA CONDICIONAL */}
-            <Modal
+            <Modal {...PANTALLA_COMPLETA_MOVIL}
                 opened={modalDespacho}
                 onClose={() => setModalDespacho(false)}
                 title={<Title order={4} c="grape">{pedido.tipoEntrega === 'pickup' ? 'Confirmar Retiro en Tienda' : 'Gestión de Despacho y Agencia'}</Title>}
@@ -619,7 +708,7 @@ export default function DetallePedidoMayorPage() {
                             <>
                                 <TextInput label={esNacional ? 'Zoom: número de guía' : 'Chofer / Agencia de Delivery'} withAsterisk {...formDespacho.getInputProps('quienRetira')} />
                                 <TextInput type="datetime-local" label="Fecha y Hora de Entrega a Agencia" withAsterisk {...formDespacho.getInputProps('fechaHoraRetiro')} />
-                                {!esNacional && <NumberInput label={pedido.tipoVenta === 'ONLINE' ? 'Lo que cobró el delivery' : 'Lo que pagó la empresa por el flete (gasto)'} description={pedido.tipoVenta === 'ONLINE' ? `Se compara con lo que se le cobró al cliente (${Number(pedido.costoFlete || 0).toFixed(2)}); genera un ajuste en tesorería` : 'El flete que se le cobra al cliente se fija en «Envío y transporte»'} decimalScale={2} withAsterisk {...formDespacho.getInputProps('costoFlete')} />}
+                                {!esNacional && <NumberInput label={pedido.tipoVenta === 'ONLINE' ? 'Lo que cobró el delivery' : 'Lo que pagó la empresa por el flete (gasto)'} description={pedido.tipoVenta === 'ONLINE' ? `Se compara con lo que se le cobró al cliente (${Number(pedido.costoFlete || 0).toFixed(2)}); genera un ajuste en tesorería` : 'El flete que se le cobra al cliente se fija en «Envío y transporte»'} decimalScale={2} min={0} allowNegative={false} inputMode="decimal" withAsterisk {...formDespacho.getInputProps('costoFlete')} />}
                                 <Text size="xs" c="dimmed">{esNacional ? 'ℹ️ Envío por Zoom con cobro a destino: el cliente paga el flete al recibir.' : 'ℹ️ Al registrar esto, recuerda contactar a la agencia de delivery para el despacho.'}</Text>
                             </>
                         )}
@@ -632,7 +721,7 @@ export default function DetallePedidoMayorPage() {
 
             {modalNotaAFactura && <ConvertirNotaEntregaModal opened onClose={() => setModalNotaAFactura(false)} pedido={pedido} onListo={refetch} />}
 
-            <Modal opened={modalFactura} onClose={() => setModalFactura(false)} title={<Title order={4}>Convertir en factura</Title>} centered>
+            <Modal {...PANTALLA_COMPLETA_MOVIL} opened={modalFactura} onClose={() => setModalFactura(false)} title={<Title order={4}>Convertir en factura</Title>} centered>
                 <Stack gap="md">
                     <Text size="sm">El recibo <b>{pedido.numeroDocumento}</b> pasará a ser una <b>factura</b>: con el número F- que escribas abajo (si ya la emitiste en el sistema anterior) o con uno nuevo, y fecha de emisión la que indiques o <b>la de hoy</b>. Entrará al libro de ventas de ese periodo.</Text>
                     <DatosDeCopia valores={copiaFactura} onCambio={setCopiaFactura} />
@@ -642,7 +731,7 @@ export default function DetallePedidoMayorPage() {
             </Modal>
 
             {/* Cobro en tienda de una compra web reservada (se cobra el total al retirar) */}
-            <Modal opened={modalCobroTienda} onClose={() => setModalCobroTienda(false)} title={<Title order={4} c="green.9">Registrar cobro en tienda</Title>} centered>
+            <Modal {...PANTALLA_COMPLETA_MOVIL} opened={modalCobroTienda} onClose={() => setModalCobroTienda(false)} title={<Title order={4} c="green.9">Registrar cobro en tienda</Title>} centered>
                 <Stack gap="md">
                     <Text size="sm">El cliente paga el total de la compra <b>{pedido.numeroDocumento}</b>: <PrecioVisual valor={pedido.totalFinal} simbolo={pedido.moneda} size="sm" fw={800} /> (≈ {equivalente(pedido.totalFinal)} a la tasa del pedido).</Text>
                     <Select label="¿Cómo pagó?" allowDeselect={false} data={['Efectivo ($)', 'Efectivo (Bs)', 'Pago Móvil', 'Punto de Venta', 'Transferencia', 'Zelle']}
@@ -657,15 +746,15 @@ export default function DetallePedidoMayorPage() {
             </Modal>
 
             {/* 🔥 MODAL DE ABONO 🔥 */}
-            <Modal opened={modalAbono} onClose={() => setModalAbono(false)} title={<Title order={4} c="green.9">Registrar Pago / Abono</Title>} centered>
+            <Modal {...PANTALLA_COMPLETA_MOVIL} opened={modalAbono} onClose={() => setModalAbono(false)} title={<Title order={4} c="green.9">Registrar Pago / Abono</Title>} centered>
                 <form onSubmit={formAbono.onSubmit(handleRegistrarAbono)}>
                     <Stack gap="md">
                         <Text size="sm" c="dimmed" mb="-sm">Saldo pendiente actual: <PrecioVisual valor={saldoCuenta} simbolo={monedaCuenta} size="sm" fw={700} /></Text>
 
-                        <Group grow>
-                            <NumberInput label="Monto a abonar" decimalScale={2} min={0} withAsterisk {...formAbono.getInputProps('montoAbono')} />
+                        <SimpleGrid cols={2} spacing="sm">
+                            <NumberInput label="Monto a abonar" decimalScale={2} min={0} allowNegative={false} inputMode="decimal" withAsterisk {...formAbono.getInputProps('montoAbono')} />
                             <Select label="Moneda del pago" data={['USD', 'BS']} allowDeselect={false} withAsterisk {...formAbono.getInputProps('monedaAbono')} />
-                        </Group>
+                        </SimpleGrid>
                         {formAbono.values.monedaAbono !== monedaCuenta && (
                             <Text size="xs" c="orange.8">Se convierte con la tasa BCV de hoy ({precioBCV || '…'} Bs/$){precioBCV > 0 && Number(formAbono.values.montoAbono) > 0 ? `: equivale a ${monedaCuenta === 'USD' ? `$${aDolares(Number(formAbono.values.montoAbono), precioBCV).toFixed(2)}` : `Bs ${aBolivares(Number(formAbono.values.montoAbono), precioBCV).toFixed(2)}`}` : ''}.</Text>
                         )}
@@ -695,7 +784,7 @@ export default function DetallePedidoMayorPage() {
                 />
             )}
             {/* MODAL DE GALERÍA CON CARRUSEL MANUAL */}
-            <Modal
+            <Modal {...PANTALLA_COMPLETA_MOVIL}
                 opened={galeriaModal.imagenes.length > 0}
                 onClose={() => setGaleriaModal({ imagenes: [], indice: 0 })}
                 title={

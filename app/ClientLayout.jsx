@@ -76,7 +76,7 @@ export default function ClientLayout({ children }) {
           <AuthProvider>
             <Suspense fallback={<LoadingFallback />}>
               <AuthGuard>
-                <Notifications />
+                <Notifications zIndex={5000} />
                 <AuthProvider>
                   <AppShell
                     header={{ height: { base: 60, sm: 70 }, collapsed: !pinned }}

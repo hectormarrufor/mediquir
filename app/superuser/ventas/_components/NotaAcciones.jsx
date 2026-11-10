@@ -79,7 +79,7 @@ export default function NotaAcciones({ nota, onCambio }) {
             <Modal opened={modal === 'reintegro'} onClose={() => setModal(null)} centered title={<Text fw={800}>Reintegro al cliente · {nota.numeroDocumento}</Text>}>
                 <Stack>
                     <Text size="sm" c="dimmed">La nota superó lo que el cliente debía: le corresponden <b>${porReintegrar.toFixed(2)}</b>. Al registrar el reintegro se asienta como un gasto (sale dinero).</Text>
-                    <NumberInput label="Monto a reintegrar (USD)" decimalScale={2} min={0} max={porReintegrar} hideControls value={monto} onChange={setMonto} />
+                    <NumberInput label="Monto a reintegrar (USD)" decimalScale={2} min={0} max={porReintegrar} allowNegative={false} inputMode="decimal" hideControls value={monto} onChange={setMonto} />
                     <Select label="Método" data={['Transferencia', 'Pago Móvil', 'Efectivo', 'Zelle']} value={metodo} onChange={(v) => setMetodo(v || 'Transferencia')} allowDeselect={false} />
                     <TextInput label="Referencia (opcional)" value={referencia} onChange={(e) => setReferencia(e.currentTarget.value)} />
                     {error && <Alert color="red">{error}</Alert>}

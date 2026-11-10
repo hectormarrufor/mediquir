@@ -9,12 +9,14 @@ import ControlFiscalPaso from '../../_components/ControlFiscalPaso';
 import { useControlFiscal } from '../../_lib/useControlFiscal';
 import { useAuth } from '@/hooks/useAuth';
 import { formatearFecha } from '@/app/constants/hora';
+import { useZoomHoja } from '@/app/components/ui/useZoomHoja';
 
 export default function ImprimirRecibo() {
     const params = useParams();
     const [venta, setVenta] = useState(null);
     const [cargando, setCargando] = useState(true);
     const { rolUsuario } = useAuth();
+    const zoom = useZoomHoja(816); // hoja carta: en el teléfono se achica al ancho de la pantalla
     const guia = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('guia') === '1';
     // A la factura se le asigna el número de control de la forma libre (correlativo compartido con las notas) al imprimirla
     const necesitaControl = Boolean(venta && venta.tipoDocumento === 'FACTURA' && venta.statusDespacho !== 'Cancelado' && !guia);
@@ -92,7 +94,12 @@ export default function ImprimirRecibo() {
 
     return (
         <div className="print-wrapper">
-            <div id="print-section" className="print-container">
+            {/* Si se cerró el diálogo de impresión (o en el teléfono no salió solo), se vuelve a abrir desde aquí. No se imprime. */}
+            <div className="print-barra">
+                <span>{tituloDocumento} {venta.numeroDocumento}</span>
+                <button type="button" onClick={() => window.print()}>Imprimir</button>
+            </div>
+            <div id="print-section" className="print-container" style={{ zoom }}>
                 
                 <img src="/tenants/mediquir/logo.png" alt="Fondo Mediquir" className="watermark" />
 
@@ -161,7 +168,7 @@ export default function ImprimirRecibo() {
                             return (
                                 <tr key={index}>
                                     <td>{d.producto?.codigo || 'S/C'}</td>
-                                    <td style={{textAlign: 'left'}}>{d.producto?.nombre}</td>
+                                    <td style={{textAlign: 'left'}}>{d.producto?.nombre || d.nombreFicticio}</td>
                                     <td style={{textAlign: 'right'}}>{formatoNumero(pu)}</td>
                                     <td style={{textAlign: 'center'}}>{formatoNumero(d.cantidad)}</td>
                                     <td style={{textAlign: 'right'}}>{formatoNumero(sub)}</td>
@@ -254,15 +261,18 @@ export default function ImprimirRecibo() {
             <style dangerouslySetInnerHTML={{ __html: `
                 * { box-sizing: border-box; }
 
-                /* CONTENEDOR EN PANTALLA MÓVIL/DESKTOP */
+                /* CONTENEDOR EN PANTALLA MÓVIL/DESKTOP: la barra arriba y la hoja centrada debajo */
                 .print-wrapper {
                     display: flex;
-                    justify-content: center;
+                    flex-direction: column;
+                    align-items: center;
                     padding: 20px;
                     background: #525659;
                     min-height: 100vh;
-                    overflow: auto; /* Permite deslizar si no cabe en el celular */
+                    overflow: auto;
                 }
+                .print-barra { width: 100%; max-width: 8.5in; display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; color: #fff; font: 600 13px Arial, Helvetica, sans-serif; }
+                .print-barra button { padding: 8px 18px; font-weight: 700; font-size: 14px; border: 0; border-radius: 6px; background: #fff; color: #0b1b3d; cursor: pointer; }
 
                 /* LA HOJA FÍSICA Y VISUAL */
                 .print-container {
@@ -278,20 +288,12 @@ export default function ImprimirRecibo() {
                     box-shadow: 0 0 10px rgba(0,0,0,0.5);
                     display: flex;
                     flex-direction: column; /* Activa el empuje del footer */
-                    transform-origin: top center;
+                    flex-shrink: 0;
                 }
 
-                /* MAGIA PARA MÓVILES ANTES DE IMPRIMIR */
+                /* TELÉFONO: la hoja se achica con zoom (calculado al ancho de la pantalla), sin desplazarse de lado */
                 @media (max-width: 850px) {
-                    .print-wrapper {
-                        justify-content: flex-start;
-                        padding: 10px;
-                    }
-                    .print-container {
-                        transform: scale(0.9); /* Se achica lo mínimo para no perder legibilidad */
-                        transform-origin: top left;
-                        margin-bottom: 0;
-                    }
+                    .print-wrapper { padding: 8px; }
                 }
 
                 /* REGLAS ESTRICTAS QUE EL NAVEGADOR DEBE OBEDECER AL IMPRIMIR */
@@ -315,7 +317,9 @@ export default function ImprimirRecibo() {
                         padding: 0.2in 0.3in !important;
                         box-shadow: none !important;
                         border: none !important;
+                        zoom: 1 !important; /* el achicado es solo para verla en el teléfono */
                     }
+                    .print-barra { display: none !important; }
                     
                     html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
                     .print-wrapper { padding: 0 !important; background: transparent !important; display: block; }
