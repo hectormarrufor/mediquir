@@ -3,6 +3,7 @@
 // Imports relativos con extensión (sin alias "@/") para poder probarlo con un script de Node.
 import db from '../../../models/index.js';
 import { aBolivares, aDolares } from '../../constants/facturacion.js';
+import { generarComisionPorPago } from './comisionesPago.js';
 
 const { Abono, CuentaPorCobrar, MovimientoFinanciero, CategoriaFinanciera, RetencionIva, NotaFiscal } = db;
 
@@ -89,6 +90,8 @@ export async function registrarAbono({ venta, monto, moneda, tasa, metodoPago, r
         ventaId: venta.id, fechaPago: fecha, metodoPago: metodoPago || 'No especificado', referencia: referencia || null,
         montoUsd: abonoUsd, montoVes: abonoBs, montoBs: abonoBs, tasaBcvAplicada: tasaNum, tasaCambio: tasaNum,
     }, { transaction: t });
+
+    await generarComisionPorPago({ abono, transaction: t });
 
     cxc.saldoPendiente = Math.max(0, r2(saldo - enMonedaCuenta));
     const liquidada = cxc.saldoPendiente <= 0;

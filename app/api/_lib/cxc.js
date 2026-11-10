@@ -1,5 +1,6 @@
 import db from '@/models';
 import { recalcularCobro, declararRetencion, MARCA_CIERRE } from './retencionesVenta';
+import { generarComisionPorPago } from './comisionesPago';
 import { tasaDelDia, tasaVigente } from './tasaBcv';
 import { fechaCaracas } from '@/app/constants/hora';
 
@@ -41,6 +42,8 @@ export async function registrarAbonoCxc({ cuentaId, fecha, monto, metodo, refere
         montoUsd: importe, tasaBcvAplicada: tasa, montoVes: r2(importe * tasa), montoBs: r2(importe * tasa), tasaCambio: tasa,
         notas: [String(notas || '').trim().slice(0, 230), cierraFactura && tipo === 'ABONO' ? MARCA_CIERRE : ''].filter(Boolean).join(' ') || null,
     }, { transaction: t });
+
+    if (tipo === 'ABONO' && importe > 0) await generarComisionPorPago({ abono, transaction: t });
 
     // Ingreso de caja: solo si la venta todavía no tiene su ingreso (las migradas del sistema anterior ya lo tienen asentado al emitirse: no se duplica).
     // Las retenciones, los ajustes y las notas de crédito no son dinero que entra.
