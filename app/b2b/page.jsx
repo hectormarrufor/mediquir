@@ -64,15 +64,6 @@ export default function B2BInicio() {
                 </Alert>
             )}
 
-            {data?.retencionesPendientes > 0 && (
-                <Alert color="yellow" variant="light" icon={<IconReceiptTax size={20} />} title="Retención de IVA pendiente">
-                    <Group justify="space-between" wrap="wrap">
-                        <Text size="sm">{data.retencionesPendientes === 1 ? 'Tienes 1 factura' : `Tienes ${data.retencionesPendientes} facturas`} con retención de IVA por respaldar: sube tu comprobante desde el detalle del pedido.</Text>
-                        <Button size="xs" variant="light" color="yellow" onClick={() => router.push('/b2b/pedidos')}>Ir a mis pedidos</Button>
-                    </Group>
-                </Alert>
-            )}
-
             <SimpleGrid cols={{ base: 1, xs: 2, lg: 3, xl: 5 }} spacing="md">
                 <Indicador icono={IconTruckDelivery} color="blue" titulo="Pedidos en curso" cargando={isLoading}
                     valor={data?.pedidosActivos ?? 0} detalle={`${data?.totalPedidos ?? 0} pedidos en total`} onClick={() => router.push('/b2b/pedidos?estado=activos')} />

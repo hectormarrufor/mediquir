@@ -144,9 +144,6 @@ export default function ClienteDashboard({ params }) {
                             <Title order={2} c="gray.9">{cliente.nombre || 'Sin Razón Social'}</Title>
                             <Group gap="xs" mt={4}>
                                 <Text c="dimmed" fw={500}>{cliente.identificacion}</Text>
-                                {cliente.esContribuyenteEspecial && (
-                                    <Badge color="violet" variant="light">Contribuyente Especial ({cliente.retencionIvaPorDefecto}%)</Badge>
-                                )}
                             </Group>
                         </Box>
                         <ActionIcon 

@@ -22,13 +22,12 @@ export default function ClienteDrawer({ opened, onClose, onCreado }) {
     const [crearAcceso, setCrearAcceso] = useState(true);
 
     const form = useForm({
-        initialValues: { identificacion: '', nombre: '', telefono: '', email: '', direccion: '', notas: '', esContribuyenteEspecial: false, retencionIvaPorDefecto: null },
+        initialValues: { identificacion: '', nombre: '', telefono: '', email: '', direccion: '', notas: '' },
         validate: {
             identificacion: (v) => (v.trim().length < 4 ? 'Indica el RIF o la cédula' : null),
             nombre: (v) => (v.trim().length < 2 ? 'Indica el nombre o la razón social' : null),
             email: (v) => (v && !/^\S+@\S+\.\S+$/.test(v) ? 'Correo inválido' : null),
             // sin valor por defecto: si es contribuyente especial hay que elegir 75 % o 100 %
-            retencionIvaPorDefecto: (v, valores) => (valores.esContribuyenteEspecial ? validarRetencion(v) : null),
         },
     });
 
@@ -41,7 +40,6 @@ export default function ClienteDrawer({ opened, onClose, onCreado }) {
                     ...values,
                     identificacion: values.identificacion.trim().toUpperCase(),
                     email: values.email.trim() || null,
-                    retencionIvaPorDefecto: values.esContribuyenteEspecial ? Number(values.retencionIvaPorDefecto) : null,
                 }),
             });
             let credenciales = null;
@@ -75,11 +73,6 @@ export default function ClienteDrawer({ opened, onClose, onCreado }) {
                         <TextInput label="Correo" type="email" {...form.getInputProps('email')} />
                     </Group>
                     <Textarea label="Dirección fiscal" autosize minRows={2} {...form.getInputProps('direccion')} />
-                    <Switch color="brand.6" label="Contribuyente especial" description="Aplica retención de IVA" {...form.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })} />
-                    {form.values.esContribuyenteEspecial && (
-                        <SelectorRetencion rif={form.values.identificacion} value={form.values.retencionIvaPorDefecto} error={form.errors.retencionIvaPorDefecto}
-                            onChange={(v) => form.setFieldValue('retencionIvaPorDefecto', v)} description="Cuánto del IVA nos retiene este cliente. No viene marcado: elige uno." />
-                    )}
                     <Textarea label="Notas internas" autosize minRows={2} {...form.getInputProps('notas')} />
                     <Divider />
                     <Checkbox checked={crearAcceso} onChange={(e) => setCrearAcceso(e.currentTarget.checked)}

@@ -65,7 +65,6 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
             nombre: '',
             telefono: '',
             email: '',
-            esContribuyenteEspecial: false,
             porcentajeRetencion: '75' // '75' | '100'
         },
         validate: {
@@ -286,9 +285,6 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
             email: formCliente.values.email || null,
             direccion: metodoEntrega === 'delivery' && coordenadasGPS 
                 ? `GPS: ${coordenadasGPS.lat}, ${coordenadasGPS.lng}` : null,
-            esContribuyenteEspecial: esJuridico ? formCliente.values.esContribuyenteEspecial : false,
-            porcentajeRetencionIVA: (esJuridico && formCliente.values.esContribuyenteEspecial) 
-                ? Number(formCliente.values.porcentajeRetencion) : 0
         };
 
         try {
@@ -406,31 +402,6 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
                             />
                         </Group>
 
-                        {(formCliente.values.tipoDoc === 'J-' || formCliente.values.tipoDoc === 'G-') && (
-                            <Paper withBorder p="sm" radius="md" bg="blue.0" style={{ borderColor: '#005AAA' }}>
-                                <Stack gap="xs">
-                                    <Checkbox
-                                        label={<Text size="sm" fw={600}>¿Esta empresa es Contribuyente Especial (SENIAT)?</Text>}
-                                        {...formCliente.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })}
-                                        color="#005AAA"
-                                        disabled={buscandoCliente}
-                                    />
-                                    {formCliente.values.esContribuyenteEspecial && (
-                                        <Radio.Group
-                                            label="Porcentaje de Retención IVA:"
-                                            size="sm"
-                                            fw={600}
-                                            {...formCliente.getInputProps('porcentajeRetencion')}
-                                        >
-                                            <Group mt="xs">
-                                                <Radio value="75" label="75% de Retención" color="#005AAA" />
-                                                <Radio value="100" label="100% de Retención" color="#005AAA" />
-                                            </Group>
-                                        </Radio.Group>
-                                    )}
-                                </Stack>
-                            </Paper>
-                        )}
 
                         <TextInput 
                             label="Nombre Completo / Razón Social" 

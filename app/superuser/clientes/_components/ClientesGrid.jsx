@@ -195,8 +195,6 @@ export default function ClientesGrid({ filas, columnas, permisos, orden, onOrden
                     </UnstyledButton>
                 );
             case 'nombre': return fila.nombre || <Text span size="xs" c="dimmed">Sin nombre</Text>;
-            case 'esContribuyenteEspecial': return fila.esContribuyenteEspecial ? <Badge size="xs" variant="light" color="grape">Especial</Badge> : <Text span size="xs" c="dimmed">No</Text>;
-            case 'retencionIvaPorDefecto': return fila.esContribuyenteEspecial ? `${fila.retencionIvaPorDefecto}%` : <span className={classes.noAplica}>—</span>;
             case 'tarifaPrecio': return <Badge size="xs" variant="light" color={fila.tarifaPrecio === 'precio7' ? 'orange' : 'blue'}>{fila.tarifaPrecio === 'precio7' ? 'Precio 7' : 'Precio 6'}</Badge>;
             case 'creditosActivos': {
                 if (!(fila.maxPedidosCredito > 0) || !(fila.diasCredito > 0)) return <Text span size="xs" c="dimmed">Sin crédito</Text>;

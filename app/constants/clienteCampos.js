@@ -9,8 +9,6 @@ export const CAMPOS_CLIENTE = {
     direccion: { etiqueta: 'Dirección', tipo: 'texto', max: 500 },
     notas: { etiqueta: 'Notas', tipo: 'texto', max: 1000 },
     imagen: { etiqueta: 'Imagen', tipo: 'texto', max: 300 },
-    esContribuyenteEspecial: { etiqueta: 'Contribuyente especial', tipo: 'booleano' },
-    retencionIvaPorDefecto: { etiqueta: 'Retención de IVA', tipo: 'opcion', valores: [75, 100] },
     diasCredito: { etiqueta: 'Días de crédito', tipo: 'entero', min: 0, max: 365, soloAdmin: true },
     maxPedidosCredito: { etiqueta: 'Máx. pedidos a crédito', tipo: 'entero', min: 0, max: 100, soloAdmin: true },
     tarifaPrecio: { etiqueta: 'Tarifa de precios B2B', tipo: 'lista', valores: ['precio6', 'precio7'], soloAdmin: true },

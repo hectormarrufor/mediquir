@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import {
     Box, Title, Paper, Group, Text, Badge, Grid, Stack, Divider, Alert,
-    Table, Stepper, Button, Select, TextInput, NumberInput, Modal, Tabs
+    Table, Stepper, Button, Select, TextInput, NumberInput, Modal, Tabs, Switch
 } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -70,7 +70,7 @@ export default function DetallePedidoMayorPage() {
     // --- FORMULARIOS ---
     const formEmpacar = useForm({ initialValues: { empacadorId: '', etiquetadorId: '' } });
     const formDespacho = useForm({ initialValues: { quienRetira: '', fechaHoraRetiro: aInputFechaHora(), costoFlete: 0 } });
-    const formAbono = useForm({ initialValues: { montoAbono: 0, metodoPago: 'Transferencia', referencia: '', monedaAbono: 'USD' } });
+    const formAbono = useForm({ initialValues: { montoAbono: 0, metodoPago: 'Transferencia', referencia: '', monedaAbono: 'USD', retuvo: false, cierra: false } });
 
     if (isLoading) return <Box p="md"><Text>Cargando panel 360° del pedido...</Text></Box>;
     if (!pedido) return <Box p="md"><Text c="red">Pedido no encontrado</Text></Box>;
@@ -95,6 +95,11 @@ export default function DetallePedidoMayorPage() {
     const saldoCuenta = cuentaPorCobrar ? (Number(cuentaPorCobrar.saldoPendiente) || 0) : (cobrableSinCuenta ? Math.max(0, Number((Number(pedido.totalFinal) - abonadoDoc).toFixed(2))) : 0);
     // Montos del documento en su moneda y su equivalente (con la tasa del documento)
     const tasaDoc = Number(pedido.tasaCambio) || 1;
+    // Retención de IVA: solo en facturas con IVA que todavía no tienen una declarada. El 75 % es del IVA de la factura (misma moneda que la cuenta).
+    const puedeRetener = pedido.tipoDocumento === 'FACTURA' && Number(pedido.montoIva) > 0 && !(pedido.retenciones || []).length;
+    const retEsperada = puedeRetener ? Math.round(Number(pedido.montoIva) * 75) / 100 : 0;
+    const montoEnCuenta = formAbono.values.monedaAbono === monedaCuenta ? Number(formAbono.values.montoAbono) || 0 : (precioBCV > 0 ? (monedaCuenta === 'USD' ? aDolares(Number(formAbono.values.montoAbono) || 0, precioBCV) : aBolivares(Number(formAbono.values.montoAbono) || 0, precioBCV)) : 0);
+    const parecioRetener = puedeRetener && montoEnCuenta > 0 && Math.abs(montoEnCuenta + retEsperada - saldoCuenta) <= (monedaCuenta === 'USD' ? 1 : 1 * tasaDoc);
     const ivaReferencialNE = pedido.tipoDocumento === 'NOTA_ENTREGA' ? Math.round((pedido.detalles || []).reduce((a, d) => a + Number(d.subtotal ?? d.precioUnitario * d.cantidad) * (d.isFicticio ? 0 : Number(d.producto?.porcentajeIva ?? 16)) / 100, 0) * 100) / 100 : 0;
     const equivalente = (v) => (pedido.moneda === 'BS' ? `$${aDolares(Number(v) || 0, tasaDoc).toFixed(2)}` : `Bs ${aBolivares(Number(v) || 0, tasaDoc).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
@@ -136,13 +141,15 @@ export default function DetallePedidoMayorPage() {
             metodoPago: values.metodoPago,
             referencia: values.referencia,
             monedaAbono: values.monedaAbono,
-            tasaCambioAbono: precioBCV
+            tasaCambioAbono: precioBCV,
+            retencion: values.retuvo && puedeRetener,
+            cierraFactura: values.cierra
         }, setModalAbono, 'Abono registrado y saldo actualizado.');
     };
 
     const abrirAbono = () => {
         // Por defecto se propone pagar todo el saldo, en la moneda de la cuenta
-        formAbono.setValues({ montoAbono: saldoCuenta, metodoPago: 'Transferencia', referencia: '', monedaAbono: monedaCuenta });
+        formAbono.setValues({ montoAbono: saldoCuenta, metodoPago: 'Transferencia', referencia: '', monedaAbono: monedaCuenta, retuvo: false, cierra: false });
         setModalAbono(true);
     };
 
@@ -662,6 +669,12 @@ export default function DetallePedidoMayorPage() {
                         )}
                         <Select label="Método de pago" data={['Transferencia', 'Pago Móvil', 'Efectivo', 'Zelle', 'Punto de Venta']} allowDeselect={false} withAsterisk {...formAbono.getInputProps('metodoPago')} />
                         <TextInput label="Referencia (Opcional)" placeholder="Nro de recibo o transferencia" {...formAbono.getInputProps('referencia')} />
+                        {puedeRetener && (
+                            <Switch color="grape" fw={700} checked={formAbono.values.retuvo} onChange={(e) => formAbono.setFieldValue('retuvo', e.currentTarget.checked)}
+                                label={parecioRetener ? 'Parece que el cliente te retuvo el 75 % del IVA. ¿Es así?' : 'El cliente retuvo el 75 % del IVA'}
+                                description={`Retención esperada: ${monedaCuenta === 'USD' ? '$' : 'Bs '}${retEsperada.toFixed(2)}. Baja la deuda desde ya; los datos del comprobante se cargan después.`} />
+                        )}
+                        <Switch color="teal" fw={700} checked={formAbono.values.cierra} onChange={(e) => formAbono.setFieldValue('cierra', e.currentTarget.checked)} label="El cliente dice que con este pago cierra la factura" description="Si aun así queda deuda, pasa a la lista «Dicen que pagaron completo» en Cuentas por cobrar." />
 
                         <Button loading={isSubmitting} type="submit" fullWidth color="green" mt="md" leftSection={<IconCash size={18} />}>
                             Procesar Abono

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { requerirNoVendedor } from '@/app/api/_lib/acceso';
-import { crearRetencionPendiente } from '@/app/api/_lib/retencionesVenta';
 import { notificarUsuario } from '@/app/handlers/notificar';
 import { calcularFactura } from '@/app/constants/facturacion';
 import db from '@/models/index';
@@ -113,9 +112,8 @@ export async function POST(request, { params }) {
             venta.revisionStock = 'RESUELTA';
             venta.revisionResueltaAt = new Date();
             await venta.save({ transaction: t });
-            const retencion = await crearRetencionPendiente({ venta, transaction: t });
             const usuario = await User.findOne({ where: { clienteId: venta.clienteId }, attributes: ['id'], transaction: t });
-            aviso = { usuarioId: usuario?.id, numero: venta.numeroDocumento, ventaId: venta.id, retencion: Boolean(retencion), nota: venta.revisionNota, total: totalUsd };
+            aviso = { usuarioId: usuario?.id, numero: venta.numeroDocumento, ventaId: venta.id, nota: venta.revisionNota, total: totalUsd };
             await t.commit();
         } else {
             throw new ErrorRevision('Acción no válida');

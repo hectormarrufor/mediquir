@@ -41,8 +41,6 @@ export default function EditarCliente({ params }) {
             email: '',
             direccion: '',
             notas: '',
-            esContribuyenteEspecial: false,
-            retencionIvaPorDefecto: '75',
             diasCredito: 7,
             maxPedidosCredito: 5,
             tarifaPrecio: 'precio6',
@@ -64,8 +62,6 @@ export default function EditarCliente({ params }) {
                 email: cliente.email || '',
                 direccion: cliente.direccion || '',
                 notas: cliente.notas || '',
-                esContribuyenteEspecial: cliente.esContribuyenteEspecial || false,
-                retencionIvaPorDefecto: String(cliente.retencionIvaPorDefecto || 75),
                 diasCredito: cliente.diasCredito ?? 7,
                 maxPedidosCredito: cliente.maxPedidosCredito ?? 5,
                 tarifaPrecio: cliente.tarifaPrecio || 'precio6',
@@ -82,8 +78,7 @@ export default function EditarCliente({ params }) {
         try {
             let payload = {
                 ...values,
-                email: values.email.trim() === '' ? null : values.email.trim(),
-                retencionIvaPorDefecto: Number(values.retencionIvaPorDefecto)
+                email: values.email.trim() === '' ? null : values.email.trim()
             };
 
             // Solo subimos imagen nueva si es un archivo Blob/File
@@ -157,17 +152,6 @@ export default function EditarCliente({ params }) {
 
                         <Textarea label="Dirección Fiscal o de Entrega" minRows={2} autosize {...form.getInputProps('direccion')} />
 
-                        <Paper withBorder p="md" radius="md" bg="gray.0">
-                            <Title order={5} mb="md" c="gray.7">Información Tributaria</Title>
-                            <Grid align="center">
-                                <Grid.Col span={{ base: 12, md: 6 }}>
-                                    <Switch size="md" label="Es Contribuyente Especial" checked={form.values.esContribuyenteEspecial} {...form.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })} />
-                                </Grid.Col>
-                                <Grid.Col span={{ base: 12, md: 6 }}>
-                                    <Select label="Porcentaje de Retención IVA" data={[{ value: '75', label: '75%' }, { value: '100', label: '100%' }]} disabled={!form.values.esContribuyenteEspecial} {...form.getInputProps('retencionIvaPorDefecto')} />
-                                </Grid.Col>
-                            </Grid>
-                        </Paper>
 
                         <Paper withBorder p="md" radius="md" bg="gray.0">
                             <Title order={5} mb={4} c="gray.7">Crédito en el portal B2B</Title>

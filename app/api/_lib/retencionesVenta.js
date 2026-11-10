@@ -54,42 +54,6 @@ export function calcularRetencion(venta, detalles, porcentaje, ivaRetenidoBs) {
     return { pct, tasa, ivaBs, baseBs, retenidoBs, retenidoUsd: aDolares(retenidoBs, tasa) };
 }
 
-/**
- * Al facturar a un contribuyente especial, deja calculada la retención: queda PENDIENTE de comprobante (lo emite el cliente,
- * se carga después) y ese IVA se descuenta del saldo desde ya, porque el cliente se lo paga al SENIAT y no a la empresa.
- * Llamar dentro de la transacción de la venta, DESPUÉS de crear sus renglones (y su cuenta por cobrar, si es a crédito).
- * Devuelve la retención, o null si no aplica (no es factura, no hay IVA, el cliente no es especial o ya tiene una).
- */
-export async function crearRetencionPendiente({ venta, transaction: t }) {
-    if (venta.tipoDocumento !== 'FACTURA' || venta.statusDespacho === 'Cancelado') return null;
-    if (!(Number(venta.montoIva) > 0) || !venta.clienteId) return null;
-
-    const cliente = await Cliente.findByPk(venta.clienteId, { attributes: ['identificacion', 'nombre', 'esContribuyenteEspecial', 'retencionIvaPorDefecto'], transaction: t });
-    if (!cliente?.esContribuyenteEspecial) return null;
-    if (await RetencionIva.findOne({ where: { ventaId: venta.id }, attributes: ['id'], transaction: t })) return null;
-
-    const detalles = await VentaDetalle.findAll({ where: { ventaId: venta.id }, attributes: ['subtotal', 'aplicaIva'], transaction: t });
-    const c = calcularRetencion(venta, detalles, cliente.retencionIvaPorDefecto);
-    const fecha = hoyCaracas();
-
-    const abono = await Abono.create({
-        ventaId: venta.id, fechaPago: fecha, metodoPago: 'Retención IVA', referencia: 'PENDIENTE DE COMPROBANTE',
-        montoUsd: c.retenidoUsd, montoVes: c.retenidoBs, montoBs: c.retenidoBs, tasaBcvAplicada: c.tasa, tasaCambio: c.tasa,
-        notas: `Retención de IVA ${c.pct}% calculada al facturar; falta el comprobante del cliente`,
-    }, { transaction: t });
-
-    const retencion = await RetencionIva.create({
-        tipo: 'VENTA', estado: 'PENDIENTE', fecha, periodo: fecha.slice(0, 7), comprobante: null,
-        facturaAfectada: venta.numeroDocumento, numeroControlFactura: venta.numeroControl,
-        contraparteRif: cliente.identificacion, contraparteNombre: cliente.nombre,
-        baseImponible: c.baseBs, alicuota: 16, montoIva: c.ivaBs, porcentajeRetencion: c.pct, ivaRetenido: c.retenidoBs,
-        tasaCambio: c.tasa, ventaId: venta.id, abonoId: abono.id,
-    }, { transaction: t });
-
-    await recalcularCobro(venta, t);
-    return retencion;
-}
-
 // Marca que lleva el abono cuando el cliente dijo que con ese pago cerraba la factura (para la lista «dicen que pagaron completo y deben»)
 export const MARCA_CIERRE = '[CIERRE DECLARADO]';
 // Las retenciones se llevan desde la primera quincena de noviembre de 2026; antes de esa fecha no se piden ni se listan

@@ -79,9 +79,6 @@ const MobileClienteCard = ({ cliente, actions, onClick }) => {
             </Avatar>
             <div>
               <Text fw={700} size="sm" lineClamp={1}>{cliente.nombre || 'Sin Nombre (Persona Natural)'}</Text>
-              {cliente.esContribuyenteEspecial && (
-                <Badge size="xs" color="violet" variant="light">Contribuyente Especial ({cliente.retencionIvaPorDefecto}%)</Badge>
-              )}
             </div>
           </Group>
           <div onClick={(e) => e.stopPropagation()}>{actions}</div>
@@ -158,16 +155,6 @@ export default function ClientesTable() {
     { accessorKey: 'nombre', header: 'Razón Social / Nombre', size: 200 },
     { accessorKey: 'telefono', header: 'Teléfono', size: 120 },
     { accessorKey: 'email', header: 'Correo', size: 180 },
-    { 
-      accessorKey: 'esContribuyenteEspecial', header: 'Tipo', size: 150,
-      Cell: ({ row }) => (
-        row.original.esContribuyenteEspecial ? (
-            <Badge color="violet" variant="light">Especial ({row.original.retencionIvaPorDefecto}%)</Badge>
-        ) : (
-            <Badge color="gray" variant="light">Ordinario</Badge>
-        )
-      ),
-    },
   ], []);
 
   const table = useMantineReactTable({

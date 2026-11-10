@@ -80,12 +80,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
             telefono: '',
             email: '',
             direccion: '',
-            esContribuyenteEspecial: false,
-            retencionIvaPorDefecto: null, // sin valor por defecto: si es contribuyente especial hay que elegir 75 % o 100 %
             notas: ''
         },
         validate: {
-            retencionIvaPorDefecto: (v, valores) => (valores.esContribuyenteEspecial ? validarRetencion(v) : null),
         }
     });
 
@@ -880,7 +877,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
                         const res = await fetch('/api/clientes', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(tipoVenta === 'MAYOR' ? { ...values, retencionIvaPorDefecto: values.esContribuyenteEspecial ? Number(values.retencionIvaPorDefecto) : null } : { identificacion: values.identificacion.trim(), nombre: values.nombre.trim(), telefono: values.telefono?.trim() || null })
+                            body: JSON.stringify(tipoVenta === 'MAYOR' ? { ...values } : { identificacion: values.identificacion.trim(), nombre: values.nombre.trim(), telefono: values.telefono?.trim() || null })
                         });
                         const data = await res.json();
                         if (!res.ok) throw new Error(data.error);
@@ -902,12 +899,6 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
                             <>
                                 <TextInput size="md" label="Correo Electrónico" placeholder="contacto@cliente.com" {...formNuevoCliente.getInputProps('email')} />
                                 <TextInput size="md" label="Dirección Fiscal" placeholder="Ej: Av. Principal, Local 4..." {...formNuevoCliente.getInputProps('direccion')} />
-                                <Checkbox label="Contribuyente Especial" size="md" mt={8} {...formNuevoCliente.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })} />
-                                {formNuevoCliente.values.esContribuyenteEspecial && (
-                                    <SelectorRetencion size="md" rif={formNuevoCliente.values.identificacion} value={formNuevoCliente.values.retencionIvaPorDefecto}
-                                        error={formNuevoCliente.errors.retencionIvaPorDefecto} onChange={(v) => formNuevoCliente.setFieldValue('retencionIvaPorDefecto', v)}
-                                        description="Cuánto del IVA nos retiene este cliente. No viene marcado: elige uno." />
-                                )}
                                 <TextInput size="md" label="Notas Adicionales" placeholder="(Opcional)" {...formNuevoCliente.getInputProps('notas')} />
                             </>
                         )}

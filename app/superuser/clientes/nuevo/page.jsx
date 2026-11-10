@@ -26,14 +26,11 @@ export default function NuevoCliente() {
             email: '',
             direccion: '',
             notas: '',
-            esContribuyenteEspecial: false,
-            retencionIvaPorDefecto: null, // sin valor por defecto: si es contribuyente especial hay que elegir 75 % o 100 %
             imagen: null
         },
         validate: {
             identificacion: (value) => (value.trim().length < 4 ? 'La identificación (RIF/CI) es obligatoria' : null),
             email: (value) => (value && !/^\S+@\S+\.\S+$/.test(value) ? 'Correo inválido' : null),
-            retencionIvaPorDefecto: (v, valores) => (valores.esContribuyenteEspecial ? validarRetencion(v) : null),
         }
     });
 
@@ -43,8 +40,7 @@ export default function NuevoCliente() {
             let payload = {
                 ...values,
                 // Si el email está vacío, mandamos null para no chocar con la validación de Sequelize
-                email: values.email.trim() === '' ? null : values.email.trim(),
-                retencionIvaPorDefecto: values.esContribuyenteEspecial ? Number(values.retencionIvaPorDefecto) : null
+                email: values.email.trim() === '' ? null : values.email.trim()
             };
 
             // Lógica de subida de imagen usando tu ImageDropzone
@@ -147,28 +143,6 @@ export default function NuevoCliente() {
                         />
 
                         {/* ZONA TRIBUTARIA */}
-                        <Paper withBorder p="md" radius="md" bg="gray.0">
-                            <Title order={5} mb="md" c="gray.7">Información Tributaria</Title>
-                            <Grid align="center">
-                                <Grid.Col span={{ base: 12, md: 6 }}>
-                                    <Switch
-                                        size="md"
-                                        label="Es Contribuyente Especial"
-                                        checked={form.values.esContribuyenteEspecial}
-                                        {...form.getInputProps('esContribuyenteEspecial', { type: 'checkbox' })}
-                                    />
-                                </Grid.Col>
-                                <Grid.Col span={{ base: 12, md: 6 }}>
-                                    {form.values.esContribuyenteEspecial ? (
-                                        <SelectorRetencion value={form.values.retencionIvaPorDefecto} error={form.errors.retencionIvaPorDefecto}
-                                            onChange={(v) => form.setFieldValue('retencionIvaPorDefecto', v)} description="Cuánto del IVA nos retiene este cliente. No viene marcado: elige uno." />
-                                    ) : (
-                                        <Text size="sm" c="dimmed">Si es contribuyente especial, aquí eliges si retiene el 75 % o el 100 % del IVA.</Text>
-                                    )}
-                                </Grid.Col>
-                            </Grid>
-                        </Paper>
-
                         {/* FOTO O LOGO DEL CLIENTE */}
                         <ImageDropzone 
                             label="Logo o Foto del Cliente" 

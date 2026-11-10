@@ -13,8 +13,9 @@ import { crearYNotificar, notificarCabezas, notificarUsuario } from '@/app/handl
 import { RetencionIva } from '@/models';
 import { faltantesDeEmpaque, reiniciarEmpaque } from '../_empaque';
 import { borrarFotosSobrantes } from '../_fotosEmpaque';
+import { Op } from 'sequelize';
 import { registrarAbono, asegurarCuentaContado, ErrorAbono } from '../../_lib/abonos';
-import { recalcularCobro } from '../../_lib/retencionesVenta';
+import { recalcularCobro, declararRetencion, MARCA_CIERRE } from '../../_lib/retencionesVenta';
 import { eliminarVenta, borrarArchivosDeVenta } from '../_eliminar';
 import { convertirAFactura, convertirNotaEntregaAFactura, ErrorConversion } from '../../_lib/convertirFactura';
 import { tasaVigente, tasaDelDia } from '../../_lib/tasaBcv';
@@ -110,7 +111,7 @@ export async function GET(request, { params }) {
                         include: [{ model: Marca, as: 'marca', attributes: ['nombre', 'imagen'] }, {model: GrupoEquivalencia, as: 'grupoEquivalencia', attributes: ['nombre', 'imagen']}]
                     }]
                 },
-                { model: Cliente, as: 'cliente', attributes: ['id', 'nombre', 'identificacion', 'direccion', 'esContribuyenteEspecial', 'retencionIvaPorDefecto'] },
+                { model: Cliente, as: 'cliente', attributes: ['id', 'nombre', 'identificacion', 'direccion'] },
                 { model: RetencionIva, as: 'retenciones' },
                 { model: MovimientoFinanciero, as: 'movimientos',
                     include: [{ model: PagoSms, as: 'pagoSms' }]
@@ -478,7 +479,7 @@ export async function PUT(request, { params }) {
         }
 
         if (accion === 'ABONAR') {
-            const { montoAbono, metodoPago, referencia, monedaAbono, tasaCambioAbono } = body;
+            const { montoAbono, metodoPago, referencia, monedaAbono, tasaCambioAbono, retencion, cierraFactura } = body;
 
             // Mismo registro que usan el vínculo de pagos móviles y el pago del cliente B2B: baja el saldo y asienta el ingreso
             // repartido entre "Ingreso por Cobranza" e "IVA Recaudado"
@@ -486,6 +487,8 @@ export async function PUT(request, { params }) {
             try {
                 // Pedido de contado aún sin cobrar (p. ej. B2B): se le abre una cuenta que vence hoy y el pago sigue como un abono más
                 if (venta.tipoVenta !== 'ONLINE') await asegurarCuentaContado({ venta, transaction: t });
+                // El cliente retuvo el 75 % del IVA: se declara primero y la deuda ya lo descuenta (igual que en el modal de cuentas por cobrar)
+                if (retencion) await declararRetencion({ venta, porcentaje: 75, transaction: t });
                 abonoRegistrado = await registrarAbono({
                     venta, monto: montoAbono, moneda: monedaAbono,
                     tasa: Number(tasaCambioAbono) > 0 ? Number(tasaCambioAbono) : Number(venta.tasaCambio),
@@ -496,6 +499,11 @@ export async function PUT(request, { params }) {
                 throw e;
             }
 
+            // «El cliente dice que con este pago cierra la factura»: marca el abono; si aun así queda deuda, va a la lista de seguimiento
+            if (cierraFactura) {
+                const ultimo = await Abono.findOne({ where: { ventaId: venta.id, metodoPago: { [Op.ne]: 'Retención IVA' } }, order: [['id', 'DESC']], transaction: t });
+                if (ultimo) await ultimo.update({ notas: [ultimo.notas, MARCA_CIERRE].filter(Boolean).join(' ') }, { transaction: t });
+            }
             await t.commit();
             if (venta.tipoVenta === 'MAYOR') {
                 await avisarCliente(venta, 'PAGO_RECIBIDO', { abonoUsd: abonoRegistrado.abonoUsd, liquidada: abonoRegistrado.liquidada, saldoRestante: abonoRegistrado.saldoRestante, monedaCuenta: abonoRegistrado.monedaCuenta, tasa: Number(venta.tasaCambio) });

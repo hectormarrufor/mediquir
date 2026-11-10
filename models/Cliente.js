@@ -21,20 +21,6 @@ const Cliente = sequelize.define('Cliente', {
     type: DataTypes.STRING,
     allowNull: true,
   },
-  esContribuyenteEspecial: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
-  },
-  retencionIvaPorDefecto: {
-    type: DataTypes.INTEGER, 
-    defaultValue: 75,
-    validate: {
-      isIn: {
-        args: [[75, 100]],
-        msg: "El porcentaje de retención solo puede ser 75 o 100"
-      }
-    }
-  },
   email: {
     type: DataTypes.STRING,
     allowNull: true,

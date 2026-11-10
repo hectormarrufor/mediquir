@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Badge, Box, Button, Group, Modal, NumberInput, Paper, Select, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconPrinter, IconReceiptTax, IconTrash } from '@tabler/icons-react';
+import { IconReceiptTax, IconTrash } from '@tabler/icons-react';
 import { aBolivares } from '@/app/constants/facturacion';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -66,6 +66,10 @@ export default function RetencionIvaCard({ pedido, onCambio }) {
         notifications.show({ color: 'teal', title: 'Retención registrada', message: retencion ? 'Comprobante confirmado: la retención ya entra al libro de ventas.' : 'Se descontó del saldo por cobrar de la factura.' });
         setAbierto(false);
     });
+    const declarar = () => llamar(async () => {
+        await pedirJson(`/api/ventas/${pedido.id}/retencion/declarar`, { method: 'POST' });
+        notifications.show({ color: 'teal', title: 'Retención declarada', message: 'Se descontó del saldo. Falta cargar los datos del comprobante.' });
+    });
     const eliminar = () => llamar(async () => {
         await pedirJson(`/api/ventas/${pedido.id}/retencion`, { method: 'DELETE' });
         notifications.show({ color: 'orange', message: 'Retención eliminada; el saldo volvió a como estaba.' });
@@ -86,33 +90,22 @@ export default function RetencionIvaCard({ pedido, onCambio }) {
                     <Text size="xs">Comprobante <b>{retencion.comprobante}</b> · {fmtFecha(retencion.fecha)}</Text>
                     <Text size="sm" fw={800}>Bs {bs(retencion.ivaRetenido)} <Text span size="xs" fw={500}>({Number(retencion.porcentajeRetencion)} % del IVA)</Text></Text>
                     <Group gap="xs" mt={6}>
-                        {retencion.comprobanteUrl && <Button component="a" href={retencion.comprobanteUrl} target="_blank" rel="noreferrer" size="compact-xs" variant="light" leftSection={<IconPrinter size={12} />}>Ver / imprimir comprobante</Button>}
-                        {isAdmin && <Button size="compact-xs" color="red" variant="subtle" leftSection={<IconTrash size={12} />} onClick={eliminar} loading={guardando}>Eliminar retención</Button>}
-                    </Group>
-                </Alert>
-            ) : porRevisar ? (
-                <Alert mt="xs" color="blue" variant="light" p="xs" title="El cliente subió su comprobante de retención">
-                    <Text size="xs">Comprobante <b>{retencion.comprobante}</b> · {fmtFecha(retencion.fecha)}</Text>
-                    <Text size="sm" fw={800}>Bs {bs(retencion.montoDeclarado ?? retencion.ivaRetenido)} <Text span size="xs" fw={500}>declarados ({Number(retencion.porcentajeRetencion)} % del IVA)</Text></Text>
-                    <Text size="xs" mb={6}>Revísalo contra el archivo: al confirmarlo entra al libro de ventas.</Text>
-                    <Group gap="xs">
-                        {retencion.comprobanteUrl && <Button component="a" href={retencion.comprobanteUrl} target="_blank" rel="noreferrer" size="compact-xs" variant="light" leftSection={<IconPrinter size={12} />}>Ver / imprimir</Button>}
-                        <Button size="compact-xs" color="grape" onClick={() => setAbierto(true)}>Revisar y confirmar</Button>
-                        {isAdmin && <Button size="compact-xs" color="red" variant="subtle" leftSection={<IconTrash size={12} />} onClick={eliminar} loading={guardando}>Quitar</Button>}
+                                                {isAdmin && <Button size="compact-xs" color="red" variant="subtle" leftSection={<IconTrash size={12} />} onClick={eliminar} loading={guardando}>Eliminar retención</Button>}
                     </Group>
                 </Alert>
             ) : retencion ? (
                 <Alert mt="xs" color="orange" variant="light" p="xs" title="Retención de IVA pendiente de comprobante">
                     <Text size="sm" fw={800}>Bs {bs(retencion.ivaRetenido)} <Text span size="xs" fw={500}>({Number(retencion.porcentajeRetencion)} % del IVA)</Text></Text>
-                    <Text size="xs" mb={6}>Calculada al facturar y ya descontada del saldo: el cliente se la paga al SENIAT. Falta el número del comprobante que emite el cliente; sin él no entra al libro de ventas.</Text>
+                    <Text size="xs" mb={6}>Ya descontada del saldo: el cliente se la paga al SENIAT. Faltan los datos de su comprobante (fecha, número y monto); sin ellos no entra al libro de ventas.</Text>
                     <Group gap="xs">
-                        <Button size="compact-xs" color="grape" onClick={() => setAbierto(true)}>Cargar comprobante</Button>
+                        <Button size="compact-xs" color="grape" onClick={() => setAbierto(true)}>Cargar datos del comprobante</Button>
                         {isAdmin && <Button size="compact-xs" color="red" variant="subtle" leftSection={<IconTrash size={12} />} onClick={eliminar} loading={guardando}>Quitar (el cliente no retiene)</Button>}
                     </Group>
                 </Alert>
             ) : (
                 <Box mt="xs">
-                    <Button fullWidth size="xs" variant="light" color="grape" onClick={() => setAbierto(true)}>Registrar retención de IVA</Button>
+                    <Button fullWidth size="xs" variant="light" color="grape" onClick={declarar} loading={guardando}>El cliente retuvo el 75 % del IVA</Button>
+                    <Text size="xs" c="dimmed" mt={4}>Baja la deuda desde ya. Los datos del comprobante se cargan después, cuando el cliente te los pase.</Text>
                 </Box>
             )}
 

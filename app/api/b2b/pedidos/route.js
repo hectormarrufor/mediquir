@@ -5,7 +5,6 @@ import { calcularFactura, precioParaCliente } from '@/app/constants/facturacion'
 import { presentacionDe } from '@/app/constants/presentaciones';
 import { requerirCliente } from '../../_lib/acceso';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
-import { crearRetencionPendiente } from '../../_lib/retencionesVenta';
 import { tasaVigente } from '../../_lib/tasaBcv';
 import { ESTADOS_ACTIVOS, Op, creditoDeCliente, hoyCaracas, resumenPedido, ventasDelCliente } from '../_lib';
 
@@ -209,10 +208,6 @@ export async function POST(request) {
                 solicitadoPorId: sesion.id || null,
             }, { transaction: t });
         }
-
-        // Factura a un contribuyente especial: la retención de IVA queda calculada (falta el comprobante del cliente) y se descuenta del saldo
-        // (en revisión de existencias se calcula al confirmar el pedido, con los renglones ya ajustados)
-        if (!enRevision) await crearRetencionPendiente({ venta, transaction: t });
 
         await t.commit();
 
