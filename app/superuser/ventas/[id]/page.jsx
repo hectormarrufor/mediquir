@@ -100,7 +100,6 @@ export default function DetallePedidoMayorPage() {
     const retEsperada = puedeRetener ? Math.round(Number(pedido.montoIva) * 75) / 100 : 0;
     const montoEnCuenta = formAbono.values.monedaAbono === monedaCuenta ? Number(formAbono.values.montoAbono) || 0 : (precioBCV > 0 ? (monedaCuenta === 'USD' ? aDolares(Number(formAbono.values.montoAbono) || 0, precioBCV) : aBolivares(Number(formAbono.values.montoAbono) || 0, precioBCV)) : 0);
     const parecioRetener = puedeRetener && montoEnCuenta > 0 && Math.abs(montoEnCuenta + retEsperada - saldoCuenta) <= (monedaCuenta === 'USD' ? 1 : 1 * tasaDoc);
-    const ivaReferencialNE = pedido.tipoDocumento === 'NOTA_ENTREGA' ? Math.round((pedido.detalles || []).reduce((a, d) => a + Number(d.subtotal ?? d.precioUnitario * d.cantidad) * (d.isFicticio ? 0 : Number(d.producto?.porcentajeIva ?? 16)) / 100, 0) * 100) / 100 : 0;
     const equivalente = (v) => (pedido.moneda === 'BS' ? `$${aDolares(Number(v) || 0, tasaDoc).toFixed(2)}` : `Bs ${aBolivares(Number(v) || 0, tasaDoc).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
     // --- HANDLERS ---
@@ -348,7 +347,6 @@ export default function DetallePedidoMayorPage() {
                                 <Stack gap={4} mt="md" ml="auto" maw={360}>
                                     <Group justify="space-between"><Text size="sm" c="dimmed">Subtotal</Text><PrecioVisual valor={pedido.subtotal} simbolo={pedido.moneda} size="sm" fw={600} /></Group>
                                     {Number(pedido.montoIva) > 0 && <Group justify="space-between"><Text size="sm" c="dimmed">IVA</Text><PrecioVisual valor={pedido.montoIva} simbolo={pedido.moneda} size="sm" fw={600} /></Group>}
-                                    {pedido.tipoDocumento === 'NOTA_ENTREGA' && ivaReferencialNE > 0 && <Group justify="space-between"><Text size="sm" c="dimmed">IVA 16% (referencial, no se cobra)</Text><PrecioVisual valor={ivaReferencialNE} simbolo={pedido.moneda} size="sm" fw={600} c="dimmed" /></Group>}
                                     {Number(pedido.costoFlete) > 0 && <Group justify="space-between"><Text size="sm" c="dimmed">{pedido.tipoVenta === 'ONLINE' ? 'Delivery' : 'Flete'}</Text><PrecioVisual valor={pedido.costoFlete} simbolo={pedido.moneda} size="sm" fw={600} /></Group>}
                                     <Divider />
                                     <Group justify="space-between"><Text fw={800}>Total</Text><PrecioVisual valor={pedido.totalFinal} simbolo={pedido.moneda} size="lg" fw={900} c="blue.9" /></Group>

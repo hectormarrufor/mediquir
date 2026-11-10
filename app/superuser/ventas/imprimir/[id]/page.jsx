@@ -59,10 +59,10 @@ export default function ImprimirRecibo() {
     
     const tituloDocumento = esFactura ? 'Factura' : (esNotaEntrega ? 'Nota de Entrega' : 'Recibo de Venta');
     
-    const totalBs = venta.moneda === 'BS' ? Number(venta.totalFinal) : Number(venta.totalFinal) * Number(venta.tasaCambio);
-    const totalUsd = venta.moneda === 'USD' ? Number(venta.totalFinal) : Number(venta.totalFinal) / Number(venta.tasaCambio);
+    let totalBs = venta.moneda === 'BS' ? Number(venta.totalFinal) : Number(venta.totalFinal) * Number(venta.tasaCambio);
+    let totalUsd = venta.moneda === 'USD' ? Number(venta.totalFinal) : Number(venta.totalFinal) / Number(venta.tasaCambio);
     
-    // En la nota de entrega las líneas se guardan sin IVA (aplicaIva=false): el IVA referencial sale de la alícuota de cada producto. La nota de entrega SÍ lleva IVA, pero el cliente solo paga la base imponible: el IVA se muestra como referencia (no se cobra ni entra a libros)
+    // En la nota de entrega las líneas se guardan sin IVA (aplicaIva=false): el IVA referencial sale de la alícuota de cada producto. En la planilla impresa se muestra como una factura: base imponible, IVA y total con IVA (en el sistema la nota guarda y cobra solo la base)
     const ivaReferencial = esNotaEntrega
         ? Math.round((venta.detalles || []).reduce((a, d) => a + Number(d.subtotal) * (d.isFicticio ? 0 : Number(d.producto?.porcentajeIva ?? 16)) / 100, 0) * 100) / 100
         : 0;
@@ -70,13 +70,15 @@ export default function ImprimirRecibo() {
     const ivaBs = venta.moneda === 'BS' ? ivaDoc : ivaDoc * Number(venta.tasaCambio);
     const ivaUsd = venta.moneda === 'USD' ? ivaDoc : ivaDoc / Number(venta.tasaCambio);
 
+    // El total de la nota guardada es la base: en la planilla se le suma el IVA
+    if (esNotaEntrega) { totalBs += ivaBs; totalUsd += ivaUsd; }
+
     // Recibo de venta (V-) de la tienda: desglosa el IVA cobrado, pero NO es un documento fiscal
     const conIva = ivaDoc > 0;
     const fleteBs = venta.moneda === 'BS' ? Number(venta.costoFlete || 0) : Number(venta.costoFlete || 0) * Number(venta.tasaCambio);
     const fleteUsd = venta.moneda === 'USD' ? Number(venta.costoFlete || 0) : Number(venta.costoFlete || 0) / Number(venta.tasaCambio);
-    // En la nota de entrega el total ya es la base (el IVA no se suma)
-    const baseBs = totalBs - (esNotaEntrega ? 0 : ivaBs) - fleteBs;
-    const baseUsd = totalUsd - (esNotaEntrega ? 0 : ivaUsd) - fleteUsd;
+    const baseBs = totalBs - ivaBs - fleteBs;
+    const baseUsd = totalUsd - ivaUsd - fleteUsd;
     const noFiscal = venta.tipoDocumento === 'VENTA_RAPIDA' || esNotaEntrega;
 
     const formatoNumero = (num) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
@@ -177,7 +179,7 @@ export default function ImprimirRecibo() {
                                 <td className="total-cell border-right text-center">
                                     {conIva ? (
                                         <>
-                                            <span className="label-red">{esNotaEntrega ? 'IVA 16% (REFERENCIAL, NO SE COBRA):' : 'TOTAL IMPUESTO: 16%'}</span><br/>
+                                            <span className="label-red">TOTAL IMPUESTO: 16%</span><br/>
                                             <div className="monto-split">
                                                 <strong>{formatoNumero(ivaBs)} <span className="label-red">Bs.</span></strong>
                                                 <strong>{formatoNumero(ivaUsd)} <span className="label-red">USD</span></strong>
