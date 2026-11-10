@@ -64,7 +64,7 @@ export default function ImprimirRecibo() {
     
     // En la nota de entrega las líneas se guardan sin IVA (aplicaIva=false): el IVA referencial sale de la alícuota de cada producto. En la planilla impresa se muestra como una factura: base imponible, IVA y total con IVA (en el sistema la nota guarda y cobra solo la base)
     const ivaReferencial = esNotaEntrega
-        ? Math.round((venta.detalles || []).reduce((a, d) => a + Number(d.subtotal) * (d.isFicticio ? 0 : Number(d.producto?.porcentajeIva ?? 16)) / 100, 0) * 100) / 100
+        ? Math.round((venta.detalles || []).reduce((a, d) => a + Number(d.subtotal) * (d.isFicticio ? (d.aplicaIva ? 16 : 0) : Number(d.producto?.porcentajeIva ?? 16)) / 100, 0) * 100) / 100
         : 0;
     const ivaDoc = esNotaEntrega ? ivaReferencial : Number(venta.montoIva);
     const ivaBs = venta.moneda === 'BS' ? ivaDoc : ivaDoc * Number(venta.tasaCambio);
