@@ -18,6 +18,12 @@ export async function generarComisionPorPago({ abono, transaction: t }) {
     if (/nota de cr|retenci/i.test(abono.metodoPago || '')) return []; // ni una nota de crédito ni la retención de IVA son dinero que comisiona
     const padres = await ComisionVenta.findAll({ where: { ventaId: abono.ventaId, concepto: 'FACTURA' }, transaction: t });
     if (!padres.length) return [];
+    // Un solo pago que salda la factura completa (con la retención ya descontada) NO es un abono: la comisión es la de la propia línea de la factura
+    const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: abono.ventaId }, transaction: t });
+    if (cxc && cxc.moneda === 'USD' && Number(cxc.saldoPendiente) - monto <= 0.01) {
+        const previos = await Abono.count({ where: { ventaId: abono.ventaId, id: { [db.Sequelize.Op.ne]: abono.id }, metodoPago: { [db.Sequelize.Op.notRegexp]: 'etenci|ota de cr' } }, transaction: t });
+        if (!previos) return [];
+    }
     const marca = `Pago #${abono.id}`;
     const venta = await Venta.findByPk(abono.ventaId, { attributes: ['numeroDocumento', 'clienteId'], transaction: t });
     const cliente = venta?.clienteId ? await Cliente.findByPk(venta.clienteId, { attributes: ['nombre'], transaction: t }) : null;
