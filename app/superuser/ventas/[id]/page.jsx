@@ -749,7 +749,7 @@ export default function DetallePedidoMayorPage() {
             <Modal {...PANTALLA_COMPLETA_MOVIL} opened={modalCobroTienda} onClose={() => setModalCobroTienda(false)} title={<Title order={4} c="green.9">Registrar cobro en tienda</Title>} centered>
                 <Stack gap="md">
                     <Text size="sm">El cliente paga el total de la compra <b>{pedido.numeroDocumento}</b>: <PrecioVisual valor={pedido.totalFinal} simbolo={pedido.moneda} size="sm" fw={800} /> (≈ {equivalente(pedido.totalFinal)} a la tasa del pedido).</Text>
-                    <Select label="¿Cómo pagó?" allowDeselect={false} data={['Efectivo ($)', 'Efectivo (Bs)', 'Pago Móvil', 'Punto de Venta', 'Transferencia', 'Zelle']}
+                    <Select label="¿Cómo pagó?" allowDeselect={false} data={['Efectivo ($)', 'Efectivo (Bs)', 'Pago Móvil', 'Punto de Venta Provincial', 'Punto de Venta Banesco', 'Biopago', 'Transferencia', 'Zelle']}
                         value={cobroTienda.metodoPago} onChange={(v) => setCobroTienda((c) => ({ ...c, metodoPago: v }))} />
                     <TextInput label="Referencia (opcional)" placeholder="Número de la operación" value={cobroTienda.referencia} onChange={(e) => { const v = e.currentTarget.value; setCobroTienda((c) => ({ ...c, referencia: v })); }} />
                     <Text size="xs" c="dimmed">El pedido queda pagado y el ingreso entra hoy a caja. Si el pago fue por Pago Móvil y llegó el aviso del banco, mejor vincúlalo desde Pagos recibidos.</Text>
@@ -773,7 +773,7 @@ export default function DetallePedidoMayorPage() {
                         {formAbono.values.monedaAbono !== monedaCuenta && (
                             <Text size="xs" c="orange.8">Se convierte con la tasa BCV de hoy ({precioBCV || '…'} Bs/$){precioBCV > 0 && Number(formAbono.values.montoAbono) > 0 ? `: equivale a ${monedaCuenta === 'USD' ? `$${aDolares(Number(formAbono.values.montoAbono), precioBCV).toFixed(2)}` : `Bs ${aBolivares(Number(formAbono.values.montoAbono), precioBCV).toFixed(2)}`}` : ''}.</Text>
                         )}
-                        <Select label="Método de pago" data={['Transferencia', 'Pago Móvil', 'Efectivo', 'Zelle', 'Punto de Venta']} allowDeselect={false} withAsterisk {...formAbono.getInputProps('metodoPago')} />
+                        <Select label="Método de pago" data={['Transferencia', 'Pago Móvil', 'Efectivo', 'Zelle', 'Punto de Venta Provincial', 'Punto de Venta Banesco', 'Biopago']} allowDeselect={false} withAsterisk {...formAbono.getInputProps('metodoPago')} />
                         <TextInput label="Referencia (Opcional)" placeholder="Nro de recibo o transferencia" {...formAbono.getInputProps('referencia')} />
                         {puedeRetener && (
                             <Switch color="grape" fw={700} checked={formAbono.values.retuvo} onChange={(e) => formAbono.setFieldValue('retuvo', e.currentTarget.checked)}
