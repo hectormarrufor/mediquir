@@ -131,6 +131,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             tipoPrecio: 'precio7', 
             conIva: true,
             condicionPago: 'Contado',
+            diasCredito: 15, // solo a crédito: arranca con los días del cliente
             metodoPago: 'Efectivo ($)', 
             referencia: '',
             quienRetira: '',
@@ -206,6 +207,25 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tipoVenta]);
+
+    // ---- Días de crédito: arrancan con los del cliente; solo administración los cambia (de esta factura o también de las futuras del cliente)
+    const esCredito = formVenta.values.condicionPago === 'Credito';
+    const clienteDelCredito = clientes?.find((c) => c.id.toString() === formVenta.values.clienteId?.toString());
+    const diasDelCliente = Number(clienteDelCredito?.diasCredito) > 0 ? Number(clienteDelCredito.diasCredito) : 15;
+    const [alcanceDias, setAlcanceDias] = useState(null); // { valor, alcance: 'factura' | 'cliente' } del cambio ya confirmado
+    const [preguntarDias, setPreguntarDias] = useState(null); // valor nuevo pendiente de decidir su alcance
+    useEffect(() => {
+        formVenta.setFieldValue('diasCredito', diasDelCliente);
+        setAlcanceDias(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formVenta.values.clienteId, formVenta.values.condicionPago, clienteDelCredito?.diasCredito]);
+    const confirmarDias = () => {
+        const v = Math.floor(Number(formVenta.values.diasCredito));
+        if (!(v >= 0)) { formVenta.setFieldValue('diasCredito', diasDelCliente); setAlcanceDias(null); return; }
+        if (v === diasDelCliente) { setAlcanceDias(null); return; }
+        if (alcanceDias?.valor === v) return;
+        setPreguntarDias(v);
+    };
 
     // Misma función que usa el servidor para cobrarle a un vendedor: el precio que se ve es el que se acepta.
     // Un vendedor no ve costos, así que el Precio 6 faltante nunca se rellena con el costo.
@@ -432,6 +452,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 moneda: simboloMoneda === 'Bs' ? 'BS' : 'USD',
                 tasaCambio: tasaBcv,
                 condicionPago: formVenta.values.condicionPago,
+                ...(esCredito ? { diasCredito: Math.floor(Number(formVenta.values.diasCredito)), actualizarDiasCliente: alcanceDias?.alcance === 'cliente' && alcanceDias.valor === Math.floor(Number(formVenta.values.diasCredito)) } : {}),
                 metodoPago: formVenta.values.condicionPago === 'Contado' ? formVenta.values.metodoPago : null,
                 referencia: formVenta.values.condicionPago === 'Contado' ? (formVenta.values.referencia || null) : null,
                 quienRetira: formVenta.values.quienRetira || null, 
@@ -463,6 +484,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             notifications.show({ title: 'Éxito', message: `Venta registrada: ${data.numeroDocumento}`, color: 'green' });
             // El próximo número de documento y el stock cambiaron: la siguiente venta debe verlos al día
             queryClient.invalidateQueries({ queryKey: ['correlativos-pos'] });
+            queryClient.invalidateQueries({ queryKey: ['clientes-pos'] }); // por si cambiaron los días de crédito del cliente
             queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
             queryClient.invalidateQueries({ queryKey: ['ventas'] });
 
@@ -681,11 +703,21 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const filaIvaCondicion = !esPresupuesto && (
         <Group mb="sm" justify="space-between" align="center" wrap="nowrap" gap="sm">
             <Checkbox size={isMobile ? 'md' : 'sm'} label={<Text fw={600} size="sm">IVA (16%)</Text>} {...formVenta.getInputProps('conIva', { type: 'checkbox' })} />
-            {tipoVenta === 'MAYOR' && (
+            {(tipoVenta === 'MAYOR' || puedeEditarPrecio) && (
                 <Select size={isMobile ? 'md' : 'xs'} w={isMobile ? 150 : 120} aria-label="Condición de pago" allowDeselect={false}
                     data={[{ value: 'Contado', label: 'Contado' }, { value: 'Credito', label: 'Crédito' }]} {...formVenta.getInputProps('condicionPago')} />
             )}
         </Group>
+    );
+
+    const filaCredito = !esPresupuesto && esCredito && (
+        <Box mb="sm">
+            <NumberInput label="Días de crédito" size={tamCampo} min={0} max={365} allowDecimal={false} allowNegative={false} inputMode="numeric" w={isMobile ? '100%' : 180}
+                readOnly={!puedeEditarPrecio} disabled={!formVenta.values.clienteId}
+                description={!formVenta.values.clienteId ? 'Elige el cliente' : `El cliente tiene ${diasDelCliente} días${puedeEditarPrecio ? '' : ' (solo administración los cambia)'}`}
+                {...formVenta.getInputProps('diasCredito')} onBlur={confirmarDias} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmarDias(); } }} />
+            {alcanceDias && <Text size="xs" c="dimmed" mt={2}>{alcanceDias.alcance === 'cliente' ? `Se guardará también como los días de crédito de ${clienteDelCredito?.nombre || 'este cliente'}.` : 'Solo para esta factura.'}</Text>}
+        </Box>
     );
 
     const filaPago = !esPresupuesto && formVenta.values.condicionPago === 'Contado' && (
@@ -876,6 +908,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                         </Group>
                         {filaIvaCondicion}
                         {filaPago}
+                        {filaCredito}
 
                         <ScrollArea style={{ flex: '1 0 200px' }} offsetScrollbars type="auto" mb="sm">
                             {carrito.length ? tablaCarrito : <Text c="dimmed" ta="center" size="sm" py="xl">Haz clic en un producto de la lista para agregarlo.</Text>}
@@ -1015,6 +1048,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                 <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb={6}>Cobro</Text>
                                 {filaIvaCondicion}
                                 {filaPago}
+                                {filaCredito}
+                        {filaCredito}
                                 {formVenta.values.condicionPago !== 'Contado' && <Text size="xs" c="dimmed">A crédito: el cliente queda debiendo y los abonos se registran después en Cuentas por cobrar.</Text>}
                             </Paper>
                         )}
@@ -1146,6 +1181,14 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             </Modal>
 
             {/* VISTA PREVIA: la hoja tal como saldrá, para confirmar antes de asentar */}
+            <Modal opened={preguntarDias !== null} onClose={() => { setPreguntarDias(null); formVenta.setFieldValue('diasCredito', alcanceDias?.valor ?? diasDelCliente); }} centered zIndex={3000} title={<Text fw={800}>Días de crédito: {preguntarDias}</Text>}>
+                <Stack gap="sm">
+                    <Text size="sm">{clienteDelCredito?.nombre} tiene {diasDelCliente} días de crédito. ¿Los {preguntarDias} días son solo para esta factura o también para las futuras de este cliente?</Text>
+                    <Button onClick={() => { setAlcanceDias({ valor: preguntarDias, alcance: 'factura' }); setPreguntarDias(null); }}>Solo esta factura</Button>
+                    <Button variant="light" onClick={() => { setAlcanceDias({ valor: preguntarDias, alcance: 'cliente' }); setPreguntarDias(null); }}>Esta y las futuras del cliente</Button>
+                    <Button variant="default" onClick={() => { setPreguntarDias(null); formVenta.setFieldValue('diasCredito', diasDelCliente); setAlcanceDias(null); }}>Cancelar</Button>
+                </Stack>
+            </Modal>
             <Modal
                 opened={previewAbierto} onClose={() => setPreviewAbierto(false)} size="1000px" fullScreen={isMobile} classNames={isMobile ? { content: CONTENIDO_SIN_RELLENO } : undefined}
                 title={<Title order={4} c="blue.9" component="div">Confirme el Documento</Title>}
@@ -1208,7 +1251,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                 <table className="doc-meta">
                                     <tbody>
                                         <tr><td className="text-right fw-bold" style={{ width: '60%' }}>ORDEN DE COMPRA</td><td>Emisión: {fechaEmision}</td></tr>
-                                        <tr><td className="text-right">Condiciones de la Transacción<br/><strong>{formVenta.values.condicionPago === 'Credito' ? 'Crédito' : formVenta.values.condicionPago}</strong></td><td className="valign-bottom">Vence: {fechaEmision}</td></tr>
+                                        <tr><td className="text-right">Condiciones de la Transacción<br/><strong>{formVenta.values.condicionPago === 'Credito' ? 'Crédito' : formVenta.values.condicionPago}</strong></td><td className="valign-bottom">Vence: {esCredito ? formatearFecha(new Date(Date.now() + (Number(formVenta.values.diasCredito) || 0) * 86400000)) : fechaEmision}</td></tr>
                                     </tbody>
                                 </table>
                             </div>

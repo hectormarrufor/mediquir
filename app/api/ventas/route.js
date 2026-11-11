@@ -111,6 +111,7 @@ export async function POST(request) {
         const {
             tipoVenta, tipoDocumento, clienteId, moneda, condicionPago, quienRetira, costoFlete,
             detalles, metodoPago, referencia, numeroDocumentoManual, vendedorId, numeroControl, fechaEmision: fechaEmisionBody,
+            diasCredito: diasCreditoBody, actualizarDiasCliente,
         } = body;
 
         if (!Array.isArray(detalles) || detalles.length === 0) {
@@ -132,6 +133,10 @@ export async function POST(request) {
         }
         if (!['USD', 'BS'].includes(moneda)) throw new ErrorNegocio('Moneda inválida');
         if (condicionPago === 'Credito' && !clienteId) throw new ErrorNegocio('Una venta a crédito requiere un cliente');
+        // El detal a crédito (y toda venta sin factura al detal) solo lo saca administración: un vendedor vende de contado
+        if (condicionPago === 'Credito' && esVend && (tipoVenta === 'DETAL' || tipoDocumento === 'VENTA_RAPIDA')) {
+            throw new ErrorNegocio('Un vendedor solo puede vender al detal de contado: el crédito al detal lo da administración', 403);
+        }
 
         // Fecha de emisión: hoy, o la que indique un administrador (YYYY-MM-DD, nunca futura) para copiar un documento que el sistema anterior emitió otro día.
         // Con esa fecha la venta toma la tasa BCV de ESE día (la tasa la pone el servidor, no el navegador).
@@ -215,6 +220,15 @@ export async function POST(request) {
             const clienteCredito = await Cliente.findByPk(clienteId, { attributes: ['id', 'diasCredito'], transaction: t });
             if (!clienteCredito) throw new ErrorNegocio('El cliente de la venta a crédito no existe');
             if (Number(clienteCredito.diasCredito) > 0) diasCredito = Number(clienteCredito.diasCredito);
+            // Solo administración cambia los días: los de esta factura, y si lo pide, también los del cliente para las próximas
+            const diasPedidos = Number(diasCreditoBody);
+            if (!esVend && Number.isInteger(diasPedidos) && diasPedidos >= 0 && diasPedidos <= 365) {
+                diasCredito = diasPedidos;
+                if (actualizarDiasCliente === true && diasPedidos !== Number(clienteCredito.diasCredito)) {
+                    clienteCredito.diasCredito = diasPedidos;
+                    await clienteCredito.save({ transaction: t });
+                }
+            }
         }
         const fechaVencimiento = condicionPago === 'Credito' ? new Date((momentoDoc ? momentoDoc.getTime() : Date.now()) + diasCredito * 86400000) : null;
         const nuevaVenta = await Venta.create({
