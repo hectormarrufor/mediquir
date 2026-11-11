@@ -9,7 +9,7 @@ import { fechaCaracas } from '@/app/constants/hora';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 const fechaLarga = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}` : '');
-const DOC = { FACTURA: 'Factura', NOTA_ENTREGA: 'N. entrega', VENTA_RAPIDA: 'V. rápida' };
+const DOC = { FACTURA: 'Factura', NOTA_DEBITO: 'N. débito' };
 const COLOR_ESTADO = { Pag: 'teal', Abo: 'orange', Pen: 'gray' };
 const esDolares = (metodo) => /\(\$\)|zelle/i.test(metodo);
 
@@ -96,9 +96,9 @@ export default function CierreCajaPage() {
                                 </Table.Thead>
                                 <Table.Tbody>
                                     {data.facturas.map((f) => (
-                                        <Table.Tr key={f.id} style={{ cursor: 'pointer' }} onClick={() => router.push(`/superuser/ventas/${f.id}`)}>
+                                        <Table.Tr key={f.id} style={{ cursor: 'pointer' }} onClick={() => router.push(`/superuser/ventas/${f.ventaId || f.id}`)}>
                                             <Table.Td><Text size="sm" fw={600}>{f.numero}</Text><Text size="xs" c="dimmed">{DOC[f.tipoDocumento]}</Text></Table.Td>
-                                            <Table.Td><Badge size="sm" variant="light" color={COLOR_ESTADO[f.estado]}>{f.estado}</Badge></Table.Td>
+                                            <Table.Td>{f.estado && <Badge size="sm" variant="light" color={COLOR_ESTADO[f.estado]}>{f.estado}</Badge>}</Table.Td>
                                             <Table.Td>{f.rif}</Table.Td>
                                             <Table.Td>{f.cliente || '—'}</Table.Td>
                                             <Table.Td>{f.condicion === 'Credito' ? 'CRÉDITO' : 'CONTADO'}</Table.Td>

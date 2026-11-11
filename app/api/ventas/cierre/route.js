@@ -17,7 +17,7 @@ export async function GET(request) {
         const fecha = new URL(request.url).searchParams.get('fecha');
         if (!FECHA.test(fecha || '')) return NextResponse.json({ error: 'Fecha inválida' }, { status: 400 });
 
-        const [facturas, devoluciones, cobros] = await Promise.all([
+        const [facturas, debitos, devoluciones, cobros] = await Promise.all([
             consulta(`
                 SELECT v.id::text AS id, v."numeroDocumento" AS numero, v."tipoDocumento"::text AS "tipoDocumento", v."condicionPago"::text AS condicion,
                        v."statusPago"::text AS pago, c.nombre AS cliente, c.identificacion AS rif,
@@ -26,8 +26,15 @@ export async function GET(request) {
                        EXISTS (SELECT 1 FROM "Abonos" a WHERE a."ventaId" = v.id) AS abonada
                   FROM "Ventas" v LEFT JOIN "Clientes" c ON c.id = v."clienteId"
                  WHERE (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date = :fecha
-                   AND v."statusDespacho" <> 'Cancelado' AND v."tipoDocumento" IN ('FACTURA', 'NOTA_ENTREGA', 'VENTA_RAPIDA')
+                   AND v."statusDespacho" <> 'Cancelado' AND v."tipoDocumento" = 'FACTURA'
                  ORDER BY v."createdAt"`, { fecha }),
+            consulta(`
+                SELECT n.id::text AS id, n."ventaId"::text AS "ventaId", n."numeroDocumento" AS numero, 'NOTA_DEBITO' AS "tipoDocumento", 'Credito' AS condicion, '' AS estado,
+                       c.nombre AS cliente, c.identificacion AS rif,
+                       (CASE WHEN n.moneda = 'BS' THEN n."totalFinal" ELSE n."totalFinal" * n."tasaCambio" END)::float AS "totalBs"
+                  FROM "NotasFiscales" n LEFT JOIN "Clientes" c ON c.id = n."clienteId"
+                 WHERE n.origen = 'VENTA' AND n.tipo = 'DEBITO' AND n.estado = 'EMITIDA' AND n.fecha = :fecha
+                 ORDER BY n."createdAt"`, { fecha }),
             consulta(`
                 SELECT n.id::text AS id, n."ventaId"::text AS "ventaId", n."numeroDocumento" AS numero, c.nombre AS cliente, c.identificacion AS rif,
                        (CASE WHEN n.moneda = 'BS' THEN n."totalFinal" ELSE n."totalFinal" * n."tasaCambio" END)::float AS "totalBs",
@@ -44,7 +51,8 @@ export async function GET(request) {
         ]);
 
         const doc = (f) => ({ ...f, estado: f.pago === 'Pagado' ? 'Pag' : f.abonada ? 'Abo' : 'Pen' });
-        const lista = facturas.map(doc);
+        // Las notas de débito suben la deuda del cliente: van con las facturas, en crédito
+        const lista = [...facturas.map(doc), ...debitos];
         const totalCredito = r2(lista.filter((f) => f.condicion === 'Credito').reduce((s, f) => s + f.totalBs, 0));
         const totalContado = r2(lista.filter((f) => f.condicion !== 'Credito').reduce((s, f) => s + f.totalBs, 0));
         const totalDevoluciones = r2(devoluciones.reduce((s, d) => s + d.totalBs, 0));
