@@ -6,7 +6,7 @@ import {
     Modal, Button, Group, Title, TextInput, NumberInput, 
     Select, Paper, Stack, Grid, Table, ActionIcon, 
     Text, Divider, Badge, Checkbox, Box, ScrollArea, Avatar, ThemeIcon, Textarea,
-    SegmentedControl, SimpleGrid, CloseButton, UnstyledButton
+    Alert, SegmentedControl, SimpleGrid, CloseButton, UnstyledButton
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query'; // 🔥 AÑADIDO useQueryClient
@@ -219,6 +219,15 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         setAlcanceDias(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formVenta.values.clienteId, formVenta.values.condicionPago, clienteDelCredito?.diasCredito]);
+    // Cliente con crédito habilitado (días y pedidos a crédito mayores a 0): la venta al mayor arranca A CRÉDITO; si no, de contado.
+    // Se decide al elegir el cliente y se puede cambiar en el selector «Forma de cobro».
+    useEffect(() => {
+        if (esPresupuesto || tipoVenta !== 'MAYOR' || !formVenta.values.clienteId) return;
+        const c = clientes?.find((x) => x.id.toString() === formVenta.values.clienteId.toString());
+        if (!c) return;
+        formVenta.setFieldValue('condicionPago', Number(c.diasCredito) > 0 && Number(c.maxPedidosCredito) > 0 ? 'Credito' : 'Contado');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formVenta.values.clienteId]);
     const confirmarDias = () => {
         const v = Math.floor(Number(formVenta.values.diasCredito));
         if (!(v >= 0)) { formVenta.setFieldValue('diasCredito', diasDelCliente); setAlcanceDias(null); return; }
@@ -718,14 +727,28 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         <Select label="Tarifa" size={tamCampo} data={opcionesTarifa} allowDeselect={false} {...formVenta.getInputProps('tipoPrecio')} />
     );
 
+    // «Forma de cobro»: grande y a la vista, porque de ella depende que la factura registre el pago (contado) o quede una cuenta por cobrar (crédito)
+    const selectorCobro = !esPresupuesto && (tipoVenta === 'MAYOR' || puedeEditarPrecio) && (
+        <Box mb="sm">
+            <Text size="sm" fw={700} mb={4}>Forma de cobro</Text>
+            <SegmentedControl fullWidth size={isMobile ? 'md' : 'sm'} value={formVenta.values.condicionPago} onChange={(v) => formVenta.setFieldValue('condicionPago', v)}
+                color={formVenta.values.condicionPago === 'Credito' ? 'orange.7' : 'green.7'}
+                data={[{ value: 'Contado', label: 'Contado (cobra ahora)' }, { value: 'Credito', label: 'Crédito (queda por cobrar)' }]} />
+            <Text size="xs" mt={4} fw={600} c={formVenta.values.condicionPago === 'Credito' ? 'orange.8' : 'green.8'}>
+                {formVenta.values.condicionPago === 'Credito'
+                    ? `Esta venta saldrá A CRÉDITO${formVenta.values.clienteId ? ` a ${Number(formVenta.values.diasCredito) || diasDelCliente} días` : ' (elige el cliente)'}: no se registra pago, queda en Cuentas por cobrar.`
+                    : 'Esta venta saldrá DE CONTADO: se registra el pago ahora.'}
+            </Text>
+        </Box>
+    );
+
     const filaIvaCondicion = !esPresupuesto && (
-        <Group mb="sm" justify="space-between" align="center" wrap="nowrap" gap="sm">
-            <Checkbox size={isMobile ? 'md' : 'sm'} label={<Text fw={600} size="sm">IVA (16%)</Text>} {...formVenta.getInputProps('conIva', { type: 'checkbox' })} />
-            {(tipoVenta === 'MAYOR' || puedeEditarPrecio) && (
-                <Select size={isMobile ? 'md' : 'xs'} w={isMobile ? 150 : 120} aria-label="Condición de pago" allowDeselect={false}
-                    data={[{ value: 'Contado', label: 'Contado' }, { value: 'Credito', label: 'Crédito' }]} {...formVenta.getInputProps('condicionPago')} />
-            )}
-        </Group>
+        <>
+            <Group mb="sm" justify="space-between" align="center" wrap="nowrap" gap="sm">
+                <Checkbox size={isMobile ? 'md' : 'sm'} label={<Text fw={600} size="sm">IVA (16%)</Text>} {...formVenta.getInputProps('conIva', { type: 'checkbox' })} />
+            </Group>
+            {selectorCobro}
+        </>
     );
 
     const filaCredito = !esPresupuesto && esCredito && (
@@ -1364,13 +1387,22 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     </div>
                 </Box>
 
+                {!esPresupuesto && (
+                    <Alert color={esCredito ? 'orange' : 'green'} variant="filled" radius={0} py={8} style={{ flexShrink: 0 }}>
+                        <Text fw={800} size={isMobile ? 'sm' : 'md'} c="white" ta="center">
+                            {esCredito
+                                ? `ESTA FACTURA SALDRÁ A CRÉDITO${formVenta.values.clienteId ? ` · ${Number(formVenta.values.diasCredito) || diasDelCliente} días · ${clienteSeleccionado?.nombre || ''}` : ''}: queda por cobrar, no se registra pago`
+                                : `ESTA VENTA SALDRÁ DE CONTADO: se registra el pago ahora (${formVenta.values.metodoPago})`}
+                        </Text>
+                    </Alert>
+                )}
                 <Group justify="flex-end" gap="sm" wrap="nowrap" bg="gray.1"
                     style={{ borderTop: '1px solid #ddd', flexShrink: 0, padding: isMobile ? '10px 12px calc(10px + env(safe-area-inset-bottom, 0px))' : 'var(--mantine-spacing-md)' }}>
                     <Button variant="outline" color="gray" onClick={() => setPreviewAbierto(false)} size={isMobile ? 'sm' : 'md'} h={isMobile ? 46 : undefined} style={isMobile ? { flex: 1 } : undefined}>
                         {isMobile ? 'Editar' : 'Volver a Editar'}
                     </Button>
                     <Button color="green.8" leftSection={<IconCheck size={20} />} onClick={handleProcesarVenta} loading={isSubmitting} size={isMobile ? 'sm' : 'md'} h={isMobile ? 46 : undefined} style={isMobile ? { flex: 2 } : undefined}>
-                        Asentar venta
+                        {esPresupuesto ? 'Asentar venta' : (esCredito ? 'Asentar A CRÉDITO' : 'Asentar DE CONTADO')}
                     </Button>
                 </Group>
 
