@@ -82,7 +82,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                     <div className="fl-fechas"><span>Emisión: <b>{fecha(venta.fechaEmision || venta.createdAt)}</b></span>{!sinVence && <span>Vence: <b>{fecha(venta.fechaVencimiento || venta.fechaEmision || venta.createdAt)}</b></span>}</div>
                     <div className="fl-cond">
                         <div><div className="fl-cond-t">{etiquetaCondicion}</div><div className="fl-cond-v">{condicion}</div></div>
-                        <div className="fl-control"><div className="fl-cond-t">Control</div><div className="fl-cond-v">{venta.numeroControl || ''}</div></div>
+                        {/* El N° de control NO se imprime: ya viene en la forma libre preimpresa (el sistema solo lo guarda) */}
                     </div>
                 </div>
 
