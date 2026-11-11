@@ -24,7 +24,7 @@ import SelectorRetencion, { validarRetencion } from './SelectorRetencion';
 import { useAuth } from '@/hooks/useAuth';
 import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 import { numeroALetras } from '@/app/utils/numeroALetras';
-import { calcularFactura, aBolivares, aDolares, precioPorTarifa, precioUnitario } from '@/app/constants/facturacion';
+import { calcularFactura, aBolivares, aDolares, precioPorTarifa } from '@/app/constants/facturacion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
 import { presentacionesDe, presentacionDe } from '@/app/constants/presentaciones';
@@ -411,29 +411,22 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     // Presupuesto con lo que hay en el carrito: no es documento fiscal, no usa correlativo ni toca inventario.
     // El cliente es opcional y SIEMPRE cuenta el IVA de cada producto (aunque la venta esté marcada sin IVA).
-    // El presupuesto se guarda en $: un precio en Bs se pasa a $ con la tarifa equivalente (P4→P7, P5→P6) o a la tasa.
+    // Se guarda en la moneda de la tarifa, tal cual se ve en el carrito: P7/P6 en $, P4/P5 (y P1) en Bs a la tasa del día.
     const guardarPresupuesto = async () => {
         if (carrito.length === 0) return notifications.show({ message: 'El carrito está vacío', color: 'orange' });
-        // El presupuesto muestra también los montos en Bs a la tasa: sin tasa no se puede guardar
+        // El presupuesto muestra también los montos en la otra moneda a la tasa: sin tasa no se puede guardar
         if (!(tasaBcv > 0)) return notifications.show({ message: 'Todavía no hay tasa BCV: espera un momento e intenta de nuevo', color: 'red' });
-        const enUsd = (valor) => precioUnitario(valor / tasaBcv);
-        const precioEnUsd = (item) => {
-            if (item.simbolo !== 'Bs') return item.precio;
-            const equivalente = { precio4: 'precio7', precio5: 'precio6' }[formVenta.values.tipoPrecio];
-            const producto = !item.isFicticio && !item.precioManual && equivalente && productos?.find((p) => p.id === item.id);
-            return producto ? calcularPrecioInfo(producto, equivalente).precio : enUsd(item.precio);
-        };
         const renglones = carrito.map((item) => ({
             productoId: item.isFicticio ? null : item.id,
             codigo: item.codigo,
             nombre: !item.isFicticio && item.presentacion !== 'UNIDAD' ? `${item.nombre} (${item.cantidadPres} ${item.presentacionEtiqueta})` : item.nombre,
             marca: item.isFicticio ? null : (item.marcaNombre || null),
             cantidad: item.cantidad, // siempre en unidades
-            precioUnitario: precioEnUsd(item),
+            precioUnitario: item.precio,
             aplicaIva: item.isFicticio ? Boolean(item.aplicaIva) : item.porcentajeIva > 0,
             porcentajeIva: item.isFicticio ? undefined : item.porcentajeIva,
         }));
-        if (costoFleteNum > 0) renglones.push({ codigo: '', nombre: 'Flete', cantidad: 1, precioUnitario: esMonedaBs ? enUsd(costoFleteNum) : costoFleteNum, aplicaIva: false });
+        if (costoFleteNum > 0) renglones.push({ codigo: '', nombre: 'Flete', cantidad: 1, precioUnitario: costoFleteNum, aplicaIva: false });
 
         setGuardandoPresupuesto(true);
         try {
@@ -441,7 +434,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 method: editando ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     clienteId: clienteSeleccionado?.id || null, clienteNombre: clienteSeleccionado?.nombre || '',
-                    tarifa: formVenta.values.tipoPrecio, tasaCambio: tasaBcv, renglones,
+                    tarifa: formVenta.values.tipoPrecio, moneda: esMonedaBs ? 'BS' : 'USD', tasaCambio: tasaBcv, renglones,
                     ...(esPresupuesto ? { validoDias: formVenta.values.validoDias, notas: formVenta.values.notas } : {}),
                 }),
             });
@@ -579,12 +572,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const opcionesTarifa = [
         { value: 'precio7', label: 'P7 (Detal USD)' },
         { value: 'precio6', label: 'P6 (Mayor USD)' },
-        // El presupuesto se guarda en $ (y muestra el equivalente en Bs a la tasa): solo tarifas en $
-        ...(esPresupuesto ? [] : [
-            { value: 'precio4', label: 'P4 (P7 en Bs)' },
-            { value: 'precio5', label: 'P5 (P6 en Bs)' },
-            ...(esVendedor ? [] : [{ value: 'precio1', label: 'P1 (35% en Bs)' }]), // deriva del costo: solo administración
-        ]),
+        // P4/P5: P7/P6 en Bs a la tasa del día (el presupuesto en Bs se guarda en Bs y muestra el equivalente en $)
+        { value: 'precio4', label: 'P4 (P7 en Bs)' },
+        { value: 'precio5', label: 'P5 (P6 en Bs)' },
+        ...(esVendedor || esPresupuesto ? [] : [{ value: 'precio1', label: 'P1 (35% en Bs)' }]), // deriva del costo: solo administración y solo en ventas
     ];
     const etiquetaTarifa = opcionesTarifa.find((o) => o.value === formVenta.values.tipoPrecio)?.label || '';
 

@@ -12,7 +12,9 @@ const Presupuesto = sequelize.define('Presupuesto', {
     clienteNombre: { type: DataTypes.STRING, allowNull: false },
     clienteIdentificacion: { type: DataTypes.STRING, allowNull: true },
     clienteDireccion: { type: DataTypes.TEXT, allowNull: true },
-    tarifa: { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'precio6' }, // precio6 (mayor) o precio7 (detal): solo de referencia, cada renglón guarda su propio precio
+    tarifa: { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'precio6' }, // precio6/precio7 ($) o precio4/precio5 (Bs): solo de referencia, cada renglón guarda su propio precio
+    // Moneda de los precios y totales: 'USD' o 'BS' (P4/P5, a la tasa del día). Los anteriores a este campo están todos en $.
+    moneda: { type: DataTypes.STRING(3), allowNull: false, defaultValue: 'USD', validate: { isIn: [['USD', 'BS']] } },
     tasaCambio: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 1 },
     subtotal: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
     montoIva: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },

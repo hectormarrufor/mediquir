@@ -12,6 +12,7 @@ export async function armarPresupuesto(body) {
 
         const tasaCambio = Number(body.tasaCambio) > 0 ? Number(body.tasaCambio) : 1;
         const tarifa = TARIFAS.includes(body.tarifa) ? body.tarifa : 'precio6';
+        const moneda = body.moneda === 'BS' ? 'BS' : 'USD'; // los precios y totales quedan en esta moneda, tal cual se cotizaron
         const validoDias = Number.isInteger(Number(body.validoDias)) && Number(body.validoDias) > 0 ? Number(body.validoDias) : 15;
 
         // El servidor es la autoridad del cálculo: nunca se guardan los totales que manda el navegador
@@ -42,6 +43,7 @@ export async function armarPresupuesto(body) {
             clienteIdentificacion: (cliente?.identificacion ?? body.clienteIdentificacion) || null,
             clienteDireccion: (cliente?.direccion ?? body.clienteDireccion) || null,
             tarifa,
+            moneda,
             tasaCambio,
             subtotal: calc.subtotal,
             montoIva: calc.montoIva,

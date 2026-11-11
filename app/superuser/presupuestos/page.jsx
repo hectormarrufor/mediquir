@@ -11,7 +11,8 @@ import { ETIQUETA_TARIFA } from '@/app/api/presupuestos/_lib';
 import { useEsTelefono } from '@/app/components/ui/modalMovil';
 
 const fetchJson = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error('No se pudo cargar'); return r.json(); };
-const total = (p) => Number(p.totalFinal).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Total en la moneda del presupuesto: P7/P6 en $, P4/P5 en Bs
+const total = (p) => `${p.moneda === 'BS' ? 'Bs' : '$'} ${Number(p.totalFinal).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const sinCliente = <Text span size="sm" c="dimmed" fs="italic">Sin cliente</Text>;
 
 export default function PresupuestosPage() {
@@ -46,7 +47,7 @@ export default function PresupuestosPage() {
                                             <Badge variant="light" size="xs" tt="none">{ETIQUETA_TARIFA[p.tarifa] || p.tarifa}</Badge>
                                         </Group>
                                     </Box>
-                                    <Text fw={800} size="sm" style={{ whiteSpace: 'nowrap' }}>$ {total(p)}</Text>
+                                    <Text fw={800} size="sm" style={{ whiteSpace: 'nowrap' }}>{total(p)}</Text>
                                 </Group>
                             </UnstyledButton>
                         ))}
@@ -54,7 +55,7 @@ export default function PresupuestosPage() {
                 ) : (
                     <Table.ScrollContainer minWidth={500}>
                         <Table highlightOnHover verticalSpacing="xs">
-                            <Table.Thead><Table.Tr><Table.Th>N°</Table.Th><Table.Th>Cliente</Table.Th><Table.Th>Fecha</Table.Th><Table.Th>Tarifa</Table.Th><Table.Th style={{ textAlign: 'right' }}>Total $</Table.Th></Table.Tr></Table.Thead>
+                            <Table.Thead><Table.Tr><Table.Th>N°</Table.Th><Table.Th>Cliente</Table.Th><Table.Th>Fecha</Table.Th><Table.Th>Tarifa</Table.Th><Table.Th style={{ textAlign: 'right' }}>Total</Table.Th></Table.Tr></Table.Thead>
                             <Table.Tbody>
                                 {presupuestos.map((p) => (
                                     <Table.Tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => abrir(p)}>

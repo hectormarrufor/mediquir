@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { Button, Group, Text } from '@mantine/core';
 import { IconPrinter } from '@tabler/icons-react';
 import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
-import { aBolivares } from '@/app/constants/facturacion';
+import { aBolivares, aDolares } from '@/app/constants/facturacion';
 
 // Presupuesto impreso en tamaño CARTA completo (no es la forma libre preimpresa: no es un documento fiscal).
 // Usa el mismo membrete y estilo visual que la Nota de Entrega, pero con su propio encabezado ("Presupuesto")
@@ -29,12 +29,13 @@ export default function PresupuestoImprimible({ presupuesto, accionesExtra = nul
     if (!presupuesto) return null;
     const tasa = Number(presupuesto.tasaCambio) || 1;
     const renglones = presupuesto.renglones || [];
-    const subtotalUsd = Number(presupuesto.subtotal) || 0;
-    const ivaUsd = Number(presupuesto.montoIva) || 0;
-    const totalUsd = Number(presupuesto.totalFinal) || 0;
-    const subtotalBs = aBolivares(subtotalUsd, tasa);
-    const ivaBs = aBolivares(ivaUsd, tasa);
-    const totalBs = aBolivares(totalUsd, tasa);
+    // Los precios y totales guardados están en la moneda del presupuesto (P4/P5 en Bs; P7/P6 en $); la otra sale a la tasa
+    const enBs = presupuesto.moneda === 'BS';
+    const simbolo = enBs ? 'Bs' : '$';
+    const montos = (v) => { const n = Number(v) || 0; return enBs ? { bs: n, usd: aDolares(n, tasa) } : { bs: aBolivares(n, tasa), usd: n }; };
+    const { bs: subtotalBs, usd: subtotalUsd } = montos(presupuesto.subtotal);
+    const { bs: ivaBs, usd: ivaUsd } = montos(presupuesto.montoIva);
+    const { bs: totalBs, usd: totalUsd } = montos(presupuesto.totalFinal);
     const creado = presupuesto.createdAt || new Date().toISOString();
     const vence = sumarDias(creado, presupuesto.validoDias ?? 15);
     const cliente = presupuesto.cliente || { nombre: presupuesto.clienteNombre, identificacion: presupuesto.clienteIdentificacion, direccion: presupuesto.clienteDireccion };
@@ -81,7 +82,7 @@ export default function PresupuestoImprimible({ presupuesto, accionesExtra = nul
                 </section>
 
                 <table className="pp-tabla">
-                    <thead><tr><th style={{ width: '10%' }}>CÓDIGO</th><th style={{ width: '45%', textAlign: 'left' }}>ARTÍCULO</th><th style={{ width: '15%', textAlign: 'right' }}>PRECIO UNIT $</th><th style={{ width: '10%', textAlign: 'center' }}>CANT.</th><th style={{ width: '20%', textAlign: 'right' }}>SUBTOTAL $</th></tr></thead>
+                    <thead><tr><th style={{ width: '10%' }}>CÓDIGO</th><th style={{ width: '45%', textAlign: 'left' }}>ARTÍCULO</th><th style={{ width: '15%', textAlign: 'right' }}>PRECIO UNIT {simbolo}</th><th style={{ width: '10%', textAlign: 'center' }}>CANT.</th><th style={{ width: '20%', textAlign: 'right' }}>SUBTOTAL {simbolo}</th></tr></thead>
                     <tbody>
                         {renglones.map((r, i) => (
                             <tr key={i}>
