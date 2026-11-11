@@ -11,7 +11,14 @@ import { PANTALLA_COMPLETA_MOVIL } from '@/app/components/ui/modalMovil';
 import { calcularFactura } from '@/app/constants/facturacion';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
+const MAX_NOTAS = 20;
 const MOTIVOS = ['Error en los datos de la factura', 'Devolución de mercancía', 'El cliente no aceptó la factura', 'Se facturó de más', 'Otro'];
+
+// 'NC-00045' + 2 -> 'NC-00047' (para mostrar el número que tomará cada nota de crédito)
+const sumarNumero = (texto, n) => {
+    const m = /^(.*?)(\d+)$/.exec(texto || '');
+    return m ? `${m[1]}${String(Number(m[2]) + n).padStart(m[2].length, '0')}` : texto;
+};
 
 async function pedir(url, opciones) {
     const res = await fetch(url, opciones);
@@ -29,7 +36,10 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
     const [afecta, setAfecta] = useState(null); // 'si' | 'no'
     const [motivo, setMotivo] = useState(MOTIVOS[0]);
     const [detalle, setDetalle] = useState('');
-    const [documentos, setDocumentos] = useState({});
+    const [documentos, setDocumentos] = useState({}); // controles de las facturas hermanas (las que comparten notas de entrega)
+    const [cuantas, setCuantas] = useState(1); // en cuántas notas de crédito se anula la factura
+    const [controles, setControles] = useState([]); // [{ numero, control }] de cada nota de esta factura
+    const [repartos, setRepartos] = useState([{}]); // por nota: { [renglón]: cantidad }
     const [fecha, setFecha] = useState('');
     const [enviando, setEnviando] = useState(false);
 
@@ -37,19 +47,32 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
         queryKey: ['anular-factura', pedido.id], enabled: opened, gcTime: 0,
         queryFn: () => pedir(`/api/ventas/${pedido.id}/anular`),
     });
-    // Controles sugeridos: los siguientes libres, uno por nota de crédito (se pueden cambiar)
+    // Controles sugeridos: los siguientes libres, uno por cada nota de crédito (se pueden cambiar). Las notas de esta factura toman los primeros;
+    // las facturas hermanas de una nota de entrega, los que siguen. Con un control indicado, la primera nota de esta factura lo toma.
     useEffect(() => {
         if (!plan) return;
-        // Con un control indicado, esta factura lo toma; las demás (facturas hermanas de una nota de entrega) reciben los sugeridos
-        let i = 0;
-        setDocumentos(Object.fromEntries(plan.facturas.map((f) => [f.id, {
-            numero: '', control: controlInicial && f.id === plan.factura.id ? controlInicial : (plan.controlesSugeridos[i++] || ''),
-        }])));
-    }, [plan, controlInicial]);
+        const pool = [...plan.controlesSugeridos];
+        setControles(Array.from({ length: cuantas }, (_, k) => ({ numero: '', control: k === 0 && controlInicial ? controlInicial : (pool.shift() || '') })));
+        setDocumentos(Object.fromEntries(plan.facturas.filter((f) => f.id !== plan.factura.id).map((f) => [f.id, { numero: '', control: pool.shift() || '' }])));
+    }, [plan, controlInicial, cuantas]);
+    useEffect(() => { setRepartos((r) => Array.from({ length: cuantas }, (_, k) => r[k] || {})); }, [cuantas]);
 
     const simbolo = plan?.factura.moneda === 'BS' ? 'Bs' : '$';
-    const deNotas = Boolean(plan?.deNotas) && tipo === 'TOTAL';
-    const facturasNc = plan ? (deNotas ? plan.facturas : plan.facturas.filter((f) => f.id === plan.factura.id)) : [];
+    const varias = cuantas > 1;
+    // Lo que queda por repartir de cada renglón al llegar a cada nota (lo que toman las notas anteriores ya no queda)
+    const quedaAntes = (k, rid) => {
+        const r = plan.renglones.find((x) => x.id === rid);
+        return Math.max(0, r.restante - repartos.slice(0, k).reduce((a, rep) => a + (Number(rep[rid]) || 0), 0));
+    };
+    const sinRepartir = plan ? plan.renglones.reduce((a, r) => a + quedaAntes(cuantas, r.id), 0) : 0;
+    const completaVarias = varias && sinRepartir === 0;
+    const deNotas = Boolean(plan?.deNotas) && (varias ? completaVarias : tipo === 'TOTAL');
+    const hermanas = plan ? plan.facturas.filter((f) => f.id !== plan.factura.id) : [];
+    const facturasNc = deNotas ? hermanas : [];
+    const montoNota = (k) => {
+        const lineas = plan.renglones.filter((r) => Number(repartos[k]?.[r.id]) > 0).map((r) => ({ precioUnitario: r.precioUnitario, cantidad: Number(repartos[k][r.id]), aplicaIva: r.aplicaIva, porcentajeIva: 16 }));
+        return lineas.length ? calcularFactura({ renglones: lineas }).totalFinal : 0;
+    };
     // Monto de la nota parcial (precio e IVA de cada renglón de la factura)
     const montoParcial = useMemo(() => {
         if (!plan || tipo !== 'PARCIAL') return 0;
@@ -60,8 +83,9 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
 
     const motivoFinal = motivo === 'Otro' ? detalle.trim() : `${motivo}${detalle.trim() ? `: ${detalle.trim()}` : ''}`;
     const faltaAfecta = !deNotas && !afecta;
-    const faltaControl = facturasNc.some((f) => !String(documentos[f.id]?.control || '').trim());
-    const sinRenglones = tipo === 'PARCIAL' && !(montoParcial > 0);
+    const faltaControl = facturasNc.some((f) => !String(documentos[f.id]?.control || '').trim())
+        || controles.slice(0, cuantas).some((c) => !String(c?.control || '').trim());
+    const sinRenglones = varias ? Array.from({ length: cuantas }, (_, k) => k).some((k) => !(montoNota(k) > 0)) : tipo === 'PARCIAL' && !(montoParcial > 0);
     const bloqueado = !plan || faltaAfecta || faltaControl || sinRenglones || motivoFinal.length < 5 || (deNotas && plan.bloqueosNotas.length > 0);
 
     const anular = async () => {
@@ -70,8 +94,13 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
             const r = await pedir(`/api/ventas/${pedido.id}/anular`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    tipo, motivo: motivoFinal, fecha: fecha || null, documentos, afectaCxc: deNotas ? null : afecta === 'si',
-                    renglones: tipo === 'PARCIAL' ? plan.renglones.filter((x) => Number(cantidades[x.id]) > 0).map((x) => ({ ventaDetalleId: x.id, cantidad: Number(cantidades[x.id]) })) : [],
+                    tipo, motivo: motivoFinal, fecha: fecha || null, afectaCxc: deNotas ? null : afecta === 'si',
+                    documentos: { ...documentos, [plan.factura.id]: controles[0] || {} },
+                    notas: varias ? controles.slice(0, cuantas).map((c, k) => ({
+                        numero: c.numero, control: c.control,
+                        renglones: plan.renglones.filter((x) => Number(repartos[k]?.[x.id]) > 0).map((x) => ({ ventaDetalleId: x.id, cantidad: Number(repartos[k][x.id]) })),
+                    })) : null,
+                    renglones: !varias && tipo === 'PARCIAL' ? plan.renglones.filter((x) => Number(cantidades[x.id]) > 0).map((x) => ({ ventaDetalleId: x.id, cantidad: Number(cantidades[x.id]) })) : [],
                 }),
             });
             notifications.show({
@@ -90,9 +119,54 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
             {isLoading ? <Group justify="center" py="md"><Loader /></Group> : error ? <Alert color="red">{error.message}</Alert> : (
                 <Stack gap="sm">
                     <Text size="sm">La factura no se borra: se emite una <b>nota de crédito</b> con el siguiente número ({plan.siguienteNc || 'NC'}) y su propio número de control, que la compensa en el libro de ventas.</Text>
-                    <SegmentedControl fullWidth value={tipo} onChange={setTipo} data={[{ value: 'TOTAL', label: `Total (${simbolo} ${nf(plan.factura.acreditable)})` }, { value: 'PARCIAL', label: 'Parcial' }]} />
+                    <NumberInput label="¿En cuántas notas de crédito se anula esta factura?" description="Si una nota no alcanza para todos los renglones, reparte la factura en varias: se emiten juntas, cada una con su número y su control."
+                        min={1} max={MAX_NOTAS} allowDecimal={false} value={cuantas} onChange={(v) => setCuantas(Math.min(MAX_NOTAS, Math.max(1, Number(v) || 1)))} w={140} />
+                    {!varias && <SegmentedControl fullWidth value={tipo} onChange={setTipo} data={[{ value: 'TOTAL', label: `Total (${simbolo} ${nf(plan.factura.acreditable)})` }, { value: 'PARCIAL', label: 'Parcial' }]} />}
 
-                    {tipo === 'PARCIAL' && (
+                    {varias && (
+                        <Stack gap="sm">
+                            {Array.from({ length: cuantas }, (_, k) => (
+                                <Card key={k} withBorder radius="md" p="xs">
+                                    <Group justify="space-between" mb={4}>
+                                        <Text size="sm" fw={800}>Nota de crédito {k + 1} de {cuantas} · {controles[k]?.numero?.trim() || sumarNumero(plan.siguienteNc, k)}</Text>
+                                        <Text size="sm">{plan.renglones.filter((r) => Number(repartos[k]?.[r.id]) > 0).length} renglones · <b>{simbolo} {nf(montoNota(k))}</b></Text>
+                                    </Group>
+                                    <Group grow align="flex-start" mb={6}>
+                                        <TextInput size="xs" label="Número de control" withAsterisk placeholder="00-0122676" value={controles[k]?.control || ''}
+                                            onChange={(e) => setControles((c) => c.map((x, i) => (i === k ? { ...x, control: e.currentTarget.value } : x)))} />
+                                        <TextInput size="xs" label="Número de NC (si ya la emitiste en el sistema anterior)" placeholder={sumarNumero(plan.siguienteNc, k)} value={controles[k]?.numero || ''}
+                                            onChange={(e) => setControles((c) => c.map((x, i) => (i === k ? { ...x, numero: e.currentTarget.value } : x)))} />
+                                    </Group>
+                                    <Table fz="sm" verticalSpacing={2}>
+                                        <Table.Thead><Table.Tr><Table.Th>Renglón</Table.Th><Table.Th ta="right">Quedan</Table.Th><Table.Th w={170}>Esta nota</Table.Th></Table.Tr></Table.Thead>
+                                        <Table.Tbody>
+                                            {plan.renglones.filter((r) => r.restante > 0).map((r) => {
+                                                const queda = quedaAntes(k, r.id);
+                                                return (
+                                                    <Table.Tr key={r.id}>
+                                                        <Table.Td><Text size="sm">{r.nombre}</Text><Text size="xs" c="dimmed">{simbolo} {nf(r.precioUnitario)} c/u{r.aplicaIva ? ' + IVA' : ' (exento)'}</Text></Table.Td>
+                                                        <Table.Td ta="right">{queda}{queda !== r.restante ? <Text span size="xs" c="dimmed"> de {r.restante}</Text> : null}</Table.Td>
+                                                        <Table.Td>
+                                                            <Group gap={4} wrap="nowrap">
+                                                                <NumberInput size="xs" w={80} min={0} max={queda} allowDecimal={false} disabled={!queda} value={repartos[k]?.[r.id] ?? 0}
+                                                                    onChange={(v) => setRepartos((rep) => rep.map((x, i) => (i === k ? { ...x, [r.id]: Math.min(queda, Math.max(0, Number(v) || 0)) } : x)))} />
+                                                                <Button size="compact-xs" variant="subtle" disabled={!queda} onClick={() => setRepartos((rep) => rep.map((x, i) => (i === k ? { ...x, [r.id]: queda } : x)))}>Lo que queda</Button>
+                                                            </Group>
+                                                        </Table.Td>
+                                                    </Table.Tr>
+                                                );
+                                            })}
+                                        </Table.Tbody>
+                                    </Table>
+                                </Card>
+                            ))}
+                            {completaVarias
+                                ? <Alert color="teal">Entre las {cuantas} notas se anula la factura completa.</Alert>
+                                : <Alert color="orange">Faltan por repartir {sinRepartir} unidades: si las dejas fuera, la anulación queda parcial.</Alert>}
+                        </Stack>
+                    )}
+
+                    {!varias && tipo === 'PARCIAL' && (
                         <Paper withBorder radius="md">
                             <Table fz="sm" verticalSpacing={4}>
                                 <Table.Thead><Table.Tr><Table.Th>Renglón</Table.Th><Table.Th ta="right">Quedan</Table.Th><Table.Th w={150}>Anular</Table.Th></Table.Tr></Table.Thead>
@@ -129,10 +203,21 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                             </Stack>
                         </Radio.Group>
                     )}
-                    {tipo === 'TOTAL' && !deNotas && <Text size="xs" c="dimmed">{plan.factura.yaSalio ? 'Todo lo facturado vuelve al inventario.' : 'El pedido aún no salió del almacén: no hay mercancía que devolver al inventario.'}</Text>}
+                    {!varias && tipo === 'TOTAL' && !deNotas && <Text size="xs" c="dimmed">{plan.factura.yaSalio ? 'Todo lo facturado vuelve al inventario.' : 'El pedido aún no salió del almacén: no hay mercancía que devolver al inventario.'}</Text>}
                     {deNotas && plan.bloqueosNotas.map((b) => <Alert key={b} color="red" icon={<IconAlertTriangle size={18} />}>{b}</Alert>)}
 
                     <Stack gap={6}>
+                        {!varias && (
+                            <Card withBorder radius="md" p="xs">
+                                <Text size="sm" fw={700} mb={4}>Nota de crédito sobre {plan.factura.numero}</Text>
+                                <Group grow align="flex-start">
+                                    <TextInput size="xs" label="Número de control" withAsterisk placeholder="00-0122676" value={controles[0]?.control || ''}
+                                        onChange={(e) => setControles((c) => c.map((x, i) => (i === 0 ? { ...x, control: e.currentTarget.value } : x)))} />
+                                    <TextInput size="xs" label="Número de NC (si ya la emitiste en el sistema anterior)" placeholder={plan.siguienteNc || ''} value={controles[0]?.numero || ''}
+                                        onChange={(e) => setControles((c) => c.map((x, i) => (i === 0 ? { ...x, numero: e.currentTarget.value } : x)))} />
+                                </Group>
+                            </Card>
+                        )}
                         {facturasNc.map((f) => (
                             <Card key={f.id} withBorder radius="md" p="xs">
                                 <Text size="sm" fw={700} mb={4}>Nota de crédito sobre {f.numero}{deNotas ? ` (${f.moneda === 'BS' ? 'Bs' : '$'} ${nf(f.acreditable)})` : ''}</Text>
@@ -150,7 +235,7 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                     <Textarea label={motivo === 'Otro' ? 'Explica el motivo' : 'Detalle (opcional)'} autosize minRows={2} value={detalle} onChange={(e) => setDetalle(e.currentTarget.value)} />
                     <TextInput type="date" label="Fecha de la nota" description="Vacía = hoy" max={new Date().toISOString().slice(0, 10)} value={fecha} onChange={(e) => setFecha(e.currentTarget.value)} />
                     <Button color="red" loading={enviando} disabled={bloqueado} onClick={anular}>
-                        {facturasNc.length > 1 ? `Anular las ${facturasNc.length} facturas` : tipo === 'TOTAL' ? 'Anular la factura' : 'Emitir la nota de crédito'}
+                        {facturasNc.length > 0 ? `Anular las ${facturasNc.length + 1} facturas` : varias ? `Emitir las ${cuantas} notas de crédito` : tipo === 'TOTAL' ? 'Anular la factura' : 'Emitir la nota de crédito'}
                     </Button>
                     <Text size="xs" c="dimmed">Esta acción no se puede deshacer desde aquí: para revertirla hay que anular la nota de crédito.</Text>
                 </Stack>

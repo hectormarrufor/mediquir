@@ -9,6 +9,9 @@
 //      (su monto, con los abonos que ya hubo); el inventario no se mueve (la mercancía sigue con el cliente, ahora por la nota). Si esas
 //      notas también están en otras facturas (una nota larga repartida), se anulan todas juntas: una NC por factura, cada una con su
 //      número de control.
+//  · VARIAS NC a la vez (notas: [{ renglones, numero, control }]): la factura se reparte en varias notas de crédito en una sola transacción. Cada nota lleva
+//      sus renglones y cantidades (lo que una nota toma ya no queda para las siguientes). Si entre todas cubren la factura completa, se trata como
+//      una anulación total (de una factura que salió de notas de entrega: no mueve inventario y la deuda vuelve a las notas); si no la cubren, como parciales.
 //  · Cada NC toma el siguiente número de NC (o el que ya tiene en el sistema anterior) y el número de control que se indique.
 import db from '../../../models/index.js';
 import { numerosAnteriores, unirAnteriores } from '../../constants/documentosAnteriores.js';
@@ -20,6 +23,7 @@ const { sequelize, Venta, CuentaPorCobrar, Abono, ComisionVenta, RetencionIva, N
 const { Op } = db.Sequelize;
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const METODO_NC = 'Nota de crédito';
+export const MAX_NOTAS = 20;
 
 export class ErrorAnulacion extends Error {
     constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
@@ -100,7 +104,8 @@ export async function planAnulacion({ venta, transaction }) {
         abonosUsd: r2(pagos.reduce((a, x) => a + Number(x.montoUsd), 0)),
         bloqueosNotas,
         siguienteNc: await siguienteNcTexto(transaction),
-        controlesSugeridos: await controlesLibres(deNotas ? Math.max(1, facturas.length) : 1, transaction),
+        // Varias notas de crédito sobre la misma factura: hacen falta controles de sobra (el formulario pregunta cuántas son)
+        controlesSugeridos: await controlesLibres((deNotas ? Math.max(1, facturas.length) : 1) + MAX_NOTAS, transaction),
     };
 }
 
@@ -111,8 +116,9 @@ export async function planAnulacion({ venta, transaction }) {
  *   afectaCxc: obligatorio salvo en la anulación total de una factura que salió de notas de entrega (ahí la deuda vuelve a las notas)
  *   documentos: { [ventaId de la factura]: { numero?, control } } -> número de NC (si ya se emitió en el sistema anterior) y su control
  */
-export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = null, motivo, documentos = {}, fecha = null, usuarioId = null, transaction: t }) {
-    if (!['TOTAL', 'PARCIAL'].includes(tipo)) throw new ErrorAnulacion('Elige si la anulación es total o parcial');
+export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = null, motivo, documentos = {}, notas = null, fecha = null, usuarioId = null, transaction: t }) {
+    const varias = Array.isArray(notas) && notas.length > 1;
+    if (!varias && !['TOTAL', 'PARCIAL'].includes(tipo)) throw new ErrorAnulacion('Elige si la anulación es total o parcial');
     const motivoTxt = String(motivo || '').trim();
     if (motivoTxt.length < 5) throw new ErrorAnulacion('Explica el motivo de la anulación (mínimo 5 caracteres)');
     const plan = await planAnulacion({ venta, transaction: t });
@@ -129,8 +135,46 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
     });
     const todos = (r) => r.filter((x) => x.restante > 0).map((x) => ({ ventaDetalleId: x.id, cantidad: x.restante }));
 
+    // ---------- Varias notas de crédito sobre la misma factura
+    const previas = new Map(); // ventaId -> notas ya emitidas aquí (la factura que se repartió en varias)
+    if (varias) {
+        if (notas.length > MAX_NOTAS) throw new ErrorAnulacion(`Máximo ${MAX_NOTAS} notas de crédito por factura`);
+        const usado = new Map();
+        const grupos = notas.map((n) => {
+            const els = (Array.isArray(n.renglones) ? n.renglones : []).filter((r) => Number(r.cantidad) > 0).map((r) => ({ ventaDetalleId: r.ventaDetalleId, cantidad: Number(r.cantidad) }));
+            if (!els.length) throw new ErrorAnulacion('Cada nota de crédito necesita al menos un renglón');
+            for (const e of els) usado.set(e.ventaDetalleId, (usado.get(e.ventaDetalleId) || 0) + e.cantidad);
+            return { ...n, renglones: els };
+        });
+        const porId = new Map(plan.renglones.map((r) => [r.id, r]));
+        for (const [id, cant] of usado) {
+            const r = porId.get(id);
+            if (!r) throw new ErrorAnulacion('Uno de los renglones no pertenece a esta factura');
+            if (cant > r.restante) throw new ErrorAnulacion(`De "${r.nombre}" quedan ${r.restante} por acreditar y entre las notas se anulan ${cant}`);
+        }
+        const completa = plan.renglones.every((r) => (usado.get(r.id) || 0) === r.restante);
+        const sinCxc = completa && plan.deNotas; // la deuda vuelve a las notas de entrega, sin mover inventario
+        if (sinCxc && plan.bloqueosNotas.length) throw new ErrorAnulacion(plan.bloqueosNotas[0], 409);
+        if (!sinCxc && typeof afectaCxc !== 'boolean') throw new ErrorAnulacion('Indica si las notas de crédito afectan la cuenta por cobrar');
+        const devuelve = !sinCxc && yaSalio(venta) && (completa || afectaCxc);
+        const emitidasAqui = [];
+        for (let i = 0; i < grupos.length; i++) {
+            const g = grupos[i];
+            let ctrl;
+            try { ctrl = await reservarControl(String(g.control || '').trim(), t); } catch (e) { if (e instanceof ErrorNumeracion) throw new ErrorAnulacion(`Nota ${i + 1}: ${e.message}`, e.status); throw e; }
+            const nota = await emitirNotaVenta({
+                venta, tipo: 'CREDITO', renglones: g.renglones, devuelveInventario: devuelve, afectaCxc: sinCxc ? false : afectaCxc, usuarioId, transaction: t,
+                motivo: `Anulación ${completa ? 'total' : 'parcial'} de la factura ${venta.numeroDocumento} en ${grupos.length} notas de crédito (${i + 1} de ${grupos.length}): ${motivoTxt}`,
+                numeroManual: g.numero || null, numeroControl: ctrl, fecha,
+            });
+            emitidasAqui.push({ numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda });
+        }
+        if (!sinCxc) return { notas: emitidasAqui, notasEntrega: [] };
+        previas.set(venta.id, emitidasAqui);
+    }
+
     // ---------- Parcial
-    if (tipo === 'PARCIAL') {
+    if (!varias && tipo === 'PARCIAL') {
         if (typeof afectaCxc !== 'boolean') throw new ErrorAnulacion('Indica si la nota de crédito afecta la cuenta por cobrar');
         const elegidos = (Array.isArray(renglones) ? renglones : []).filter((r) => Number(r.cantidad) > 0).map((r) => ({ ventaDetalleId: r.ventaDetalleId, cantidad: Number(r.cantidad) }));
         if (!elegidos.length) throw new ErrorAnulacion('Elige al menos un renglón y cuántas unidades se anulan');
@@ -140,7 +184,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
     }
 
     // ---------- Total de una factura propia (no viene de notas de entrega)
-    if (!plan.deNotas) {
+    if (!varias && !plan.deNotas) {
         if (typeof afectaCxc !== 'boolean') throw new ErrorAnulacion('Indica si la nota de crédito afecta la cuenta por cobrar');
         const nota = await emitir(venta, todos(plan.renglones), yaSalio(venta), afectaCxc, `Anulación total de la factura ${venta.numeroDocumento}: ${motivoTxt}`);
         return { notas: [{ numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda }], notasEntrega: [] };
@@ -155,6 +199,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
     const textoNotas = unirAnteriores(notasEntrega.map((n) => n.numeroDocumento));
     const emitidas = [];
     for (const f of facturas) {
+        if (previas.has(f.id)) { emitidas.push(...previas.get(f.id)); continue; }
         const { renglones: r } = await notasDeVenta(f, t);
         // La NC no baja la deuda de la factura (esa deuda deja de existir: vuelve a la nota) ni mueve inventario
         const nota = await emitir(f, todos(r), false, false, `Anulación total de la factura ${f.numeroDocumento}: vuelve a ser documento principal ${textoNotas}. ${motivoTxt}`);

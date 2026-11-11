@@ -28,7 +28,7 @@ export async function GET(_request, { params }) {
     }
 }
 
-// { tipo: 'TOTAL'|'PARCIAL', renglones, afectaCxc, motivo, documentos: { [ventaId]: { numero, control } }, fecha }
+// { tipo: 'TOTAL'|'PARCIAL', notas (varias NC: [{ renglones, numero, control }]), renglones, afectaCxc, motivo, documentos: { [ventaId]: { numero, control } }, fecha }
 export async function POST(request, { params }) {
     const acceso = await requerirAdmin();
     if (acceso.error) return acceso.error;
@@ -41,7 +41,7 @@ export async function POST(request, { params }) {
         const b = await request.json();
         const r = await anularFactura({
             venta, tipo: b.tipo, renglones: b.renglones, afectaCxc: typeof b.afectaCxc === 'boolean' ? b.afectaCxc : null, motivo: b.motivo,
-            documentos: b.documentos && typeof b.documentos === 'object' ? b.documentos : {}, fecha: b.fecha || null, usuarioId: Number(acceso.sesion.id) || null, transaction: t,
+            documentos: b.documentos && typeof b.documentos === 'object' ? b.documentos : {}, notas: Array.isArray(b.notas) ? b.notas : null, fecha: b.fecha || null, usuarioId: Number(acceso.sesion.id) || null, transaction: t,
         });
         await t.commit();
         return NextResponse.json({ success: true, ...r });
