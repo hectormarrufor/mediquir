@@ -38,7 +38,9 @@ function TarjetaDocumento({ f, acc }) {
             </Group>
             {/* Retención de IVA que hizo el cliente: la factura con y sin ella, en dólares y en bolívares */}
             {f.retUsd !== null && f.retUsd !== undefined ? (
-                <Text fz={12} c="grape.8">Retención <b>{dolares(f.retUsd)}</b> · Monto − ret. <b>{dolares(f.montoMenosRet)}</b> · {bolivares(f.totalBs)} → <b>{bolivares(f.totalBsMenosRet)}</b></Text>
+                <Text fz={12} c={f.retReal ? 'grape.8' : '#5c6675'} fs={f.retReal ? undefined : 'italic'}>
+                    {f.retReal ? 'Retuvo' : 'Retención calculada (75 % del IVA)'} <b>{dolares(f.retUsd)}</b> · Monto − ret. <b>{dolares(f.montoMenosRet)}</b> · {bolivares(f.totalBs)} → <b>{bolivares(f.totalBsMenosRet)}</b>
+                </Text>
             ) : f.totalBs ? <Text fz={12} c="#5c6675">Total {bolivares(f.totalBs)}</Text> : null}
             <Text fz={12} c="#5c6675">Emitida {fmtFecha(f.emision) || '—'}{f.vendedor ? ` · Vendedor: ${f.vendedor}` : ''}</Text>
             {f.observacion && <Text fz={12.5} mt={6} px={8} py={4} style={{ background: 'rgba(11,27,61,0.05)', borderRadius: 6, wordBreak: 'break-word' }}>{f.observacion}</Text>}

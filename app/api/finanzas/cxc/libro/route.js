@@ -49,13 +49,18 @@ export async function GET(request) {
             // Retención de IVA que se esperaría (75 %) a la tasa de la factura, en dólares: con ella el abono sabe si «parece que el cliente retuvo»
             const ivaUsd = c.monedaVenta === 'BS' ? Number(c.ivaVenta) / (Number(c.tasaVenta) || 1) : Number(c.ivaVenta);
             const retEsperada = c.tipoDoc === 'FACTURA' && ivaUsd > 0 ? r2(ivaUsd * 0.75) : 0;
-            // Retención que el cliente ya hizo (declarada o con comprobante): el total de la factura en $ y en Bs, con y sin ella
+            // Retención de IVA, SIEMPRE en las facturas (para confirmar si el cliente pagó reteniendo o no): la que el cliente ya hizo (declarada o
+            // con comprobante) o, si no la ha hecho, la calculada (75 % del IVA a la tasa de la factura). Con ella, el total en $ y en Bs con y sin retención.
+            const esFactura = c.tipoDoc === 'FACTURA';
             const totalBs = c.monedaVenta === 'BS' ? r2(c.totalVenta) : r2(Number(c.totalVenta) * (Number(c.tasaVenta) || 1));
-            const retBs = c.retBs !== null && c.retBs !== undefined ? r2(c.retBs) : null;
-            const retUsd = retBs === null ? null : (c.retUsdAbono !== null && c.retUsdAbono !== undefined ? r2(c.retUsdAbono) : r2(retBs / (Number(c.retTasa) || Number(c.tasaVenta) || 1)));
+            const ivaBs = c.monedaVenta === 'BS' ? Number(c.ivaVenta) : Number(c.ivaVenta) * (Number(c.tasaVenta) || 1);
+            const real = c.retBs !== null && c.retBs !== undefined;
+            const retBs = real ? r2(c.retBs) : esFactura ? r2(ivaBs * 0.75) : null;
+            const retUsd = real ? (c.retUsdAbono !== null && c.retUsdAbono !== undefined ? r2(c.retUsdAbono) : r2(retBs / (Number(c.retTasa) || Number(c.tasaVenta) || 1))) : esFactura ? retEsperada : null;
             return {
                 retEstado: c.retEstado || null, retEsperada, cierreDeclarado: Boolean(c.cierreDeclarado),
-                retUsd, retBs, totalBs, montoMenosRet: retUsd === null ? null : r2(monto - retUsd), totalBsMenosRet: retBs === null ? null : r2(totalBs - retBs),
+                retUsd, retBs, retReal: real, totalBs: esFactura || c.tipoDoc === 'NOTA_ENTREGA' ? totalBs : null,
+                montoMenosRet: retUsd === null ? null : r2(monto - retUsd), totalBsMenosRet: retBs === null ? null : r2(totalBs - retBs),
                 id: c.id, ventaId: c.ventaId, clienteId: c.clienteId, cliente: c.cliente, rif: c.rif, documento: c.documento, tipoDoc: c.tipoDoc, emision: iso(c.emision), vence,
                 monto, abonado: r2(monto - saldo), saldo, estado: c.estado, vencida: saldo > 0.005 && Boolean(vence) && vence < hoy, observacion: c.observacion || '',
                 vendedor: vendedorPorVenta.get(c.ventaId) || null, abonos: abonosPorVenta.get(c.ventaId) || [],

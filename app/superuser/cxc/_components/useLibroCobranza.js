@@ -85,7 +85,7 @@ export function useLibroCobranza() {
         const lista = [...m.values()].map((g) => ({
             ...g,
             monto: suma(g.filas, 'monto'), abonado: suma(g.filas, 'abonado'), saldo: suma(g.filas, 'saldo'),
-            retUsd: suma(g.filas.filter((f) => f.retUsd !== null && f.retUsd !== undefined), 'retUsd'),
+            retUsd: suma(g.filas.filter((f) => f.retReal), 'retUsd'), // solo las retenciones que el cliente sí hizo
             vencido: suma(g.filas.filter((f) => f.vencida), 'saldo'),
             atrasoMax: Math.max(0, ...g.filas.filter((f) => f.vencida).map((f) => -f.dias)),
             vencidas: g.filas.filter((f) => f.vencida).length,
@@ -100,7 +100,7 @@ export function useLibroCobranza() {
     // Totales de lo que se está viendo (con filtros) y resumen general de lo pendiente (sin filtros)
     const totales = useMemo(() => ({
         monto: suma(filas, 'monto'), abonado: suma(filas, 'abonado'), saldo: suma(filas, 'saldo'), documentos: filas.length, clientes: grupos.length,
-        retUsd: suma(filas.filter((f) => f.retUsd !== null && f.retUsd !== undefined), 'retUsd'),
+        retUsd: suma(filas.filter((f) => f.retReal), 'retUsd'), // solo las retenciones que el cliente sí hizo
     }), [filas, grupos]);
     const resumen = useMemo(() => {
         const pendientes = todas.filter((f) => !f.pagada);
@@ -149,9 +149,12 @@ export function useLibroCobranza() {
 
     // Descarga lo que se está viendo (con filtros y búsqueda) para abrirlo en Excel
     const exportarCsv = () => {
-        const lineas = [['Cliente', 'RIF', 'Documento', 'Emisión', 'Vence', 'Días de atraso', 'Monto USD', 'Retención USD', 'Monto menos retención USD', 'Total Bs', 'Total Bs menos retención', 'Abonado', 'Saldo', 'Vendedor', 'Observación']];
+        const lineas = [['Cliente', 'RIF', 'Documento', 'Emisión', 'Vence', 'Días de atraso', 'Monto USD', 'Retención USD', 'Retención', 'Monto menos retención USD', 'Total Bs', 'Total Bs menos retención', 'Abonado', 'Saldo', 'Vendedor', 'Observación']];
         const vacio = (v) => (v === null || v === undefined ? '' : v);
-        for (const g of grupos) for (const f of g.filas) lineas.push([f.cliente, f.rif, f.documento, f.emision, f.vence, f.vencida ? -f.dias : '', f.monto, vacio(f.retUsd), vacio(f.montoMenosRet), vacio(f.totalBs), vacio(f.totalBsMenosRet), f.abonado, f.saldo, f.vendedor || '', f.observacion]);
+        for (const g of grupos) for (const f of g.filas) {
+            const tipoRet = f.retUsd === null || f.retUsd === undefined ? '' : f.retReal ? 'Retuvo' : 'Calculada (75 % del IVA)';
+            lineas.push([f.cliente, f.rif, f.documento, f.emision, f.vence, f.vencida ? -f.dias : '', f.monto, vacio(f.retUsd), tipoRet, vacio(f.montoMenosRet), vacio(f.totalBs), vacio(f.totalBsMenosRet), f.abonado, f.saldo, f.vendedor || '', f.observacion]);
+        }
         const csv = lineas.map((l) => l.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8' }));

@@ -54,8 +54,10 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
     const grande = useAnchoGrande(); // la columna del vendedor solo cuando cabe sin apretar las demás
     const { abierto, alternarCliente, desplegarTodo, plegarTodo, plegadas, alternarPlegada } = libro;
     const columnas = grande ? 14 : 13;
-    // Retención de IVA que hizo el cliente (si la hizo): la factura con y sin ella, en dólares y en bolívares
+    // Retención de IVA, siempre en las facturas: la que hizo el cliente (morado, negrita) o la calculada, 75 % del IVA (gris, cursiva),
+    // para confirmar si pagó reteniendo o no. La factura con y sin ella, en dólares y en bolívares.
     const conRet = (v) => (v === null || v === undefined ? <Text span c="dimmed">—</Text> : usd(v));
+    const estiloRet = (f) => (f.retReal ? { c: 'grape.8', fw: 700 } : { c: 'dimmed', fs: 'italic' });
     const todosAbiertos = grupos.length > 0 && grupos.every((g) => abierto(g.id));
     const abonosVisibles = (f) => f.abonos.length > 0 && !plegadas.has(f.id);
 
@@ -127,10 +129,14 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
                                     <Table.Td><Text fz={12} px={6}>{fmtFecha(f.emision)}</Text></Table.Td>
                                     <Table.Td><CeldaEditable tipo="fecha" valor={f.vence} formato={formatoVence(f)} etiqueta={`Vencimiento de ${f.documento}`} onGuardar={(v) => acc.guardar(f, { fechaVencimiento: v })} color={f.vencida ? '#c92a2a' : undefined} /></Table.Td>
                                     <Table.Td><CeldaEditable tipo="numero" valor={f.monto} align="right" formato={usd} etiqueta={`Monto de ${f.documento}`} onGuardar={(v) => { acc.corregirMonto(f, v); return Promise.resolve(); }} /></Table.Td>
-                                    <Table.Td><Text fz={12.5} ta="right" px={6} c="grape.8">{conRet(f.retUsd)}</Text></Table.Td>
-                                    <Table.Td><Text fz={12.5} ta="right" px={6} fw={f.montoMenosRet !== null && f.montoMenosRet !== undefined ? 700 : undefined}>{conRet(f.montoMenosRet)}</Text></Table.Td>
+                                    <Table.Td>
+                                        <Tooltip label={f.retReal ? 'El cliente retuvo (declarada en el abono o con comprobante)' : 'Calculada: 75 % del IVA. El cliente no ha declarado retención'} disabled={f.retUsd === null || f.retUsd === undefined}>
+                                            <Text fz={12.5} ta="right" px={6} {...estiloRet(f)}>{conRet(f.retUsd)}</Text>
+                                        </Tooltip>
+                                    </Table.Td>
+                                    <Table.Td><Text fz={12.5} ta="right" px={6} {...estiloRet(f)} c={f.retReal ? undefined : 'dimmed'}>{conRet(f.montoMenosRet)}</Text></Table.Td>
                                     <Table.Td><Text fz={12.5} ta="right" px={6}>{f.totalBs !== null && f.totalBs !== undefined ? usd(f.totalBs) : ''}</Text></Table.Td>
-                                    <Table.Td><Text fz={12.5} ta="right" px={6}>{conRet(f.totalBsMenosRet)}</Text></Table.Td>
+                                    <Table.Td><Text fz={12.5} ta="right" px={6} c={f.retReal ? undefined : 'dimmed'} fs={f.retReal ? undefined : 'italic'}>{conRet(f.totalBsMenosRet)}</Text></Table.Td>
                                     <Table.Td><Text size="sm" ta="right" px={6} c="#1971c2">{usd(f.abonado)}</Text></Table.Td>
                                     <Table.Td><CeldaEditable tipo="numero" valor={f.saldo} align="right" formato={usd} negrita color={f.vencida ? '#c92a2a' : undefined} etiqueta={`Saldo de ${f.documento}`} onGuardar={(v) => { acc.abonar(f, v); return Promise.resolve(); }} /></Table.Td>
                                     {grande && <Table.Td><Text fz={12} px={6} truncate="end">{f.vendedor || ''}</Text></Table.Td>}
