@@ -17,7 +17,11 @@ import { capitalizarPalabras } from '@/app/handlers/formatters';
 import { PRESENTACIONES } from '@/app/constants/inventarioCampos';
 
 
-export default function ProductoForm({ productId = null }) {
+// onGuardado / onCancelar: para usarlo dentro de otra pantalla (p. ej. crear un producto al vuelo en una compra, en una ventana):
+// no navega, al guardar llama onGuardado(producto) y «Cancelar» llama onCancelar.
+export default function ProductoForm({ productId = null, onGuardado = null, onCancelar = null }) {
+    const embebido = Boolean(onGuardado || onCancelar);
+    const zNested = embebido ? 4000 : undefined; // las ventanas de categoría/marca/grupo deben quedar por encima de la ventana que lo contiene
     const router = useRouter();
     const queryClient = useQueryClient();
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -211,6 +215,9 @@ export default function ProductoForm({ productId = null }) {
 
             notifications.show({ title: 'Éxito', message: `Producto ${isEditMode ? 'actualizado' : 'registrado'} correctamente`, color: 'green' });
             queryClient.invalidateQueries({ queryKey: ['productos'] });
+            queryClient.invalidateQueries({ queryKey: ['productos-compra'] });
+            queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
+            if (embebido) { onGuardado?.(data.producto || data); return; }
             router.push('/superuser/inventario/productos');
 
         } catch (error) {
@@ -224,10 +231,12 @@ export default function ProductoForm({ productId = null }) {
 
     return (
         <Box p="md" maw={1000} mx="auto">
-            <Group mb="xl">
-                <Button variant="subtle" color="gray" leftSection={<IconArrowLeft size={16} />} onClick={() => router.back()}>Volver</Button>
-                <Title order={2} c="blue.9">{isEditMode ? 'Editar Producto' : 'Registrar Nuevo Producto'}</Title>
-            </Group>
+            {!embebido && (
+                <Group mb="xl">
+                    <Button variant="subtle" color="gray" leftSection={<IconArrowLeft size={16} />} onClick={() => router.back()}>Volver</Button>
+                    <Title order={2} c="blue.9">{isEditMode ? 'Editar Producto' : 'Registrar Nuevo Producto'}</Title>
+                </Group>
+            )}
 
             <form onSubmit={form.onSubmit(handleSubmitProducto)}>
                 <Stack gap="xl">
@@ -477,7 +486,7 @@ export default function ProductoForm({ productId = null }) {
 
                     {/* BOTONES DE ACCIÓN */}
                     <Group justify="flex-end" mt="md">
-                        <Button variant="light" color="gray" onClick={() => router.back()} disabled={isSubmitting}>Cancelar</Button>
+                        <Button variant="light" color="gray" onClick={() => (embebido ? onCancelar?.() : router.back())} disabled={isSubmitting}>Cancelar</Button>
                         <Button type="submit" size="lg" color={isEditMode ? "green.8" : "blue.9"} leftSection={<IconDeviceFloppy size={20} />} loading={isSubmitting}>
                             {isEditMode ? 'Actualizar Producto Completo' : 'Guardar Producto Completo'}
                         </Button>
@@ -486,7 +495,7 @@ export default function ProductoForm({ productId = null }) {
             </form>
 
             {/* --- MODALES DINÁMICOS --- */}
-            <Modal opened={modalCat} onClose={() => { setModalCat(false); formCategoria.reset(); }} title={<Title order={4}>Nueva Categoría</Title>} centered>
+            <Modal opened={modalCat} onClose={() => { setModalCat(false); formCategoria.reset(); }} title={<Title order={4}>Nueva Categoría</Title>} centered zIndex={zNested}>
                 <form onSubmit={formCategoria.onSubmit((values) => handleSubmitDiccionario('/api/categorias', 'categorias', 'categoriaId', values, {}, formCategoria, setModalCat))}>
                     <Stack gap="md">
                         {/* Categoría: Aplica Capitalización Inteligente */}
@@ -501,7 +510,7 @@ export default function ProductoForm({ productId = null }) {
                 </form>
             </Modal>
 
-            <Modal opened={modalMarca} onClose={() => { setModalMarca(false); formMarca.reset(); }} title={<Title order={4}>Nueva Marca</Title>} centered>
+            <Modal opened={modalMarca} onClose={() => { setModalMarca(false); formMarca.reset(); }} title={<Title order={4}>Nueva Marca</Title>} centered zIndex={zNested}>
                 <form onSubmit={formMarca.onSubmit((values) => handleSubmitDiccionario('/api/marcas', 'marcas', 'marcaId', values, {}, formMarca, setModalMarca))}>
                     <Stack gap="md">
                         {/* 🔥 Marca: TODO MAYÚSCULAS 🔥 */}
@@ -517,7 +526,7 @@ export default function ProductoForm({ productId = null }) {
                 </form>
             </Modal>
 
-            <Modal opened={modalGrupo} onClose={() => { setModalGrupo(false); formGrupo.reset(); }} title={<Title order={4}>Nuevo Grupo</Title>} centered>
+            <Modal opened={modalGrupo} onClose={() => { setModalGrupo(false); formGrupo.reset(); }} title={<Title order={4}>Nuevo Grupo</Title>} centered zIndex={zNested}>
                 <form onSubmit={formGrupo.onSubmit((values) => handleSubmitDiccionario('/api/grupos-equivalencia', 'grupos', 'grupoEquivalenciaId', values, { categoriaId: form.values.categoriaId }, formGrupo, setModalGrupo))}>
                     <Stack gap="md">
                         {/* 🔥 Grupo Equivalencia: TODO MAYÚSCULAS 🔥 */}

@@ -9,6 +9,7 @@ import {
 import { useForm } from '@mantine/form';
 import { useMediaQuery } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import ProductoForm from './ProductoForm';
 import { 
     IconTrash, IconPlus, IconMinus, IconCheck, IconShieldCheck, IconAlertTriangle, IconReceiptTax, IconPackage, IconSparkles
 } from '@tabler/icons-react';
@@ -375,6 +376,17 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         }
     };
 
+    // Producto que no está en el catálogo: se crea con el formulario de productos (imágenes y todo) sin salir de la compra y queda agregado
+    const [modalProductoNuevo, setModalProductoNuevo] = useState(false);
+    const productoCreado = async (nuevo) => {
+        setModalProductoNuevo(false);
+        // Se vuelve a leer el catálogo para tener el producto completo (marca, empaque) y se agrega a la compra
+        const lista = await queryClient.fetchQuery({ queryKey: ['productos-compra'], queryFn: () => fetchSelect('/api/productos'), staleTime: 0 });
+        const completo = (Array.isArray(lista) ? lista : []).find((p) => Number(p.id) === Number(nuevo?.id)) || nuevo;
+        if (completo?.id) agregarAlCarritoCompra(completo);
+        notifications.show({ color: 'teal', title: 'Producto creado', message: `${completo?.nombre || 'Producto'} quedó registrado y agregado a la compra` });
+    };
+
     const agregarAlCarritoCompra = (prod) => {
         const existe = carritoCompra.find(i => i.id === prod.id);
         if (existe) {
@@ -655,10 +667,14 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         <Paper withBorder p={isMobile ? 'xs' : 'sm'} radius="md" h={isMobile ? 260 : undefined}
             style={{ display: 'flex', flexDirection: 'column', ...(isMobile ? {} : { flex: '0 0 clamp(300px, 28%, 420px)', minHeight: 0 }) }}>
             {!isMobile && <Group justify="space-between" mb={6}><Text fw={700} size="sm">Productos disponibles</Text><Text size="xs" c="dimmed">{coincidencias.length} encontrados</Text></Group>}
-            <TextInput size="sm" placeholder="Buscar producto por nombre o SKU..." mb={isMobile ? 6 : 'xs'} value={busquedaProd} onChange={(e) => setBusquedaProd(e.currentTarget.value)} data-autofocus />
+            <Group gap="xs" wrap="nowrap" align="flex-start" mb={isMobile ? 6 : 'xs'}>
+                <TextInput size="sm" style={{ flex: 1, minWidth: 0 }} placeholder="Buscar producto por nombre o SKU..." value={busquedaProd} onChange={(e) => setBusquedaProd(e.currentTarget.value)} data-autofocus />
+                <Button size="sm" variant="light" color="teal" tt="none" style={{ flex: '0 0 auto' }} leftSection={<IconPlus size={16} />} onClick={() => setModalProductoNuevo(true)}>Nuevo</Button>
+            </Group>
             <ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto">
                 <Stack gap={6}>
                     {productosFiltrados.map(prod => <FilaProducto key={prod.id} prod={prod} isMobile onAgregar={agregarAlCarritoCompra} />)}
+                    {!productosFiltrados.length && busquedaProd.trim() && <Text size="sm" c="dimmed" ta="center" py="sm">No hay productos con «{busquedaProd.trim()}». Usa <b>Nuevo</b> para registrarlo ahora.</Text>}
                     {hayMas && <Text size="xs" c="dimmed" ta="center">Mostrando {MAX_LISTA} de {coincidencias.length}: escribe para afinar la búsqueda.</Text>}
                 </Stack>
             </ScrollArea>
@@ -1004,6 +1020,9 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 )}
 
                 {/* MODAL SECUNDARIO: CREAR PROVEEDOR EN CALIENTE */}
+                <Modal opened={modalProductoNuevo} onClose={() => setModalProductoNuevo(false)} fullScreen zIndex={2500} title={<Title order={3} c="blue.9">Nuevo producto</Title>}>
+                    <ProductoForm onGuardado={productoCreado} onCancelar={() => setModalProductoNuevo(false)} />
+                </Modal>
                 <Modal opened={modalCrearProv} onClose={() => setModalCrearProv(false)} size="lg" title={<Title order={3} c="grape">Registrar Nuevo Proveedor</Title>} centered zIndex={2000}>
                     <form onSubmit={formNuevoProv.onSubmit(async (values) => {
                         try {
