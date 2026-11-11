@@ -68,14 +68,16 @@ export async function GET(request) {
                 v."totalFinal"::float AS total, ${USD}::float AS "totalUsd", v."statusDespacho"::text AS estado, ${PAGO} AS pago, v."condicionPago"::text AS "condicionPago",
                 v."empacadoAt", v."etiquetadoAt", v."empacadorId", v."etiquetadorId",
                 COALESCE(c."nombre", 'Cliente al detal') AS cliente, COALESCE(e."nombre" || ' ' || e."apellido", u."user") AS vendedor,
-                (SELECT COALESCE(SUM(d."cantidad"), 0)::int FROM "VentaDetalles" d WHERE d."ventaId" = v."id") AS articulos
+                (SELECT COALESCE(SUM(d."cantidad"), 0)::int FROM "VentaDetalles" d WHERE d."ventaId" = v."id") AS articulos,
+                (SELECT r."estado" FROM "RetencionesIva" r WHERE r."ventaId" = v."id" LIMIT 1) AS retencion
                 ${desdeSql} WHERE ${filtro}`);
         if (incluyeNotas) partes.push(`SELECT n."id", v."id" AS "ventaId", n."numeroDocumento" AS numero, n."createdAt" AS fecha, v."tipoVenta" AS tipo,
                 (CASE WHEN n."tipo" = 'CREDITO' THEN 'NOTA_CREDITO' ELSE 'NOTA_DEBITO' END) AS "tipoDocumento", n."moneda"::text AS moneda,
                 (n."totalFinal" * (CASE WHEN n."tipo" = 'CREDITO' THEN -1 ELSE 1 END))::float AS total, ${NOTA_USD}::float AS "totalUsd",
                 (CASE WHEN n."estado" = 'ANULADA' THEN 'Anulada' ELSE 'Emitida' END) AS estado, NULL::text AS pago, NULL::text AS "condicionPago",
                 NULL::timestamptz AS "empacadoAt", NULL::timestamptz AS "etiquetadoAt", NULL::int AS "empacadorId", NULL::int AS "etiquetadorId",
-                COALESCE(c."nombre", 'Cliente al detal') AS cliente, COALESCE(e."nombre" || ' ' || e."apellido", u."user") AS vendedor, NULL::int AS articulos
+                COALESCE(c."nombre", 'Cliente al detal') AS cliente, COALESCE(e."nombre" || ' ' || e."apellido", u."user") AS vendedor, NULL::int AS articulos,
+                NULL::text AS retencion
                 ${desdeNota} WHERE ${filtroNota}`);
         if (!partes.length) return NextResponse.json({ ventas: [], total: 0, pagina, paginas: 1 });
         const unidas = partes.join(' UNION ALL ');

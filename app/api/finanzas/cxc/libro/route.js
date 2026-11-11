@@ -24,8 +24,11 @@ export async function GET(request) {
             q(`SELECT c.id, c."ventaId", c."clienteId", c."montoTotal"::float AS monto, c."saldoPendiente"::float AS saldo, c.moneda::text AS moneda, c."tasaCambio"::float AS tasa,
                     c."fechaVencimiento" AS vence, c.estado::text AS estado, c.observacion, v."numeroDocumento" AS documento, v."tipoDocumento"::text AS "tipoDoc",
                     (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date AS emision, cl.nombre AS cliente, cl.identificacion AS rif,
-                    v."montoIva"::float AS "ivaVenta", v.moneda::text AS "monedaVenta", v."tasaCambio"::float AS "tasaVenta",
+                    v."montoIva"::float AS "ivaVenta", v.moneda::text AS "monedaVenta", v."tasaCambio"::float AS "tasaVenta", v."totalFinal"::float AS "totalVenta",
                     (SELECT r.estado FROM "RetencionesIva" r WHERE r."ventaId" = c."ventaId" LIMIT 1) AS "retEstado",
+                    (SELECT r."ivaRetenido"::float FROM "RetencionesIva" r WHERE r."ventaId" = c."ventaId" LIMIT 1) AS "retBs",
+                    (SELECT r."tasaCambio"::float FROM "RetencionesIva" r WHERE r."ventaId" = c."ventaId" LIMIT 1) AS "retTasa",
+                    (SELECT a."montoUsd"::float FROM "RetencionesIva" r JOIN "Abonos" a ON a.id = r."abonoId" WHERE r."ventaId" = c."ventaId" LIMIT 1) AS "retUsdAbono",
                     EXISTS (SELECT 1 FROM "Abonos" a WHERE a."ventaId" = c."ventaId" AND a.notas LIKE '%${MARCA_CIERRE}%') AS "cierreDeclarado"
                FROM "CuentasPorCobrar" c JOIN "Ventas" v ON v.id = c."ventaId" JOIN "Clientes" cl ON cl.id = c."clienteId"
                ${filtro} ORDER BY cl.nombre, c."fechaVencimiento", v."numeroDocumento"`),
@@ -46,8 +49,13 @@ export async function GET(request) {
             // Retención de IVA que se esperaría (75 %) a la tasa de la factura, en dólares: con ella el abono sabe si «parece que el cliente retuvo»
             const ivaUsd = c.monedaVenta === 'BS' ? Number(c.ivaVenta) / (Number(c.tasaVenta) || 1) : Number(c.ivaVenta);
             const retEsperada = c.tipoDoc === 'FACTURA' && ivaUsd > 0 ? r2(ivaUsd * 0.75) : 0;
+            // Retención que el cliente ya hizo (declarada o con comprobante): el total de la factura en $ y en Bs, con y sin ella
+            const totalBs = c.monedaVenta === 'BS' ? r2(c.totalVenta) : r2(Number(c.totalVenta) * (Number(c.tasaVenta) || 1));
+            const retBs = c.retBs !== null && c.retBs !== undefined ? r2(c.retBs) : null;
+            const retUsd = retBs === null ? null : (c.retUsdAbono !== null && c.retUsdAbono !== undefined ? r2(c.retUsdAbono) : r2(retBs / (Number(c.retTasa) || Number(c.tasaVenta) || 1)));
             return {
                 retEstado: c.retEstado || null, retEsperada, cierreDeclarado: Boolean(c.cierreDeclarado),
+                retUsd, retBs, totalBs, montoMenosRet: retUsd === null ? null : r2(monto - retUsd), totalBsMenosRet: retBs === null ? null : r2(totalBs - retBs),
                 id: c.id, ventaId: c.ventaId, clienteId: c.clienteId, cliente: c.cliente, rif: c.rif, documento: c.documento, tipoDoc: c.tipoDoc, emision: iso(c.emision), vence,
                 monto, abonado: r2(monto - saldo), saldo, estado: c.estado, vencida: saldo > 0.005 && Boolean(vence) && vence < hoy, observacion: c.observacion || '',
                 vendedor: vendedorPorVenta.get(c.ventaId) || null, abonos: abonosPorVenta.get(c.ventaId) || [],

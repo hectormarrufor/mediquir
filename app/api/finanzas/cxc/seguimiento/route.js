@@ -18,6 +18,7 @@ export async function GET() {
         const q = (sql, replacements) => sequelize.query(sql, { type: sequelize.QueryTypes.SELECT, replacements });
         const [retenciones, dicen] = await Promise.all([
             q(`SELECT r.id, r."ventaId", r."facturaAfectada" AS documento, r.fecha, r.estado, r."ivaRetenido"::float AS "ivaRetenidoBs", r."porcentajeRetencion"::float AS pct,
+                      r.comprobante, r."montoDeclarado"::float AS "montoDeclarado", v."numeroControl",
                       cl.id AS "clienteId", cl.nombre AS cliente, cl.identificacion AS rif, cl.telefono
                  FROM "RetencionesIva" r JOIN "Ventas" v ON v.id = r."ventaId" LEFT JOIN "Clientes" cl ON cl.id = v."clienteId"
                 WHERE r.tipo = 'VENTA' AND r.estado IN ('PENDIENTE', 'POR_REVISAR') AND r.fecha >= :desde AND v."statusDespacho" <> 'Cancelado'

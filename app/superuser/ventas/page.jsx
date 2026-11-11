@@ -38,6 +38,13 @@ async function pedirJson(url, opciones) {
 const TIPOS = { DETAL: { etiqueta: 'Detal', color: 'yellow' }, MAYOR: { etiqueta: 'Mayor', color: 'grape' }, ONLINE: { etiqueta: 'Online', color: 'cyan' } };
 const COLOR_DESPACHO = { Pendiente: 'blue', Empacado: 'violet', Parcial: 'orange', Completado: 'teal', Cancelado: 'gray' };
 const COLOR_PAGO = { Pagado: 'teal', Pendiente: 'orange', Vencido: 'red' };
+// El cliente retuvo el IVA de la factura (declarado en el abono o en la factura): falta o no el comprobante
+const RETENCION = {
+    REGISTRADA: { texto: 'Retenida', color: 'grape' },
+    PENDIENTE: { texto: 'Retenida · falta comprobante', color: 'orange' },
+    POR_REVISAR: { texto: 'Retenida · comprobante por revisar', color: 'orange' },
+};
+const BadgeRetencion = ({ estado }) => (RETENCION[estado] ? <Badge variant="light" color={RETENCION[estado].color} tt="none">{RETENCION[estado].texto}</Badge> : null);
 const COLOR_DONA = { DETAL: 'yellow.6', MAYOR: 'grape.6', ONLINE: 'cyan.6' };
 
 // Rango de fechas de cada periodo (semana de lunes a domingo)
@@ -105,6 +112,7 @@ function TarjetaVenta({ v, esVendedor, isAdmin, onAbrir, onEliminar }) {
                 <Group gap={6} wrap="wrap" style={{ minWidth: 0 }}>
                     <Badge variant="light" color={(esNota(v) ? COLOR_NOTA : COLOR_DESPACHO)[v.estado] || 'gray'}>{v.estado}</Badge>
                     {v.pago && <Badge variant="light" color={COLOR_PAGO[v.pago] || 'gray'}>{v.pago}</Badge>}
+                    <BadgeRetencion estado={v.retencion} />
                     {v.tipo === 'MAYOR' && v.empacadorId && (
                         <Group gap={2} wrap="nowrap" aria-label={`Empaque ${v.empacadoAt ? 'firmado' : 'pendiente'} · Etiquetado ${v.etiquetadoAt ? 'firmado' : 'pendiente'}`}>
                             <IconPackage size={16} color={v.empacadoAt ? 'var(--mantine-color-teal-6)' : 'var(--mantine-color-gray-5)'} />
@@ -395,7 +403,11 @@ export default function VentasDashboard() {
                                                         )}
                                                     </Group>
                                                 </Table.Td>
-                                                <Table.Td>{v.pago ? <Badge variant="light" color={COLOR_PAGO[v.pago] || 'gray'}>{v.pago}</Badge> : <Text size="sm" c="dimmed">—</Text>}</Table.Td>
+                                                <Table.Td>
+                                                    {v.pago ? (
+                                                        <Group gap={4} wrap="wrap"><Badge variant="light" color={COLOR_PAGO[v.pago] || 'gray'}>{v.pago}</Badge><BadgeRetencion estado={v.retencion} /></Group>
+                                                    ) : <Text size="sm" c="dimmed">—</Text>}
+                                                </Table.Td>
                                                 <Table.Td onClick={(e) => e.stopPropagation()}>
                                                     {!esNota(v) && (
                                                         <Group gap={4} wrap="nowrap" justify="flex-end">

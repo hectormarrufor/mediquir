@@ -7,7 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { Badge, Box, Button, Collapse, Group, Stack, Text, UnstyledButton } from '@mantine/core';
 import { IconAlertTriangle, IconChevronDown, IconCoin, IconPencil } from '@tabler/icons-react';
 import { MenuDocumento } from './PiezasLibro';
-import { dolares, fmtFecha, usd, vencimientoEnPalabras } from './utilidades';
+import { bolivares, dolares, fmtFecha, usd, vencimientoEnPalabras } from './utilidades';
 import classes from './cxc.module.css';
 
 function TarjetaDocumento({ f, acc }) {
@@ -36,6 +36,10 @@ function TarjetaDocumento({ f, acc }) {
                 <Text fz={12.5}>Monto <b>{dolares(f.monto)}</b></Text>
                 <Text fz={12.5} c="#1971c2">Abonado <b>{dolares(f.abonado)}</b></Text>
             </Group>
+            {/* Retención de IVA que hizo el cliente: la factura con y sin ella, en dólares y en bolívares */}
+            {f.retUsd !== null && f.retUsd !== undefined ? (
+                <Text fz={12} c="grape.8">Retención <b>{dolares(f.retUsd)}</b> · Monto − ret. <b>{dolares(f.montoMenosRet)}</b> · {bolivares(f.totalBs)} → <b>{bolivares(f.totalBsMenosRet)}</b></Text>
+            ) : f.totalBs ? <Text fz={12} c="#5c6675">Total {bolivares(f.totalBs)}</Text> : null}
             <Text fz={12} c="#5c6675">Emitida {fmtFecha(f.emision) || '—'}{f.vendedor ? ` · Vendedor: ${f.vendedor}` : ''}</Text>
             {f.observacion && <Text fz={12.5} mt={6} px={8} py={4} style={{ background: 'rgba(11,27,61,0.05)', borderRadius: 6, wordBreak: 'break-word' }}>{f.observacion}</Text>}
             <Group gap={6} mt={8} wrap="nowrap">

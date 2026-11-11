@@ -53,7 +53,9 @@ function Abonos({ f, acc }) {
 export default function LibroTabla({ grupos, totales, acc, libro }) {
     const grande = useAnchoGrande(); // la columna del vendedor solo cuando cabe sin apretar las demás
     const { abierto, alternarCliente, desplegarTodo, plegarTodo, plegadas, alternarPlegada } = libro;
-    const columnas = grande ? 10 : 9;
+    const columnas = grande ? 14 : 13;
+    // Retención de IVA que hizo el cliente (si la hizo): la factura con y sin ella, en dólares y en bolívares
+    const conRet = (v) => (v === null || v === undefined ? <Text span c="dimmed">—</Text> : usd(v));
     const todosAbiertos = grupos.length > 0 && grupos.every((g) => abierto(g.id));
     const abonosVisibles = (f) => f.abonos.length > 0 && !plegadas.has(f.id);
 
@@ -75,6 +77,10 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
                     <Table.Th w={80}>Emisión</Table.Th>
                     <Table.Th w={122}>Vence</Table.Th>
                     <Table.Th w={106} ta="right">Monto USD</Table.Th>
+                    <Table.Th w={92} ta="right"><Tooltip label="IVA que retuvo el cliente (lo paga al SENIAT), en dólares"><span>Retención</span></Tooltip></Table.Th>
+                    <Table.Th w={104} ta="right"><Tooltip label="Monto de la factura con la retención aplicada (lo que paga en dinero)"><span>Monto − ret.</span></Tooltip></Table.Th>
+                    <Table.Th w={118} ta="right">Total Bs</Table.Th>
+                    <Table.Th w={118} ta="right"><Tooltip label="Total en bolívares con la retención aplicada"><span>Bs − ret.</span></Tooltip></Table.Th>
                     <Table.Th w={100} ta="right">Abonado</Table.Th>
                     <Table.Th w={112} ta="right">Saldo</Table.Th>
                     {grande && <Table.Th w={130}>Vendedor</Table.Th>}
@@ -96,9 +102,11 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
                                 </Group>
                             </Table.Td>
                             <Table.Td ta="right"><Text fz={12} fw={700} pr={6}>{usd(g.monto)}</Text></Table.Td>
+                            <Table.Td ta="right"><Text fz={12} fw={700} pr={6} c="grape.8">{g.retUsd > 0 ? usd(g.retUsd) : ''}</Text></Table.Td>
+                            <Table.Td colSpan={3} />
                             <Table.Td ta="right"><Text fz={12} fw={700} pr={6} c="#1971c2">{usd(g.abonado)}</Text></Table.Td>
                             <Table.Td ta="right"><Text size="sm" fw={800} pr={6} c={g.vencido > 0 ? 'red.8' : 'navy.9'}>{usd(g.saldo)}</Text></Table.Td>
-                            <Table.Td colSpan={columnas - 7} />
+                            <Table.Td colSpan={columnas - 11} />
                         </Table.Tr>
                         {abierto(g.id) && g.filas.map((f) => (
                             <React.Fragment key={f.id}>
@@ -119,6 +127,10 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
                                     <Table.Td><Text fz={12} px={6}>{fmtFecha(f.emision)}</Text></Table.Td>
                                     <Table.Td><CeldaEditable tipo="fecha" valor={f.vence} formato={formatoVence(f)} etiqueta={`Vencimiento de ${f.documento}`} onGuardar={(v) => acc.guardar(f, { fechaVencimiento: v })} color={f.vencida ? '#c92a2a' : undefined} /></Table.Td>
                                     <Table.Td><CeldaEditable tipo="numero" valor={f.monto} align="right" formato={usd} etiqueta={`Monto de ${f.documento}`} onGuardar={(v) => { acc.corregirMonto(f, v); return Promise.resolve(); }} /></Table.Td>
+                                    <Table.Td><Text fz={12.5} ta="right" px={6} c="grape.8">{conRet(f.retUsd)}</Text></Table.Td>
+                                    <Table.Td><Text fz={12.5} ta="right" px={6} fw={f.montoMenosRet !== null && f.montoMenosRet !== undefined ? 700 : undefined}>{conRet(f.montoMenosRet)}</Text></Table.Td>
+                                    <Table.Td><Text fz={12.5} ta="right" px={6}>{f.totalBs !== null && f.totalBs !== undefined ? usd(f.totalBs) : ''}</Text></Table.Td>
+                                    <Table.Td><Text fz={12.5} ta="right" px={6}>{conRet(f.totalBsMenosRet)}</Text></Table.Td>
                                     <Table.Td><Text size="sm" ta="right" px={6} c="#1971c2">{usd(f.abonado)}</Text></Table.Td>
                                     <Table.Td><CeldaEditable tipo="numero" valor={f.saldo} align="right" formato={usd} negrita color={f.vencida ? '#c92a2a' : undefined} etiqueta={`Saldo de ${f.documento}`} onGuardar={(v) => { acc.abonar(f, v); return Promise.resolve(); }} /></Table.Td>
                                     {grande && <Table.Td><Text fz={12} px={6} truncate="end">{f.vendedor || ''}</Text></Table.Td>}
@@ -145,9 +157,11 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
                 <Table.Tr>
                     <Table.Td colSpan={4}><Text fw={800} fz={12} pl={4}>TOTAL · {totales.documentos} documento(s) de {totales.clientes} cliente(s)</Text></Table.Td>
                     <Table.Td ta="right"><Text fw={800} fz={12} pr={6}>{usd(totales.monto)}</Text></Table.Td>
+                    <Table.Td ta="right"><Text fw={800} fz={12} pr={6} c="grape.8">{totales.retUsd > 0 ? usd(totales.retUsd) : ''}</Text></Table.Td>
+                    <Table.Td colSpan={3} />
                     <Table.Td ta="right"><Text fw={800} fz={12} pr={6} c="#1971c2">{usd(totales.abonado)}</Text></Table.Td>
                     <Table.Td ta="right"><Text fw={800} size="sm" pr={6} c="navy.9">{usd(totales.saldo)}</Text></Table.Td>
-                    <Table.Td colSpan={columnas - 7} />
+                    <Table.Td colSpan={columnas - 11} />
                 </Table.Tr>
             </Table.Tfoot>
         </Table>
