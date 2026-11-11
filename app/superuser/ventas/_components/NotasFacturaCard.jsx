@@ -8,6 +8,8 @@ import EmitirNotaModal from './EmitirNotaModal';
 import NotaAcciones from './NotaAcciones';
 import DiferencialCambiarioModal from './DiferencialCambiarioModal';
 import CompensarNotaModal from './CompensarNotaModal';
+import AnularFacturaModal from './AnularFacturaModal';
+import { useAuth } from '@/hooks/useAuth';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 const fmtFecha = (v) => (v ? `${String(v).slice(8, 10)}/${String(v).slice(5, 7)}/${String(v).slice(0, 4)}` : '');
@@ -19,6 +21,8 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
     const [diferencial, setDiferencial] = useState(false);
     const [compensar, setCompensar] = useState(null); // nota de crédito recién emitida que dejó saldo a favor: se ofrece compensarlo
     const [controlInicial, setControlInicial] = useState('');
+    const [anulando, setAnulando] = useState(false);
+    const { isAdmin } = useAuth();
     // Abierta desde «Números de control» (?nota=CREDITO&control=00-0122660): se abre la nota con ese número de control
     useEffect(() => {
         const p = new URLSearchParams(window.location.search);
@@ -50,6 +54,13 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
 
             {pedido.moneda === 'USD' && (
                 <Button size="xs" variant="light" color="indigo" fullWidth mb="sm" onClick={() => setDiferencial(true)}>Nota de débito por diferencial cambiario</Button>
+            )}
+            {/* Anular la factura (total o parcial) con una nota de crédito: solo administración */}
+            {isAdmin && data && data.acreditable > 0 && (
+                <Button size="xs" variant="outline" color="red" fullWidth mb="sm" onClick={() => setAnulando(true)}>Anular factura (total o parcial)</Button>
+            )}
+            {data && data.acreditable <= 0 && notas.some((n) => n.tipo === 'CREDITO' && n.estado === 'EMITIDA') && (
+                <Badge color="red" variant="light" size="lg" fullWidth mb="sm">Factura anulada por completo con nota de crédito</Badge>
             )}
 
             {!notas.length ? <Text size="xs" c="dimmed">Esta factura no tiene notas.</Text> : (
@@ -86,6 +97,7 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
             {diferencial && <DiferencialCambiarioModal opened onClose={() => setDiferencial(false)} factura={pedido} onEmitida={refrescar} />}
             {emitiendo && <EmitirNotaModal opened onClose={() => { setEmitiendo(null); setControlInicial(''); }} factura={pedido} tipo={emitiendo} controlInicial={controlInicial} onEmitida={(nota) => { refrescar(); if (nota?.tipo === 'CREDITO' && Number(nota.saldoAFavorUsd) > 0.005) setCompensar(nota); }} />}
             {compensar && <CompensarNotaModal nota={compensar} desdeEmision onClose={() => setCompensar(null)} onCambio={refrescar} />}
+            {anulando && <AnularFacturaModal opened onClose={() => setAnulando(false)} pedido={pedido} onListo={refrescar} />}
         </Paper>
     );
 }

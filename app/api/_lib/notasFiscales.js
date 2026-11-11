@@ -109,8 +109,10 @@ export async function otrasFacturasDelCliente(venta, transaction) {
  * @param {Array}  p.renglones    Crédito: [{ ventaDetalleId, cantidad }] (devolución de un renglón) y/o conceptos libres.
  *                                Concepto libre (crédito o débito): [{ descripcion, precioUnitario, cantidad?, aplicaIva }]
  * @param {string[]} p.otrasFacturasIds  Solo nota de débito: otras facturas del mismo cliente que también afecta (la deuda se suma a la factura principal, `venta`)
+ * @param {boolean} p.afectaCxc   Solo nota de crédito: false = no baja lo que el cliente debe (ni deja saldo a favor); p. ej. una anulación parcial
+ *                                que no toca la cuenta por cobrar, o la de una factura cuya deuda vuelve a su nota de entrega.
  */
-export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario = false, otrasFacturasIds = [], usuarioId = null, transaction: t, numeroManual = null, numeroControl = null, fecha = null }) {
+export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario = false, afectaCxc = true, otrasFacturasIds = [], usuarioId = null, transaction: t, numeroManual = null, numeroControl = null, fecha = null }) {
     if (!PREFIJO[tipo]) throw new ErrorNota('Tipo de nota no válido');
     if (venta.tipoDocumento !== 'FACTURA') throw new ErrorNota('Las notas de crédito y de débito solo se emiten sobre facturas', 409);
     if (venta.statusDespacho === 'Cancelado') throw new ErrorNota('La factura está anulada', 409);
@@ -200,9 +202,10 @@ export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelve
     const totalBs = aBsDoc(factura.totalFinal, moneda, tasa);
 
     if (tipo === 'CREDITO') {
-        // 1) Inventario: solo si la mercancía ya salió (el mayor descuenta al empacar; el detal y la tienda, al vender)
+        // 1) Inventario: solo si la mercancía ya salió (el mayor descuenta al empacar; el detal y la tienda, al vender; una factura copiada
+        //    del sistema anterior ya está despachada aunque nunca pasó por el empaque)
         if (nota.devuelveInventario) {
-            const descontado = venta.tipoVenta !== 'MAYOR' || Boolean(venta.empacadoAt);
+            const descontado = venta.tipoVenta !== 'MAYOR' || Boolean(venta.empacadoAt) || venta.statusDespacho === 'Completado';
             if (!descontado) throw new ErrorNota('Este pedido aún no se ha empacado: no salió mercancía del inventario, no hay nada que reintegrar. Desmarca esa opción.', 409);
             for (const l of lineas.filter((x) => x.productoId)) {
                 const producto = await Producto.findByPk(l.productoId, { transaction: t, lock: t.LOCK.UPDATE });
@@ -215,7 +218,9 @@ export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelve
 
         // 2) Deuda del cliente: la nota se aplica como un abono (no es dinero, es un descuento de la deuda)
         const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, transaction: t, lock: t.LOCK.UPDATE });
-        if (!cxc && venta.statusPago === 'Pagado') {
+        if (!afectaCxc) {
+            // No toca lo que el cliente debe: ni abono ni saldo a favor
+        } else if (!cxc && venta.statusPago === 'Pagado') {
             nota.saldoAFavorUsd = totalUsd; // ya se cobró todo: hay dinero que devolverle al cliente
         } else {
             const abono = await Abono.create({

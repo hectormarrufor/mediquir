@@ -68,6 +68,36 @@ async function primerControlLibre(desde, transaction) {
     return n;
 }
 
+const textoControl = (n, ceros) => formatear('CONTROL', n, ceros || CLAVES.CONTROL.ceros);
+
+/** Los próximos `cantidad` números de control libres, seguidos (para sugerir el control de varias notas que se emiten juntas). */
+export async function controlesLibres(cantidad = 1, transaction) {
+    const c = await Correlativo.findOne({ where: { prefijo: 'CONTROL' }, transaction });
+    if (!c || !c.configurado) return [];
+    const lista = [];
+    let n = Number(c.siguienteNumero) || 1;
+    for (let i = 0; i < cantidad; i++) {
+        n = await primerControlLibre(n, transaction);
+        lista.push(textoControl(n, c.cerosRelleno));
+        n += 1;
+    }
+    return lista;
+}
+
+/**
+ * Un número de control escrito a mano para un documento que se emite ahora: debe tener el formato 00-0122676 y estar libre
+ * (ni documento ni forma anulada). Si era el siguiente del correlativo, el correlativo avanza. Devuelve el texto normalizado.
+ */
+export async function reservarControl(texto, transaction) {
+    const m = /^(?:00-)?0*(\d{1,9})$/.exec(String(texto ?? '').trim());
+    if (!m) throw new ErrorNumeracion(`El número de control «${texto}» no es válido: escríbelo como 00-0122676`);
+    const n = Number(m[1]);
+    if ((await primerControlLibre(n, transaction)) !== n) throw new ErrorNumeracion(`El número de control ${textoControl(n)} ya está usado (o anotado como forma anulada)`, 409);
+    const c = await Correlativo.findOne({ where: { prefijo: 'CONTROL' }, transaction, lock: transaction?.LOCK.UPDATE });
+    if (c && Number(c.siguienteNumero) === n) { c.siguienteNumero = await primerControlLibre(n + 1, transaction); await c.save({ transaction }); }
+    return textoControl(n, c?.cerosRelleno);
+}
+
 // Estado de todas las series, para mostrarlo y para saber cuáles faltan por configurar
 export async function estadoNumeracion(transaction) {
     const filas = await Correlativo.findAll({ where: { prefijo: Object.keys(CLAVES) }, transaction });
