@@ -16,7 +16,7 @@ import {
     IconTrash, IconPlus, IconMinus, IconExchange,
     IconPackage, IconReceiptTax, IconCheck, IconTag,
     IconZoomIn, IconZoomOut, IconEdit, IconArrowBackUp, IconFileInvoice,
-    IconSearch, IconShoppingCart, IconChevronRight
+    IconSearch, IconShoppingCart, IconChevronRight, IconPrinter
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import PrecioVisual from '../ui/PrecioVisual'; 
@@ -481,7 +481,20 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Error al procesar la venta');
 
-            notifications.show({ title: 'Éxito', message: `Venta registrada: ${data.numeroDocumento}`, color: 'green' });
+            // Se ofrece imprimir de una vez. Va en un aviso con botón (y no se abre sola) porque el navegador bloquea ventanas que no vienen de un toque;
+            // el aviso sobrevive al cierre de esta pantalla
+            notifications.show({
+                id: `venta-${data.ventaId}`, color: 'green', autoClose: 20000, withCloseButton: true,
+                title: `Venta registrada: ${data.numeroDocumento}`,
+                message: (
+                    <Group gap="sm" mt={4}>
+                        <Button size="xs" color="blue.8" leftSection={<IconPrinter size={14} />}
+                            onClick={() => { window.open(`/superuser/ventas/imprimir/${data.ventaId}`, '_blank'); notifications.hide(`venta-${data.ventaId}`); }}>
+                            Imprimir ahora
+                        </Button>
+                    </Group>
+                ),
+            });
             // El próximo número de documento y el stock cambiaron: la siguiente venta debe verlos al día
             queryClient.invalidateQueries({ queryKey: ['correlativos-pos'] });
             queryClient.invalidateQueries({ queryKey: ['clientes-pos'] }); // por si cambiaron los días de crédito del cliente
