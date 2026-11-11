@@ -22,6 +22,8 @@ const VentaDetalle = sequelize.define('VentaDetalle', {
         type: DataTypes.BOOLEAN,
         defaultValue: false
     },
+    // Renglón escrito a mano: su texto es lo que salió impreso y no cambia. Puede quedar ENLAZADO a un producto (isFicticio + productoId)
+    // solo para que cuente en el total vendido de ese producto (Inventario > Ventas sin producto); no mueve inventario.
     nombreFicticio: {
         type: DataTypes.STRING,
         allowNull: true // Se llena solo cuando isFicticio es true

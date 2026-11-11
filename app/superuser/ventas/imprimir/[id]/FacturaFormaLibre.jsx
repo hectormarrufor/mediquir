@@ -91,8 +91,9 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                     <tbody>
                         {detalles.map((d, i) => (
                             <tr key={i}>
-                                <td>{d.producto?.codigo || 'S/C'}</td>
-                                <td className="fl-nombre">{d.producto?.nombre || d.nombreFicticio}</td>
+                                {/* Un renglón escrito a mano se imprime con su texto aunque esté enlazado a un producto (el enlace solo cuenta lo vendido) */}
+                                <td>{d.isFicticio ? 'S/C' : (d.producto?.codigo || 'S/C')}</td>
+                                <td className="fl-nombre">{d.isFicticio ? d.nombreFicticio : (d.producto?.nombre || d.nombreFicticio)}</td>
                                 <td style={{ textAlign: 'right' }}>{fmt(aBs(d.precioUnitario))}</td>
                                 <td style={{ textAlign: 'center' }}>{fmt(d.cantidad)}</td>
                                 <td style={{ textAlign: 'right' }}>{fmt(aBs(d.subtotal))}</td>

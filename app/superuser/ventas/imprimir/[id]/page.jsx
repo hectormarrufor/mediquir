@@ -167,8 +167,8 @@ export default function ImprimirRecibo() {
                             
                             return (
                                 <tr key={index}>
-                                    <td>{d.producto?.codigo || 'S/C'}</td>
-                                    <td style={{textAlign: 'left'}}>{d.producto?.nombre || d.nombreFicticio}</td>
+                                    <td>{d.isFicticio ? 'S/C' : (d.producto?.codigo || 'S/C')}</td>
+                                    <td style={{textAlign: 'left'}}>{d.isFicticio ? d.nombreFicticio : (d.producto?.nombre || d.nombreFicticio)}</td>
                                     <td style={{textAlign: 'right'}}>{formatoNumero(pu)}</td>
                                     <td style={{textAlign: 'center'}}>{formatoNumero(d.cantidad)}</td>
                                     <td style={{textAlign: 'right'}}>{formatoNumero(sub)}</td>

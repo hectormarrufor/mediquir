@@ -69,7 +69,7 @@ export default function RevisionExistencias({ pedido, onCambio }) {
                             return (
                                 <Paper key={d.id} withBorder radius="md" p={8} bg="white">
                                     <Group justify="space-between" wrap="nowrap" align="flex-start" gap="xs">
-                                        <Text size="sm" fw={600} lh={1.25} style={{ minWidth: 0 }}>{d.producto?.nombre || d.nombreFicticio}</Text>
+                                        <Text size="sm" fw={600} lh={1.25} style={{ minWidth: 0 }}>{d.isFicticio ? d.nombreFicticio : (d.producto?.nombre || d.nombreFicticio)}</Text>
                                         {falta > 0 ? <Badge color="red" variant="light" style={{ flexShrink: 0 }}>Falta {falta} und</Badge> : <Badge color="teal" variant="light" style={{ flexShrink: 0 }}>Alcanza</Badge>}
                                     </Group>
                                     <Text size="xs" c="dimmed" mt={2}>Piden {textoPiden(d)}{esPres(d) ? ` (${Number(d.cantidad)} und)` : ''} · en almacén {Number(d.producto?.stockAlmacen) || 0}</Text>
@@ -88,7 +88,7 @@ export default function RevisionExistencias({ pedido, onCambio }) {
                             const nuevo = edits[d.id] ?? actual;
                             return (
                                 <Table.Tr key={d.id}>
-                                    <Table.Td>{d.producto?.nombre || d.nombreFicticio}</Table.Td>
+                                    <Table.Td>{d.isFicticio ? d.nombreFicticio : (d.producto?.nombre || d.nombreFicticio)}</Table.Td>
                                     <Table.Td ta="right">
                                         {textoPiden(d)}
                                         {esPres(d) && <Text size="xs" c="dimmed">{Number(d.cantidad)} und</Text>}
