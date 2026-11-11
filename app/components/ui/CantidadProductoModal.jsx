@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Button, Group, Modal, NumberInput, SegmentedControl, Stack, Text } from '@mantine/core';
+import useVisualViewport from '@/hooks/useVisualViewport';
 
 // Pregunta cuánto se agrega de un producto: por unidad (cuántas) o por caja (cuántas cajas y cuántas unidades trae cada una).
 // presentaciones: las de presentacionesDe(producto) ({ clave, etiqueta, singular, plural, unidades }).
@@ -23,8 +24,12 @@ export default function CantidadProductoModal({ opened, onClose, nombre, present
     const valido = n >= 1 && !excede;
     const confirmar = () => { if (valido) { onConfirmar(pres.clave, n); onClose(); } };
 
+    // Con el teclado abierto, el modal se centra en el área visible (no en la pantalla completa)
+    const vv = useVisualViewport(opened);
+
     return (
-        <Modal opened={opened} onClose={onClose} title={<Text fw={800}>¿Cuánto vas a agregar?</Text>} centered size="sm" zIndex={zIndex}>
+        <Modal opened={opened} onClose={onClose} title={<Text fw={800}>¿Cuánto vas a agregar?</Text>} centered size="sm" zIndex={zIndex}
+            styles={vv ? { inner: { top: vv.top, bottom: 'auto', height: vv.height, paddingTop: 0, paddingBottom: 0 } } : undefined}>
             {pres && (
                 <Stack gap="sm">
                     <Text size="sm" fw={600} lineClamp={2}>{nombre}</Text>
