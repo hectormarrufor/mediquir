@@ -25,7 +25,7 @@ import EnvioCard from '../_components/EnvioCard';
 import PagoPorVerificarCard from '../_components/PagoPorVerificarCard';
 import { aInputFechaHora, formatearFecha, formatearFechaHora } from '@/app/constants/hora';
 import NotasFacturaCard from '../_components/NotasFacturaCard';
-import ConvertirNotaEntregaModal from '../_components/ConvertirNotaEntregaModal';
+import FacturarNotasModal from '../_components/FacturarNotasModal';
 import DatosDeCopia from '@/app/components/admin/DatosDeCopia';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -188,8 +188,16 @@ export default function DetallePedidoMayorPage() {
         ),
         <Button key="imprimir" size={tamAccion} variant="white" leftSection={<IconPrinter size={16} />} onClick={() => window.open(`/superuser/ventas/imprimir/${pedido.id}`, '_blank')}>Imprimir</Button>,
     ].filter(Boolean);
-    const avisoReemplazo = pedido.reemplazadaPor && (
-        <Button size={tamAccion} variant="light" color="orange" fullWidth={isMobile} onClick={() => router.push(`/superuser/ventas/${pedido.reemplazadaPor.id}`)}>Anulada: pasó a la factura {pedido.reemplazadaPor.numero} →</Button>
+    // Una nota puede haber pasado a una factura o, si tenía muchos renglones, a varias
+    const reemplazos = pedido.reemplazadaPorTodas || (pedido.reemplazadaPor ? [pedido.reemplazadaPor] : []);
+    const avisoReemplazo = reemplazos.length > 0 && (
+        <Group gap={6} wrap="wrap">
+            {reemplazos.map((f, i) => (
+                <Button key={f.id} size={tamAccion} variant="light" color="orange" fullWidth={isMobile} onClick={() => router.push(`/superuser/ventas/${f.id}`)}>
+                    {i === 0 ? `Anulada: pasó a la factura${reemplazos.length > 1 ? 's' : ''} ` : ''}{f.numero} →
+                </Button>
+            ))}
+        </Group>
     );
     const etiquetasEstado = (
         <>
@@ -719,7 +727,7 @@ export default function DetallePedidoMayorPage() {
                 </form>
             </Modal>
 
-            {modalNotaAFactura && <ConvertirNotaEntregaModal opened onClose={() => setModalNotaAFactura(false)} pedido={pedido} onListo={refetch} />}
+            {modalNotaAFactura && <FacturarNotasModal opened onClose={() => setModalNotaAFactura(false)} pedido={pedido} onListo={refetch} />}
 
             <Modal {...PANTALLA_COMPLETA_MOVIL} opened={modalFactura} onClose={() => setModalFactura(false)} title={<Title order={4}>Convertir en factura</Title>} centered>
                 <Stack gap="md">

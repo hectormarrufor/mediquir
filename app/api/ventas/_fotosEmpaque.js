@@ -1,4 +1,5 @@
 import { list, del } from '@vercel/blob';
+import { numerosAnteriores } from '../../constants/documentosAnteriores.js';
 
 // Política de retención de las fotos de empaque:
 //  · Al firmar el empaque se borran las fotos repetidas (solo quedan las dos definitivas).
@@ -8,8 +9,13 @@ export const DIAS_RETENCION_FOTOS = 90;
 export const DIAS_CANCELADAS = 7;
 export const DIAS_SIN_FIRMAR = 30;
 
-// Si la venta era un recibo V- que se convirtió en factura, las fotos siguen bajo el número anterior
-const prefijosDe = (venta) => [venta.numeroDocumento, venta.numeroDocumentoAnterior].filter(Boolean).map((n) => `empaques/${n}/`);
+// Si la venta era un recibo V- (o una nota de entrega) que pasó a factura con sus fotos, estas siguen bajo el número anterior.
+// Una factura hecha de varias notas (o una de las facturas de una nota larga) no se lleva las fotos: cada nota conserva las suyas,
+// así que sus carpetas solo cuentan si la factura tiene fotos propias.
+const prefijosDe = (venta) => {
+    const conFotos = Boolean(venta.fotoCajaAbiertaUrl || venta.fotoCajaSelladaUrl);
+    return [venta.numeroDocumento, ...(conFotos ? numerosAnteriores(venta.numeroDocumentoAnterior) : [])].filter(Boolean).map((n) => `empaques/${n}/`);
+};
 
 // Todas las fotos del pedido que hay en el Blob
 async function fotosEnBlob(venta) {

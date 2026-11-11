@@ -22,6 +22,7 @@ import { tasaVigente, tasaDelDia } from '../../_lib/tasaBcv';
 import { avisarCliente } from '../../_lib/avisosCliente';
 import { confirmarPagoManual, cancelarPedidoTienda, asentarCobroTienda, ErrorPagoTienda } from '../../_lib/pagoTienda';
 import { fechaCaracas, desdeInputFechaHora } from '@/app/constants/hora';
+import { numerosAnteriores } from '@/app/constants/documentosAnteriores';
 
 // Error de reglas de logística (permisos, estados) con su código HTTP
 class ErrorLogistica extends Error {
@@ -148,10 +149,18 @@ export async function GET(request, { params }) {
             return NextResponse.json(j);
         }
 
-        // Nota de entrega que pasó a factura: queda anulada en el historial y se enlaza a su factura
+        // Nota de entrega que pasó a factura: queda anulada en el historial y se enlaza a su(s) factura(s). Una factura puede venir de varias
+        // notas ("NE-06610, NE-06614") y una nota larga puede repartirse en varias facturas
         if (venta.tipoDocumento === 'NOTA_ENTREGA' && venta.statusDespacho === 'Cancelado') {
-            const f = await Venta.findOne({ where: { numeroDocumentoAnterior: venta.numeroDocumento, tipoDocumento: 'FACTURA' }, attributes: ['id', 'numeroDocumento'] });
-            if (f) return NextResponse.json({ ...venta.toJSON(), reemplazadaPor: { id: f.id, numero: f.numeroDocumento } });
+            const num = venta.numeroDocumento;
+            const facturas = await Venta.findAll({
+                where: { tipoDocumento: 'FACTURA', [Op.or]: [{ numeroDocumentoAnterior: num }, { numeroDocumentoAnterior: { [Op.regexp]: `(^|, )${num.replace(/[^A-Za-z0-9-]/g, '')}(,|$)` } }] },
+                attributes: ['id', 'numeroDocumento'], order: [['numeroDocumento', 'ASC']],
+            });
+            if (facturas.length) {
+                const lista = facturas.map((f) => ({ id: f.id, numero: f.numeroDocumento }));
+                return NextResponse.json({ ...venta.toJSON(), reemplazadaPor: lista[0], reemplazadaPorTodas: lista });
+            }
         }
         return NextResponse.json(venta);
     } catch (error) {
@@ -567,7 +576,9 @@ export async function DELETE(request, { params }) {
         // Archivos del Blob (comprobantes de retención y fotos de empaque): fuera de la transacción para no retenerla durante la red
         let archivosBorrados = 0;
         try {
-            archivosBorrados = await borrarArchivosDeVenta([ventaAMatar.numeroDocumento, ventaAMatar.numeroDocumentoAnterior], archivos);
+            // Las carpetas de los documentos anteriores solo si sus fotos pasaron a esta venta (una factura de varias notas no se las lleva)
+            const conFotos = Boolean(ventaAMatar.fotoCajaAbiertaUrl || ventaAMatar.fotoCajaSelladaUrl);
+            archivosBorrados = await borrarArchivosDeVenta([ventaAMatar.numeroDocumento, ...(conFotos ? numerosAnteriores(ventaAMatar.numeroDocumentoAnterior) : [])], archivos);
         } catch (e) {
             console.error('No se pudieron borrar los archivos del Blob de la venta eliminada:', archivos, e.message);
         }

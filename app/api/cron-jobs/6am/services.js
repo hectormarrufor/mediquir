@@ -267,15 +267,16 @@ export async function limpiarFotosEmpaque() {
     const hace = (dias) => new Date(Date.now() - dias * 24 * 60 * 60 * 1000);
     const conFotos = { [Op.or]: [{ fotoCajaAbiertaUrl: { [Op.ne]: null } }, { fotoCajaSelladaUrl: { [Op.ne]: null } }] };
 
+    // Una nota de entrega que pasó a factura(s) queda anulada pero SÍ se despachó: sus fotos son evidencia y siguen la ventana de reclamos
     const vencidas = await Venta.findAll({
-        where: { statusDespacho: 'Completado', fotosVencidasAt: null, fechaHoraRetiro: { [Op.lt]: hace(DIAS_RETENCION_FOTOS) }, ...conFotos },
+        where: { statusDespacho: { [Op.in]: ['Completado', 'Cancelado'] }, fotosVencidasAt: null, fechaHoraRetiro: { [Op.lt]: hace(DIAS_RETENCION_FOTOS) }, ...conFotos },
         limit: LOTE,
     });
     const abandonadas = await Venta.findAll({
         where: {
             [Op.and]: [conFotos, {
                 [Op.or]: [
-                    { statusDespacho: 'Cancelado', updatedAt: { [Op.lt]: hace(DIAS_CANCELADAS) } },
+                    { statusDespacho: 'Cancelado', fechaHoraRetiro: null, updatedAt: { [Op.lt]: hace(DIAS_CANCELADAS) } },
                     { statusDespacho: { [Op.notIn]: ['Completado', 'Cancelado'] }, empacadoAt: null, empaqueIniciadoAt: { [Op.lt]: hace(DIAS_SIN_FIRMAR) } },
                 ],
             }],

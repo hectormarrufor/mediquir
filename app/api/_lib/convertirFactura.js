@@ -5,7 +5,7 @@
 //    periodo en que se emite, no en el de la compra. El V- anterior queda en `numeroDocumentoAnterior`.
 //  · El IVA que la tienda había dejado como ingreso pasa a la categoría "IVA Recaudado": queda reservado para pagar al SENIAT.
 import db from '../../../models/index.js';
-import { calcularFactura, aDolares, aBolivares, REGLAS } from '../../constants/facturacion.js';
+import { calcularFactura, REGLAS } from '../../constants/facturacion.js';
 import { recalcularCobro } from './retencionesVenta.js';
 import { fechaCaracas } from '../../constants/hora.js';
 import { primerLibre } from './correlativoLibre.js';
@@ -22,7 +22,7 @@ const CAT_IVA = 'IVA Recaudado';
 // Siguiente número de factura: nunca por debajo del mayor F- ya emitido.
 // `manual`: el número que ya tiene esa factura en el sistema anterior (mientras convivan los dos, la factura se copia con SU número y no con uno nuevo).
 // Si ya existe una factura con ese número se rechaza (no se renumera en silencio); el correlativo avanza para que el siguiente sea el que sigue.
-async function siguienteNumeroFactura(t, manual = null) {
+export async function siguienteNumeroFactura(t, manual = null) {
     let corr = await Correlativo.findOne({ where: { prefijo: 'F' }, transaction: t, lock: t.LOCK.UPDATE });
     if (!corr) corr = await Correlativo.create({ prefijo: 'F', siguienteNumero: 1, cerosRelleno: 5 }, { transaction: t });
     const ceros = corr.cerosRelleno || 5;
@@ -108,18 +108,6 @@ async function planConversionNE(venta, transaction) {
     return { cxc, lineas, ivaNuevo, ivaViejo, deltaIva: r2(ivaNuevo - ivaViejo), totalNuevo: r2(Number(venta.totalFinal) + ivaNuevo - ivaViejo) };
 }
 
-/** Vista previa para la pantalla: qué cambia si se convierte hoy (no guarda nada). */
-export async function vistaPreviaConversion({ venta, tasaHoy, transaction }) {
-    const p = await planConversionNE(venta, transaction);
-    const tasaAntes = Number(venta.tasaCambio) || 1;
-    const totalAntes = Number(venta.totalFinal);
-    return {
-        numeroActual: venta.numeroDocumento, tasaAntes, tasaHoy,
-        ivaUsd: p.ivaNuevo, deltaIvaUsd: p.deltaIva, totalAntesUsd: totalAntes, totalNuevoUsd: p.totalNuevo, saldoNuevoUsd: Number((Number(p.cxc.saldoPendiente) + p.deltaIva).toFixed(2)),
-        totalAntesBs: aBolivares(totalAntes, tasaAntes), totalNuevoBs: aBolivares(p.totalNuevo, tasaHoy),
-    };
-}
-
 /**
  * Pasa la nota de entrega `venta` (ya cargada y bloqueada dentro de `transaction`) a una FACTURA NUEVA con la tasa de hoy. No hace commit.
  *  · La nota NO desaparece: conserva su número y queda anulada (histórica). La factura toma el siguiente F- y enlaza a la nota en `numeroDocumentoAnterior`.
@@ -156,9 +144,11 @@ export async function convertirNotaEntregaAFactura({ venta, tasaHoy, transaction
 
     // 3. Todo lo que seguía a la nota sigue a la factura (el inventario no se vuelve a tocar: las salidas ya hechas pasan con ella)
     await sql('UPDATE "CuentasPorCobrar" SET "ventaId" = :f, "tasaCambio" = :tasa, "montoTotal" = "montoTotal" + :delta WHERE "ventaId" = :n', { f: factura.id, n: venta.id, tasa: tasaHoy, delta: p.deltaIva });
-    for (const tabla of ['Abonos', 'MovimientosFinancieros', 'NotasFiscales', 'SalidasInventario', 'PagoSms']) {
+    for (const tabla of ['Abonos', 'MovimientosFinancieros', 'NotasFiscales', 'PagoSms']) {
         await sql(`UPDATE "${tabla}" SET "ventaId" = :f WHERE "ventaId" = :n`, { f: factura.id, n: venta.id });
     }
+    // Las salidas de inventario guardan la venta en "venta_id" (modelo con underscored): con "ventaId" la conversión fallaba
+    await sql('UPDATE "SalidasInventario" SET venta_id = :f WHERE venta_id = :n', { f: factura.id, n: venta.id });
     // Comisiones: siguen al documento nuevo. La comisión (base sin IVA) no cambia; el monto de la factura sí, y de él depende cómo se prorratean los abonos futuros
     await sql(`UPDATE "ComisionesVenta" SET "ventaId" = :f, "documentoTexto" = :num, "montoUsd" = CASE WHEN concepto = 'FACTURA' THEN :total ELSE "montoUsd" END WHERE "ventaId" = :n`, { f: factura.id, n: venta.id, num: numero, total: p.totalNuevo });
 
