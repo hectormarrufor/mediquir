@@ -7,6 +7,7 @@ import { notifications } from '@mantine/notifications';
 import { useCart } from './CartContext';
 import ImageCarousel from './ImageCarousel';
 import ProductDetail from './ProductDetail';
+import CantidadProductoModal from '../ui/CantidadProductoModal';
 import { getProductImages, getPricing, getPresentacionLabel, presentacionesTienda, formatearPrecio, formatearBs } from './productUtils';
 import { aBolivares, montoRenglon, calcularFactura } from '@/app/constants/facturacion';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
@@ -15,6 +16,7 @@ import classes from './landing.module.css';
 export default function ProductCard({ product, isMobile }) {
     const [detailOpened, setDetailOpened] = useState(false);
     const [detailMounted, setDetailMounted] = useState(false); // monta el detalle solo la primera vez que se abre
+    const [preguntar, setPreguntar] = useState(null); // clave de la presentación con que se abre «¿Cuánto vas a agregar?»
     const { addToCart, unidadesEnCarrito } = useCart();
 
     const images = useMemo(() => getProductImages(product), [product]);
@@ -41,21 +43,13 @@ export default function ProductCard({ product, isMobile }) {
         openDetail();
     };
 
-    const handleQuickAdd = (e) => {
-        e.stopPropagation();
-        addToCart(product, 1, precioFinal);
-        notifications.show({
-            message: `${product.nombre} añadido al carrito`,
-            color: 'teal',
-            icon: <IconCheck size={16} />,
-            autoClose: 2000,
-        });
-    };
-
-    const handleQuickAddCaja = (e) => {
-        e.stopPropagation();
-        addToCart(product, 1, precioFinal, 'CAJA');
-        notifications.show({ message: `1 ${caja.etiqueta} de ${product.nombre} añadida al carrito`, color: 'teal', icon: <IconCheck size={16} />, autoClose: 2200 });
+    // El botón de añadir pregunta cuánto: por unidad (cuántas) o por caja (cuántas y cuántas unidades trae)
+    const handleQuickAdd = (e) => { e.stopPropagation(); setPreguntar('UNIDAD'); };
+    const handleQuickAddCaja = (e) => { e.stopPropagation(); setPreguntar('CAJA'); };
+    const confirmarCantidad = (clave, n) => {
+        addToCart(product, n, precioFinal, clave);
+        const pres = presentacionesTienda(product).find((p) => p.clave === clave);
+        notifications.show({ message: `${n} ${n === 1 ? pres.singular : pres.plural} de ${product.nombre} añadido al carrito`, color: 'teal', icon: <IconCheck size={16} />, autoClose: 2200 });
     };
 
     return (
@@ -159,6 +153,11 @@ export default function ProductCard({ product, isMobile }) {
                     )}
                 </Box>
             </Box>
+
+            {preguntar && (
+                <CantidadProductoModal opened onClose={() => setPreguntar(null)} nombre={product.nombre} presentaciones={presentacionesTienda(product)} claveInicial={preguntar}
+                    maxUnidades={Math.max(0, stock - enCarrito)} onConfirmar={confirmarCantidad} />
+            )}
 
             {detailMounted && (
                 <ProductDetail product={product} opened={detailOpened} onClose={() => setDetailOpened(false)} isMobile={isMobile} />

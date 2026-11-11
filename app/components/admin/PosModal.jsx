@@ -29,6 +29,7 @@ import { buscarProductos } from '@/app/helpers/busquedaProductos';
 import { presentacionesDe, presentacionDe } from '@/app/constants/presentaciones';
 import { fechaCaracas, formatearFecha } from '@/app/constants/hora';
 import { CONTENIDO_SIN_RELLENO } from '@/app/components/ui/modalMovil';
+import CantidadProductoModal from '@/app/components/ui/CantidadProductoModal';
 
 // Precio unitario editable de un renglón (solo administración). Se confirma al salir del campo o con Enter; no cambia el precio del producto,
 // solo el de esta venta. Resaltado en naranja cuando difiere del precio del sistema.
@@ -230,6 +231,13 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     // Un renglón por producto Y presentación: 2 cajas + 50 sueltas del mismo producto son dos renglones.
     // `cantidad` siempre son UNIDADES (precio, stock y factura no cambian); `cantidadPres` es lo que se pide (2 cajas).
+    // En un presupuesto siempre se pregunta cuánto se agrega (unidades o cajas); en una venta el toque agrega una unidad al instante
+    const [preguntar, setPreguntar] = useState(null); // { producto, clave }
+    const pedirProducto = (producto, presentacion = 'UNIDAD') => {
+        if (esPresupuesto) setPreguntar({ producto, clave: presentacion });
+        else agregarAlCarrito(producto, presentacion);
+    };
+
     const agregarAlCarrito = (producto, presentacion = 'UNIDAD', n = 1) => {
         const info = calcularPrecioInfo(producto, formVenta.values.tipoPrecio);
         const pres = presentacionDe(producto, presentacion) || presentacionDe(producto, 'UNIDAD');
@@ -542,14 +550,14 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         const imgFinal = getImageUrl(prod.imagen) || getImageUrl(prod.marca?.imagen);
         const enCarrito = unidadesEnCarrito.get(prod.id) || 0;
         const botonesPresentacion = presentacionesDe(prod).filter((p) => p.clave !== 'UNIDAD').map((p) => (
-            <Button key={p.clave} size={isMobile ? 'compact-sm' : 'compact-xs'} color="grape" variant="light" onClick={(e) => { e.stopPropagation(); agregarAlCarrito(prod, p.clave); }}>
+            <Button key={p.clave} size={isMobile ? 'compact-sm' : 'compact-xs'} color="grape" variant="light" onClick={(e) => { e.stopPropagation(); pedirProducto(prod, p.clave); }}>
                 + {p.etiqueta}
             </Button>
         ));
         return (
             <Paper
                 key={prod.id} p={isMobile ? 8 : 'sm'} withBorder radius="md" role="button" tabIndex={0}
-                onClick={() => agregarAlCarrito(prod)} onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) agregarAlCarrito(prod); }}
+                onClick={() => pedirProducto(prod)} onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) pedirProducto(prod); }}
                 style={{ cursor: 'pointer', ...(enCarrito ? { borderColor: 'var(--mantine-color-blue-4)', background: 'var(--mantine-color-blue-0)' } : {}) }}
             >
                 <Group wrap="nowrap" justify="space-between" gap="sm" align="flex-start">
@@ -1090,6 +1098,11 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             </Modal>
 
             {/* PRODUCTO FICTICIO (1010): descripción y precio escritos a mano */}
+            {preguntar && (
+                <CantidadProductoModal opened onClose={() => setPreguntar(null)} zIndex={3000} nombre={preguntar.producto.nombre} presentaciones={presentacionesDe(preguntar.producto)}
+                    claveInicial={preguntar.clave} onConfirmar={(clave, n) => agregarAlCarrito(preguntar.producto, clave, n)} />
+            )}
+
             <Modal opened={modalFicticio} onClose={() => setModalFicticio(false)} fullScreen={isMobile} classNames={isMobile ? { content: CONTENIDO_SIN_RELLENO } : undefined} title={<Title order={4} c="grape" component="div">Agregar Ítem Ficticio (1010)</Title>} centered zIndex={2000}>
                 <form onSubmit={formFicticio.onSubmit(handleAgregarFicticio)}>
                     <Stack gap="md">
