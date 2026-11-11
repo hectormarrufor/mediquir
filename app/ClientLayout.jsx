@@ -13,6 +13,7 @@ import { Notifications } from '@mantine/notifications';
 import { useRouter, usePathname } from 'next/navigation';
 import { theme as themeConfig, cssVariablesResolver } from '../theme';
 import { AuthProvider } from '@/hooks/useAuth';
+import useVisualViewport from '@/hooks/useVisualViewport';
 import NavBar from './NavBar';
 import AuthGuard from '@/hooks/authGuard';
 import SiteHeader from './components/nav/SiteHeader';
@@ -48,6 +49,8 @@ export default function ClientLayout({ children }) {
   const sinReserva = pathname === '/' || pathname === '/login';
   const pinned = useHeadroom({ fixedAt: 120 });
   const isMobile = useMediaQuery('(max-width: 48em)');
+  // Con el teclado del teléfono abierto, los modales se centran en el área visible (ver global.css)
+  useVisualViewport();
 
   // Con el menú lateral abierto en móvil, el contenido de atrás no debe desplazarse
   useEffect(() => {

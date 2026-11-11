@@ -1,24 +1,26 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
-// Área realmente visible de la pantalla. Cuando sale el teclado en Android/iOS el área visible se encoge
-// (en iOS además la página se desplaza), así que un modal centrado con `centered` queda tapado.
-// Devuelve { height, top } para fijar el contenedor del modal a esa área; null si no aplica (escritorio o sin soporte).
-export default function useVisualViewport(activo = true) {
-    const [vv, setVv] = useState(null);
+// Se usa UNA sola vez (en ClientLayout). Cuando el teclado de Android/iOS achica el área visible, marca <html data-teclado>
+// y publica --vv-height / --vv-top; global.css con eso centra todos los modales en el área visible, sin tocar cada uno.
+export default function useVisualViewport() {
     useEffect(() => {
-        if (!activo || typeof window === 'undefined' || !window.visualViewport) { setVv(null); return undefined; }
-        const v = window.visualViewport;
+        const v = typeof window !== 'undefined' ? window.visualViewport : null;
+        if (!v) return undefined;
+        const root = document.documentElement;
         const actualizar = () => {
-            // Solo hay que ajustar cuando el teclado achica el área; sin teclado se deja el comportamiento normal
-            const conTeclado = window.innerHeight - v.height > 100;
-            setVv(conTeclado ? { height: v.height, top: v.offsetTop } : null);
+            if (window.innerHeight - v.height > 100) {
+                root.setAttribute('data-teclado', '');
+                root.style.setProperty('--vv-height', `${v.height}px`);
+                root.style.setProperty('--vv-top', `${v.offsetTop}px`);
+            } else {
+                root.removeAttribute('data-teclado');
+            }
         };
         actualizar();
         v.addEventListener('resize', actualizar);
         v.addEventListener('scroll', actualizar);
-        return () => { v.removeEventListener('resize', actualizar); v.removeEventListener('scroll', actualizar); };
-    }, [activo]);
-    return vv;
+        return () => { v.removeEventListener('resize', actualizar); v.removeEventListener('scroll', actualizar); actualizar(); };
+    }, []);
 }

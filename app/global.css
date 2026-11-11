@@ -218,3 +218,12 @@ html { scroll-behavior: smooth; }
     font-size: 16px;
   }
 }
+
+/* Teclado de Android/iOS abierto: todos los modales se centran en el área visible (useVisualViewport) */
+html[data-teclado] .mantine-Modal-inner {
+  top: var(--vv-top);
+  bottom: auto;
+  height: var(--vv-height);
+  padding-top: 0;
+  padding-bottom: 0;
+}
