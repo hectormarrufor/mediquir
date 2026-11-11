@@ -22,7 +22,8 @@ async function pedir(url, opciones) {
 
 // Anular una factura (total o parcial) con una nota de crédito. Pregunta si la nota afecta la cuenta por cobrar y el número de control
 // de cada nota. Una factura que salió de notas de entrega, al anularse por completo, devuelve la deuda a esas notas.
-export default function AnularFacturaModal({ opened, onClose, pedido, onListo }) {
+// controlInicial: número de control que toma la nota de crédito de esta factura (desde «Números de control», el hueco que se está registrando)
+export default function AnularFacturaModal({ opened, onClose, pedido, onListo, controlInicial = null }) {
     const [tipo, setTipo] = useState('TOTAL');
     const [cantidades, setCantidades] = useState({});
     const [afecta, setAfecta] = useState(null); // 'si' | 'no'
@@ -38,8 +39,13 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo })
     });
     // Controles sugeridos: los siguientes libres, uno por nota de crédito (se pueden cambiar)
     useEffect(() => {
-        if (plan) setDocumentos(Object.fromEntries(plan.facturas.map((f, i) => [f.id, { numero: '', control: plan.controlesSugeridos[i] || '' }])));
-    }, [plan]);
+        if (!plan) return;
+        // Con un control indicado, esta factura lo toma; las demás (facturas hermanas de una nota de entrega) reciben los sugeridos
+        let i = 0;
+        setDocumentos(Object.fromEntries(plan.facturas.map((f) => [f.id, {
+            numero: '', control: controlInicial && f.id === plan.factura.id ? controlInicial : (plan.controlesSugeridos[i++] || ''),
+        }])));
+    }, [plan, controlInicial]);
 
     const simbolo = plan?.factura.moneda === 'BS' ? 'Bs' : '$';
     const deNotas = Boolean(plan?.deNotas) && tipo === 'TOTAL';

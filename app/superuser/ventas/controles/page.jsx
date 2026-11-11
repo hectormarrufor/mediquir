@@ -12,6 +12,7 @@ import { IconAlertTriangle, IconArrowLeft, IconDotsVertical, IconFileOff, IconRe
 import { useAuth } from '@/hooks/useAuth';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { PANTALLA_COMPLETA_MOVIL, useEsTelefono } from '@/app/components/ui/modalMovil';
+import AnularFacturaModal from '../_components/AnularFacturaModal';
 
 const PosModal = dynamic(() => import('../../../components/admin/PosModal'), { ssr: false });
 
@@ -76,6 +77,7 @@ export default function NumerosDeControlPage() {
     const [motivo, setMotivo] = useState(MOTIVOS[0]);
     const [detalle, setDetalle] = useState('');
     const [nota, setNota] = useState(null); // { tipo, fila }
+    const [anulando, setAnulando] = useState(null); // { pedido: { id, numeroDocumento }, control } -> nota de crédito como anulación
     const [facturaNota, setFacturaNota] = useState('');
     const [posControl, setPosControl] = useState(null);
     const [enviando, setEnviando] = useState(false);
@@ -116,11 +118,18 @@ export default function NumerosDeControlPage() {
         }
     };
 
-    // La nota se emite desde su factura: se busca la factura y se abre con la nota y el control ya puestos
+    // Se busca la factura que afecta la nota. La nota de crédito es una ANULACIÓN (total o parcial, preguntando si afecta la cuenta por cobrar)
+    // y se hace aquí mismo con este número de control; la de débito se emite desde su factura con el control ya puesto.
     const irANota = async () => {
         setEnviando(true);
         try {
             const f = await pedir(`/api/ventas/controles?factura=${encodeURIComponent(facturaNota)}`);
+            if (nota.tipo === 'CREDITO') {
+                setAnulando({ pedido: { id: f.id, numeroDocumento: f.numero }, control: nota.fila.control });
+                setNota(null);
+                setEnviando(false);
+                return;
+            }
             router.push(`/superuser/ventas/${f.id}?nota=${nota.tipo}&control=${encodeURIComponent(nota.fila.control)}`);
         } catch (e) {
             notifications.show({ title: 'Factura no encontrada', message: e.message, color: 'red' });
@@ -231,11 +240,20 @@ export default function NumerosDeControlPage() {
 
             <Modal {...PANTALLA_COMPLETA_MOVIL} opened={Boolean(nota)} onClose={() => setNota(null)} title={<Text fw={800}>{nota?.tipo === 'CREDITO' ? 'Nota de crédito' : 'Nota de débito'} con el control {nota?.fila.control}</Text>} centered>
                 <Stack gap="sm">
-                    <Text size="sm">La nota se registra desde la factura que afecta. Escribe su número y se abre con la nota y este número de control ya puestos.</Text>
+                    <Text size="sm">
+                        {nota?.tipo === 'CREDITO'
+                            ? '¿A qué factura aplica la nota de crédito? Escribe su número: luego eliges si anula toda la factura o parte de ella y si afecta la cuenta por cobrar, con este número de control ya puesto.'
+                            : 'La nota se registra desde la factura que afecta. Escribe su número y se abre con la nota y este número de control ya puestos.'}
+                    </Text>
                     <TextInput label="Número de la factura" placeholder="146870" value={facturaNota} onChange={(e) => setFacturaNota(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && facturaNota.trim() && irANota()} data-autofocus />
-                    <Button loading={enviando} disabled={!facturaNota.trim()} onClick={irANota}>Abrir la factura</Button>
+                    <Button loading={enviando} disabled={!facturaNota.trim()} onClick={irANota}>{nota?.tipo === 'CREDITO' ? 'Continuar' : 'Abrir la factura'}</Button>
                 </Stack>
             </Modal>
+
+            {anulando && (
+                <AnularFacturaModal opened pedido={anulando.pedido} controlInicial={anulando.control}
+                    onClose={() => setAnulando(null)} onListo={() => { refetch(); queryClient.invalidateQueries({ queryKey: ['ventas'] }); }} />
+            )}
 
             {posControl && (
                 <PosModal opened controlInicial={posControl} tasaBcv={tasa || 0}
