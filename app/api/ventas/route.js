@@ -6,6 +6,7 @@ const { Venta, VentaDetalle, Producto, Marca, Correlativo, CategoriaFinanciera, 
 import { requerirStaff } from '../inventario/_lib';
 import { tasaVigente, tasaDelDia } from '../_lib/tasaBcv';
 import { primerLibre } from '../_lib/correlativoLibre';
+import { asegurarComisionFactura } from '../_lib/comisionesPago';
 import { calcularFactura, aBolivares, aDolares, REGLAS, precioPorTarifa, TARIFAS_VENDEDOR } from '@/app/constants/facturacion';
 import { rolDe } from '@/app/constants/roles';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
@@ -315,9 +316,12 @@ export async function POST(request) {
             }
         }
 
+        // --- 6. COMISIÓN: si el cliente es de un vendedor externo, la factura o nota lleva su línea de comisión desde ya
+        await asegurarComisionFactura({ venta: nuevaVenta, transaction: t });
+
         await t.commit();
 
-        // --- 6. NOTIFICACIÓN PUSH AL MAYOR ---
+        // --- 7. NOTIFICACIÓN PUSH AL MAYOR ---
         if (tipoVenta === 'MAYOR') {
             try {
                 const clienteDB = await Cliente.findByPk(clienteId);

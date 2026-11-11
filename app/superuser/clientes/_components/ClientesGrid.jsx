@@ -21,7 +21,7 @@ const fmtFecha = (v) => (v ? new Date(v).toLocaleDateString('es-VE', { timeZone:
 
 // Editor que reemplaza la celda mientras se edita (no controlado: teclear no repinta la hoja).
 //   Enter -> confirma y baja · Tab / Shift+Tab -> confirma y avanza / retrocede · Esc -> cancela · clic fuera -> confirma
-function Editor({ col, edicion, onConfirmar, onCancelar }) {
+function Editor({ col, edicion, onConfirmar, onCancelar, opciones }) {
     const ref = useRef(null);
     useEffect(() => {
         const el = ref.current;
@@ -33,7 +33,7 @@ function Editor({ col, edicion, onConfirmar, onCancelar }) {
     if (col.tipo === 'select') {
         return (
             <Select
-                autoFocus variant="unstyled" size="xs" data={OPCIONES[col.campo]} value={edicion.texto} defaultDropdownOpened allowDeselect={false}
+                autoFocus variant="unstyled" size="xs" data={opciones?.[col.campo] || OPCIONES[col.campo]} value={edicion.texto} defaultDropdownOpened allowDeselect={false}
                 comboboxProps={{ withinPortal: true, zIndex: 400, width: 'max-content', position: 'bottom-start' }}
                 classNames={{ input: classes.editor }}
                 onChange={(v) => onConfirmar(v, 'abajo')}
@@ -59,7 +59,8 @@ function Editor({ col, edicion, onConfirmar, onCancelar }) {
 
 // Hoja de cálculo de clientes. Se edita en la celda y cada cambio se guarda al instante.
 // Flechas / Tab (mover) · Enter o F2 (editar) · escribir (reemplaza) · Esc (cancelar) · Supr (vaciar) · Ctrl+C (copiar) · Ctrl+Z (deshacer)
-export default function ClientesGrid({ filas, columnas, permisos, orden, onOrden, onFicha, onAcceso }) {
+// opciones: listas de las columnas select que vienen de la base (p. ej. los vendedores externos), además de las fijas de OPCIONES
+export default function ClientesGrid({ filas, columnas, permisos, orden, onOrden, onFicha, onAcceso, opciones }) {
     const queryClient = useQueryClient();
     const navegables = useMemo(() => columnas.filter((c) => !c.fija), [columnas]);
     const [activa, setActiva] = useState(null);      // { r, c } sobre `navegables`
@@ -196,6 +197,11 @@ export default function ClientesGrid({ filas, columnas, permisos, orden, onOrden
                 );
             case 'nombre': return fila.nombre || <Text span size="xs" c="dimmed">Sin nombre</Text>;
             case 'tarifaPrecio': return <Badge size="xs" variant="light" color={fila.tarifaPrecio === 'precio7' ? 'orange' : 'blue'}>{fila.tarifaPrecio === 'precio7' ? 'Precio 7' : 'Precio 6'}</Badge>;
+            case 'vendedorComisionId': {
+                // Por el id (al editar la celda cambia el id antes de recargar el nombre)
+                const nombre = opciones?.vendedorComisionId?.find((o) => o.value === String(fila.vendedorComisionId))?.label || fila.vendedor;
+                return fila.vendedorComisionId ? <Badge size="xs" variant="light" color="grape" tt="none">{nombre}</Badge> : <span className={classes.noAplica}>—</span>;
+            }
             case 'creditosActivos': {
                 if (!(fila.maxPedidosCredito > 0) || !(fila.diasCredito > 0)) return <Text span size="xs" c="dimmed">Sin crédito</Text>;
                 const lleno = fila.creditosActivos >= fila.maxPedidosCredito;
@@ -266,7 +272,7 @@ export default function ClientesGrid({ filas, columnas, permisos, orden, onOrden
                                         >
                                             {editando
                                                 ? <>
-                                                    <Editor col={col} edicion={edicion} onConfirmar={confirmar} onCancelar={cancelar} />
+                                                    <Editor col={col} edicion={edicion} onConfirmar={confirmar} onCancelar={cancelar} opciones={opciones} />
                                                     {edicion.error && <div className={classes.errorEdicion}>{edicion.error}</div>}
                                                 </>
                                                 : contenido(fila, col)}

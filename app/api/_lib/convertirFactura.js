@@ -9,6 +9,7 @@ import { calcularFactura, REGLAS } from '../../constants/facturacion.js';
 import { recalcularCobro } from './retencionesVenta.js';
 import { fechaCaracas } from '../../constants/hora.js';
 import { primerLibre } from './correlativoLibre.js';
+import { asegurarComisionFactura } from './comisionesPago.js';
 
 const { sequelize, Correlativo, CategoriaFinanciera, MovimientoFinanciero, VentaDetalle, Producto, CuentaPorCobrar, Venta } = db;
 const { Op } = db.Sequelize;
@@ -79,6 +80,8 @@ export async function convertirAFactura({ venta, transaction: t, numeroManual = 
             transaction: t,
         }
     );
+    // El recibo pasa a ser factura: si el cliente es de un vendedor externo, lleva su línea de comisión
+    await asegurarComisionFactura({ venta, transaction: t });
     return { numeroDocumento: numero, numeroAnterior: anterior, ivaReservado: reclasificados > 0 };
 }
 
@@ -159,5 +162,7 @@ export async function convertirNotaEntregaAFactura({ venta, tasaHoy, transaction
     await venta.save({ transaction: t });
 
     await recalcularCobro(factura, t);
+    // Si la nota no traía comisión pero el cliente es de un vendedor externo, la factura la toma
+    await asegurarComisionFactura({ venta: factura, transaction: t });
     return { numeroDocumento: numero, numeroAnterior: anterior, tasaHoy: Number(tasaHoy), ivaAgregadoUsd: p.deltaIva, totalUsd: p.totalNuevo, ventaId: factura.id };
 }

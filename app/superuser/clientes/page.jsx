@@ -94,6 +94,10 @@ export default function ClientesDashboard() {
 
     const columnas = useMemo(() => COLUMNAS.filter((c) => !(esVendedor && c.dinero)), [esVendedor]);
     const permisos = data?.permisos || { editar: false, editarCredito: false };
+    // Opciones de la columna «Vendedor externo» (vienen de la base)
+    const opciones = useMemo(() => ({
+        vendedorComisionId: [{ value: '', label: 'Sin vendedor' }, ...(data?.vendedores || []).filter((v) => v.activo).map((v) => ({ value: String(v.id), label: v.nombre }))],
+    }), [data]);
 
     const paginas = Math.max(1, Math.ceil(ordenados.length / TAMANO));
     const visibles = ordenados.slice((pagina - 1) * TAMANO, pagina * TAMANO);
@@ -149,7 +153,7 @@ export default function ClientesDashboard() {
                     {isLoading ? <Stack gap="xs">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} h={52} />)}</Stack>
                         : !visibles.length ? <Center py={50}><Text c="dimmed">No hay clientes con esos filtros.</Text></Center> : (
                             <ClientesGrid
-                                filas={visibles} columnas={columnas} permisos={permisos} orden={orden} onOrden={onOrden}
+                                filas={visibles} columnas={columnas} permisos={permisos} orden={orden} onOrden={onOrden} opciones={opciones}
                                 onFicha={(id) => router.push(`/superuser/clientes/${id}`)} onAcceso={(cliente) => setAcceso({ cliente })}
                             />
                         )}

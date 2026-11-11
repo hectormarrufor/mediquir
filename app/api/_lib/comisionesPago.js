@@ -5,8 +5,47 @@
 // Imports relativos con extensión (sin alias "@/") para poder probarlo con un script de Node.
 import db from '../../../models/index.js';
 
-const { ComisionVenta, Cliente, Venta, Abono, CuentaPorCobrar } = db;
+const { ComisionVenta, Cliente, Venta, Abono, CuentaPorCobrar, sequelize } = db;
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+const diaCaracas = (f) => (f ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas' }).format(new Date(f)) : null);
+
+/**
+ * La factura (o nota de entrega) no tiene línea de vendedor a comisión pero su cliente ES de un vendedor externo (ficha del cliente,
+ * «Vendedor externo»): se le crea, con el % que ese vendedor tiene con ese cliente (el de su última línea; si no, el del vendedor).
+ * Así una venta nunca se queda sin comisión porque no estaba en la hoja del vendedor (pasó con la F-146834 de Farmavit18, de Edgar Jiménez).
+ * Si el cliente no tiene vendedor externo, no hace nada. Devuelve la línea creada.
+ */
+export async function asegurarComisionFactura({ venta, transaction: t }) {
+    if (!venta?.id || !venta.clienteId || !['FACTURA', 'NOTA_ENTREGA'].includes(venta.tipoDocumento) || venta.statusDespacho === 'Cancelado') return null;
+    if (await ComisionVenta.count({ where: { ventaId: venta.id, concepto: 'FACTURA' }, transaction: t })) return null;
+    const [dueno] = await sequelize.query(
+        `SELECT vc.id AS "vendedorId", vc.porcentaje::float AS defecto, c.nombre AS cliente,
+                (SELECT cv.porcentaje::float FROM "ComisionesVenta" cv JOIN "Ventas" v ON v.id = cv."ventaId"
+                  WHERE cv."vendedorId" = vc.id AND v."clienteId" = c.id AND cv.concepto = 'FACTURA' ORDER BY cv.id DESC LIMIT 1) AS porcentaje,
+                (SELECT cv."clienteTexto" FROM "ComisionesVenta" cv JOIN "Ventas" v ON v.id = cv."ventaId"
+                  WHERE cv."vendedorId" = vc.id AND v."clienteId" = c.id AND cv."clienteTexto" IS NOT NULL ORDER BY cv.id DESC LIMIT 1) AS "clienteTexto"
+           FROM "Clientes" c JOIN "VendedoresComision" vc ON vc.id = c."vendedorComisionId"
+          WHERE c.id = :cliente AND vc.activo = true`,
+        { replacements: { cliente: venta.clienteId }, type: sequelize.QueryTypes.SELECT, transaction: t },
+    );
+    if (!dueno) return null;
+    dueno.porcentaje = dueno.porcentaje || dueno.defecto;
+    dueno.clienteTexto = dueno.clienteTexto || dueno.cliente;
+    if (!(dueno.porcentaje > 0)) return null;
+    // En dólares, como la hoja del vendedor: el monto es lo que debe el cliente (su cuenta por cobrar en dólares) y la base, lo vendido sin IVA
+    const tasa = Number(venta.tasaCambio) || 1;
+    const enUsd = (monto) => (venta.moneda === 'BS' ? r2(Number(monto) / tasa) : r2(monto));
+    const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, attributes: ['montoTotal', 'moneda'], transaction: t });
+    const montoUsd = cxc && cxc.moneda === 'USD' ? r2(cxc.montoTotal) : enUsd(venta.totalFinal);
+    const baseUsd = enUsd(venta.subtotal);
+    const digitos = String(venta.numeroDocumento || '').replace(/\D/g, '');
+    return ComisionVenta.create({
+        vendedorId: dueno.vendedorId, ventaId: venta.id, concepto: 'FACTURA', fecha: diaCaracas(venta.fechaEmision || venta.createdAt || new Date()), vencimiento: diaCaracas(venta.fechaVencimiento),
+        documentoTexto: venta.tipoDocumento === 'NOTA_ENTREGA' ? digitos.replace(/^0+/, '') : digitos, clienteTexto: dueno.clienteTexto,
+        montoUsd, baseUsd, porcentaje: dueno.porcentaje, comisionUsd: r2((baseUsd * dueno.porcentaje) / 100), estatusComision: 'PENDIENTE',
+        observacion: 'Agregada sola: el cliente es de este vendedor',
+    }, { transaction: t });
+}
 
 /**
  * @param {object} p.abono  Abono recién creado (necesita id, ventaId, montoUsd, fechaPago, metodoPago)
@@ -16,7 +55,12 @@ export async function generarComisionPorPago({ abono, transaction: t }) {
     const monto = Number(abono.montoUsd);
     if (!(monto > 0) || !abono.ventaId) return [];
     if (/nota de cr|retenci/i.test(abono.metodoPago || '')) return []; // ni una nota de crédito ni la retención de IVA son dinero que comisiona
-    const padres = await ComisionVenta.findAll({ where: { ventaId: abono.ventaId, concepto: 'FACTURA' }, transaction: t });
+    let padres = await ComisionVenta.findAll({ where: { ventaId: abono.ventaId, concepto: 'FACTURA' }, transaction: t });
+    if (!padres.length) {
+        // La factura no estaba en la hoja del vendedor, pero el cliente es suyo: se le crea la línea antes de comisionar el pago
+        const venta = await Venta.findByPk(abono.ventaId, { transaction: t });
+        if (await asegurarComisionFactura({ venta, transaction: t })) padres = await ComisionVenta.findAll({ where: { ventaId: abono.ventaId, concepto: 'FACTURA' }, transaction: t });
+    }
     if (!padres.length) return [];
     // Un solo pago que salda la factura completa (con la retención ya descontada) NO es un abono: la comisión es la de la propia línea de la factura
     const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: abono.ventaId }, transaction: t });

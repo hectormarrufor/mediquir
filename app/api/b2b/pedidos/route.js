@@ -7,6 +7,7 @@ import { presentacionDe } from '@/app/constants/presentaciones';
 import { requerirCliente } from '../../_lib/acceso';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { tasaVigente } from '../../_lib/tasaBcv';
+import { asegurarComisionFactura } from '../../_lib/comisionesPago';
 import { ESTADOS_ACTIVOS, Op, creditoDeCliente, hoyCaracas, resumenPedido, ventasDelCliente } from '../_lib';
 
 export const dynamic = 'force-dynamic';
@@ -209,6 +210,9 @@ export async function POST(request) {
                 solicitadoPorId: sesion.id || null,
             }, { transaction: t });
         }
+
+        // Si el cliente es de un vendedor externo, su pedido (factura o nota de entrega) lleva la línea de comisión desde ya
+        await asegurarComisionFactura({ venta, transaction: t });
 
         await t.commit();
 

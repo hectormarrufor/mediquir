@@ -66,6 +66,11 @@ const Cliente = sequelize.define('Cliente', {
     defaultValue: 'precio6',
     validate: { isIn: [['precio6', 'precio7']] },
   },
+  // Vendedor externo (a comisión) del cliente: sus facturas y notas de entrega toman solas la línea de comisión de ese vendedor
+  vendedorComisionId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
 }, {
   tableName: 'Clientes',
   timestamps: true,
@@ -77,6 +82,7 @@ Cliente.associate = (models) => {
   
   // 🔥 CORRECCIÓN 2: Semántica perfecta. El modelo es Venta, pero para el cliente son sus "pedidos"
   Cliente.hasMany(models.Venta, { foreignKey: 'clienteId', as: 'pedidos' });
+  Cliente.belongsTo(models.VendedorComision, { foreignKey: 'vendedorComisionId', as: 'vendedorComision' });
 };
 
 module.exports = Cliente;

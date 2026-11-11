@@ -5,6 +5,19 @@ import { requerirNoVendedor } from '../../_lib/acceso';
 export const dynamic = 'force-dynamic';
 const { VendedorComision } = db;
 
+// Lista de vendedores a comisión (para elegir el vendedor externo de un cliente)
+export async function GET() {
+    const acceso = await requerirNoVendedor();
+    if (acceso.error) return acceso.error;
+    try {
+        const vendedores = await VendedorComision.findAll({ attributes: ['id', 'nombre', 'porcentaje', 'activo'], order: [['nombre', 'ASC']], raw: true });
+        return NextResponse.json({ vendedores });
+    } catch (error) {
+        console.error('Lista de vendedores a comisión:', error);
+        return NextResponse.json({ error: 'No se pudieron cargar los vendedores' }, { status: 500 });
+    }
+}
+
 // Alta de un vendedor a comisión (no es nómina ni tiene acceso al sistema): { nombre, porcentaje }
 export async function POST(request) {
     const acceso = await requerirNoVendedor();

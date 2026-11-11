@@ -20,6 +20,7 @@ export async function GET() {
     try {
         const filas = await sequelize.query(
             `SELECT c."id", c."identificacion", c."nombre", c."telefono", c."email", c."direccion", c."imagen", c."notas", c."diasCredito", c."maxPedidosCredito", c."tarifaPrecio", c."createdAt",
+                c."vendedorComisionId", (SELECT vc.nombre FROM "VendedoresComision" vc WHERE vc.id = c."vendedorComisionId") AS vendedor,
                 (SELECT COUNT(*) FROM "Ventas" x WHERE x."clienteId" = c."id" AND x."condicionPago" = 'Credito' AND x."statusDespacho" <> 'Cancelado' AND x."statusPago" <> 'Pagado')::int AS "creditosActivos",
                 (SELECT u."user" FROM "Usuarios" u WHERE u."clienteId" = c."id" LIMIT 1) AS usuario,
                 COALESCE(m."compras", 0)::float AS compras, COALESCE(m."pedidos", 0)::int AS pedidos, m."ultima" AS "ultimaCompra",
@@ -39,7 +40,9 @@ export async function GET() {
         );
 
         const clientes = filas.map((c) => (conDinero ? c : { ...c, compras: null, saldo: null, pedidos: null }));
-        return NextResponse.json({ clientes, permisos });
+        // Vendedores externos (a comisión) para la columna «Vendedor externo»
+        const vendedores = await sequelize.query(`SELECT id, nombre, activo FROM "VendedoresComision" ORDER BY nombre`, { type: sequelize.QueryTypes.SELECT });
+        return NextResponse.json({ clientes, permisos, vendedores });
     } catch (error) {
         console.error('Resumen de clientes:', error);
         return NextResponse.json({ error: 'No se pudo cargar la lista de clientes' }, { status: 500 });

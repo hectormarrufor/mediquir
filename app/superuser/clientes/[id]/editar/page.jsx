@@ -23,6 +23,15 @@ export default function EditarCliente({ params }) {
     const { rolUsuario } = useAuth();
     const esAdmin = rolUsuario === 'admin'; // solo un administrador cambia el crédito del cliente
 
+    // Vendedores a comisión para elegir el vendedor externo del cliente
+    const { data: vendedores } = useQuery({
+        queryKey: ['vendedores-comision'],
+        queryFn: async () => {
+            const res = await fetch('/api/comisiones/vendedores');
+            return res.ok ? (await res.json()).vendedores : [];
+        },
+    });
+
     // Fetch del cliente a editar
     const { data: cliente, isLoading, isError } = useQuery({
         queryKey: ['cliente', id],
@@ -44,6 +53,7 @@ export default function EditarCliente({ params }) {
             diasCredito: 7,
             maxPedidosCredito: 5,
             tarifaPrecio: 'precio6',
+            vendedorComisionId: '',
             imagen: null
         },
         validate: {
@@ -65,6 +75,7 @@ export default function EditarCliente({ params }) {
                 diasCredito: cliente.diasCredito ?? 7,
                 maxPedidosCredito: cliente.maxPedidosCredito ?? 5,
                 tarifaPrecio: cliente.tarifaPrecio || 'precio6',
+                vendedorComisionId: cliente.vendedorComisionId ? String(cliente.vendedorComisionId) : '',
                 imagen: cliente.imagen || null
             });
         }
@@ -179,6 +190,18 @@ export default function EditarCliente({ params }) {
                                 label="Tarifa de precios" allowDeselect={false} disabled={!esAdmin}
                                 data={[{ value: 'precio6', label: 'Precio 6 (mayor)' }, { value: 'precio7', label: 'Precio 7 (detal)' }]}
                                 {...form.getInputProps('tarifaPrecio')}
+                            />
+                        </Paper>
+
+                        <Paper withBorder p="md" radius="md" bg="gray.0">
+                            <Title order={5} mb={4} c="gray.7">Vendedor externo</Title>
+                            <Text size="xs" c="dimmed" mb="md">
+                                Vendedor a comisión del cliente: sus facturas y notas de entrega toman solas la comisión de ese vendedor. {!esAdmin && 'Solo un administrador puede cambiarlo.'}
+                            </Text>
+                            <Select
+                                label="Vendedor" allowDeselect={false} disabled={!esAdmin}
+                                data={[{ value: '', label: 'Sin vendedor' }, ...(vendedores || []).filter((v) => v.activo || String(v.id) === form.values.vendedorComisionId).map((v) => ({ value: String(v.id), label: `${v.nombre} (${Number(v.porcentaje)} %)` }))]}
+                                {...form.getInputProps('vendedorComisionId')}
                             />
                         </Paper>
 

@@ -12,6 +12,8 @@ export const CAMPOS_CLIENTE = {
     diasCredito: { etiqueta: 'Días de crédito', tipo: 'entero', min: 0, max: 365, soloAdmin: true },
     maxPedidosCredito: { etiqueta: 'Máx. pedidos a crédito', tipo: 'entero', min: 0, max: 100, soloAdmin: true },
     tarifaPrecio: { etiqueta: 'Tarifa de precios B2B', tipo: 'lista', valores: ['precio6', 'precio7'], soloAdmin: true },
+    // Vendedor externo (a comisión): sus facturas toman solas la comisión de ese vendedor. Vacío = el cliente no es de ningún vendedor
+    vendedorComisionId: { etiqueta: 'Vendedor externo', tipo: 'idOpcional', soloAdmin: true },
 };
 
 const bien = (valor) => ({ ok: true, valor });
@@ -51,6 +53,11 @@ export function validarCampoCliente(campo, crudo) {
         case 'opcion': {
             const n = Number(crudo);
             return spec.valores.includes(n) ? bien(n) : fallo(`Solo se permite ${spec.valores.join(' o ')}`);
+        }
+        case 'idOpcional': {
+            if (vacio) return bien(null);
+            const n = Number(String(crudo).trim());
+            return Number.isInteger(n) && n > 0 ? bien(n) : fallo('Elige uno de la lista');
         }
         case 'lista': {
             const v = String(crudo ?? '').trim();

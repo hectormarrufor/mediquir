@@ -162,7 +162,13 @@ export async function GET(request, { params }) {
                 return NextResponse.json({ ...venta.toJSON(), reemplazadaPor: lista[0], reemplazadaPorTodas: lista });
             }
         }
-        return NextResponse.json(venta);
+        // Vendedor externo (a comisión) de la venta: el de su línea de comisión
+        const [vendedorExterno] = await sequelize.query(
+            `SELECT vc.nombre, cv.porcentaje::float AS porcentaje FROM "ComisionesVenta" cv JOIN "VendedoresComision" vc ON vc.id = cv."vendedorId"
+              WHERE cv."ventaId" = :v AND cv.concepto = 'FACTURA' ORDER BY cv.id LIMIT 1`,
+            { replacements: { v: venta.id }, type: sequelize.QueryTypes.SELECT },
+        );
+        return NextResponse.json(vendedorExterno ? { ...venta.toJSON(), vendedorExterno } : venta);
     } catch (error) {
         console.error('Error obteniendo detalle de venta:', error);
         return NextResponse.json({ error: 'Error interno del servidor', detalle: error.message }, { status: 500 });

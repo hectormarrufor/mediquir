@@ -427,6 +427,13 @@ export default function DetallePedidoMayorPage() {
                                     <Text size="xs" c="dimmed">Vendedor / Registrador:</Text>
                                     <Text size="sm" fw={600} mb={6}>{pedido.vendedor?.empleado ? `${pedido.vendedor.empleado.nombre} ${pedido.vendedor.empleado.apellido}` : 'Sistema'}</Text>
 
+                                    {pedido.vendedorExterno && (
+                                        <>
+                                            <Text size="xs" c="dimmed">Vendedor externo (comisión):</Text>
+                                            <Text size="sm" fw={600} mb={6} c="grape.8">{pedido.vendedorExterno.nombre} · {pedido.vendedorExterno.porcentaje} %</Text>
+                                        </>
+                                    )}
+
                                     <Text size="xs" c="dimmed">Empacador:</Text>
                                     <Text size="sm" fw={600} mb={6}>{pedido.empacador?.empleado ? `${pedido.empacador.empleado.nombre} ${pedido.empacador.empleado.apellido}` : 'Pendiente'}</Text>
 

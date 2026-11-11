@@ -13,6 +13,7 @@ export const COLUMNAS = [
     { key: 'diasCredito', label: 'Días crédito', ancho: 100, tipo: 'numero', campo: 'diasCredito', derecha: true, soloAdmin: true, ayuda: 'Días que tiene para pagar un pedido a crédito' },
     { key: 'maxPedidosCredito', label: 'Máx. pedidos créd.', ancho: 124, tipo: 'numero', campo: 'maxPedidosCredito', derecha: true, soloAdmin: true, ayuda: 'Pedidos a crédito activos a la vez (0 = sin crédito)' },
     { key: 'tarifaPrecio', label: 'Tarifa B2B', ancho: 104, tipo: 'select', campo: 'tarifaPrecio', soloAdmin: true, ayuda: 'Precio que ve y paga en el portal: Precio 6 (mayor) o Precio 7 (detal)' },
+    { key: 'vendedorComisionId', label: 'Vendedor externo', ancho: 150, tipo: 'select', campo: 'vendedorComisionId', soloAdmin: true, orden: 'vendedor', ayuda: 'Vendedor a comisión del cliente: sus facturas toman solas su comisión' },
     { key: 'creditosActivos', label: 'Créd. activos', ancho: 104, tipo: 'derivada', orden: 'creditosActivos', derecha: true, ayuda: 'Pedidos a crédito activos / máximo' },
     { key: 'compras', label: 'Compras $', ancho: 110, tipo: 'derivada', orden: 'compras', derecha: true, dinero: true },
     { key: 'saldo', label: 'Saldo $', ancho: 104, tipo: 'derivada', orden: 'saldo', derecha: true, dinero: true },

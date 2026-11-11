@@ -22,6 +22,7 @@ import { calcularFactura, REGLAS } from '../../constants/facturacion.js';
 import { CONFIG_FISCAL } from '../../constants/empresa.js';
 import { unirAnteriores } from '../../constants/documentosAnteriores.js';
 import { recalcularCobro } from './retencionesVenta.js';
+import { asegurarComisionFactura } from './comisionesPago.js';
 import { ErrorConversion, fechaEmisionDe, siguienteNumeroFactura, convertirNotaEntregaAFactura } from './convertirFactura.js';
 
 const { sequelize, Venta, VentaDetalle, Producto, CuentaPorCobrar, Abono, ComisionVenta, SalidaInventario, NotaFiscal, Cliente } = db;
@@ -268,6 +269,8 @@ export async function emitirFacturasDeNotas({ cargadas, grupos, moneda = 'USD', 
         await ComisionVenta.destroy({ where: { ventaId: idsNotas, concepto: 'FACTURA' }, transaction: t });
     }
     await sql(`UPDATE "ComisionesVenta" SET "ventaId" = :f, "documentoTexto" = :num WHERE "ventaId" IN (:notas)`, { f: destino, num: emitidas[0].numero.replace(/\D/g, ''), notas: idsNotas });
+    // Notas sin comisión de un cliente que sí es de un vendedor externo: cada factura toma su línea
+    if (!comisionesFactura.length) for (const e of emitidas) await asegurarComisionFactura({ venta: e.factura, transaction: t });
 
     // La deuda de las notas ya está en las facturas; las notas quedan anuladas y conservan su número y sus renglones como historia
     await CuentaPorCobrar.destroy({ where: { ventaId: idsNotas }, transaction: t });
