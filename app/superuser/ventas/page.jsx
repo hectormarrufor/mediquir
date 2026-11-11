@@ -80,9 +80,9 @@ function Indicador({ icono: Icono, color, titulo, valor, detalle, cargando }) {
                 {/* En el teléfono van dos por fila: sin ícono para que la cifra quepa */}
                 <ThemeIcon size={44} radius="md" variant="light" color={color} visibleFrom="sm" style={{ flexShrink: 0 }}><Icono size={24} /></ThemeIcon>
                 <Box style={{ minWidth: 0 }}>
-                    <Text size="xs" c="dimmed" fw={700} tt="uppercase" lineClamp={1}>{titulo}</Text>
+                    <Tooltip label={titulo} multiline maw={340} withArrow openDelay={250}><Text size="xs" c="dimmed" fw={700} tt="uppercase" lineClamp={1}>{titulo}</Text></Tooltip>
                     {cargando ? <Skeleton h={28} w={110} mt={4} /> : <Text fz={{ base: 19, sm: 24 }} fw={800} lh={1.2} c="navy.9" style={{ whiteSpace: 'nowrap' }}>{valor}</Text>}
-                    {detalle && !cargando && <Text size="xs" c="dimmed" lineClamp={1}>{detalle}</Text>}
+                    {detalle && !cargando && <Tooltip label={detalle} multiline maw={340} withArrow openDelay={250}><Text size="xs" c="dimmed" lineClamp={1}>{detalle}</Text></Tooltip>}
                 </Box>
             </Group>
         </Card>
@@ -100,8 +100,8 @@ function TarjetaVenta({ v, esVendedor, isAdmin, onAbrir, onEliminar }) {
                         <Badge size="xs" variant="light" color={DOC[v.tipoDocumento]?.color}>{DOC[v.tipoDocumento]?.etiqueta}</Badge>
                         {v.tipo && <Badge size="xs" variant="light" color={TIPOS[v.tipo]?.color}>{TIPOS[v.tipo]?.etiqueta}</Badge>}
                     </Group>
-                    <Text size="sm" fw={600} lineClamp={1}>{v.cliente}</Text>
-                    <Text size="xs" c="dimmed" lineClamp={1}>{fmtFecha(v.fecha)}{esNota(v) ? '' : ` · ${v.articulos} art.`}{!esVendedor && v.vendedor ? ` · ${v.vendedor}` : ''}</Text>
+                    <Tooltip label={v.cliente} multiline maw={340} withArrow openDelay={250}><Text size="sm" fw={600} lineClamp={1}>{v.cliente}</Text></Tooltip>
+                    <Tooltip label={`${fmtFecha(v.fecha)}${esNota(v) ? '' : ` · ${v.articulos} art.`}${!esVendedor && v.vendedor ? ` · ${v.vendedor}` : ''}`} multiline maw={340} withArrow openDelay={250}><Text size="xs" c="dimmed" lineClamp={1}>{fmtFecha(v.fecha)}{esNota(v) ? '' : ` · ${v.articulos} art.`}{!esVendedor && v.vendedor ? ` · ${v.vendedor}` : ''}</Text></Tooltip>
                 </Box>
                 <Box ta="right" style={{ flexShrink: 0 }}>
                     <Text fw={800} size="md" c={v.tipoDocumento === 'NOTA_CREDITO' ? 'red.7' : undefined} style={{ whiteSpace: 'nowrap' }}>{fmtUsd(v.totalUsd)}</Text>
@@ -150,7 +150,7 @@ function Ranking({ titulo, filas, formato, cargando }) {
                     {filas.map((f) => (
                         <Box key={f.nombre}>
                             <Group justify="space-between" wrap="nowrap" mb={2}>
-                                <Text size="sm" fw={600} lineClamp={1}>{f.nombre}</Text>
+                                <Tooltip label={f.nombre} multiline maw={340} withArrow openDelay={250}><Text size="sm" fw={600} lineClamp={1}>{f.nombre}</Text></Tooltip>
                                 <Text size="sm" fw={700} style={{ flexShrink: 0 }}>{formato(f)}</Text>
                             </Group>
                             <Progress value={(f.valor / max) * 100} size="sm" radius="xl" color="brand.6" />
@@ -384,8 +384,8 @@ export default function VentasDashboard() {
                                             <Table.Tr key={`${v.tipoDocumento}-${v.id}`} style={{ cursor: 'pointer' }} onClick={() => router.push(`/superuser/ventas/${v.ventaId || v.id}`)}>
                                                 <Table.Td><Group gap={6} wrap="nowrap"><Text fw={700} size="sm">{v.numero}</Text><Badge size="xs" variant="light" color={DOC[v.tipoDocumento]?.color}>{DOC[v.tipoDocumento]?.etiqueta}</Badge>{v.tipo && <Badge size="xs" variant="light" color={TIPOS[v.tipo]?.color}>{TIPOS[v.tipo]?.etiqueta}</Badge>}</Group></Table.Td>
                                                 <Table.Td><Text size="xs">{fmtFecha(v.fecha)}</Text></Table.Td>
-                                                <Table.Td><Text size="sm" lineClamp={1} maw={180}>{v.cliente}</Text></Table.Td>
-                                                {!esVendedor && <Table.Td><Text size="sm" c="dimmed" lineClamp={1} maw={140}>{v.vendedor || '—'}</Text></Table.Td>}
+                                                <Table.Td><Tooltip label={v.cliente} multiline maw={340} withArrow openDelay={250}><Text size="sm" lineClamp={1} maw={180}>{v.cliente}</Text></Tooltip></Table.Td>
+                                                {!esVendedor && <Table.Td><Tooltip label={v.vendedor || '—'} multiline maw={340} withArrow openDelay={250}><Text size="sm" c="dimmed" lineClamp={1} maw={140}>{v.vendedor || '—'}</Text></Tooltip></Table.Td>}
                                                 <Table.Td ta="right"><Text size="sm">{esNota(v) ? '—' : v.articulos}</Text></Table.Td>
                                                 <Table.Td ta="right">
                                                     <Text size="sm" fw={800} c={v.tipoDocumento === 'NOTA_CREDITO' ? 'red.7' : undefined}>{fmtUsd(v.totalUsd)}</Text>

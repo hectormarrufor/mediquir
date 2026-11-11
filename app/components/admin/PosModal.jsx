@@ -380,6 +380,11 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             return notifications.show({ title: 'Demasiados renglones', message: `Una factura admite hasta ${CONFIG_FISCAL.maxRenglonesFactura} renglones (es lo que cabe en la forma libre). Divide la venta en dos facturas.`, color: 'orange' });
         }
         
+        // Una venta al mayor casi siempre es a crédito: si va de contado se confirma antes de asentar (se registra el pago de una vez)
+        if (tipoVenta === 'MAYOR' && formVenta.values.condicionPago === 'Contado' && !window.confirm('Esta venta al MAYOR quedó DE CONTADO: se registrará el pago ahora, sin cuenta por cobrar. ¿Es correcto? (Aceptar = de contado · Cancelar = volver para cambiarla a Crédito)')) {
+            setVista('datos');
+            return;
+        }
         setZoomPreview(false);
         setPreviewAbierto(true);
     };
