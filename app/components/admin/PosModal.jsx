@@ -152,13 +152,17 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [opened, controlInicial]);
 
-    // Presupuesto guardado: se cargan sus renglones (precios ya en $, fijos como estaban), cliente, vigencia y observaciones
+    // Presupuesto guardado: se cargan sus renglones (precios fijos como estaban, en su moneda), cliente, vigencia y observaciones.
+    // Los presupuestos en $ sacados antes con una tarifa en Bs guardaron sus precios en $: se abren con la tarifa equivalente en $.
     useEffect(() => {
         if (!opened || !editando) return;
-        const tarifa = { precio4: 'precio7', precio5: 'precio6', precio1: 'precio7' }[editando.tarifa] || editando.tarifa || 'precio7';
+        const enBs = editando.moneda === 'BS';
+        const tarifa = enBs
+            ? (['precio4', 'precio5'].includes(editando.tarifa) ? editando.tarifa : 'precio4')
+            : ({ precio4: 'precio7', precio5: 'precio6', precio1: 'precio7' }[editando.tarifa] || editando.tarifa || 'precio7');
         formVenta.setValues({ ...formVenta.values, clienteId: editando.clienteId ? String(editando.clienteId) : null, tipoPrecio: tarifa, validoDias: editando.validoDias || 15, notas: editando.notas || '' });
         setCarrito((editando.renglones || []).map((r, i) => {
-            const base = { clave: `ed-${i}`, presentacion: 'UNIDAD', unidadesPorPres: 1, cantidadPres: r.cantidad, cantidad: r.cantidad, precio: Number(r.precioUnitario), precioManual: true, simbolo: '$', tieneDescuento: false, afectaInventario: false };
+            const base = { clave: `ed-${i}`, presentacion: 'UNIDAD', unidadesPorPres: 1, cantidadPres: r.cantidad, cantidad: r.cantidad, precio: Number(r.precioUnitario), precioManual: true, simbolo: enBs ? 'Bs' : '$', tieneDescuento: false, afectaInventario: false };
             if (r.productoId) return { ...base, id: r.productoId, nombre: r.nombre, codigo: r.codigo, marcaNombre: r.marca || undefined, porcentajeIva: Number(r.porcentajeIva) || 0, isFicticio: false, afectaInventario: true };
             return { ...base, id: `ficticio-ed-${i}`, nombre: r.nombre, codigo: r.codigo || '1010', aplicaIva: Boolean(r.aplicaIva), isFicticio: true };
         }));
@@ -276,32 +280,39 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     // Un renglón por producto Y presentación: 2 cajas + 50 sueltas del mismo producto son dos renglones.
     // `cantidad` siempre son UNIDADES (precio, stock y factura no cambian); `cantidadPres` es lo que se pide (2 cajas).
-    // En un presupuesto siempre se pregunta cuánto se agrega (unidades o cajas); en una venta el toque agrega una unidad al instante
+    // En un presupuesto siempre se pregunta cuánto se agrega (unidades o cajas) y a qué precio. En una venta en la computadora el toque
+    // agrega una unidad al instante (el precio se cambia en la tabla); en el teléfono, donde la tarjeta del carrito queda lejos,
+    // administración también recibe la pregunta con la caja del precio. Un vendedor cobra siempre la tarifa: a él se le agrega al instante.
     const [preguntar, setPreguntar] = useState(null); // { producto, clave }
     const pedirProducto = (producto, presentacion = 'UNIDAD') => {
-        if (esPresupuesto) setPreguntar({ producto, clave: presentacion });
+        if (esPresupuesto || (isMobile && puedeEditarPrecio)) setPreguntar({ producto, clave: presentacion });
         else agregarAlCarrito(producto, presentacion);
     };
 
-    const agregarAlCarrito = (producto, presentacion = 'UNIDAD', n = 1) => {
+    // precioElegido: el que se escribió en la pregunta de cantidad (solo administración); si difiere del de la tarifa, el renglón queda con precio propio
+    const agregarAlCarrito = (producto, presentacion = 'UNIDAD', n = 1, precioElegido) => {
         const info = calcularPrecioInfo(producto, formVenta.values.tipoPrecio);
         const pres = presentacionDe(producto, presentacion) || presentacionDe(producto, 'UNIDAD');
         const clave = `${producto.id}:${pres.clave}`;
         const imgProducto = getImageUrl(producto.imagen);
         const imgMarca = getImageUrl(producto.marca?.imagen);
+        const conPrecio = puedeEditarPrecio && Number(precioElegido) > 0;
+        const manualElegido = conPrecio && Math.abs(Number(precioElegido) - Number(info.precio)) >= 0.0005;
 
         // Con la función de actualización: dos toques rápidos en el teléfono suman dos (el segundo no pisa al primero)
         setCarrito((prev) => {
             const existe = prev.find(item => item.clave === clave);
             if (existe) return prev.map(item => item.clave === clave ? {
-                ...item, cantidadPres: item.cantidadPres + n, cantidad: (item.cantidadPres + n) * pres.unidades, precio: item.precioManual ? item.precio : info.precio, simbolo: info.simbolo,
+                ...item, cantidadPres: item.cantidadPres + n, cantidad: (item.cantidadPres + n) * pres.unidades,
+                precio: conPrecio ? Number(precioElegido) : (item.precioManual ? item.precio : info.precio),
+                precioManual: conPrecio ? manualElegido : item.precioManual, simbolo: info.simbolo,
                 tieneDescuento: info.tieneDescuento, porcentajeDescuento: info.porcentajeDescuento,
                 porcentajeIva: Number(producto.porcentajeIva) || 0,
                 imagen: imgProducto, marcaImagen: imgMarca, marcaNombre: producto.marca?.nombre
             } : item);
             return [...prev, {
-                id: producto.id, nombre: producto.nombre, codigo: producto.codigo, 
-                precio: info.precio, simbolo: info.simbolo, 
+                id: producto.id, nombre: producto.nombre, codigo: producto.codigo,
+                precio: conPrecio ? Number(precioElegido) : info.precio, precioManual: manualElegido, simbolo: info.simbolo,
                 tieneDescuento: info.tieneDescuento, porcentajeDescuento: info.porcentajeDescuento,
                 porcentajeIva: Number(producto.porcentajeIva) || 0, 
                 clave, presentacion: pres.clave, presentacionEtiqueta: pres.etiqueta, unidadesPorPres: pres.unidades, cantidadPres: n, cantidad: n * pres.unidades,
@@ -576,6 +587,20 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         ]),
     ];
     const etiquetaTarifa = opcionesTarifa.find((o) => o.value === formVenta.values.tipoPrecio)?.label || '';
+
+    // Precio que se propone al preguntar la cantidad: el de la tarifa, con botones para los otros precios del producto en la misma moneda
+    // (P7/P6 en $, P4/P5 en Bs) y el total del renglón también en la otra moneda a la tasa del día
+    const CORTO_TARIFA = { precio7: 'P7 Detal', precio6: 'P6 Mayor', precio4: 'P4 Detal', precio5: 'P5 Mayor', precio1: 'P1' };
+    const precioPregunta = (producto) => {
+        const tarifa = formVenta.values.tipoPrecio;
+        const info = calcularPrecioInfo(producto, tarifa);
+        const mismas = (esMonedaBs ? ['precio4', 'precio5', 'precio1'] : ['precio7', 'precio6']).filter((t) => opcionesTarifa.some((o) => o.value === t));
+        return {
+            valor: info.precio, simbolo: info.simbolo, editable: puedeEditarPrecio, etiqueta: etiquetaTarifa,
+            opciones: mismas.map((t) => ({ etiqueta: CORTO_TARIFA[t], valor: calcularPrecioInfo(producto, t).precio })),
+            equivalente: tasaBcv > 0 ? (v) => (esMonedaBs ? `≈ $${formatoNumero(aDolares(v, tasaBcv))}` : `≈ Bs ${formatoNumero(aBolivares(v, tasaBcv))}`) : null,
+        };
+    };
     const esEfectivo = ['Efectivo ($)', 'Efectivo (Bs)'].includes(formVenta.values.metodoPago);
     const unidadesCarrito = carrito.reduce((a, i) => a + i.cantidad, 0);
     // Lo que se cobra en la otra moneda (a la tasa de hoy): la persona en caja lo ve sin hacer la cuenta
@@ -1193,7 +1218,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             {/* PRODUCTO FICTICIO (1010): descripción y precio escritos a mano */}
             {preguntar && (
                 <CantidadProductoModal opened onClose={() => setPreguntar(null)} zIndex={3000} nombre={preguntar.producto.nombre} presentaciones={presentacionesDe(preguntar.producto)}
-                    claveInicial={preguntar.clave} onConfirmar={(clave, n) => agregarAlCarrito(preguntar.producto, clave, n)} />
+                    claveInicial={preguntar.clave} precio={precioPregunta(preguntar.producto)} onConfirmar={(clave, n, precio) => agregarAlCarrito(preguntar.producto, clave, n, precio)} />
             )}
 
             <Modal opened={modalFicticio} onClose={() => setModalFicticio(false)} fullScreen={isMobile} classNames={isMobile ? { content: CONTENIDO_SIN_RELLENO } : undefined} title={<Title order={4} c="grape" component="div">Agregar Ítem Ficticio (1010)</Title>} centered zIndex={2000}>
