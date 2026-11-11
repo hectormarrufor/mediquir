@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { nombreConMarca } from '@/app/constants/nombreConMarca';
 import { useParams } from 'next/navigation';
 import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 import { numeroALetras } from '@/app/utils/numeroALetras';
@@ -168,7 +169,7 @@ export default function ImprimirRecibo() {
                             return (
                                 <tr key={index}>
                                     <td>{d.isFicticio ? 'S/C' : (d.producto?.codigo || 'S/C')}</td>
-                                    <td style={{textAlign: 'left'}}>{d.isFicticio ? d.nombreFicticio : (d.producto?.nombre || d.nombreFicticio)}</td>
+                                    <td style={{textAlign: 'left'}}>{d.isFicticio ? d.nombreFicticio : nombreConMarca(d.producto?.nombre || d.nombreFicticio, d.producto?.marca?.nombre)}</td>
                                     <td style={{textAlign: 'right'}}>{formatoNumero(pu)}</td>
                                     <td style={{textAlign: 'center'}}>{formatoNumero(d.cantidad)}</td>
                                     <td style={{textAlign: 'right'}}>{formatoNumero(sub)}</td>

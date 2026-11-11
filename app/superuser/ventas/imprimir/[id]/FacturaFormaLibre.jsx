@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { nombreConMarca } from '@/app/constants/nombreConMarca';
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { numeroALetras } from '@/app/utils/numeroALetras';
@@ -93,7 +94,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                             <tr key={i}>
                                 {/* Un renglón escrito a mano se imprime con su texto aunque esté enlazado a un producto (el enlace solo cuenta lo vendido) */}
                                 <td>{d.isFicticio ? 'S/C' : (d.producto?.codigo || 'S/C')}</td>
-                                <td className="fl-nombre">{d.isFicticio ? d.nombreFicticio : (d.producto?.nombre || d.nombreFicticio)}</td>
+                                <td className="fl-nombre">{d.isFicticio ? d.nombreFicticio : nombreConMarca(d.producto?.nombre || d.nombreFicticio, d.producto?.marca?.nombre)}</td>
                                 <td style={{ textAlign: 'right' }}>{fmt(aBs(d.precioUnitario))}</td>
                                 <td style={{ textAlign: 'center' }}>{fmt(d.cantidad)}</td>
                                 <td style={{ textAlign: 'right' }}>{fmt(aBs(d.subtotal))}</td>

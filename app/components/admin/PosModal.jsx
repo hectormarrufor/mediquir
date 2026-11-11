@@ -1,5 +1,6 @@
 'use client';
 
+import { nombreConMarca } from '@/app/constants/nombreConMarca';
 import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { 
     Modal, Button, Group, Title, TextInput, NumberInput, 
@@ -157,7 +158,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         formVenta.setValues({ ...formVenta.values, clienteId: editando.clienteId ? String(editando.clienteId) : null, tipoPrecio: tarifa, validoDias: editando.validoDias || 15, notas: editando.notas || '' });
         setCarrito((editando.renglones || []).map((r, i) => {
             const base = { clave: `ed-${i}`, presentacion: 'UNIDAD', unidadesPorPres: 1, cantidadPres: r.cantidad, cantidad: r.cantidad, precio: Number(r.precioUnitario), precioManual: true, simbolo: '$', tieneDescuento: false, afectaInventario: false };
-            if (r.productoId) return { ...base, id: r.productoId, nombre: r.nombre, codigo: r.codigo, porcentajeIva: Number(r.porcentajeIva) || 0, isFicticio: false, afectaInventario: true };
+            if (r.productoId) return { ...base, id: r.productoId, nombre: r.nombre, codigo: r.codigo, marcaNombre: r.marca || undefined, porcentajeIva: Number(r.porcentajeIva) || 0, isFicticio: false, afectaInventario: true };
             return { ...base, id: `ficticio-ed-${i}`, nombre: r.nombre, codigo: r.codigo || '1010', aplicaIva: Boolean(r.aplicaIva), isFicticio: true };
         }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -381,6 +382,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             productoId: item.isFicticio ? null : item.id,
             codigo: item.codigo,
             nombre: !item.isFicticio && item.presentacion !== 'UNIDAD' ? `${item.nombre} (${item.cantidadPres} ${item.presentacionEtiqueta})` : item.nombre,
+            marca: item.isFicticio ? null : (item.marcaNombre || null),
             cantidad: item.cantidad, // siempre en unidades
             precioUnitario: precioEnUsd(item),
             aplicaIva: item.isFicticio ? Boolean(item.aplicaIva) : item.porcentajeIva > 0,
@@ -1227,7 +1229,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                     <tr key={d.clave}>
                                         <td>{d.codigo || 'S/C'}</td>
                                         <td style={{textAlign: 'left'}}>
-                                            {d.nombre}
+                                            {d.isFicticio ? d.nombre : nombreConMarca(d.nombre, d.marcaNombre)}
                                             {esExento(d) && formVenta.values.conIva && (
                                                 <span style={{fontSize: '8px', color: '#666', marginLeft: 4}}>(E)</span>
                                             )}

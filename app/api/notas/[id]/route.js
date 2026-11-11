@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { Cliente, NotaFiscal, NotaFiscalDetalle, Proveedor, Venta, FacturaCompra, sequelize } from '@/models';
+import { Marca, Producto, Cliente, NotaFiscal, NotaFiscalDetalle, Proveedor, Venta, FacturaCompra, sequelize } from '@/models';
 import { requerirAdmin, requerirNoVendedor } from '@/app/api/_lib/acceso';
 import { tasaVigente } from '@/app/api/_lib/tasaBcv';
 import { ErrorNota, anularNota, registrarReintegro, compensarSaldoAFavor } from '@/app/api/_lib/notasFiscales';
@@ -25,7 +25,15 @@ export async function GET(request, { params }) {
             ],
         });
         if (!nota) return NextResponse.json({ error: 'Nota no encontrada' }, { status: 404 });
-        return NextResponse.json(nota);
+        // La marca del producto sale impresa junto al artículo
+        const json = nota.toJSON();
+        const ids = [...new Set((json.detalles || []).map((d) => d.productoId).filter(Boolean))];
+        if (ids.length) {
+            const productos = await Producto.findAll({ where: { id: ids }, attributes: ['id'], include: [{ model: Marca, as: 'marca', attributes: ['nombre'] }] });
+            const marcas = Object.fromEntries(productos.map((p) => [p.id, p.marca?.nombre]));
+            json.detalles = json.detalles.map((d) => ({ ...d, marcaNombre: marcas[d.productoId] || null }));
+        }
+        return NextResponse.json(json);
     } catch (error) {
         console.error('Detalle de nota:', error);
         return NextResponse.json({ error: 'No se pudo cargar la nota' }, { status: 500 });

@@ -1,5 +1,6 @@
 'use client';
 
+import { nombreConMarca } from '@/app/constants/nombreConMarca';
 import React, { useEffect, useState } from 'react';
 import { Button, Group, Text } from '@mantine/core';
 import { IconPrinter } from '@tabler/icons-react';
@@ -85,7 +86,7 @@ export default function PresupuestoImprimible({ presupuesto, accionesExtra = nul
                         {renglones.map((r, i) => (
                             <tr key={i}>
                                 <td>{r.codigo || 'S/C'}</td>
-                                <td style={{ textAlign: 'left' }}>{r.nombre}{!r.aplicaIva && <span className="pp-exento"> (exento)</span>}</td>
+                                <td style={{ textAlign: 'left' }}>{nombreConMarca(r.nombre, r.marca)}{!r.aplicaIva && <span className="pp-exento"> (exento)</span>}</td>
                                 <td style={{ textAlign: 'right' }}>{fmt(r.precioUnitario)}</td>
                                 <td style={{ textAlign: 'center' }}>{fmt(r.cantidad).replace(/,00$/, '')}</td>
                                 <td style={{ textAlign: 'right' }}>{fmt(r.subtotal)}</td>

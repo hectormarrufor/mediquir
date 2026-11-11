@@ -28,6 +28,7 @@ export async function armarPresupuesto(body) {
             productoId: Number(r.productoId) || null,
             codigo: String(r.codigo || '').slice(0, 40),
             nombre: String(r.nombre).slice(0, 255),
+            marca: String(r.marca || '').trim().slice(0, 100) || null,
             cantidad: calc.renglones[i].cantidad,
             precioUnitario: calc.renglones[i].precioUnitario,
             aplicaIva: calc.renglones[i].aplicaIva,

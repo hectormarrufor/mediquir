@@ -47,7 +47,7 @@ export default function ImprimirNota() {
         montoIva: nota.montoIva, totalFinal: nota.totalFinal, condicionPago: 'Contado', fechaVencimiento: null,
         createdAt: `${nota.fecha}T16:00:00Z`, // mediodía de Caracas: así la fecha impresa no se corre un día
         cliente: nota.cliente,
-        detalles: (nota.detalles || []).map((d) => ({ producto: { codigo: '', nombre: d.descripcion }, precioUnitario: d.precioUnitario, cantidad: d.cantidad, subtotal: d.subtotal, aplicaIva: d.aplicaIva })),
+        detalles: (nota.detalles || []).map((d) => ({ producto: { codigo: '', nombre: d.descripcion, marca: d.marcaNombre ? { nombre: d.marcaNombre } : null }, precioUnitario: d.precioUnitario, cantidad: d.cantidad, subtotal: d.subtotal, aplicaIva: d.aplicaIva })),
     };
     // Facturas que afecta (las notas anteriores a las "varias facturas" solo tienen la principal)
     const facturas = nota.facturasAfectadas?.length ? nota.facturasAfectadas : [{ numeroDocumento: nota.venta?.numeroDocumento, fecha: fechaCaracas(nota.venta?.createdAt) }];
