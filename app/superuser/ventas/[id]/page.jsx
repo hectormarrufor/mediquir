@@ -201,6 +201,12 @@ export default function DetallePedidoMayorPage() {
     );
     const etiquetasEstado = (
         <>
+            {/* Fecha de la factura (la de emisión si se copió de otro sistema) y condición de pago */}
+            <Badge size="lg" variant="outline" color="gray.3">Fecha: {formatearFecha(pedido.fechaEmision || pedido.createdAt)}</Badge>
+            <Badge size="lg" variant="filled" color={esCredito ? 'red' : 'teal'}>
+                {esCredito ? `A crédito${pedido.fechaVencimiento ? ` · vence ${formatearFecha(pedido.fechaVencimiento)}` : ''}` : 'De contado'}
+            </Badge>
+
             {/* Estado de pago (los valores vienen como 'Pagado' / 'Pendiente': antes se comparaba en mayúsculas y siempre salía naranja) */}
             <Badge size="lg" color={cancelado ? 'gray' : pagado ? 'green' : 'orange'}>
                 Pago: {cancelado ? 'Anulado' : (pedido.statusPago || 'Pendiente')}
