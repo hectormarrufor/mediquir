@@ -10,7 +10,7 @@ import db from '../../../models/index.js';
 import { fechaCaracas } from '../../constants/hora.js';
 import { primerLibre } from './correlativoLibre.js';
 
-const { sequelize, Correlativo, Venta, NotaFiscal, RetencionIva } = db;
+const { sequelize, Correlativo, Venta, NotaFiscal, RetencionIva, FormaAnulada } = db;
 
 export class ErrorNumeracion extends Error {
     constructor(mensaje, status = 400, codigo = null) { super(mensaje); this.status = status; this.codigo = codigo; }
@@ -46,16 +46,20 @@ export async function ultimoUsado(clave, transaction) {
             SELECT CAST(substring("numeroControl" from 4) AS bigint) AS n FROM "Ventas" WHERE "numeroControl" ~ '^00-[0-9]+$'
             UNION ALL
             SELECT CAST(substring("numeroControl" from 4) AS bigint) FROM "NotasFiscales" WHERE "origen" = 'VENTA' AND "numeroControl" ~ '^00-[0-9]+$'
+            UNION ALL
+            SELECT numero FROM "FormasAnuladas"
         ) t`);
     }
     return fila?.n === null || fila?.n === undefined ? null : Number(fila.n);
 }
 
 // Primer número de control libre desde `desde`: una factura copiada con su control adelantado no mueve el correlativo; al llegar a él se salta.
+// Tampoco se asigna una forma anulada (hoja dañada o saltada).
 async function primerControlLibre(desde, transaction) {
     const filas = await sequelize.query(
         `SELECT CAST(substring("numeroControl" from 4) AS bigint) AS n FROM "Ventas" WHERE "numeroControl" ~ '^00-[0-9]+$'
-         UNION SELECT CAST(substring("numeroControl" from 4) AS bigint) FROM "NotasFiscales" WHERE "origen" = 'VENTA' AND "numeroControl" ~ '^00-[0-9]+$'`,
+         UNION SELECT CAST(substring("numeroControl" from 4) AS bigint) FROM "NotasFiscales" WHERE "origen" = 'VENTA' AND "numeroControl" ~ '^00-[0-9]+$'
+         UNION SELECT numero FROM "FormasAnuladas"`,
         { type: sequelize.QueryTypes.SELECT, transaction },
     );
     const usados = new Set(filas.map((f) => Number(f.n)));
@@ -145,6 +149,15 @@ export async function asignarControl({ origen, id, reasignar = false, transactio
 
     if (doc.numeroControl && !reasignar) return { numeroControl: doc.numeroControl, nuevo: false };
 
+    // Se pide otro número porque la forma se dañó: la hoja anterior queda registrada como anulada (explica el hueco en la secuencia)
+    const anterior = /^00-(\d+)$/.exec(String(doc.numeroControl || ''));
+    if (reasignar && anterior) {
+        await FormaAnulada.findOrCreate({
+            where: { numero: Number(anterior[1]) },
+            defaults: { motivo: `Forma dañada al imprimir ${doc.numeroDocumento}: se imprimió en la siguiente` },
+            transaction: t,
+        });
+    }
     const numero = await siguienteControl(t);
     doc.numeroControl = numero;
     await doc.save({ transaction: t });

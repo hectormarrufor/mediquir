@@ -58,7 +58,8 @@ function PrecioEditable({ valor, simbolo, editado, onCommit, onRestablecer, size
 
 // modo="presupuesto": la misma pantalla de venta, pero solo para cotizar (no hay correlativo, pago ni inventario).
 // Un presupuesto siempre cuenta el IVA de cada producto y el cliente es opcional.
-export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' }) {
+// controlInicial: número de control con el que se abre (registrar la factura de un número que faltaba en la secuencia de la forma libre)
+export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta', controlInicial = null }) {
     const esPresupuesto = modo === 'presupuesto';
     const queryClient = useQueryClient(); // 🔥 INSTANCIADO PARA INVALIDAR QUERIES
     const [tipoVenta, setTipoVenta] = useState('DETAL'); 
@@ -137,6 +138,14 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta' 
             notas: ''       // solo presupuesto
         }
     });
+
+    // Abierto desde «Números de control»: es una factura (con IVA) y lleva ese número de control
+    useEffect(() => {
+        if (!opened || !controlInicial) return;
+        formVenta.setFieldValue('conIva', true);
+        formVenta.setFieldValue('numeroControl', controlInicial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [opened, controlInicial]);
 
     const tipoDocumentoActual = tipoVenta === 'DETAL'
         ? (formVenta.values.conIva ? 'FACTURA' : 'VENTA RAPIDA')

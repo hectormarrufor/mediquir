@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconFileDiff } from '@tabler/icons-react';
@@ -18,6 +18,15 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
     const [emitiendo, setEmitiendo] = useState(null); // 'CREDITO' | 'DEBITO'
     const [diferencial, setDiferencial] = useState(false);
     const [compensar, setCompensar] = useState(null); // nota de crédito recién emitida que dejó saldo a favor: se ofrece compensarlo
+    const [controlInicial, setControlInicial] = useState('');
+    // Abierta desde «Números de control» (?nota=CREDITO&control=00-0122660): se abre la nota con ese número de control
+    useEffect(() => {
+        const p = new URLSearchParams(window.location.search);
+        const tipo = p.get('nota');
+        if (!['CREDITO', 'DEBITO'].includes(tipo) || pedido.tipoDocumento !== 'FACTURA' || pedido.statusDespacho === 'Cancelado') return;
+        setControlInicial(p.get('control') || '');
+        setEmitiendo(tipo);
+    }, [pedido.tipoDocumento, pedido.statusDespacho]);
     const { data, refetch } = useQuery({
         queryKey: ['notas-venta', pedido.id],
         queryFn: async () => {
@@ -75,7 +84,7 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
             )}
 
             {diferencial && <DiferencialCambiarioModal opened onClose={() => setDiferencial(false)} factura={pedido} onEmitida={refrescar} />}
-            {emitiendo && <EmitirNotaModal opened onClose={() => setEmitiendo(null)} factura={pedido} tipo={emitiendo} onEmitida={(nota) => { refrescar(); if (nota?.tipo === 'CREDITO' && Number(nota.saldoAFavorUsd) > 0.005) setCompensar(nota); }} />}
+            {emitiendo && <EmitirNotaModal opened onClose={() => { setEmitiendo(null); setControlInicial(''); }} factura={pedido} tipo={emitiendo} controlInicial={controlInicial} onEmitida={(nota) => { refrescar(); if (nota?.tipo === 'CREDITO' && Number(nota.saldoAFavorUsd) > 0.005) setCompensar(nota); }} />}
             {compensar && <CompensarNotaModal nota={compensar} desdeEmision onClose={() => setCompensar(null)} onCambio={refrescar} />}
         </Paper>
     );

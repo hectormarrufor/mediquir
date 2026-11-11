@@ -28,7 +28,8 @@ async function pedirJson(url, opciones) {
 
 // Emite una nota de crédito (devolver renglones de la factura y/o otros conceptos) o de débito (conceptos adicionales).
 // El servidor vuelve a calcular todo: aquí solo se ve el total antes de emitir.
-export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmitida }) {
+// controlInicial: número de control con el que se abre (la nota de un número que faltaba en la secuencia de la forma libre)
+export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmitida, controlInicial = '' }) {
     const telefono = useEsTelefono();
     const esCredito = tipo === 'CREDITO';
     const simbolo = factura.moneda === 'BS' ? 'Bs' : '$';
@@ -55,7 +56,8 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
     useEffect(() => {
         if (!opened) return;
         setCantidades({}); setLibres(esCredito ? [] : [LIBRE()]); setMotivo(MOTIVOS[tipo][0]); setDetalle(''); setDevuelve(false); setOtras([]); setError(null);
-    }, [opened, tipo, esCredito]);
+        if (controlInicial) setCopia((c) => ({ ...c, control: controlInicial }));
+    }, [opened, tipo, esCredito, controlInicial]);
 
     const lineas = useMemo(() => {
         const deFactura = (data?.renglones || []).filter((r) => Number(cantidades[r.id]) > 0)

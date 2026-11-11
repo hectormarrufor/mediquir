@@ -23,6 +23,7 @@ const db = {
     RetencionIva: require('./facturacion/RetencionIva'),
     NotaFiscal: require('./facturacion/NotaFiscal'),
     NotaFiscalDetalle: require('./facturacion/NotaFiscalDetalle'),
+    FormaAnulada: require('./facturacion/FormaAnulada'),
     Cliente: require('./Cliente'),
     Presupuesto: require('./Presupuesto'),
     Tag: require('./inventario/Tag'),

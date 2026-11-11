@@ -15,7 +15,7 @@ import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
 import {
     IconAlertTriangle, IconCash, IconChevronDown, IconChevronUp, IconCircleCheck, IconClockHour4, IconPackage, IconPlus, IconPrinter,
-    IconReceipt2, IconSearch, IconShoppingBag, IconTrash, IconTruckDelivery, IconFileInvoice,
+    IconReceipt2, IconSearch, IconShoppingBag, IconTrash, IconTruckDelivery, IconFileInvoice, IconListNumbers,
 } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
@@ -265,6 +265,7 @@ export default function VentasDashboard() {
                     </Box>
                     {/* En el teléfono la venta nueva va primero y a todo el ancho */}
                     <Group gap="xs" w={telefono ? '100%' : undefined} wrap={telefono ? 'nowrap' : 'wrap'}>
+                        {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconListNumbers size={18} />} onClick={() => router.push('/superuser/ventas/controles')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 3, flexShrink: 0 } : undefined}>{telefono ? 'Controles' : 'Números de control'}</Button>}
                         <Button size="md" variant="light" color="teal" leftSection={<IconFileInvoice size={18} />} onClick={() => router.push('/superuser/presupuestos')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 2, flexShrink: 0 } : undefined}>Presupuestos</Button>
                         <Button size="md" color="accent.6" leftSection={<IconPlus size={18} />} onClick={() => setPosAbierto(true)} style={telefono ? { flex: 1, minWidth: 0 } : undefined}>{telefono ? 'Nueva venta' : 'Nueva venta o pedido'}</Button>
                     </Group>
