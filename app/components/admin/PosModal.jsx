@@ -60,8 +60,10 @@ function PrecioEditable({ valor, simbolo, editado, onCommit, onRestablecer, size
 // modo="presupuesto": la misma pantalla de venta, pero solo para cotizar (no hay correlativo, pago ni inventario).
 // Un presupuesto siempre cuenta el IVA de cada producto y el cliente es opcional.
 // controlInicial: número de control con el que se abre (registrar la factura de un número que faltaba en la secuencia de la forma libre)
-export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta', controlInicial = null }) {
+// presupuestoEditar: presupuesto ya guardado (con modo="presupuesto"): se carga para modificarlo y al guardar se actualiza el mismo número
+export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta', controlInicial = null, presupuestoEditar = null }) {
     const esPresupuesto = modo === 'presupuesto';
+    const editando = esPresupuesto && presupuestoEditar ? presupuestoEditar : null;
     const queryClient = useQueryClient(); // 🔥 INSTANCIADO PARA INVALIDAR QUERIES
     const [tipoVenta, setTipoVenta] = useState('DETAL'); 
     const [carrito, setCarrito] = useState([]);
@@ -147,6 +149,19 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         formVenta.setFieldValue('numeroControl', controlInicial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [opened, controlInicial]);
+
+    // Presupuesto guardado: se cargan sus renglones (precios ya en $, fijos como estaban), cliente, vigencia y observaciones
+    useEffect(() => {
+        if (!opened || !editando) return;
+        const tarifa = { precio4: 'precio7', precio5: 'precio6', precio1: 'precio7' }[editando.tarifa] || editando.tarifa || 'precio7';
+        formVenta.setValues({ ...formVenta.values, clienteId: editando.clienteId ? String(editando.clienteId) : null, tipoPrecio: tarifa, validoDias: editando.validoDias || 15, notas: editando.notas || '' });
+        setCarrito((editando.renglones || []).map((r, i) => {
+            const base = { clave: `ed-${i}`, presentacion: 'UNIDAD', unidadesPorPres: 1, cantidadPres: r.cantidad, cantidad: r.cantidad, precio: Number(r.precioUnitario), precioManual: true, simbolo: '$', tieneDescuento: false, afectaInventario: false };
+            if (r.productoId) return { ...base, id: r.productoId, nombre: r.nombre, codigo: r.codigo, porcentajeIva: Number(r.porcentajeIva) || 0, isFicticio: false, afectaInventario: true };
+            return { ...base, id: `ficticio-ed-${i}`, nombre: r.nombre, codigo: r.codigo || '1010', aplicaIva: Boolean(r.aplicaIva), isFicticio: true };
+        }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [opened, editando?.id]);
 
     const tipoDocumentoActual = tipoVenta === 'DETAL'
         ? (formVenta.values.conIva ? 'FACTURA' : 'VENTA RAPIDA')
@@ -375,8 +390,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
         setGuardandoPresupuesto(true);
         try {
-            const res = await fetch('/api/presupuestos', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
+            const res = await fetch(editando ? `/api/presupuestos/${editando.id}` : '/api/presupuestos', {
+                method: editando ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     clienteId: clienteSeleccionado?.id || null, clienteNombre: clienteSeleccionado?.nombre || '',
                     tarifa: formVenta.values.tipoPrecio, tasaCambio: tasaBcv, renglones,
@@ -385,7 +400,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'No se pudo guardar el presupuesto');
-            notifications.show({ color: 'teal', title: 'Presupuesto guardado', message: data.numero });
+            notifications.show({ color: 'teal', title: editando ? 'Presupuesto modificado' : 'Presupuesto guardado', message: data.numero });
             setCarrito([]);
             formVenta.reset();
             // En modo presupuesto esta pantalla ES la página de nuevo presupuesto (su onClose vuelve a la lista):
@@ -894,7 +909,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
                             {esPresupuesto ? (
                                 <Button size="md" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}>
-                                    Guardar presupuesto
+                                    {editando ? 'Guardar cambios' : 'Guardar presupuesto'}
                                 </Button>
                             ) : (
                                 <Group gap="xs">
@@ -920,7 +935,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             <Box style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', borderBottom: '1px solid #e3e7ee', padding: 'calc(8px + env(safe-area-inset-top, 0px)) 12px 8px', boxShadow: '0 4px 12px -8px rgba(0,0,0,0.25)' }}>
                 <Group justify="space-between" wrap="nowrap" gap="xs" mb={8}>
                     <Box style={{ minWidth: 0 }}>
-                        <Text fw={800} size="lg" c="blue.9" lh={1.2} truncate="end">{esPresupuesto ? 'Nuevo presupuesto' : 'Nueva venta'}</Text>
+                        <Text fw={800} size="lg" c="blue.9" lh={1.2} truncate="end">{esPresupuesto ? (editando ? `Modificar ${editando.numero}` : 'Nuevo presupuesto') : 'Nueva venta'}</Text>
                         <Group gap={4} wrap="nowrap">
                             <IconExchange size={14} color="#1971C2" />
                             <Text size="xs" c="dimmed" lh={1.2}>Tasa BCV: <b>{tasaBcv ? `${tasaBcv} Bs/$` : '…'}</b></Text>
@@ -1026,7 +1041,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     </Box>
                 </Group>
                 {esPresupuesto ? (
-                    <Button fullWidth size="md" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}>Guardar presupuesto</Button>
+                    <Button fullWidth size="md" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}>{editando ? 'Guardar cambios' : 'Guardar presupuesto'}</Button>
                 ) : (
                     <Group gap={8} wrap="nowrap">
                         <Button size="sm" h={46} px="sm" variant="light" color="teal" onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}
@@ -1052,7 +1067,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             ) : (
                 <Modal
                     opened={opened} onClose={onClose} size="95%" centered
-                    title={<Title order={3} c="blue.9" component="div">{esPresupuesto ? 'Nuevo presupuesto' : 'Terminal POS - Nueva Venta'}</Title>}
+                    title={<Title order={3} c="blue.9" component="div">{esPresupuesto ? (editando ? `Modificar ${editando.numero}` : 'Nuevo presupuesto') : 'Terminal POS - Nueva Venta'}</Title>}
                     styles={{ inner: { padding: '16px' }, content: { borderRadius: '8px' }, body: { padding: '20px' }, header: { padding: '20px' } }}
                 >
                     {contenidoEscritorio}
