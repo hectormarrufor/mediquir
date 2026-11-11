@@ -212,7 +212,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             cantidadCompra: 1,
             precioCompra: exacto(aMon(costoUnidad)), // el costo de la ficha con todos sus decimales (p. ej. 0.00825)
             porcentajeIva: prod.porcentajeIva === null || prod.porcentajeIva === undefined || prod.porcentajeIva === "" || Number.isNaN(Number(prod.porcentajeIva)) ? 16 : Number(prod.porcentajeIva), // 0 = exento: no se puede tratar como "sin dato"
-            aceptarCambioPrecio: true
+            aceptarPrecio6: true,
+            aceptarPrecio7: true
         };
     };
 
@@ -443,8 +444,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         setCarritoCompra(carritoCompra.map(i => i.id === id ? recalcular({ ...i, precioCompra: nuevoPrecio }) : i));
     };
 
-    const toggleAceptarCambioItem = (id) => {
-        setCarritoCompra(carritoCompra.map(i => i.id === id ? { ...i, aceptarCambioPrecio: !i.aceptarCambioPrecio } : i));
+    const toggleAceptarPrecioItem = (id, campo) => {
+        setCarritoCompra(carritoCompra.map(i => i.id === id ? { ...i, [campo]: !(i[campo] ?? true) } : i));
     };
 
     const eliminarItem = (id) => setCarritoCompra(carritoCompra.filter(i => i.id !== id));
@@ -1059,7 +1060,6 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                         <Table.Th ta="center"><Text size="sm">Aumento</Text></Table.Th>
                                         <Table.Th><Text size="sm">Precio 6 (Actual ➔ Nuevo)</Text></Table.Th>
                                         <Table.Th><Text size="sm">Precio 7 (Actual ➔ Nuevo)</Text></Table.Th>
-                                        <Table.Th ta="center"><Text size="sm">¿Modificar?</Text></Table.Th>
                                         </>}
                                     </Table.Tr>
                                 </Table.Thead>
@@ -1090,16 +1090,22 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                                                 <Table.Td>
                                                     <Text size="md">${sim.precio6.actual} ➔ <Text span fw={700} c="blue" size="lg">${sim.precio6.nuevo}</Text></Text>
                                                     {esBs && <Text size="xs" c="dimmed">Bs {formatoExacto(sim.precio6.actual * tasa)} ➔ Bs {formatoExacto(sim.precio6.nuevo * tasa)}</Text>}
-                                                </Table.Td>
+                                                    <Checkbox
+                                                        mt={4}
+                                                        size="md"
+                                                        checked={itemCarrito?.aceptarPrecio6 ?? true}
+                                                        onChange={() => toggleAceptarPrecioItem(sim.productoId, 'aceptarPrecio6')}
+                                                        label="Aceptar"
+                                                    />
+</Table.Td>
                                                 <Table.Td>
                                                     <Text size="md">${sim.precio7.actual} ➔ <Text span fw={700} c="blue" size="lg">${sim.precio7.nuevo}</Text></Text>
                                                     {esBs && <Text size="xs" c="dimmed">Bs {formatoExacto(sim.precio7.actual * tasa)} ➔ Bs {formatoExacto(sim.precio7.nuevo * tasa)}</Text>}
-                                                </Table.Td>
-                                                <Table.Td ta="center">
-                                                    <Checkbox 
+                                                    <Checkbox
+                                                        mt={4}
                                                         size="md"
-                                                        checked={itemCarrito?.aceptarCambioPrecio ?? true}
-                                                        onChange={() => toggleAceptarCambioItem(sim.productoId)}
+                                                        checked={itemCarrito?.aceptarPrecio7 ?? true}
+                                                        onChange={() => toggleAceptarPrecioItem(sim.productoId, 'aceptarPrecio7')}
                                                         label="Aceptar"
                                                     />
                                                 </Table.Td>

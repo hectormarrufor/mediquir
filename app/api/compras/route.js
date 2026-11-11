@@ -108,7 +108,7 @@ export async function POST(request) {
         const esGasto = esGastoCliente === true;
 
         // Un vendedor registra la compra (stock y costo) pero NO cambia precios de venta
-        if (esVend && Array.isArray(detalles)) detalles.forEach((d) => { d.aceptarCambioPrecio = false; });
+        if (esVend && Array.isArray(detalles)) detalles.forEach((d) => { d.aceptarCambioPrecio = false; d.aceptarPrecio6 = false; d.aceptarPrecio7 = false; });
 
         // Un gasto no lleva productos (no toca el inventario): lleva una descripción, una categoría y el monto
         const descripcionGasto = String(descripcionGastoCliente || '').trim().slice(0, 200);
@@ -336,10 +336,10 @@ export async function POST(request) {
                 producto.costoUsd = sim.nuevoCostoPonderado;
 
                 // Si el usuario aceptó el cambio para este ítem específico
-                if (item.aceptarCambioPrecio !== false) {
-                    if (sim.precio6.nuevo > 0) producto.precio6 = sim.precio6.nuevo;
-                    if (sim.precio7.nuevo > 0) producto.precio7 = sim.precio7.nuevo;
-                }
+                // Cada precio se acepta por separado (a veces solo se quiere cambiar el precio 7)
+                const general = item.aceptarCambioPrecio !== false;
+                if ((item.aceptarPrecio6 ?? general) !== false && sim.precio6.nuevo > 0) producto.precio6 = sim.precio6.nuevo;
+                if ((item.aceptarPrecio7 ?? general) !== false && sim.precio7.nuevo > 0) producto.precio7 = sim.precio7.nuevo;
 
                 await producto.save({ transaction: t });
 
