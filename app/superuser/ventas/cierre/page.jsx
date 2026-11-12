@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Alert, Badge, Box, Button, Card, Group, Loader, Paper, SimpleGrid, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { IconArrowLeft, IconPrinter } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
 import { fechaCaracas } from '@/app/constants/hora';
+import { abrirCierrePdf } from './_lib/cierreCajaPdf';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 const fechaLarga = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}` : '');
@@ -38,6 +40,13 @@ export default function CierreCajaPage() {
         enabled: /^\d{4}-\d{2}-\d{2}$/.test(fecha),
     });
     const t = data?.totales;
+    const [generando, setGenerando] = useState(false);
+    const imprimir = async () => {
+        setGenerando(true);
+        try { await abrirCierrePdf(data); }
+        catch (e) { notifications.show({ message: e.message || 'No se pudo generar el PDF', color: 'red' }); }
+        finally { setGenerando(false); }
+    };
 
     return (
         <Box p={{ base: 'sm', sm: 'lg' }} maw={1200} mx="auto">
@@ -48,7 +57,7 @@ export default function CierreCajaPage() {
                 </Group>
                 <Group gap="sm" align="flex-end">
                     <TextInput type="date" label="Día" value={fecha} max={fechaCaracas()} onChange={(e) => e.currentTarget.value && setFecha(e.currentTarget.value)} />
-                    <Button variant="light" leftSection={<IconPrinter size={18} />} onClick={() => window.print()}>Imprimir</Button>
+                    <Button variant="light" leftSection={<IconPrinter size={18} />} loading={generando} disabled={!data} onClick={imprimir}>PDF / Imprimir</Button>
                 </Group>
             </Group>
 
