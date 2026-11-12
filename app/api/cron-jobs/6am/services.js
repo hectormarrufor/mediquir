@@ -55,7 +55,16 @@ export async function syncExchangeRates() {
         }).format(now);
 
         // SCRAPING BCV: la tasa y su fecha valor (a las 6:00 a. m. es la de hoy; en la tarde ya es la de mañana)
-        const bcv = await leerBcv();
+        // Es LA lectura que importa del día (la de las 6 p. m. ya no corre): si el BCV tarda o falla se reintenta antes de rendirse
+        let bcv;
+        for (let intento = 1; ; intento++) {
+            try { bcv = await leerBcv(); break; }
+            catch (e) {
+                if (intento >= 3) throw e;
+                console.warn(`BCV intento ${intento} falló (${e.message}); se reintenta`);
+                await new Promise((r) => setTimeout(r, 4000));
+            }
+        }
         const precioDolarBCV = bcv.usd;
         const precioEuroBCV = bcv.eur;
 
@@ -92,7 +101,9 @@ export async function syncExchangeRates() {
         if (resultRecord) await resultRecord.update(datosAGuardar);
         else resultRecord = await BcvPrecioHistorico.create({ fecha: bcv.fechaValor, ...datosAGuardar });
 
-        return { type: 'FINANZAS', status: 'OK', msg: `Actualizado -> BCV: ${resultRecord.monto}, EUR: ${resultRecord.montoEur}, USDT: ${resultRecord.montoUsdt}` };
+        // Si lo leído no es de hoy (feriado o el BCV aún sin publicar) se avisa: rige la última tasa guardada
+        const aviso = bcv.fechaValor !== fechaActual ? ` ⚠️ OJO: la fecha valor del BCV es ${bcv.fechaValor}, no hoy (${fechaActual}); rige la última tasa vigente` : '';
+        return { type: 'FINANZAS', status: 'OK', msg: `Actualizado -> BCV: ${resultRecord.monto}, EUR: ${resultRecord.montoEur}, USDT: ${resultRecord.montoUsdt}${aviso}` };
     } catch (e) {
         return { type: 'FINANZAS', status: 'ERROR', msg: e.message };
     }

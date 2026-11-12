@@ -1,6 +1,7 @@
 import { Cliente } from '@/models';
 import { calcularFactura, REGLAS } from '@/app/constants/facturacion';
 import { TARIFAS } from './_lib';
+import { tasaVigente } from '../_lib/tasaBcv';
 
 // Valida el cuerpo y arma los datos del presupuesto (crear y modificar usan lo mismo). El servidor es la autoridad del cálculo.
 // Devuelve { error } o { datos }.
@@ -10,7 +11,11 @@ export async function armarPresupuesto(body) {
         if (!validos.length) return { error: 'El presupuesto necesita al menos un renglón válido' };
         // El cliente es opcional: un presupuesto rápido puede salir sin cliente (se imprime con las líneas en blanco)
 
-        const tasaCambio = Number(body.tasaCambio) > 0 ? Number(body.tasaCambio) : 1;
+        // La tasa es la de la base de datos (la que trae el cron de las 6 a. m.), igual que en las ventas: no se confía en la del navegador
+        let tasaCambio;
+        try { tasaCambio = await tasaVigente(); } catch { return { error: 'No hay una tasa BCV vigente registrada' }; }
+        // Los precios en Bs que armó la pantalla usaron su tasa: si ya no coincide, se pide recargar para no guardar números mezclados
+        if (Number(body.tasaCambio) > 0 && Math.abs(Number(body.tasaCambio) - tasaCambio) > 0.005) return { error: `La tasa BCV cambió (ahora ${tasaCambio}). Recarga la página y vuelve a guardar el presupuesto.` };
         const tarifa = TARIFAS.includes(body.tarifa) ? body.tarifa : 'precio6';
         const moneda = body.moneda === 'BS' ? 'BS' : 'USD'; // los precios y totales quedan en esta moneda, tal cual se cotizaron
         const validoDias = Number.isInteger(Number(body.validoDias)) && Number(body.validoDias) > 0 ? Number(body.validoDias) : 15;

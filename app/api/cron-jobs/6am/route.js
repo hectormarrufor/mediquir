@@ -42,8 +42,18 @@ export async function GET(request) {
         // 1. Finanzas
         if (finanzas.status === 'fulfilled' && finanzas.value.status === 'OK') {
             report.push(`✅ Tasas actualizadas: ${finanzas.value.msg}`);
+            if (finanzas.value.msg.includes('OJO')) {
+                await notificarCabezas({ title: '⚠️ Tasa BCV sin cambio de fecha', body: finanzas.value.msg, url: '/superuser', tag: `tasa-bcv-fecha-${Date.now()}` });
+            }
         } else {
-            report.push(`❌ Error Finanzas: ${finanzas.status === 'fulfilled' ? finanzas.value.msg : finanzas.reason}`);
+            const motivo = finanzas.status === 'fulfilled' ? finanzas.value.msg : finanzas.reason;
+            report.push(`❌ Error Finanzas: ${motivo}`);
+            await notificarCabezas({
+                title: '🚨 No se pudo traer la tasa BCV de hoy',
+                body: `El cron de las 6 a. m. falló tras 3 intentos (${motivo}). Al abrir el POS se intentará traerla de nuevo; si no, revisa la tasa.`,
+                url: '/superuser',
+                tag: `tasa-bcv-fallo-${Date.now()}`
+            });
         }
 
         // 2. RRHH
