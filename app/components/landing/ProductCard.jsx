@@ -1,28 +1,26 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { Badge, Box, Button, Group, Text, ActionIcon } from '@mantine/core';
-import { IconShoppingCartPlus, IconCheck, IconPackage } from '@tabler/icons-react';
-import { notifications } from '@mantine/notifications';
+import React, { memo } from 'react';
+import { IconBrandWhatsapp, IconEye, IconPackage, IconPlus, IconShoppingBag } from '@tabler/icons-react';
 import { useCart } from './CartContext';
-import ImageCarousel from './ImageCarousel';
-import ProductDetail from './ProductDetail';
-import CantidadProductoModal from '../ui/CantidadProductoModal';
-import { getProductImages, getPricing, getPresentacionLabel, presentacionesTienda, formatearPrecio, formatearBs } from './productUtils';
-import { aBolivares, montoRenglon, calcularFactura } from '@/app/constants/facturacion';
-import { useTasaBcv } from '@/hooks/useTasaBcv';
+import { useTienda } from './TiendaContext';
+import {
+    enlaceWhatsApp, estadoStock, formatearBs, formatearPrecio, getPricing, getProductImages, presentacionesTienda, sufijoUnidad,
+} from './productUtils';
+import { aBolivares, calcularFactura, montoRenglon } from '@/app/constants/facturacion';
+import { SITIO, rutaProducto } from '@/app/lib/seo';
 import classes from './landing.module.css';
 
-export default function ProductCard({ product, isMobile }) {
-    const [detailOpened, setDetailOpened] = useState(false);
-    const [detailMounted, setDetailMounted] = useState(false); // monta el detalle solo la primera vez que se abre
-    const [preguntar, setPreguntar] = useState(null); // clave de la presentación con que se abre «¿Cuánto vas a agregar?»
-    const { addToCart, unidadesEnCarrito } = useCart();
+// Tarjeta del catálogo. Sus seis partes (foto, marca, nombre, precio, caja y botón) van siempre en ese orden y siempre presentes,
+// porque comparten las filas de la cuadrícula (subgrid): así en una fila todos los precios y botones quedan a la misma altura.
+// Toda la tarjeta abre la vista rápida (el enlace del nombre la cubre entera); los botones quedan por encima.
+function ProductCard({ product, tasa }) {
+    const { unidadesEnCarrito } = useCart();
+    const { abrirDetalle, pedirCantidad } = useTienda();
 
-    const images = useMemo(() => getProductImages(product), [product]);
-    const { stock, precioBase, porcentajeAhorro, hasDiscount, precioFinal, isOutOfStock, isLowStock } = getPricing(product);
-    const unidadEtiqueta = presentacionesTienda(product).find((p) => p.clave === 'UNIDAD')?.etiqueta || 'Unidad';
-    const { tasa } = useTasaBcv();
+    const foto = getProductImages(product)[0];
+    const { stock, precioBase, porcentajeAhorro, hasDiscount, precioFinal, isOutOfStock } = getPricing(product);
+    const estado = estadoStock(product);
     const porcentajeIva = Number(product?.porcentajeIva) || 0;
     // Mismo cálculo que el carrito: IVA y total de una unidad
     const { montoIva, subtotal: baseUnidad } = calcularFactura({ renglones: [{ precioUnitario: precioFinal, cantidad: 1, aplicaIva: porcentajeIva > 0, porcentajeIva }] });
@@ -32,136 +30,81 @@ export default function ProductCard({ product, isMobile }) {
     const caja = presentacionesTienda(product).find((p) => p.clave === 'CAJA') || null;
     const puedeCaja = Boolean(caja) && !isOutOfStock && enCarrito + caja.unidades <= stock;
 
-    const openDetail = () => {
-        setDetailMounted(true);
-        setDetailOpened(true);
-    };
-
-    // Los botones internos (indicadores del carrusel, "+") no deben abrir el detalle
-    const handleCardClick = (e) => {
-        if (e.target.closest('button')) return;
-        openDetail();
-    };
-
-    // El botón de añadir pregunta cuánto: por unidad (cuántas) o por caja (cuántas y cuántas unidades trae)
-    const handleQuickAdd = (e) => { e.stopPropagation(); setPreguntar('UNIDAD'); };
-    const handleQuickAddCaja = (e) => { e.stopPropagation(); setPreguntar('CAJA'); };
-    const confirmarCantidad = (clave, n) => {
-        addToCart(product, n, precioFinal, clave);
-        const pres = presentacionesTienda(product).find((p) => p.clave === clave);
-        notifications.show({ message: `${n} ${n === 1 ? pres.singular : pres.plural} de ${product.nombre} añadido al carrito`, color: 'teal', icon: <IconCheck size={16} />, autoClose: 2200 });
+    // Clic normal: vista rápida. Con Ctrl/Cmd o botón central el enlace abre la ficha completa en otra pestaña, como cualquier enlace.
+    const abrir = (e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        abrirDetalle(product);
     };
 
     return (
-        <>
-            <Box
-                className={classes.card}
-                role="button"
-                tabIndex={0}
-                aria-label={`Ver ${product.nombre}`}
-                onClick={handleCardClick}
-                onKeyDown={(e) => { if (e.key === 'Enter') openDetail(); }}
-            >
-                <Box className={classes.media}>
-                    {hasDiscount && (
-                        <Badge color="red.7" variant="filled" size="sm" pos="absolute" top={8} left={8} style={{ zIndex: 2 }}>
-                            -{porcentajeAhorro}%
-                        </Badge>
+        <article className={classes.card} data-agotado={isOutOfStock || undefined}>
+            <div className={classes.cardFoto} data-sin-foto={foto.isPlaceholder || undefined}>
+                <img src={foto.src} alt="" loading="lazy" decoding="async" />
+                <div className={classes.cardEtiquetas}>
+                    {hasDiscount && <span className={`${classes.etiqueta} ${classes.etiquetaOferta}`}>-{porcentajeAhorro}%</span>}
+                    {enCarrito > 0 && (
+                        <span className={`${classes.etiqueta} ${classes.etiquetaCarrito}`} role="img" aria-label={`${enCarrito} en tu carrito`} title="Unidades en tu carrito">
+                            <IconShoppingBag size={13} stroke={2.2} aria-hidden="true" /> {enCarrito}
+                        </span>
                     )}
-                    <Badge
-                        color={isOutOfStock ? 'gray.7' : isLowStock ? 'orange.6' : 'teal.7'} variant="filled" tt="none"
-                        size={isMobile ? 'xs' : 'sm'} pos="absolute" top={isMobile ? 4 : 8} right={isMobile ? 4 : 8} style={{ zIndex: 2 }}
+                </div>
+                <span className={classes.cardVista} aria-hidden="true"><IconEye size={15} stroke={2} /> Vista rápida</span>
+            </div>
+
+            <div className={classes.cardMeta}>
+                <span className={classes.cardMarca}>{product.marca?.nombre || 'Genérico'}</span>
+                <span className={classes.cardStock} data-estado={estado.clave}>{estado.texto}</span>
+            </div>
+
+            <h3 className={classes.cardNombre}>
+                <a href={rutaProducto(product)} onClick={abrir} title={product.nombre}>{product.nombre}</a>
+            </h3>
+
+            <div className={classes.cardPrecio}>
+                {hasDiscount && <span className={classes.precioAntes}>Ref ${formatearPrecio(precioBase)}</span>}
+                <span className={classes.precioRef} data-oferta={hasDiscount || undefined}>
+                    Ref ${formatearPrecio(precioFinal)} <small>{sufijoUnidad(product)}</small>
+                </span>
+                <span className={classes.precioIva}>
+                    {porcentajeIva > 0 ? <>+ IVA {porcentajeIva}% · Total <b>${formatearPrecio(totalUnidad)}</b></> : 'Exento de IVA'}
+                </span>
+                <span className={classes.precioBs}>{tasa ? `Bs ${formatearBs(aBolivares(totalUnidad, tasa))}` : ' '}</span>
+            </div>
+
+            <div className={classes.cardCaja}>
+                {caja && (
+                    <button
+                        type="button" className={classes.cajaBtn} disabled={!puedeCaja}
+                        onClick={() => pedirCantidad(product, 'CAJA')}
+                        aria-label={`Añadir ${caja.etiqueta} de ${product.nombre} al carrito`}
                     >
-                        {isOutOfStock ? 'Agotado' : isLowStock ? 'Pocas unidades' : 'Disponible'}
-                    </Badge>
+                        <span><IconPackage size={15} stroke={1.9} aria-hidden="true" /> {caja.etiqueta}</span>
+                        <b>${formatearPrecio(montoRenglon(precioFinal, caja.unidades))}</b>
+                    </button>
+                )}
+            </div>
 
-                    <Box style={{ opacity: isOutOfStock ? 0.45 : 1 }}>
-                        <ImageCarousel
-                            images={images}
-                            alt={product.nombre}
-                            height={isMobile ? 105 : 180}
-                            // En móvil se desliza con el dedo; el autoplay solo corre en escritorio
-                            autoplayDelay={isMobile ? 0 : 4000 + (product.id % 5) * 600}
-                            withControls={!isMobile}
-                            padding={isMobile ? 4 : 10}
-                        />
-                    </Box>
-                </Box>
-
-                <Box p={isMobile ? 6 : 12} style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: isMobile ? 2 : 4 }}>
-                    <Group justify="space-between" wrap="nowrap" gap={4}>
-                        <Text fz={isMobile ? 8 : 10} c="blue.9" tt="uppercase" fw={800} lts={isMobile ? 0.3 : 0.8} lineClamp={1}>
-                            {product.marca?.nombre || 'Genérico'}
-                        </Text>
-                        {!isMobile && (
-                            <Text fz={10} c="dimmed" fw={600} style={{ whiteSpace: 'nowrap' }}>
-                                {getPresentacionLabel(product)}
-                            </Text>
-                        )}
-                    </Group>
-
-                    <Text fw={700} fz={{ base: 11, sm: 14 }} lh={1.25} lineClamp={2} c="navy.9" mih={{ base: 28, sm: 35 }}>
-                        {product.nombre}
-                    </Text>
-
-                    <Group justify="space-between" align="flex-end" wrap="nowrap" mt="auto" pt={6} gap={6}>
-                        <Box>
-                            {hasDiscount && (
-                                <Text td="line-through" fz={11} c="dimmed" lh={1}>${formatearPrecio(precioBase)}</Text>
-                            )}
-                            <Text fw={800} fz={{ base: 13, sm: 19 }} lh={1.15} c={hasDiscount ? 'red.7' : 'brand.6'}>
-                                Ref ${formatearPrecio(precioFinal)}{caja && <Text span fz={{ base: 8, sm: 11 }} fw={600} c="dimmed"> c/u</Text>}
-                            </Text>
-                            <Text fz={{ base: 9, sm: 11 }} fw={600} c="dimmed" lh={1.2}>
-                                {porcentajeIva > 0 ? `+ IVA ${porcentajeIva}%: $${formatearPrecio(montoIva)}` : 'Exento de IVA'}
-                            </Text>
-                            <Text fz={{ base: 10, sm: 13 }} fw={800} c="navy.9" lh={1.2}>Total ${formatearPrecio(totalUnidad)}</Text>
-                            {tasa && <Text fz={{ base: 9, sm: 12 }} fw={600} c="dimmed" lh={1.2}>Bs {formatearBs(aBolivares(totalUnidad, tasa))}</Text>}
-                        </Box>
-                        {!caja && (
-                            <ActionIcon
-                                size={isMobile ? 28 : 38}
-                                radius="xl"
-                                color="navy.9"
-                                variant={puedeAgregar ? 'filled' : 'light'}
-                                disabled={!puedeAgregar}
-                                onClick={handleQuickAdd}
-                                aria-label={`Añadir ${product.nombre} al carrito`}
-                            >
-                                <IconShoppingCartPlus size={isMobile ? 15 : 20} />
-                            </ActionIcon>
-                        )}
-                    </Group>
-                    {caja && (
-                        <Box mt={4} style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 3 : 5 }}>
-                            {isMobile && <Text fz={9} fw={800} c="grape.8" lh={1.1} ta="center">{caja.etiqueta}: ${formatearPrecio(montoRenglon(precioFinal, caja.unidades))}</Text>}
-                            <Button
-                                size="compact-xs" color="navy.9" variant={puedeAgregar ? 'filled' : 'light'} fullWidth disabled={!puedeAgregar}
-                                leftSection={<IconShoppingCartPlus size={isMobile ? 12 : 14} />} onClick={handleQuickAdd}
-                                styles={isMobile ? { root: { height: 24, fontSize: 10, paddingInline: 4 }, section: { marginInlineEnd: 3 } } : undefined}
-                            >
-                                + {unidadEtiqueta}
-                            </Button>
-                            <Button
-                                size="compact-xs" color="grape.7" variant={puedeCaja ? 'filled' : 'light'} fullWidth disabled={!puedeCaja}
-                                leftSection={<IconPackage size={isMobile ? 12 : 14} />} onClick={handleQuickAddCaja}
-                                styles={isMobile ? { root: { height: 24, fontSize: 10, paddingInline: 4 }, section: { marginInlineEnd: 3 } } : undefined}
-                            >
-                                {isMobile ? `+ Caja x${caja.unidades}` : `+ ${caja.etiqueta} · $${formatearPrecio(montoRenglon(precioFinal, caja.unidades))}`}
-                            </Button>
-                        </Box>
-                    )}
-                </Box>
-            </Box>
-
-            {preguntar && (
-                <CantidadProductoModal opened onClose={() => setPreguntar(null)} nombre={product.nombre} presentaciones={presentacionesTienda(product)} claveInicial={preguntar}
-                    maxUnidades={Math.max(0, stock - enCarrito)} onConfirmar={confirmarCantidad} />
-            )}
-
-            {detailMounted && (
-                <ProductDetail product={product} opened={detailOpened} onClose={() => setDetailOpened(false)} isMobile={isMobile} />
-            )}
-        </>
+            <div className={classes.cardAccion}>
+                {isOutOfStock ? (
+                    <a
+                        className={classes.agregar} data-variante="consultar" target="_blank" rel="noopener noreferrer"
+                        href={enlaceWhatsApp(SITIO.whatsapp, `Hola, quisiera saber cuándo tendrán disponible: ${product.nombre}`)}
+                    >
+                        <IconBrandWhatsapp size={17} stroke={1.9} aria-hidden="true" /> Consultar
+                    </a>
+                ) : (
+                    <button
+                        type="button" className={classes.agregar} disabled={!puedeAgregar}
+                        onClick={() => pedirCantidad(product, 'UNIDAD')}
+                        aria-label={`Añadir ${product.nombre} al carrito`}
+                    >
+                        {puedeAgregar ? <><IconPlus size={17} stroke={2.4} aria-hidden="true" /> Agregar</> : 'Máximo en tu carrito'}
+                    </button>
+                )}
+            </div>
+        </article>
     );
 }
+
+export default memo(ProductCard);

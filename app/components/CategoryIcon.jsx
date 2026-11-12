@@ -39,6 +39,9 @@ const iconMap = {
 const normalizar = (nombre) =>
     nombre.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
+// El icono "pelado" de una categoría (o null si no tiene uno propio), para quien dibuja su propio contenedor (la portada)
+export const iconoDeCategoria = (nombre) => (nombre ? iconMap[normalizar(nombre)] || null : null);
+
 export default function CategoryIcon({ categoryName, size = 40, color = 'blue', variant = 'light', ...props }) {
     if (!categoryName) return null;
 

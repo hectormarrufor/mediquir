@@ -1,109 +1,72 @@
 'use client';
 
-import React from 'react';
-import { Container, Title, Text, Group, SimpleGrid, Stack, Box, Skeleton, UnstyledButton, Badge } from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
-import { useQuery } from '@tanstack/react-query';
-import CategoryIcon from '../CategoryIcon';
+import React, { useMemo } from 'react';
+import { IconArrowRight, IconArrowUpRight } from '@tabler/icons-react';
+import { iconoDeCategoria } from '../CategoryIcon';
+import Pulso from './Pulso';
+import { useCatalogo, useCategorias } from './useCatalogo';
+import { nombreCategoria } from './productUtils';
 import classes from './landing.module.css';
 
+const iniciales = (nombre) => nombre.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
 
-export default function CategorySection({ selectedCategory, onSelectCategory }) {
-    const isMobile = useMediaQuery('(max-width: 48em)', true);
+// Especialidades: una ficha por categoría, ordenadas de la que más productos tiene a la que menos.
+// En el teléfono son dos filas que se deslizan de lado; en escritorio, una cuadrícula completa. Todo por CSS.
+export default function CategorySection({ selectedCategory, onSelectCategory, onVerTodo }) {
+    const { data: categorias, isLoading } = useCategorias();
+    const { data: productos } = useCatalogo();
 
-    const { data: categorias, isLoading } = useQuery({
-        queryKey: ['categorias-landing'],
-        staleTime: 5 * 60_000,
-        queryFn: async () => {
-            const res = await fetch('/api/categorias');
-            if (!res.ok) throw new Error('Error al cargar categorías');
-            return res.json();
-        }
-    });
-
-    // Reutiliza la misma petición del catálogo para mostrar cuántos productos tiene cada categoría
-    const { data: productos } = useQuery({
-        queryKey: ['productos-landing'],
-        staleTime: 60_000,
-        queryFn: async () => {
-            const res = await fetch('/api/productos');
-            if (!res.ok) throw new Error('Error al cargar productos');
-            return res.json();
-        }
-    });
-
-    const contar = (cat) => (productos || []).filter((p) => (p.categoriaId ?? p.categoria?.id) === cat.id).length;
-    const toggle = (cat) => onSelectCategory(selectedCategory?.id === cat.id ? null : cat);
+    const lista = useMemo(() => {
+        const cuenta = new Map();
+        (productos || []).forEach((p) => {
+            const id = p.categoriaId ?? p.categoria?.id;
+            if (id != null) cuenta.set(id, (cuenta.get(id) || 0) + 1);
+        });
+        return (categorias || [])
+            .map((cat) => ({ ...cat, total: cuenta.get(cat.id) || 0, etiqueta: nombreCategoria(cat.nombre) }))
+            // Mientras llega el catálogo se muestran todas; después, solo las que tienen productos
+            .filter((cat) => !productos || cat.total > 0)
+            .sort((a, b) => (b.total - a.total) || a.etiqueta.localeCompare(b.etiqueta, 'es'));
+    }, [categorias, productos]);
 
     return (
-        <Box id="especialidades" py={{ base: 24, md: 56 }}>
-            <Container fluid px={{ base: 6, sm: 10 }}>
-                <Stack gap={4} mb={{ base: 'sm', md: 'xl' }} align={isMobile ? 'flex-start' : 'center'}>
-                    <Text fz={11} fw={800} c="brand.6" tt="uppercase" lts={1.5}>Especialidades</Text>
-                    <Title order={2} fz={{ base: 22, md: 32 }} fw={900} className={classes.gradientText} tt="none" display="block" pb={0}>
-                        Encuentra lo que necesitas
-                    </Title>
-                </Stack>
+        <section id="especialidades" className={classes.especialidades} aria-labelledby="titulo-especialidades">
+            <div className={classes.wrap}>
+                <header className={classes.seccionCab}>
+                    <div>
+                        <p className={classes.eyebrow}><Pulso /> Especialidades</p>
+                        <h2 id="titulo-especialidades" className={classes.h2}>Compra por especialidad</h2>
+                    </div>
+                    <button type="button" className={classes.verTodo} onClick={onVerTodo}>
+                        Ver todo el catálogo <IconArrowRight size={18} stroke={2} aria-hidden="true" />
+                    </button>
+                </header>
 
-                {isLoading ? (
-                    <Group gap="xs" wrap="nowrap">
-                        {[1, 2, 3, 4].map((i) => <Skeleton key={i} h={isMobile ? 38 : 84} w={isMobile ? 110 : 200} radius="xl" />)}
-                    </Group>
-                ) : isMobile ? (
-                    // MÓVIL: chips compactos con scroll horizontal
-                    <Box className={classes.scroller}>
-                        <Badge
-                            component="button" size="xl" radius="xl" h={38} px={16}
-                            variant={selectedCategory ? 'default' : 'filled'} color="navy.9"
-                            style={{ cursor: 'pointer', textTransform: 'none' }}
-                            onClick={() => onSelectCategory(null)}
-                        >
-                            Todas
-                        </Badge>
-                        {categorias?.map((cat) => {
-                            const isSelected = selectedCategory?.id === cat.id;
+                <div className={classes.catGrid}>
+                    {isLoading
+                        ? Array.from({ length: 8 }).map((_, i) => <div key={i} className={`${classes.skel} ${classes.catSkel}`} />)
+                        : lista.map((cat) => {
+                            const seleccionada = selectedCategory?.id === cat.id;
+                            const Icono = iconoDeCategoria(cat.nombre);
                             return (
-                                <Badge
-                                    key={cat.id} component="button" size="xl" radius="xl" h={38} px={14}
-                                    variant={isSelected ? 'filled' : 'default'} color="navy.9"
-                                    leftSection={<CategoryIcon categoryName={cat.nombre} size={24} color={isSelected ? 'white' : 'brand.6'} variant="transparent" />}
-                                    style={{ cursor: 'pointer', textTransform: 'none' }}
-                                    onClick={() => toggle(cat)}
+                                <button
+                                    key={cat.id} type="button" className={classes.cat}
+                                    data-selected={seleccionada || undefined} aria-pressed={seleccionada}
+                                    onClick={() => onSelectCategory(seleccionada ? null : cat)}
                                 >
-                                    {cat.nombre}
-                                </Badge>
+                                    <span className={classes.catIcono}>
+                                        {Icono ? <Icono size={26} stroke={1.6} aria-hidden="true" /> : <span className={classes.catIniciales}>{iniciales(cat.etiqueta)}</span>}
+                                    </span>
+                                    <span>
+                                        <span className={classes.catNombre}>{cat.etiqueta}</span>
+                                        {cat.total > 0 && <span className={classes.catCuenta}>{cat.total} {cat.total === 1 ? 'producto' : 'productos'}</span>}
+                                    </span>
+                                    <IconArrowUpRight className={classes.catFlecha} size={18} stroke={2} aria-hidden="true" />
+                                </button>
                             );
                         })}
-                    </Box>
-                ) : (
-                    // ESCRITORIO: tarjetas con icono y conteo
-                    <SimpleGrid cols={{ base: 3, md: 3, lg: Math.min(Math.max(categorias?.length || 6, 1), 6) }} spacing="md" maw={1500} mx="auto">
-                        {categorias?.map((cat) => {
-                            const isSelected = selectedCategory?.id === cat.id;
-                            const total = contar(cat);
-                            return (
-                                <UnstyledButton
-                                    key={cat.id}
-                                    className={classes.categoryCard}
-                                    data-selected={isSelected || undefined}
-                                    onClick={() => toggle(cat)}
-                                >
-                                    <Group gap="md" wrap="nowrap">
-                                        <CategoryIcon
-                                            categoryName={cat.nombre} size={48}
-                                            color={isSelected ? 'accent.6' : 'brand.6'} variant="light"
-                                        />
-                                        <Box>
-                                            <Text fw={800} c={isSelected ? 'accent.6' : 'navy.9'} lh={1.2}>{cat.nombre}</Text>
-                                            {total > 0 && <Text size="xs" c="dimmed">{total} {total === 1 ? 'producto' : 'productos'}</Text>}
-                                        </Box>
-                                    </Group>
-                                </UnstyledButton>
-                            );
-                        })}
-                    </SimpleGrid>
-                )}
-            </Container>
-        </Box>
+                </div>
+            </div>
+        </section>
     );
 }

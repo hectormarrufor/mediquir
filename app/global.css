@@ -174,6 +174,52 @@ html { scroll-behavior: smooth; }
 /* Al desplazarse a una sección desde el menú, deja libre el header fijo */
 #especialidades, #productos-section, #contacto { scroll-margin-top: 84px; }
 
+/* =====================================================================
+   TIENDA PÚBLICA: tokens de diseño (portada, carrito, vista rápida).
+   Van en :root para que también los vean los modales y cajones, que Mantine
+   dibuja fuera de la página (en un portal). Los usa landing.module.css.
+   ===================================================================== */
+:root {
+  --mq-ink: #0b1b3d;            /* texto principal (navy de la marca) */
+  --mq-ink-2: #3a4863;          /* texto secundario */
+  --mq-ink-3: #64708a;          /* texto atenuado (4.9:1 sobre blanco) */
+  --mq-line: #e2e8f1;           /* filetes */
+  --mq-line-2: #cdd7e5;         /* filetes marcados */
+  --mq-bg: #f4f7fb;             /* fondo de la página */
+  --mq-surface: #ffffff;
+  --mq-tint: #eaf2fb;           /* superficie azulada suave */
+  --mq-blue: #005aaa;           /* azul de la marca */
+  --mq-blue-2: #004a8f;
+  --mq-sky: #6cc0ff;
+  --mq-night: #071634;          /* azul noche del encabezado y el pie */
+  --mq-green: #0a7f4f;          /* disponible */
+  --mq-green-bg: #e3f6ec;
+  --mq-amber: #a15c00;          /* pocas unidades */
+  --mq-amber-bg: #fff3d6;
+  --mq-red: #c8321f;            /* oferta / agotado en el carrito */
+  --mq-wa: #0b8043;             /* verde WhatsApp con contraste suficiente para texto blanco */
+  --mq-r-s: 10px;
+  --mq-r-m: 14px;
+  --mq-r-l: 20px;
+  --mq-r-xl: 28px;
+  --mq-shadow-1: 0 1px 2px rgba(11, 27, 61, 0.05), 0 6px 16px -8px rgba(11, 27, 61, 0.12);
+  --mq-shadow-2: 0 2px 4px rgba(11, 27, 61, 0.05), 0 22px 44px -22px rgba(11, 27, 61, 0.32);
+  --mq-shadow-3: 0 30px 70px -30px rgba(4, 12, 32, 0.55);
+  --mq-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Modales y cajones de la tienda (clase que les pone temaTienda.js): hoja blanca lisa, sin el relleno ni el filete luminoso
+   que el tema del sistema les da a todas las superficies. Con !important porque compite con estilos en línea del Paper. */
+.tienda-hoja {
+  padding: 0 !important;
+  background: #fff !important;
+  border: 0 !important;
+}
+
+.tienda-hoja::before {
+  display: none !important;
+}
+
 
 /* ------------------------------------------------------------------------------------------------
    Contraste y consistencia entre el fondo y los textos

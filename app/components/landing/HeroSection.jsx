@@ -1,172 +1,196 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import {
-    Container, Title, Text, Button, Group, TextInput, Badge, Box,
-    ThemeIcon, Paper, Stack, Loader, Flex
-} from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
-import {
-    IconSearch, IconTruckDelivery, IconShieldCheck, IconStethoscope,
-    IconHeartHandshake, IconChevronDown
-} from '@tabler/icons-react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { IconMapPin } from '@tabler/icons-react';
+import { ahoraCaracas, avisoDespacho } from '@/app/constants/horario';
+import { useTasaBcv } from '@/hooks/useTasaBcv';
+import BuscadorTienda from './BuscadorTienda';
+import { TRAZA_ECG } from './Pulso';
+import { useTienda } from './TiendaContext';
+import { useCatalogo } from './useCatalogo';
+import { enStock, formatearBs, formatearPrecio, getMainImage, getPricing } from './productUtils';
 import classes from './landing.module.css';
 
-// Versiones optimizadas (~50–200 KB) de las fotos originales de 7–9 MB
-const HERO_IMAGES = [1, 2, 4, 5].map((n) => ({
-    lg: `/tenants/mediquir/hero-${n}-lg.jpg`,
-    sm: `/tenants/mediquir/hero-${n}-sm.jpg`,
-}));
+// Fotos reales de la tienda (versiones livianas): solo se usan si el video no puede reproducirse
+const FOTOS = [2, 4].map((n) => `/tenants/mediquir/hero-${n}-lg.jpg`);
+const POPULARES = ['Guantes', 'Jeringas', 'Catéter', 'Mascarillas', 'Gasas', 'Alcohol', 'Fajas', 'Bisturí'];
+const MILES = new Intl.NumberFormat('es-VE');
 
+// ¿Sale hoy el pedido? Mismo horario de despacho que usa el pago (app/constants/horario.js)
+function estadoDespacho() {
+    const aviso = avisoDespacho();
+    if (aviso) return { tono: 'ambar', texto: <>Pide ahora y <b>sale {aviso.cuando}</b></> };
+    return { tono: 'verde', texto: <><b>Despachamos hoy</b> · hasta las {ahoraCaracas().dia === 6 ? '12:30' : '4:30'} p. m.</> };
+}
+
+// Cuenta desde cero hasta el valor cuando ya se conoce (una sola vez)
+function useConteo(valor) {
+    const [n, setN] = useState(0);
+    useEffect(() => {
+        if (!valor) return undefined;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setN(valor); return undefined; }
+        let cuadro;
+        const inicio = performance.now();
+        const paso = (ahora) => {
+            const t = Math.min(1, (ahora - inicio) / 1100);
+            setN(Math.round(valor * (1 - (1 - t) ** 3)));
+            if (t < 1) cuadro = requestAnimationFrame(paso);
+        };
+        cuadro = requestAnimationFrame(paso);
+        return () => cancelAnimationFrame(cuadro);
+    }, [valor]);
+    return n;
+}
+
+function Cifra({ valor, mas, etiqueta }) {
+    const n = useConteo(valor);
+    return (
+        <div className={classes.cifra}>
+            <dt>{etiqueta}</dt>
+            <dd>{valor ? `${mas ? '+' : ''}${MILES.format(n)}` : '—'}</dd>
+        </div>
+    );
+}
 
 export default function HeroSection({ searchQuery, onSearch }) {
-    // Se asume móvil hasta comprobar lo contrario: así el móvil nunca descarga el video
-    const isMobile = useMediaQuery('(max-width: 48em)', true);
-    const [localQuery, setLocalQuery] = useState(searchQuery || '');
-    const [currentSlide, setCurrentSlide] = useState(0);
-    const [videoError, setVideoError] = useState(false);
+    const { data: productos } = useCatalogo();
+    const { tasa } = useTasaBcv();
+    const { abrirDetalle } = useTienda();
+    const videoRef = useRef(null);
+    const [sinVideo, setSinVideo] = useState(false);
+    const [foto, setFoto] = useState(0);
+    const [despacho, setDespacho] = useState(null); // depende de la hora: se calcula ya en el navegador
+    const [turno, setTurno] = useState(0);
 
-    useEffect(() => { setLocalQuery(searchQuery || ''); }, [searchQuery]);
-
-    // Misma queryKey que el catálogo: no genera una petición extra
-    const { data: productos } = useQuery({
-        queryKey: ['productos-landing'],
-        staleTime: 60_000,
-        queryFn: async () => {
-            const res = await fetch('/api/productos');
-            if (!res.ok) throw new Error('Error al cargar productos');
-            return res.json();
-        }
-    });
-
-    const totalProductos = productos?.length || 0;
-    // El video se ve igual en móvil y escritorio (silenciado y en línea, como exigen los navegadores móviles para reproducirse solo);
-    // si el video falla se cae al fundido de fotos.
-    const usaVideo = !videoError;
-
-    // Sin video (móvil o error): fundido lento entre fotos
     useEffect(() => {
-        if (usaVideo) return;
-        const timer = setInterval(() => setCurrentSlide((prev) => (prev + 1) % HERO_IMAGES.length), 6000);
+        setDespacho(estadoDespacho());
+        const reloj = setInterval(() => setDespacho(estadoDespacho()), 60_000);
+        return () => clearInterval(reloj);
+    }, []);
+
+    // El video solo corre mientras se ve (ahorra batería y datos) y no arranca si el sistema pide menos movimiento
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video || sinVideo) return undefined;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { video.pause(); return undefined; }
+        const observador = new IntersectionObserver(([entrada]) => {
+            if (entrada.isIntersecting) video.play().catch(() => {});
+            else video.pause();
+        }, { threshold: 0.15 });
+        observador.observe(video);
+        return () => observador.disconnect();
+    }, [sinVideo]);
+
+    useEffect(() => {
+        if (!sinVideo) return undefined;
+        const timer = setInterval(() => setFoto((i) => (i + 1) % FOTOS.length), 6000);
         return () => clearInterval(timer);
-    }, [usaVideo]);
+    }, [sinVideo]);
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        if (localQuery.trim().length > 0) onSearch(localQuery.trim());
-    };
+    const cifras = useMemo(() => {
+        const lista = productos || [];
+        return {
+            productos: Math.floor(lista.length / 100) * 100,
+            marcas: Math.floor(new Set(lista.map((p) => p.marca?.nombre).filter(Boolean)).size / 10) * 10,
+            especialidades: new Set(lista.map((p) => p.categoria?.id ?? p.categoriaId).filter(Boolean)).size,
+        };
+    }, [productos]);
 
-    const scrollToCatalog = () => document.getElementById('productos-section')?.scrollIntoView({ behavior: 'smooth' });
+    // Los más pedidos que hay en existencia y tienen foto: rotan en la tarjeta que monta sobre el video
+    const destacados = useMemo(
+        () => (productos || [])
+            .filter((p) => enStock(p) && (p.imagen || p.grupoEquivalencia?.imagen))
+            .sort((a, b) => (b.nroVentas || 0) - (a.nroVentas || 0))
+            .slice(0, 5),
+        [productos]
+    );
+    useEffect(() => {
+        if (destacados.length < 2) return undefined;
+        const timer = setInterval(() => setTurno((i) => i + 1), 4800);
+        return () => clearInterval(timer);
+    }, [destacados.length]);
+    const destacado = destacados.length ? destacados[turno % destacados.length] : null;
 
     return (
-        <Box className={classes.hero} pos="relative" mih={{ base: 520, sm: 660, md: 744 }} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            {/* FONDO */}
-            <Box pos="absolute" inset={0} style={{ zIndex: 0, backgroundColor: 'var(--mantine-color-navy-9)' }}>
-                {usaVideo ? (
-                    <video
-                        src="/tenants/mediquir/hero-video.mp4"
-                        poster={isMobile ? HERO_IMAGES[0].sm : HERO_IMAGES[0].lg}
-                        autoPlay loop muted playsInline preload="metadata"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        onError={() => setVideoError(true)}
-                    />
-                ) : (
-                    HERO_IMAGES.map((img, idx) => (
-                        <Box key={idx} className={classes.heroSlide} data-active={idx === currentSlide || undefined}>
-                            <img
-                                src={isMobile ? img.sm : img.lg}
-                                alt=""
-                                loading={idx === 0 ? 'eager' : 'lazy'}
-                                fetchPriority={idx === 0 ? 'high' : 'auto'}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        <section className={classes.hero} aria-labelledby="titulo-tienda">
+            <div className={classes.heroFondo} aria-hidden="true">
+                <div className={classes.heroPapel} />
+                <svg className={classes.heroTraza} viewBox="0 0 1440 200" preserveAspectRatio="none">
+                    <path className={classes.trazaBase} d={TRAZA_ECG} pathLength="1" />
+                    <path className={classes.trazaLuz} d={TRAZA_ECG} pathLength="1" />
+                </svg>
+            </div>
+
+            <div className={`${classes.wrap} ${classes.heroGrid}`}>
+                <div className={classes.heroTexto}>
+                    <p className={classes.estado}>
+                        <span className={classes.punto} data-tono={despacho?.tono} />
+                        <span>{despacho?.texto || 'Despachos de lunes a sábado'}</span>
+                    </p>
+
+                    <h1 id="titulo-tienda" className={classes.heroTitulo}>
+                        Insumos médicos, <em>del mostrador a tu puerta.</em>
+                    </h1>
+
+                    <p className={classes.heroBajada}>
+                        Material médico-quirúrgico <strong>al mayor y al detal</strong> para clínicas, consultorios y tu hogar.
+                        Precios en dólares y en bolívares a tasa BCV.
+                    </p>
+
+                    <BuscadorTienda valor={searchQuery} productos={productos} onBuscar={onSearch} />
+
+                    <div className={classes.populares}>
+                        <span className={classes.popularesTitulo}>Lo más buscado</span>
+                        {POPULARES.map((termino) => (
+                            <button key={termino} type="button" className={classes.popular} onClick={() => onSearch(termino)}>{termino}</button>
+                        ))}
+                    </div>
+
+                    <dl className={classes.cifras}>
+                        <Cifra valor={cifras.productos} mas etiqueta="productos" />
+                        <Cifra valor={cifras.marcas} mas etiqueta="marcas" />
+                        <Cifra valor={cifras.especialidades} etiqueta="especialidades" />
+                    </dl>
+                </div>
+
+                <div className={classes.escena}>
+                    <div className={classes.escenaMarco}>
+                        {sinVideo ? (
+                            FOTOS.map((src, i) => (
+                                <img key={src} className={classes.escenaFoto} data-activa={i === foto || undefined} src={src} alt="" loading={i === 0 ? 'eager' : 'lazy'} />
+                            ))
+                        ) : (
+                            <video
+                                ref={videoRef}
+                                src="/tenants/mediquir/hero-video.mp4"
+                                poster="/tenants/mediquir/hero-video-poster.jpg"
+                                autoPlay loop muted playsInline preload="metadata"
+                                aria-label="La tienda de Mediquir en Ciudad Ojeda"
+                                onError={() => setSinVideo(true)}
                             />
-                        </Box>
-                    ))
-                )}
-            </Box>
+                        )}
+                        <span className={classes.escenaPie}><IconMapPin size={15} stroke={2} aria-hidden="true" /> Nuestra tienda<span className={classes.escenaPieCiudad}> · Ciudad Ojeda, Zulia</span></span>
+                    </div>
 
-            <Box
-                pos="absolute" inset={0} style={{ zIndex: 2 }}
-                bg={isMobile
-                    ? 'linear-gradient(180deg, rgba(11,27,61,0.88) 0%, rgba(11,27,61,0.72) 55%, rgba(11,27,61,0.9) 100%)'
-                    : 'linear-gradient(90deg, rgba(11,27,61,0.95) 0%, rgba(11,27,61,0.65) 50%, rgba(0,0,0,0.2) 100%)'}
-            />
+                    {tasa && (
+                        <div className={`${classes.flot} ${classes.flotTasa}`}>
+                            <span className={classes.flotEtiqueta}>Tasa BCV de hoy</span>
+                            <span className={classes.flotValor}>Bs {formatearBs(tasa)} <small>por $</small></span>
+                        </div>
+                    )}
 
-            <Box className={classes.heroGlow} />
-
-            <Container
-                fluid w="100%" pos="relative" px={{ base: 18, sm: 36, lg: 72 }} pt={{ base: 84, md: 120 }} pb={{ base: 32, md: 80 }}
-                style={{ zIndex: 3, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}
-            >
-                <Box maw={640}>
-                    <Badge
-                        variant="outline" color="white" size={isMobile ? 'md' : 'lg'} radius="xl" mb="sm"
-                        leftSection={<IconHeartHandshake size={14} />} tt="none"
-                        style={{ backdropFilter: 'blur(5px)', borderWidth: 1.5 }}
-                    >
-                        Clínicas, consultorios y hogar
-                    </Badge>
-
-                    <Title order={1} c="white" fz={{ base: 30, sm: 44, md: 56 }} fw={900} lh={1.1} mb="sm" tt="none" display="block" pb={0} style={{ letterSpacing: '-0.5px' }}>
-                        Salud integral a tu alcance, de forma{' '}
-                        <Text component="span" c="sky.3" inherit>inteligente.</Text>
-                    </Title>
-
-                    <Text c="gray.3" fz={{ base: 'sm', md: 'lg' }} mb={{ base: 'md', md: 30 }} maw={540}>
-                        <Text component="span" visibleFrom="sm" inherit>
-                            Ya sea que busques abastecer tu inventario médico al mayor o necesites insumos al detal, garantizamos calidad, rapidez y los mejores precios.
-                        </Text>
-                        <Text component="span" hiddenFrom="sm" inherit>
-                            Insumos médicos al mayor y al detal. Calidad, rapidez y los mejores precios.
-                        </Text>
-                    </Text>
-
-                    <Paper variant="plano" p={4} radius="xl" shadow="xl" mb="md" maw={520} bg="white" withBorder={false}>
-                        <form onSubmit={handleSubmit}>
-                            <Flex gap="xs" align="center" pl="md">
-                                <TextInput
-                                    placeholder="Busca: tensiómetro, guantes, jeringas…"
-                                    size="md" radius="xl" variant="unstyled" style={{ flex: 1 }}
-                                    value={localQuery}
-                                    onChange={(e) => setLocalQuery(e.currentTarget.value)}
-                                    aria-label="Buscar insumos"
-                                />
-                                <Button type="submit" color="navy.9" size="md" radius="xl" px={18} aria-label="Buscar">
-                                    <IconSearch size={20} />
-                                </Button>
-                            </Flex>
-                        </form>
-                    </Paper>
-
-                    {/* Confianza: en el teléfono baja a una segunda fila en vez de cortarse a la derecha */}
-                    <Group gap={{ base: 'md', md: 'xl' }} rowGap={8} wrap="wrap">
-                        <Group gap={6} wrap="nowrap">
-                            <ThemeIcon color="rgba(255,255,255,0.12)" c="white" size="md" radius="xl"><IconTruckDelivery size={16} /></ThemeIcon>
-                            <Text size="xs" fw={600} c="white" style={{ whiteSpace: 'nowrap' }}>Envíos nacionales</Text>
-                        </Group>
-                        <Group gap={6} wrap="nowrap">
-                            <ThemeIcon color="rgba(255,255,255,0.12)" c="white" size="md" radius="xl"><IconShieldCheck size={16} /></ThemeIcon>
-                            <Text size="xs" fw={600} c="white" style={{ whiteSpace: 'nowrap' }}>Calidad certificada</Text>
-                        </Group>
-                        <Group gap={6} wrap="nowrap">
-                            <ThemeIcon color="rgba(255,255,255,0.12)" c="white" size="md" radius="xl"><IconStethoscope size={16} /></ThemeIcon>
-                            <Text size="xs" fw={600} c="white" style={{ whiteSpace: 'nowrap' }}>
-                                {totalProductos === 0 ? <Loader size={10} color="white" /> : `${totalProductos > 100 ? '+' : ''}${totalProductos} insumos`}
-                            </Text>
-                        </Group>
-                    </Group>
-                </Box>
-
-                <Box visibleFrom="md" pos="absolute" bottom={28} left="50%" style={{ transform: 'translateX(-50%)' }}>
-                    <Button
-                        variant="subtle" color="white" radius="xl" onClick={scrollToCatalog} tt="none"
-                        rightSection={<IconChevronDown size={18} />}
-                    >
-                        Ver catálogo
-                    </Button>
-                </Box>
-            </Container>
-        </Box>
+                    {destacado && (
+                        <button type="button" className={`${classes.flot} ${classes.flotTop}`} onClick={() => abrirDetalle(destacado)} aria-label={`Ver ${destacado.nombre}`}>
+                            <span className={classes.flotFoto}><img key={destacado.id} src={getMainImage(destacado)} alt="" /></span>
+                            <span className={classes.flotTexto}>
+                                <span className={classes.flotEtiqueta}>De lo más pedido</span>
+                                <span className={classes.flotNombre}>{destacado.nombre}</span>
+                                <span className={classes.flotPrecio}>Ref ${formatearPrecio(getPricing(destacado).precioFinal)}</span>
+                            </span>
+                        </button>
+                    )}
+                </div>
+            </div>
+        </section>
     );
 }

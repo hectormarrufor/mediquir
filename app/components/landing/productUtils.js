@@ -65,6 +65,38 @@ export function getPricing(product) {
 // En la tienda se vende por unidad (o par, paquete) y por caja cerrada; el bulto es solo del portal B2B
 export const presentacionesTienda = (product) => presentacionesDe(product).filter((p) => p.clave !== 'BULTO');
 
+export const enStock = (p) => (Number(p?.stockAlmacen) > 0 ? 1 : 0);
+
+// Estado de existencia para mostrar en la tienda. Con 10 o menos se dice cuántas quedan (el cliente sabe hasta cuánto puede pedir).
+export function estadoStock(product) {
+    const stock = Math.floor(Number(product?.stockAlmacen) || 0);
+    if (stock <= 0) return { clave: 'agotado', texto: 'Agotado' };
+    if (stock <= 10) return { clave: 'pocas', texto: stock === 1 ? 'Queda 1' : `Quedan ${stock}` };
+    return { clave: 'disponible', texto: 'Disponible' };
+}
+
+// Cómo se cobra la unidad base junto al precio: "c/u", "/ par", "/ paquete x12", "/ metro"
+export function sufijoUnidad(product) {
+    const unidad = presentacionesTienda(product).find((p) => p.clave === 'UNIDAD');
+    return !unidad || unidad.singular === 'unidad' ? 'c/u' : `/ ${unidad.singular}`;
+}
+
+// Las categorías están guardadas sin tildes ("Bebes y Ninos"); en la tienda se muestran bien escritas.
+const CATEGORIAS_BIEN_ESCRITAS = {
+    'bebes y ninos': 'Bebés y Niños',
+    collarin: 'Collarín',
+    ginecologia: 'Ginecología',
+    miscelaneo: 'Misceláneo',
+    'insumos medicos': 'Insumos Médicos',
+    'equipos medicos': 'Equipos Médicos',
+    'productos farmaceuticos': 'Productos Farmacéuticos',
+};
+const sinTildes = (s) => String(s ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+export const nombreCategoria = (nombre) => CATEGORIAS_BIEN_ESCRITAS[sinTildes(nombre)] || nombre || '';
+
+// Enlace de WhatsApp con el mensaje ya escrito (consultas de productos agotados, ayuda con un pedido)
+export const enlaceWhatsApp = (numero, mensaje) => `https://wa.me/${numero}${mensaje ? `?text=${encodeURIComponent(mensaje)}` : ''}`;
+
 export function getPresentacionLabel(product) {
     switch (product?.presentacion) {
         case 'par': return 'Par';
