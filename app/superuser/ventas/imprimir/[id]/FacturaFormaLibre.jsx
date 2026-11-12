@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { nombreConMarca } from '@/app/constants/nombreConMarca';
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
@@ -30,6 +30,12 @@ const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-VE', { timeZone: 'A
 // que afecta y `condicionTexto` reemplaza las condiciones de pago; `sinVence` oculta la fecha de vencimiento.
 // `lineasExtra`: textos libres que salen como filas de descripción después de los artículos (facturas que afecta la nota, tasa BCV, etc.).
 export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factura', referencia = null, etiquetaCondicion = 'Condiciones de la Transacción', condicionTexto = null, sinVence = false, lineasExtra = [], onReasignarControl = null, vistaPrevia = false, onToggleGuia = null }) {
+    // Papel de la impresión: CARTA vertical por defecto (la hoja va centrada arriba); MEDIA CARTA = la hoja completa en horizontal.
+    // Se recuerda la última elección en este navegador.
+    const [papel, setPapel] = useState('carta');
+    useEffect(() => { try { const g = localStorage.getItem('papelFormaLibre'); if (g === 'carta' || g === 'media') setPapel(g); } catch { /* sin almacenamiento */ } }, []);
+    const elegirPapel = (v) => { setPapel(v); try { localStorage.setItem('papelFormaLibre', v); } catch { /* sin almacenamiento */ } };
+    const esCarta = papel === 'carta';
     const zoom = useZoomHoja(768, 24); // media carta horizontal (8 in): en el teléfono se achica al ancho de la pantalla
     const tasa = Number(venta.tasaCambio) || 1;
     const esBs = venta.moneda === 'BS';
@@ -57,6 +63,8 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                 <span>{titulo} {venta.numeroDocumento} · media carta 8 × 5.5 in{guia ? (vistaPrevia ? ' · GUÍA de la forma preimpresa (se imprime)' : ' · GUÍA de la forma preimpresa (no se imprime)') : ''}{vistaPrevia ? ' · VISTA PREVIA: no es un documento emitido' : ''}</span>
                 <span>
                     <button type="button" onClick={() => window.print()}>Imprimir</button>{' '}
+                    <button type="button" className={esCarta ? 'fl-papel fl-papel-on' : 'fl-papel'} onClick={() => elegirPapel('carta')}>Carta vertical</button>
+                    <button type="button" className={!esCarta ? 'fl-papel fl-papel-on' : 'fl-papel'} onClick={() => elegirPapel('media')}>Media carta horizontal</button>{' '}
                     {onReasignarControl && <><button type="button" onClick={onReasignarControl}>Forma dañada: siguiente N° de control</button>{' '}</>}
                     {vistaPrevia
                         ? (onToggleGuia && <button type="button" onClick={onToggleGuia}>{guia ? 'Ocultar guía' : 'Ver guía sobre la forma'}</button>)
@@ -131,6 +139,8 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                     .fl-barra button:first-child { background: #fff; color: #0b1b3d; }
                 }
                 .fl-barra a { color: #9ecbff; }
+                .fl-barra .fl-papel { background: #3b3f43; color: #fff; border: 1px solid #777; }
+                .fl-barra .fl-papel-on { background: #fff !important; color: #0b1b3d !important; }
                 .fl-aviso { max-width: 8in; margin: 0 auto 8px; background: #ffe08a; color: #5c3b00; padding: 6px 10px; font-size: 12px; font-weight: 700; }
 
                 /* La hoja: media carta horizontal. Todo va en pulgadas desde su esquina superior izquierda. */
@@ -179,15 +189,15 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                 .fl-gran { font-size: 11.5px; font-weight: 800; margin-top: 0; text-align: right; padding-right: 8px; }
 
 
-                /* Impresión: media carta horizontal, sin márgenes; el diálogo ya propone este tamaño de hoja */
+                /* Impresión sin márgenes: en CARTA vertical la hoja (8 in) queda centrada arriba; en MEDIA CARTA ocupa todo el papel en horizontal */
                 @media print {
-                    @page { size: 8in 5.5in; margin: 0 !important; }
+                    @page { size: ${esCarta ? 'letter portrait' : '8in 5.5in'}; margin: 0 !important; }
                     html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
                     body * { visibility: hidden !important; }
                     #print-section, #print-section * { visibility: visible !important; }
                     .fl-guia:not(.fl-guia-imprime) { display: none !important; } /* en la vista previa la guía sí se imprime */
                     .fl-envoltura { padding: 0 !important; background: transparent !important; min-height: 0; }
-                    #print-section { position: absolute !important; left: 0 !important; top: 0 !important; margin: 0 !important; box-shadow: none !important; transform: none !important; zoom: 1 !important; }
+                    #print-section { position: absolute !important; left: ${esCarta ? '0.25in' : '0'} !important; top: 0 !important; margin: 0 !important; box-shadow: none !important; transform: none !important; zoom: 1 !important; }
                     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                 }
             ` }} />
