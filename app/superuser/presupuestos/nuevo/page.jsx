@@ -11,5 +11,10 @@ const PosModal = dynamic(() => import('../../../components/admin/PosModal'), { s
 export default function NuevoPresupuesto() {
     const router = useRouter();
     const { tasa } = useTasaBcv();
-    return <PosModal opened modo="presupuesto" tasaBcv={tasa || 0} onClose={() => router.push('/superuser/presupuestos')} />;
+    // Salir con «Cerrar» descarta el borrador; un refresco accidental no pasa por aquí y lo conserva
+    const salir = () => {
+        try { localStorage.removeItem('mediquir:borrador-presupuesto'); } catch { /* */ }
+        router.push('/superuser/presupuestos');
+    };
+    return <PosModal opened modo="presupuesto" tasaBcv={tasa || 0} onClose={salir} />;
 }

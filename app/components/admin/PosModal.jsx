@@ -62,6 +62,8 @@ function PrecioEditable({ valor, simbolo, editado, onCommit, onRestablecer, size
 // Un presupuesto siempre cuenta el IVA de cada producto y el cliente es opcional.
 // controlInicial: número de control con el que se abre (registrar la factura de un número que faltaba en la secuencia de la forma libre)
 // presupuestoEditar: presupuesto ya guardado (con modo="presupuesto"): se carga para modificarlo y al guardar se actualiza el mismo número
+export const BORRADOR_PRESUPUESTO = 'mediquir:borrador-presupuesto';
+
 export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta', controlInicial = null, presupuestoEditar = null }) {
     const esPresupuesto = modo === 'presupuesto';
     const editando = esPresupuesto && presupuestoEditar ? presupuestoEditar : null;
@@ -143,6 +145,31 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             notas: ''       // solo presupuesto
         }
     });
+
+    // Borrador del presupuesto nuevo: si la página se refresca por accidente, el formulario y el carrito se recuperan.
+    // Se borra al guardar o al salir con «Cerrar» (ver BORRADOR_PRESUPUESTO en la página de nuevo presupuesto).
+    const guardaBorrador = esPresupuesto && !editando;
+    const [borradorListo, setBorradorListo] = useState(false);
+    useEffect(() => {
+        if (!guardaBorrador || !opened) return;
+        try {
+            const b = JSON.parse(localStorage.getItem(BORRADOR_PRESUPUESTO) || 'null');
+            if (b) {
+                if (b.tipoVenta) setTipoVenta(b.tipoVenta);
+                if (b.form) formVenta.setValues({ ...formVenta.values, ...b.form });
+                if (Array.isArray(b.carrito)) setCarrito(b.carrito);
+            }
+        } catch { /* sin borrador legible: se empieza en blanco */ }
+        setBorradorListo(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [guardaBorrador, opened]);
+    useEffect(() => {
+        if (!guardaBorrador || !borradorListo) return;
+        try {
+            if (carrito.length === 0 && !formVenta.values.clienteId && !formVenta.values.notas) localStorage.removeItem(BORRADOR_PRESUPUESTO);
+            else localStorage.setItem(BORRADOR_PRESUPUESTO, JSON.stringify({ tipoVenta, form: formVenta.values, carrito }));
+        } catch { /* almacenamiento lleno o bloqueado: no pasa nada */ }
+    }, [guardaBorrador, borradorListo, tipoVenta, carrito, formVenta.values]);
 
     // Abierto desde «Números de control»: es una factura (con IVA) y lleva ese número de control
     useEffect(() => {
@@ -441,6 +468,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'No se pudo guardar el presupuesto');
             notifications.show({ color: 'teal', title: editando ? 'Presupuesto modificado' : 'Presupuesto guardado', message: data.numero });
+            try { localStorage.removeItem(BORRADOR_PRESUPUESTO); } catch { /* */ }
             setCarrito([]);
             formVenta.reset();
             // En modo presupuesto esta pantalla ES la página de nuevo presupuesto (su onClose vuelve a la lista):
