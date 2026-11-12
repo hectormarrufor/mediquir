@@ -38,7 +38,7 @@ const mockdata = [
       icon: FaMoneyBillWave,
       color: 'green',
       href: '/superuser/rrhh/pagos',
-      description: 'Recibos de alimentación, transporte y quincena: histórico, PDF y confirmación del empleado.'
+      description: 'Recibos de alimentación, transporte y quincena: histórico y PDF para imprimir, firmar y archivar.'
     },
     { 
       title: 'Dotación de Indumentaria', 

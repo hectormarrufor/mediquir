@@ -1,30 +1,23 @@
 import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
 import db from '@/models';
-import { notificarUsuario } from '@/app/handlers/notificar';
 import { fechaCaracas } from '@/app/constants/hora';
-import { TIPOS_PAGO, FORMAS_PAGO, totalesPago, fechaCorta } from '@/app/constants/pagosEmpleados';
-import { requerirPersonal, requerirAdministracion, nombreDe, FECHA } from './_lib';
+import { TIPOS_PAGO, FORMAS_PAGO, totalesPago } from '@/app/constants/pagosEmpleados';
+import { requerirAdministracion, nombreDe, FECHA } from './_lib';
 
 export const dynamic = 'force-dynamic';
 
-const { PagoEmpleado, Empleado, Puesto, User } = db;
+const { PagoEmpleado, Empleado, Puesto } = db;
 
-// Histórico de recibos. Administración ve todos (con filtros); cualquier otro empleado ve SOLO los suyos.
+// Histórico de recibos (solo administración, con filtros).
 // ?tipo= ?empleadoId= ?estado= ?desde= ?hasta= (sobre la fecha del recibo)
 export async function GET(request) {
-    const acceso = await requerirPersonal();
+    const acceso = await requerirAdministracion();
     if (acceso.error) return acceso.error;
     try {
         const p = new URL(request.url).searchParams;
         const donde = {};
-        if (acceso.admin) {
-            if (Number(p.get('empleadoId')) > 0) donde.empleadoId = Number(p.get('empleadoId'));
-        } else {
-            if (!acceso.empleadoId) return NextResponse.json([]);
-            donde.empleadoId = acceso.empleadoId;
-            donde.estado = { [Op.ne]: 'ANULADO' };
-        }
+        if (Number(p.get('empleadoId')) > 0) donde.empleadoId = Number(p.get('empleadoId'));
         if (TIPOS_PAGO[p.get('tipo')]) donde.tipo = p.get('tipo');
         if (['PENDIENTE', 'CONFIRMADO', 'ANULADO'].includes(p.get('estado'))) donde.estado = p.get('estado');
         const fecha = {};
@@ -42,7 +35,7 @@ export async function GET(request) {
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
-// Crea un recibo (solo administración) y avisa al empleado para que lo confirme con su firma.
+// Crea un recibo (solo administración). Se imprime, el empleado lo firma en papel y se archiva.
 // { tipo, empleadoId, fecha, periodoDesde, periodoHasta, dias, conceptos: [{ concepto, asignacion, deduccion }], formaPago, referencia, conceptoTexto }
 export async function POST(request) {
     const acceso = await requerirAdministracion();
@@ -91,21 +84,7 @@ export async function POST(request) {
             ...totalesPago(conceptos), formaPago, referencia, conceptoTexto, creadoPorId: acceso.usuarioId, creadoPorNombre: nombreDe(acceso.sesion),
         });
 
-        // Aviso al usuario del empleado: debe confirmar el recibo con su firma
-        const usuario = await User.findOne({ where: { empleadoId: empleado.id }, attributes: ['id'] });
-        let notificado = false;
-        if (usuario) {
-            try {
-                await notificarUsuario(usuario.id, {
-                    title: `🧾 Recibo por confirmar: ${cfg.etiqueta}`,
-                    body: `Bs ${Number(pago.totalCobrar).toLocaleString('es-VE', { minimumFractionDigits: 2 })} · ${tipo === 'QUINCENA' ? fechaCorta(fecha) : `${fechaCorta(periodoDesde)} al ${fechaCorta(periodoHasta)}`}. Entra y confírmalo con tu firma.`,
-                    url: '/superuser/mis-pagos',
-                    tag: `pago-empleado-${pago.id}`,
-                });
-                notificado = true;
-            } catch (e) { console.error('Aviso de recibo de pago:', e.message); }
-        }
-        return NextResponse.json({ pago, notificado, tieneUsuario: Boolean(usuario) }, { status: 201 });
+        return NextResponse.json({ pago }, { status: 201 });
     } catch (error) {
         console.error('Pagos a empleados (crear):', error);
         return NextResponse.json({ error: 'No se pudo guardar el recibo' }, { status: 500 });

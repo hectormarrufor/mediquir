@@ -60,14 +60,11 @@ const VENDEDOR_API = [
     ['POST', /^\/api\/tareas(\/[^/]+\/comentarios)?$/],
     ['PATCH', /^\/api\/tareas\/[^/]+$/],
     ['DELETE', /^\/api\/tareas\/[^/]+$/],
-    // Recibos de pago: cada empleado ve y confirma SOLO los suyos (la ruta valida por sesión; crear y anular exige administración)
-    ['GET', /^\/api\/rrhh\/pagos$/],
-    ['POST', /^\/api\/rrhh\/pagos\/[^/]+\/confirmar$/],
 ];
 const VENDEDOR_PAGINAS = [
     /^\/superuser$/, /^\/superuser\/ventas(\/.*)?$/, /^\/superuser\/compras$/,
     /^\/superuser\/inventario\/consulta$/, /^\/superuser\/clientes(\/nuevo)?$/, /^\/superuser\/notificaciones$/,
-    /^\/superuser\/presupuestos(\/.*)?$/, /^\/superuser\/proveedores$/, /^\/superuser\/mis-pagos$/,
+    /^\/superuser\/presupuestos(\/.*)?$/, /^\/superuser\/proveedores$/,
 ];
 
 const json = (mensaje, status) => NextResponse.json({ error: mensaje }, { status });

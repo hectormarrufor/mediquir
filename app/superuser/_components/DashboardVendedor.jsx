@@ -157,13 +157,6 @@ export default function DashboardVendedor() {
         refetchOnWindowFocus: true,
     });
 
-    const { data: misRecibos } = useQuery({
-        queryKey: ['pagos-empleados', 'mios', 'pendientes'],
-        queryFn: () => pedirJson('/api/rrhh/pagos?estado=PENDIENTE'),
-        refetchInterval: 120000,
-    });
-    const recibosPendientes = Array.isArray(misRecibos) ? misRecibos.length : 0;
-
     const firmar = async () => {
         if (!porFirmar) return;
         setFirmando(true);
@@ -218,16 +211,6 @@ export default function DashboardVendedor() {
                 </Group>
 
                 {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}
-
-                {/* Recibos de pago (alimentación, transporte, quincena) que administración registró y faltan por confirmar */}
-                {recibosPendientes > 0 && (
-                    <Alert color="yellow" variant="filled" icon={<IconReceipt2 size={20} />} title={`Tienes ${recibosPendientes} recibo(s) de pago por confirmar`}>
-                        <Group justify="space-between" wrap="nowrap" gap="xs">
-                            <Text size="sm">Revisa el monto y confírmalo.</Text>
-                            <Button size="xs" color="dark" onClick={() => router.push('/superuser/mis-pagos')}>Ver recibos</Button>
-                        </Group>
-                    </Alert>
-                )}
 
                 <SimpleGrid cols={{ base: 2, lg: 4 }} spacing={{ base: 6, sm: 'md' }}>
                     <Acceso icono={IconShoppingCart} color="navy.9" titulo="Nueva venta o pedido" descripcion="Al detal o pedido al mayor" onClick={() => setPosAbierto(true)} />

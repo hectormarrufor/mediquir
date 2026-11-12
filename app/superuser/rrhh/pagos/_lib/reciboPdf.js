@@ -53,7 +53,7 @@ export function construirPdf({ jsPDF, autoTable, pago, logo, generado }) {
     let y = CAB + 13;
     const tabla = { theme: 'grid', margin: { left: M, right: M }, styles: { font: 'helvetica', fontSize: 9, cellPadding: 2, textColor: [25, 35, 55], lineColor: GRIS_LINEA, lineWidth: 0.25, valign: 'middle' } };
 
-    // ---- Firma a mano, cédula y huella (el recibo se imprime y se archiva) + una línea de constancia de la confirmación digital
+    // ---- Firma a mano, cédula y huella (el recibo se imprime, se firma y se archiva) + una línea de constancia
     const bloqueFirma = (yTop) => {
         const mitad = (ANCHO - 2 * M) / 2 - 3;
         doc.setDrawColor(...GRIS); doc.setLineWidth(0.3);
@@ -68,10 +68,10 @@ export function construirPdf({ jsPDF, autoTable, pago, logo, generado }) {
             doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
             doc.text('HUELLA', x2 + mitad - 24, yTop + 33, { align: 'center' });
         }
-        // Constancia: quién lo registró y cuándo lo confirmó el empleado desde su usuario
+        // Constancia: quién lo registró y si ya se firmó y archivó
         const estado = anulado ? `ANULADO el ${fechaHora(pago.anuladoAt)}${pago.anuladoMotivo ? ` · ${pago.anuladoMotivo}` : ''}`
-            : confirmado ? `Confirmado digitalmente por el empleado desde su usuario el ${fechaHora(pago.confirmadoAt)}${pago.confirmadoIp ? ` (IP ${pago.confirmadoIp})` : ''}`
-                : 'Pendiente de confirmación digital del empleado';
+            : confirmado ? `Firmado y archivado (marcado el ${fechaHora(pago.confirmadoAt)})`
+                : 'Pendiente de firma';
         doc.setTextColor(...GRIS); doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5);
         doc.text(doc.splitTextToSize(`Recibo N° ${codigo} · registrado por ${pago.creadoPorNombre || 'Administración'} · ${estado}`, ANCHO - 2 * M), M, yTop + 40);
     };

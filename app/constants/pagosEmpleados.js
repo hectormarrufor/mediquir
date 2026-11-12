@@ -17,8 +17,8 @@ export const TIPOS_PAGO = {
 
 export const FORMAS_PAGO = { EFECTIVO: 'Efectivo', CHEQUE: 'Cheque', TRANSFERENCIA: 'Transferencia' };
 export const ESTADOS_PAGO = {
-    PENDIENTE: { etiqueta: 'Por confirmar', color: 'yellow' },
-    CONFIRMADO: { etiqueta: 'Confirmado', color: 'teal' },
+    PENDIENTE: { etiqueta: 'Por firmar', color: 'yellow' },
+    CONFIRMADO: { etiqueta: 'Firmado', color: 'teal' },
     ANULADO: { etiqueta: 'Anulado', color: 'gray' },
 };
 

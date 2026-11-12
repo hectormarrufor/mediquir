@@ -57,7 +57,7 @@ function FormularioRecibo({ opened, onClose, empleados, historial }) {
                 formaPago: esQuincena ? f.formaPago : undefined, referencia: f.referencia || undefined, conceptoTexto: esQuincena ? conceptoQuincena : undefined,
             };
             const r = await enviar('/api/rrhh/pagos', cuerpo);
-            notifications.show({ color: 'teal', title: 'Recibo registrado', message: r.notificado ? `Se le avisó a ${empleado?.nombre} para que lo confirme desde su usuario.` : `${empleado?.nombre} no tiene usuario: el recibo queda por confirmar, imprímelo para su firma.` });
+            notifications.show({ color: 'teal', title: 'Recibo registrado', message: `Imprímelo para que ${empleado?.nombre} lo firme y márcalo como firmado al archivarlo.` });
             queryClient.invalidateQueries({ queryKey: ['pagos-empleados'] });
             onClose();
             abrirReciboPdf(r.pago).catch(() => {});
@@ -69,8 +69,7 @@ function FormularioRecibo({ opened, onClose, empleados, historial }) {
             <Stack gap="sm">
                 <SegmentedControl fullWidth value={f.tipo} onChange={(v) => setF(reciboNuevo(v, historial))} data={Object.entries(TIPOS_PAGO).map(([value, c]) => ({ value, label: c.etiqueta }))} />
                 <Select label="Empleado" withAsterisk searchable value={f.empleadoId ? String(f.empleadoId) : null} onChange={(v) => set({ empleadoId: v })} placeholder="Elige al empleado"
-                    data={(empleados || []).map((e) => ({ value: String(e.id), label: `${e.nombre} · C.I. ${e.cedula}${e.tieneUsuario ? '' : ' (sin usuario)'}` }))} />
-                {empleado && !empleado.tieneUsuario && <Alert color="yellow" variant="light">Este empleado no tiene usuario: no podrá confirmar desde el sistema. El recibo se imprime y se firma en papel.</Alert>}
+                    data={(empleados || []).map((e) => ({ value: String(e.id), label: `${e.nombre} · C.I. ${e.cedula}` }))} />
                 <Group grow align="flex-start">
                     <TextInput type="date" label="Fecha del recibo" value={f.fecha} onChange={(e) => set({ fecha: e.currentTarget.value })} />
                     <TextInput type="date" label={esQuincena ? 'Quincena desde' : 'Desde'} withAsterisk={!esQuincena} value={f.periodoDesde} onChange={(e) => set({ periodoDesde: e.currentTarget.value })} />
@@ -108,7 +107,7 @@ function FormularioRecibo({ opened, onClose, empleados, historial }) {
 
                 <Alert color="blue" variant="light" title={`Total a cobrar: Bs ${nf(t.totalCobrar)}`}>
                     {!esQuincena && <Text size="xs">Asignaciones Bs {nf(t.totalAsignaciones)} − deducciones Bs {nf(t.totalDeducciones)}.</Text>}
-                    <Text size="xs">El empleado recibe un aviso y lo confirma desde su usuario; el recibo se abre en PDF para imprimirlo y archivarlo.</Text>
+                    <Text size="xs">El recibo se abre en PDF para imprimirlo, que el empleado lo firme y se archive. Luego lo marcas como firmado aquí.</Text>
                 </Alert>
                 {error && <Alert color="red">{error}</Alert>}
                 <Group justify="flex-end">
@@ -154,6 +153,13 @@ export default function PagosEmpleadosPage() {
             queryClient.invalidateQueries({ queryKey: ['pagos-empleados'] });
         } catch (e) { notifications.show({ color: 'red', message: e.message }); }
     };
+    const marcarFirmado = async (p) => {
+        try {
+            await enviar(`/api/rrhh/pagos/${p.id}/confirmar`, {});
+            notifications.show({ color: 'teal', message: 'Recibo marcado como firmado' });
+            queryClient.invalidateQueries({ queryKey: ['pagos-empleados'] });
+        } catch (e) { notifications.show({ color: 'red', message: e.message }); }
+    };
     const verPdf = (p) => abrirReciboPdf(p).catch((e) => notifications.show({ color: 'red', message: e.message || 'No se pudo generar el PDF' }));
 
     return (
@@ -194,10 +200,11 @@ export default function PagosEmpleadosPage() {
                                         <Table.Td ta="right" fw={700}>{nf(p.totalCobrar)}</Table.Td>
                                         <Table.Td>
                                             <Badge color={ESTADOS_PAGO[p.estado]?.color}>{ESTADOS_PAGO[p.estado]?.etiqueta}</Badge>
-                                            {p.confirmadoAt && <Text size="xs" c="dimmed">{new Date(p.confirmadoAt).toLocaleString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'short', timeStyle: 'short' })}</Text>}
+                                            {p.estado === 'CONFIRMADO' && p.confirmadoAt && <Text size="xs" c="dimmed">{new Date(p.confirmadoAt).toLocaleString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'short', timeStyle: 'short' })}</Text>}
                                         </Table.Td>
                                         <Table.Td>
                                             <Group gap={4} wrap="nowrap" justify="flex-end">
+                                                {p.estado === 'PENDIENTE' && <Tooltip label="Marcar como firmado y archivado"><ActionIcon variant="light" color="teal" onClick={() => marcarFirmado(p)}><IconCheck size={18} /></ActionIcon></Tooltip>}
                                                 <Tooltip label="PDF para imprimir"><ActionIcon variant="light" onClick={() => verPdf(p)}><IconFileTypePdf size={18} /></ActionIcon></Tooltip>
                                                 {p.estado !== 'ANULADO' && <Tooltip label="Anular"><ActionIcon variant="subtle" color="red" onClick={() => setAAnular(p)}><IconBan size={18} /></ActionIcon></Tooltip>}
                                             </Group>
