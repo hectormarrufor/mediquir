@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Button, Group, Modal, NumberInput, SegmentedControl, Stack, Text } from '@mantine/core';
+import { Button, Group, Modal, NumberInput, SegmentedControl, SimpleGrid, Stack, Text } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import PrecioVisual from './PrecioVisual';
 // Pregunta cuánto se agrega de un producto: por unidad (cuántas) o por caja (cuántas cajas y cuántas unidades trae cada una).
 // presentaciones: las de presentacionesDe(producto) ({ clave, etiqueta, singular, plural, unidades }).
@@ -13,6 +14,7 @@ import PrecioVisual from './PrecioVisual';
 const iguales = (a, b) => Math.abs(Number(a) - Number(b)) < 0.0005;
 
 export default function CantidadProductoModal({ opened, onClose, nombre, presentaciones, claveInicial = 'UNIDAD', maxUnidades = Infinity, onConfirmar, zIndex, precio = null, ocultarExistencias = false }) {
+    const movil = useMediaQuery('(max-width: 48em)');
     const [clave, setClave] = useState(claveInicial);
     const [cantidad, setCantidad] = useState(1);
     const [precioTxt, setPrecioTxt] = useState(precio ? precio.valor : '');
@@ -38,32 +40,41 @@ export default function CantidadProductoModal({ opened, onClose, nombre, present
     const totalRenglon = precio && precioValido ? precioNum * unidades : 0;
     const equivalente = precio?.equivalente && totalRenglon > 0 ? precio.equivalente(totalRenglon) : null;
 
+    const tam = movil ? 'sm' : 'md';
+    const precioInput = precio?.editable && (
+        <NumberInput
+            label={movil ? `Precio (${precio.simbolo})` : `Precio por unidad (${precio.simbolo})`}
+            description={!movil && precio.etiqueta ? `Tarifa ${precio.etiqueta}. Cámbialo si este renglón lleva otro precio.` : undefined}
+            value={precioTxt} onChange={setPrecioTxt} min={0} allowNegative={false} decimalScale={precio.simbolo === 'Bs' ? 2 : 3} hideControls
+            inputMode="decimal" size={tam} prefix={precio.simbolo === 'Bs' ? 'Bs ' : '$'} error={precioValido ? null : (movil ? 'Mayor que cero' : 'Escribe un precio mayor que cero')}
+            onFocus={(e) => e.currentTarget.select()} onKeyDown={(e) => { if (e.key === 'Enter') confirmar(); }}
+            styles={{ input: { fontWeight: 700, ...(cambiado ? { borderColor: '#f08c00', backgroundColor: '#fff9db' } : {}) } }}
+        />
+    );
+
     return (
-        <Modal opened={opened} onClose={onClose} title={<Text fw={800}>¿Cuánto vas a agregar?</Text>} centered size="sm" zIndex={zIndex}>
+        <Modal opened={opened} onClose={onClose} title={<Text fw={800} size={movil ? 'sm' : 'md'}>¿Cuánto vas a agregar?</Text>} centered={!movil} size="sm" zIndex={zIndex}
+            yOffset={movil ? 6 : undefined} padding={movil ? 'sm' : 'md'}
+            styles={movil ? { header: { minHeight: 32, paddingBottom: 0 }, title: { lineHeight: 1.2 }, inner: { paddingLeft: 6, paddingRight: 6 } } : undefined}>
             {pres && (
-                <Stack gap="sm">
-                    <Text size="sm" fw={600} lineClamp={2}>{nombre}</Text>
+                <Stack gap={movil ? 6 : 'sm'}>
+                    <Text size="sm" fw={600} lineClamp={movil ? 1 : 2}>{nombre}</Text>
                     {presentaciones.length > 1 && (
-                        <SegmentedControl fullWidth value={clave} onChange={setClave} orientation={presentaciones.length > 2 ? 'vertical' : 'horizontal'}
-                            data={presentaciones.map((p) => ({ value: p.clave, label: p.unidades > 1 ? `${p.etiqueta} · ${p.unidades} unidades` : p.etiqueta }))} />
+                        <SegmentedControl fullWidth size={movil ? 'xs' : 'sm'} value={clave} onChange={setClave} orientation={presentaciones.length > 2 && !movil ? 'vertical' : 'horizontal'}
+                            data={presentaciones.map((p) => ({ value: p.clave, label: p.unidades > 1 ? `${p.etiqueta} · ${p.unidades} unid.` : p.etiqueta }))} />
                     )}
-                    <NumberInput data-autofocus label={`¿Cuántas ${pres.plural}?`} min={1} max={maxPres} allowDecimal={false} allowNegative={false} value={cantidad} onChange={setCantidad}
-                        inputMode="numeric" size="md" onKeyDown={(e) => { if (e.key === 'Enter') confirmar(); }} />
-                    <Text size="sm" c={excede ? 'red.7' : 'dimmed'}>
+                    <SimpleGrid cols={precio?.editable ? 2 : 1} spacing="xs">
+                        <NumberInput data-autofocus label={movil ? `Cantidad (${pres.plural})` : `¿Cuántas ${pres.plural}?`} min={1} max={maxPres} allowDecimal={false} allowNegative={false} value={cantidad} onChange={setCantidad}
+                            inputMode="numeric" size={tam} onKeyDown={(e) => { if (e.key === 'Enter') confirmar(); }} />
+                        {precioInput}
+                    </SimpleGrid>
+                    <Text size={movil ? 'xs' : 'sm'} c={excede ? 'red.7' : 'dimmed'}>
                         {excede ? (ocultarExistencias ? 'Esa cantidad supera lo que hay disponible ahora. Reduce la cantidad o consúltanos por WhatsApp.' : `Solo hay ${maxUnidades} unidades disponibles.`) : pres.unidades > 1 ? `${n} ${n === 1 ? pres.singular : pres.plural} × ${pres.unidades} = ${unidades} unidades` : `${unidades} ${unidades === 1 ? pres.singular : pres.plural}`}
                     </Text>
 
                     {precio && (
-                        <Stack gap={6}>
-                            {precio.editable ? (
-                                <NumberInput
-                                    label={`Precio por unidad (${precio.simbolo})`} description={precio.etiqueta ? `Tarifa ${precio.etiqueta}. Cámbialo si este renglón lleva otro precio.` : undefined}
-                                    value={precioTxt} onChange={setPrecioTxt} min={0} allowNegative={false} decimalScale={precio.simbolo === 'Bs' ? 2 : 3} hideControls
-                                    inputMode="decimal" size="md" prefix={precio.simbolo === 'Bs' ? 'Bs ' : '$'} error={precioValido ? null : 'Escribe un precio mayor que cero'}
-                                    onFocus={(e) => e.currentTarget.select()} onKeyDown={(e) => { if (e.key === 'Enter') confirmar(); }}
-                                    styles={{ input: { fontWeight: 700, ...(cambiado ? { borderColor: '#f08c00', backgroundColor: '#fff9db' } : {}) } }}
-                                />
-                            ) : (
+                        <Stack gap={movil ? 4 : 6}>
+                            {!precio.editable && (
                                 <Group justify="space-between" gap="xs">
                                     <Text size="sm" fw={600}>Precio por unidad{precio.etiqueta ? ` (${precio.etiqueta})` : ''}</Text>
                                     <PrecioVisual valor={precio.valor} simbolo={precio.simbolo} size="md" fw={800} />
@@ -81,19 +92,19 @@ export default function CantidadProductoModal({ opened, onClose, nombre, present
                                     })}
                                 </Group>
                             )}
-                            {cambiado && <Text size="xs" c="orange.8" fw={600}>Precio cambiado solo para este renglón (el del producto no cambia).</Text>}
+                            {cambiado && <Text size="xs" c="orange.8" fw={600}>{movil ? 'Precio cambiado solo en este renglón.' : 'Precio cambiado solo para este renglón (el del producto no cambia).'}</Text>}
                             {totalRenglon > 0 && (
                                 <Group justify="space-between" gap="xs" wrap="nowrap">
-                                    <Text size="sm" c="dimmed">Total del renglón{equivalente ? <Text span size="xs" c="dimmed"> ({equivalente})</Text> : null}</Text>
+                                    <Text size="sm" c="dimmed">Total{movil ? '' : ' del renglón'}{equivalente ? <Text span size="xs" c="dimmed"> ({equivalente})</Text> : null}</Text>
                                     <PrecioVisual valor={totalRenglon} simbolo={precio.simbolo} size="md" fw={800} />
                                 </Group>
                             )}
                         </Stack>
                     )}
 
-                    <Group justify="flex-end">
-                        <Button variant="default" onClick={onClose}>Cancelar</Button>
-                        <Button disabled={!valido} onClick={confirmar}>Agregar</Button>
+                    <Group justify="flex-end" gap="xs">
+                        <Button variant="default" size={tam} onClick={onClose}>Cancelar</Button>
+                        <Button size={tam} disabled={!valido} onClick={confirmar}>Agregar</Button>
                     </Group>
                 </Stack>
             )}
