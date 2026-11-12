@@ -248,7 +248,7 @@ export default function ProductoForm({ productId = null, onGuardado = null, onCa
                             {/* 🔥 NUEVO ORDEN LÓGICO: Fila 1 (Cat -> Grupo -> Marca) */}
                             <Grid.Col span={{ base: 12, md: 4 }}>
                                 <Group align="flex-end" gap="xs" wrap="nowrap">
-                                    <Select style={{ flex: 1 }} withAsterisk label="Categoría" data={mapOptions(categorias)} searchable {...form.getInputProps('categoriaId')} />
+                                    <Select style={{ flex: 1 }} withAsterisk label="Categoría" comboboxProps={{ zIndex: 5000 }} data={mapOptions(categorias)} searchable {...form.getInputProps('categoriaId')} />
                                     <ActionIcon size="lg" color="blue" variant="light" onClick={() => setModalCat(true)}><IconPlus size={18} /></ActionIcon>
                                 </Group>
                             </Grid.Col>
@@ -256,7 +256,7 @@ export default function ProductoForm({ productId = null, onGuardado = null, onCa
                             <Grid.Col span={{ base: 12, md: 4 }}>
                                 <Group align="flex-end" gap="xs" wrap="nowrap">
                                     <Select
-                                        style={{ flex: 1 }} label="Grupo Equivalencia" description="Para stock global"
+                                        comboboxProps={{ zIndex: 5000 }} style={{ flex: 1 }} label="Grupo Equivalencia" description="Para stock global"
                                         data={mapOptions(grupos)} searchable clearable
                                         value={form.values.grupoEquivalenciaId}
                                         onChange={(val) => {
@@ -289,7 +289,7 @@ export default function ProductoForm({ productId = null, onGuardado = null, onCa
                             <Grid.Col span={{ base: 12, md: 4 }}>
                                 <Group align="flex-end" gap="xs" wrap="nowrap">
                                     <Select
-                                        style={{ flex: 1 }}
+                                        comboboxProps={{ zIndex: 5000 }} style={{ flex: 1 }}
                                         withAsterisk
                                         label="Marca"
                                         data={mapOptions(marcas)}
@@ -350,7 +350,7 @@ export default function ProductoForm({ productId = null, onGuardado = null, onCa
 
                             {/* 🔥 NUEVO ORDEN LÓGICO: Fila 3 (Etiquetas) */}
                             <Grid.Col span={12}>
-                                <TagsInput
+                                <TagsInput comboboxProps={{ zIndex: 5000 }}
                                     label="Etiquetas (Tags)" description="Escribe una etiqueta y presiona Enter. Se normalizará automáticamente." placeholder="Agrega características..."
                                     data={tagOptionsStr} searchable clearable value={form.values.tags} error={form.errors.tags}
                                     onChange={(values) => {
@@ -426,7 +426,7 @@ export default function ProductoForm({ productId = null, onGuardado = null, onCa
                         <Title order={4} mb="md" c="gray.7">3. Logística e Inventario</Title>
                         <Grid>
                             <Grid.Col span={{ base: 12, md: 4 }}>
-                                <Select label="Presentación (qué es UNA unidad: stock, costo y precios)" description="Unidad, par, paquete, caja x100/x200, metro o rollo. La caja (o el rollo, si se vende por metro) se define abajo" data={PRESENTACIONES} withAsterisk {...form.getInputProps('presentacion')} />
+                                <Select comboboxProps={{ zIndex: 5000 }} label="Presentación (qué es UNA unidad: stock, costo y precios)" description="Unidad, par, paquete, caja x100/x200, metro o rollo. La caja (o el rollo, si se vende por metro) se define abajo" data={PRESENTACIONES} withAsterisk {...form.getInputProps('presentacion')} />
                             </Grid.Col>
                             <Grid.Col span={{ base: 12, md: 4 }}>
                                 <NumberInput label={form.values.presentacion === 'metro' ? "Metros por rollo (opcional)" : "Unidades por caja (opcional)"} description={form.values.presentacion === 'metro' ? "Cuántos metros trae el rollo completo; vacío si no se vende por rollo" : "Cuántas unidades (o pares) trae cada caja; vacío si no se vende en cajas"} placeholder="Ej. 100" min={1} {...form.getInputProps('unidadesPorCaja')} />
