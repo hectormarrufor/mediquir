@@ -30,6 +30,7 @@ const db = {
     Categoria: require('./inventario/Categoria'),
     MenuPermission: require('./MenuPermission'),
     Tarea: require('./recursosHumanos/Tarea'),
+    PagoEmpleado: require('./recursosHumanos/PagoEmpleado'),
     TareaComentario: require('./recursosHumanos/TareaComentario'),
     BcvPrecioHistorico: require('./BcvPrecioHistorico'),
     

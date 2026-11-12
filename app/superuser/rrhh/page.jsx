@@ -4,7 +4,7 @@
 import { Container, Paper, Title, Text, SimpleGrid, ThemeIcon, Group, ActionIcon, Card, rem } from '@mantine/core';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { FaUsers, FaBriefcase, FaTshirt, FaBuilding } from 'react-icons/fa';
+import { FaUsers, FaBriefcase, FaTshirt, FaBuilding, FaMoneyBillWave } from 'react-icons/fa';
 import { IconChevronLeft } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -32,6 +32,13 @@ const mockdata = [
       href: '/superuser/rrhh/departamentos',
       description: 'Organizar la empresa en áreas operativas.',
       restricted: true // Marcamos este como restringido
+    },
+    {
+      title: 'Pagos a empleados',
+      icon: FaMoneyBillWave,
+      color: 'green',
+      href: '/superuser/rrhh/pagos',
+      description: 'Recibos de alimentación, transporte y quincena: histórico, PDF y confirmación del empleado.'
     },
     { 
       title: 'Dotación de Indumentaria', 
