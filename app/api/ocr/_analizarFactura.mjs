@@ -61,8 +61,8 @@ const PROMPT_FACTURA = `
   13. total: total a pagar de la factura, en la moneda de la factura (bolívares si los hay).
   14. totalUsd: el total en dólares si la factura también lo imprime; si no, null.
   15. SOLO en NOTA_DEBITO (en los demás tipos null): concepto = el motivo o descripción de la nota; facturaAfectada = el número de la
-      factura que afecta ("Referencia/Fac. Afec."); bases = una entrada por cada base imponible con monto, con su alícuota
-      (por ejemplo B. Imponible 1 al 16 %, 2 al 8 %, 3 al 27 %): [{ "porcentaje": 16, "base": 100.5 }].
+      factura que afecta ("Referencia/Fac. Afec."); bases = la base imponible de la nota: [{ "porcentaje": 16, "base": 100.5 }]
+      (hoy solo está vigente la alícuota del 16 %; ignora cualquier base al 8 % o 27 % con monto cero).
 
   Responde SOLO este JSON válido:
   {

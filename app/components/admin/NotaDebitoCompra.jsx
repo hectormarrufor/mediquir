@@ -10,7 +10,7 @@ import { fechaCaracas } from '@/app/constants/hora';
 // Nota de débito de un proveedor (formato del sistema anterior: «Nota de débito a Proveedores»).
 // Sube lo que se le debe al proveedor por la factura que afecta y entra al libro de compras. Se guarda con el mismo servicio que las
 // notas registradas desde la lista de compras (POST /api/compras/[id]/notas), así que los montos van en la moneda de esa factura.
-const ALICUOTAS = [16, 8, 27];
+const ALICUOTA = 16; // la única alícuota vigente
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const limpiar = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^0+/, '');
@@ -23,7 +23,7 @@ export default function NotaDebitoCompra({ proveedorId, ia, onRegistrada, onCanc
     const [fecha, setFecha] = useState(fechaCaracas());
     const [facturaId, setFacturaId] = useState(null);
     const [concepto, setConcepto] = useState('');
-    const [bases, setBases] = useState({ 16: '', 8: '', 27: '' });
+    const [base, setBase] = useState('');
     const [exento, setExento] = useState('');
     const [ivaImpreso, setIvaImpreso] = useState('');
     const [enviando, setEnviando] = useState(false);
@@ -50,9 +50,8 @@ export default function NotaDebitoCompra({ proveedorId, ia, onRegistrada, onCanc
         if (ia.control) setControl(String(ia.control).slice(0, 30));
         if (ia.fecha) { if (ia.fecha <= fechaCaracas()) setFecha(ia.fecha); else nuevos.push('La fecha leída es posterior a hoy: revísala.'); }
         if (ia.concepto) setConcepto(String(ia.concepto).slice(0, 200));
-        const b = { 16: '', 8: '', 27: '' };
-        (ia.bases || []).forEach((x) => { const p = ALICUOTAS.includes(Number(x.porcentaje)) ? Number(x.porcentaje) : 16; b[p] = (Number(b[p]) || 0) + (Number(x.base) || 0) || ''; });
-        setBases(b);
+        const leida = (ia.bases || []).reduce((a, x) => a + (Number(x.base) || 0), 0);
+        setBase(leida > 0 ? leida : '');
         setExento(ia.exento ? ia.exento : '');
         setIvaImpreso(ia.iva ? ia.iva : '');
         setAvisos(nuevos);
@@ -71,8 +70,8 @@ export default function NotaDebitoCompra({ proveedorId, ia, onRegistrada, onCanc
     const monedaLeida = ia?.moneda === 'USD' ? 'USD' : ia?.moneda ? 'BS' : null;
     const desajusteMoneda = factura && monedaLeida && monedaLeida !== factura.moneda;
 
-    const baseTotal = r2(ALICUOTAS.reduce((a, p) => a + (Number(bases[p]) || 0), 0));
-    const ivaCalculado = r2(ALICUOTAS.reduce((a, p) => a + ((Number(bases[p]) || 0) * p) / 100, 0));
+    const baseTotal = r2(Number(base) || 0);
+    const ivaCalculado = r2((baseTotal * ALICUOTA) / 100);
     const ivaFinal = ivaImpreso === '' ? ivaCalculado : r2(Number(ivaImpreso) || 0);
     const total = r2(baseTotal + (Number(exento) || 0) + ivaFinal);
     const valido = Boolean(factura) && numero.trim() && concepto.trim().length >= 5 && total > 0;
@@ -124,12 +123,8 @@ export default function NotaDebitoCompra({ proveedorId, ia, onRegistrada, onCanc
                 <Textarea label="Concepto" withAsterisk minRows={2} autosize maxRows={4} maxLength={200} placeholder="Ej: diferencial cambiario, intereses por mora, cargo por flete…" value={concepto} onChange={(e) => setConcepto(e.currentTarget.value)} />
 
                 <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs">
-                    {ALICUOTAS.map((p) => (
-                        <NumberInput key={p} label={`Base imponible ${p}%${simbolo ? ` (${simbolo})` : ''}`} min={0} decimalScale={2} hideControls value={bases[p]} onChange={(v) => setBases({ ...bases, [p]: v })}
-                            description={`IVA ${simbolo}${nf(((Number(bases[p]) || 0) * p) / 100)}`} />
-                    ))}
-                </SimpleGrid>
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
+                    <NumberInput label={`Base imponible ${ALICUOTA}%${simbolo ? ` (${simbolo})` : ''}`} min={0} decimalScale={2} hideControls value={base} onChange={setBase}
+                        description={`IVA ${simbolo}${nf(ivaCalculado)}`} />
                     <NumberInput label={`Monto exento${simbolo ? ` (${simbolo})` : ''}`} min={0} decimalScale={2} hideControls value={exento} onChange={setExento} />
                     <NumberInput label={`Total impuestos (IVA)${simbolo ? ` (${simbolo})` : ''}`} min={0} decimalScale={2} hideControls value={ivaImpreso} onChange={setIvaImpreso}
                         description={`Vacío = calculado (${simbolo}${nf(ivaCalculado)}). Escríbelo si la nota trae otro por céntimos.`} />
