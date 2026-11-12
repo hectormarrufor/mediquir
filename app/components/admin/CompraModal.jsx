@@ -96,6 +96,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
 
     // Gasto (servicio, flete, alquiler...): documento de compra sin productos; no toca el inventario y, si es factura, entra al libro de compras
     const [esGasto, setEsGasto] = useState(iniciarComoGasto);
+    const [descuentoPct, setDescuentoPct] = useState(''); // % de descuento que el proveedor aplicó a la base imponible
     const [gasto, setGasto] = useState({ descripcion: '', categoriaId: null, base: 0, exento: 0 });
     useEffect(() => { if (opened) setEsGasto(iniciarComoGasto); }, [opened, iniciarComoGasto]);
 
@@ -486,6 +487,16 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     // El IVA impreso en la factura, si la persona eligió usarlo (cuando el proveedor lo imprimió redondeado a céntimos)
     if (!esGasto && esFactura && ivaAjustado !== null) montoIva = exacto(ivaAjustado);
 
+    // Descuento del proveedor: se aplica a la base imponible (lo que lleva IVA; en una nota de entrega, a todo el monto).
+    // El IVA se calcula sobre la base ya descontada y lo exento no se toca.
+    const pctDescuento = esGasto ? 0 : Math.min(100, Math.max(0, Number(descuentoPct) || 0));
+    let montoDescuento = 0;
+    if (pctDescuento > 0) {
+        montoDescuento = exacto((subtotal - montoExento) * pctDescuento / 100);
+        subtotal = exacto(subtotal - montoDescuento);
+        montoIva = exacto(montoIvaCalculado * (1 - pctDescuento / 100));
+    }
+
     if (esGasto) {
         const base = Math.max(0, Number(gasto.base) || 0);
         const exento = Math.max(0, Number(gasto.exento) || 0);
@@ -612,6 +623,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             queryClient.invalidateQueries({ queryKey: ['productos-pos'] }); // el POS ve el stock y el costo nuevos
             setCarritoCompra([]);
             setGasto({ descripcion: '', categoriaId: null, base: 0, exento: 0 });
+            setDescuentoPct('');
             setModalSimulacionAbierto(false);
             onClose();
 
@@ -787,7 +799,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                     {(esGasto ? subtotal > 0 : carritoCompra.length > 0) && (
                         <CuadreFactura
                             impreso={lectura.impreso} simbolo={sim} tasa={tasa}
-                            calculado={{ base: exacto(subtotal - montoExento), exento: montoExento, ivaCalculado: esGasto ? montoIva : montoIvaCalculado, total: totalFinal }}
+                            calculado={{ base: exacto(subtotal - montoExento), exento: montoExento, ivaCalculado: esGasto || pctDescuento > 0 ? montoIva : montoIvaCalculado, total: totalFinal }}
                             renglonesFactura={esGasto ? 0 : lectura.renglones} renglonesCompra={esGasto ? 0 : carritoCompra.length}
                             ivaAjustado={esGasto ? null : ivaAjustado} onUsarIvaImpreso={esGasto ? null : () => setIvaAjustado(Number(lectura.impreso.montoIva))} onQuitarAjuste={() => setIvaAjustado(null)}
                         />
@@ -952,6 +964,8 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         <Paper withBorder p="sm" radius="md" style={{ flex: '0 0 auto' }}>
             <Group justify="space-between" align="center" wrap="nowrap">
                 <Group gap="xl" align="flex-end">
+                    {!esGasto && <NumberInput size="xs" w={130} label="Descuento (%)" description="Del proveedor, sobre la base" min={0} max={100} decimalScale={4} suffix=" %" placeholder="0" value={descuentoPct} onChange={setDescuentoPct} hideControls />}
+                    {montoDescuento > 0 && <Box><Text size="xs" c="dimmed">Descuento (−)</Text><PrecioVisual exacto valor={montoDescuento} simbolo={sim} size="md" fw={600} /></Box>}
                     <Box><Text size="xs" c="dimmed">Subtotal</Text><PrecioVisual exacto valor={subtotal} simbolo={sim} size="md" fw={600} /></Box>
                     {esFactura && <Box><Text size="xs" c="dimmed">IVA ({CONFIG_FISCAL.alicuotaGeneral}%)</Text><PrecioVisual exacto valor={montoIva} simbolo={sim} size="md" fw={600} /></Box>}
                     {montoRetencion > 0 && (
@@ -971,8 +985,9 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
 
     const pieMovil = (
         <Box style={{ position: 'sticky', bottom: 0, zIndex: 15, background: '#fff', margin: '6px -8px -8px', padding: '8px 12px calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -6px 16px rgba(0,0,0,0.12)', borderTop: '1px solid var(--mantine-color-gray-3)' }}>
+            {!esGasto && <NumberInput size="xs" mb={6} label="Descuento del proveedor sobre la base (%)" min={0} max={100} decimalScale={4} suffix=" %" placeholder="0" value={descuentoPct} onChange={setDescuentoPct} hideControls />}
             <Group justify="space-between" mb={6} wrap="nowrap">
-                <Text size="xs" c="dimmed">Subtotal <PrecioVisual exacto valor={subtotal} simbolo={sim} size="xs" />{esFactura && <> · IVA <PrecioVisual exacto valor={montoIva} simbolo={sim} size="xs" /></>}{montoRetencion > 0 && <Text span size="xs" c="red" fw={700}> · Ret. −<PrecioVisual exacto valor={montoRetencion} simbolo={sim} size="xs" /></Text>}</Text>
+                <Text size="xs" c="dimmed">{montoDescuento > 0 && <>Desc. −<PrecioVisual exacto valor={montoDescuento} simbolo={sim} size="xs" /> · </>}Subtotal<PrecioVisual exacto valor={subtotal} simbolo={sim} size="xs" />{esFactura && <> · IVA <PrecioVisual exacto valor={montoIva} simbolo={sim} size="xs" /></>}{montoRetencion > 0 && <Text span size="xs" c="red" fw={700}> · Ret. −<PrecioVisual exacto valor={montoRetencion} simbolo={sim} size="xs" /></Text>}</Text>
                 <Text fw={900} size="lg" c="blue.9" style={{ whiteSpace: 'nowrap' }}><PrecioVisual exacto valor={totalFinal} simbolo={sim} size="lg" fw={900} c="blue.9" /></Text>
             </Group>
             <Button fullWidth size="md" color="green.8" tt="none" leftSection={<IconCheck size={20} />} onClick={accionRegistrar} loading={isSubmitting} disabled={registroBloqueado}>{labelBoton}</Button>
