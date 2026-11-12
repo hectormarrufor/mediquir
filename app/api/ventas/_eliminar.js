@@ -64,7 +64,7 @@ export async function eliminarVenta({ venta, transaction: t }) {
     }
 
     // ---- Archivos que hay que borrar del Blob (comprobantes de retención y fotos de empaque)
-    const archivos = [...retenciones.map((r) => r.comprobanteUrl), venta.fotoCajaAbiertaUrl, venta.fotoCajaSelladaUrl].filter(Boolean);
+    const archivos = [...retenciones.map((r) => r.comprobanteUrl), venta.fotoCajaAbiertaUrl, venta.fotoCajaSelladaUrl, venta.firmaChoferUrl].filter(Boolean);
 
     // ---- Notificaciones que apuntan a esta venta (quedarían con un enlace muerto)
     const notificaciones = await Notificacion.findAll({ where: { url: { [Sequelize.Op.like]: `%${id}%` } }, attributes: ['id'], transaction: t });

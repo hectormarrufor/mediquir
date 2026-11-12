@@ -16,6 +16,7 @@ import TareasPanel from '@/app/components/tareas/TareasPanel';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 
 const PosModal = dynamic(() => import('../../components/admin/PosModal'), { ssr: false });
+const EntregaChoferForm = dynamic(() => import('../../components/admin/EntregaChoferForm'), { ssr: false });
 const CompraModal = dynamic(() => import('../../components/admin/CompraModal'), { ssr: false });
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -117,6 +118,25 @@ function TarjetaTarea({ tarea, tipo, onFirmar }) {
     );
 }
 
+// Pedido ya empacado y etiquetado que espera al chofer o agencia: «Entregar» abre el formulario con los datos del chofer, su firma y la confirmación de la factura
+function TarjetaEntrega({ tarea, onEntregar }) {
+    return (
+        <Paper withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+            <Group justify="space-between" wrap="nowrap" align="flex-start">
+                <Box style={{ minWidth: 0 }}>
+                    <Group gap={8}>
+                        <Text fw={800} c="navy.9">{tarea.numero}</Text>
+                        <Badge variant="light" color="teal" size="sm">Listo para entregar</Badge>
+                    </Group>
+                    <Text size="sm" c="dimmed" truncate>{tarea.cliente} · {tarea.articulos} artículos</Text>
+                    {tarea.transporte && <Text size="xs" c="dimmed" truncate>Lo retira: {tarea.transporte}</Text>}
+                </Box>
+                <Button size="sm" color="grape.6" leftSection={<IconTruckDelivery size={16} />} onClick={() => onEntregar(tarea)}>Entregar</Button>
+            </Group>
+        </Paper>
+    );
+}
+
 export default function DashboardVendedor() {
     const router = useRouter();
     const queryClient = useQueryClient();
@@ -127,6 +147,8 @@ export default function DashboardVendedor() {
     const [compraAbierta, setCompraAbierta] = useState(false);
     const [porFirmar, setPorFirmar] = useState(null); // { tarea, tipo }
     const [firmando, setFirmando] = useState(false);
+    const [porEntregar, setPorEntregar] = useState(null); // tarea que se va a entregar al chofer
+    const [entregando, setEntregando] = useState(false);
 
     const { data, isLoading, error } = useQuery({
         queryKey: ['vendedor', 'resumen'],
@@ -154,7 +176,27 @@ export default function DashboardVendedor() {
         }
     };
 
+    const entregar = async (valores) => {
+        if (!porEntregar) return;
+        setEntregando(true);
+        try {
+            await pedirJson(`/api/ventas/${porEntregar.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accion: 'ENTREGAR_CHOFER', ...valores }),
+            });
+            notifications.show({ color: 'teal', title: 'Mercancía entregada', message: `Pedido ${porEntregar.numero}: entrega al chofer registrada con su firma.` });
+            setPorEntregar(null);
+            queryClient.invalidateQueries({ queryKey: ['vendedor'] });
+        } catch (e) {
+            notifications.show({ color: 'red', title: 'No se pudo registrar la entrega', message: e.message });
+        } finally {
+            setEntregando(false);
+        }
+    };
+
     const nEmpacar = data?.porEmpacar?.length ?? 0;
+    const nEntregar = data?.porEntregar?.length ?? 0;
     const nEtiquetar = data?.porEtiquetar?.length ?? 0;
 
     return (
@@ -177,13 +219,14 @@ export default function DashboardVendedor() {
                     <Acceso icono={IconTruckDelivery} color="grape.6" titulo="Mis ventas y pedidos" descripcion="Historial y seguimiento" onClick={() => router.push('/superuser/ventas')} />
                 </SimpleGrid>
 
-                <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+                <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
                     <Indicador icono={IconPackage} color="blue" titulo="Por empacar" cargando={isLoading} valor={nEmpacar} detalle={nEmpacar ? 'Pedidos que te asignaron' : 'Nada pendiente'} />
                     <Indicador icono={IconTag} color="violet" titulo="Por etiquetar" cargando={isLoading} valor={nEtiquetar} detalle={nEtiquetar ? 'Pedidos que te asignaron' : 'Nada pendiente'} />
+                    <Indicador icono={IconTruckDelivery} color="grape" titulo="Por entregar" cargando={isLoading} valor={nEntregar} detalle={nEntregar ? 'Listos para el chofer o la agencia' : 'Nada pendiente'} />
                     <Indicador icono={IconCash} color="teal" titulo="Vendido hoy" cargando={isLoading} valor={fmtUsd(data?.hoy?.totalUsd)} detalle={`${data?.hoy?.ventas ?? 0} ventas · ${data?.hoy?.detal ?? 0} al detal`} />
                 </SimpleGrid>
 
-                <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg" style={{ alignItems: 'start' }}>
+                <SimpleGrid cols={{ base: 1, lg: 3 }} spacing="lg" style={{ alignItems: 'start' }}>
                     <Stack gap="sm">
                         <Group gap={8}><IconPackage size={20} color="var(--mantine-color-brand-6)" /><Title order={4} c="white">Mis tareas de empaque</Title></Group>
                         {isLoading ? <Skeleton h={120} radius="lg" />
@@ -195,6 +238,12 @@ export default function DashboardVendedor() {
                         {isLoading ? <Skeleton h={120} radius="lg" />
                             : nEtiquetar === 0 ? <Paper withBorder radius="lg" p="lg"><Group gap="xs"><IconCircleCheck color="var(--mantine-color-teal-6)" /><Text c="dimmed">No tienes pedidos por etiquetar.</Text></Group></Paper>
                                 : data.porEtiquetar.map((t) => <TarjetaTarea key={t.id} tarea={t} tipo="etiquetado" onFirmar={(tarea, tipo) => setPorFirmar({ tarea, tipo })} />)}
+                    </Stack>
+                    <Stack gap="sm">
+                        <Group gap={8}><IconTruckDelivery size={20} color="var(--mantine-color-grape-6)" /><Title order={4} c="white">Mis entregas al chofer</Title></Group>
+                        {isLoading ? <Skeleton h={120} radius="lg" />
+                            : nEntregar === 0 ? <Paper withBorder radius="lg" p="lg"><Group gap="xs"><IconCircleCheck color="var(--mantine-color-teal-6)" /><Text c="dimmed">No tienes pedidos listos para entregar.</Text></Group></Paper>
+                                : data.porEntregar.map((t) => <TarjetaEntrega key={t.id} tarea={t} onEntregar={setPorEntregar} />)}
                     </Stack>
                 </SimpleGrid>
 
@@ -251,6 +300,10 @@ export default function DashboardVendedor() {
                         <Button color="navy.9" loading={firmando} onClick={firmar} leftSection={<IconCircleCheck size={16} />}>Sí, firmar</Button>
                     </Group>
                 </Stack>
+            </Modal>
+
+            <Modal opened={Boolean(porEntregar)} onClose={() => setPorEntregar(null)} fullScreen={false} size="lg" centered title={<Text fw={800}>Entregar al chofer</Text>} closeOnClickOutside={false}>
+                {porEntregar && <EntregaChoferForm key={porEntregar.id} numeroDocumento={porEntregar.numero} empresaInicial={porEntregar.transporte} cargando={entregando} onConfirmar={entregar} />}
             </Modal>
 
             {posAbierto && <PosModal opened={posAbierto} onClose={() => { setPosAbierto(false); queryClient.invalidateQueries({ queryKey: ['vendedor'] }); }} tasaBcv={tasa || 0} />}

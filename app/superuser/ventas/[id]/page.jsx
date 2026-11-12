@@ -22,6 +22,8 @@ import CambioDeudaModal from '@/app/superuser/cxc/_components/CambioDeudaModal';
 import EvidenciaEmpaque from '../_components/EvidenciaEmpaque';
 import RevisionExistencias from '../_components/RevisionExistencias';
 import EnvioCard from '../_components/EnvioCard';
+import EntregaChoferForm from '@/app/components/admin/EntregaChoferForm';
+import EntregaChoferCard from '../_components/EntregaChoferCard';
 import PagoPorVerificarCard from '../_components/PagoPorVerificarCard';
 import { aInputFechaHora, formatearFecha, formatearFechaHora } from '@/app/constants/hora';
 import NotasFacturaCard from '../_components/NotasFacturaCard';
@@ -449,6 +451,7 @@ export default function DetallePedidoMayorPage() {
 
                                 {!esVendedor && <PagoPorVerificarCard pedido={pedido} esAdmin={rolUsuario === 'admin'} onCambio={refetch} />}
                                 {!esVendedor && !esNacional && <EnvioCard pedido={pedido} onCambio={refetch} />}
+                                <EntregaChoferCard pedido={pedido} />
 
                                 {!esVendedor && <RetencionIvaCard pedido={pedido} onCambio={refetch} />}
 
@@ -713,6 +716,14 @@ export default function DetallePedidoMayorPage() {
                 title={<Title order={4} c="grape">{pedido.tipoEntrega === 'pickup' ? 'Confirmar Retiro en Tienda' : 'Gestión de Despacho y Agencia'}</Title>}
                 centered
             >
+                {pedido.tipoEntrega !== 'pickup' && !esNacional ? (
+                    <EntregaChoferForm
+                        numeroDocumento={pedido.numeroDocumento} empresaInicial={pedido.quienRetira || ''} cargando={isSubmitting}
+                        onConfirmar={(v) => handleAction('ENTREGAR_CHOFER', { ...v, costoFlete: formDespacho.values.costoFlete }, setModalDespacho, 'Entrega al chofer registrada con su firma.')}
+                    >
+                        <NumberInput label={pedido.tipoVenta === 'ONLINE' ? 'Lo que cobró el delivery' : 'Lo que pagó la empresa por el flete (gasto)'} description={pedido.tipoVenta === 'ONLINE' ? `Se compara con lo que se le cobró al cliente (${Number(pedido.costoFlete || 0).toFixed(2)}); genera un ajuste en tesorería` : 'El flete que se le cobra al cliente se fija en «Envío y transporte»'} decimalScale={2} min={0} allowNegative={false} inputMode="decimal" {...formDespacho.getInputProps('costoFlete')} />
+                    </EntregaChoferForm>
+                ) : (
                 <form onSubmit={formDespacho.onSubmit((values) => {
                     const body = pedido.tipoEntrega === 'pickup'
                         ? { quienRetira: 'Cliente en Tienda (Pickup)', costoFlete: 0, fechaHoraRetiro: new Date().toISOString() }
@@ -738,6 +749,7 @@ export default function DetallePedidoMayorPage() {
                         </Button>
                     </Stack>
                 </form>
+                )}
             </Modal>
 
             {modalNotaAFactura && <FacturarNotasModal opened onClose={() => setModalNotaAFactura(false)} pedido={pedido} onListo={refetch} />}

@@ -14,6 +14,7 @@ import { RetencionIva } from '@/models';
 import { faltantesDeEmpaque, reiniciarEmpaque } from '../_empaque';
 import { borrarFotosSobrantes } from '../_fotosEmpaque';
 import { Op } from 'sequelize';
+import { put } from '@vercel/blob';
 import { registrarAbono, asegurarCuentaContado, ErrorAbono } from '../../_lib/abonos';
 import { recalcularCobro, declararRetencion, MARCA_CIERRE } from '../../_lib/retencionesVenta';
 import { eliminarVenta, borrarArchivosDeVenta } from '../_eliminar';
@@ -30,7 +31,7 @@ class ErrorLogistica extends Error {
 }
 
 // El vendedor solo firma; asignar, despachar y cobrar es de administración
-const ACCIONES_VENDEDOR = ['FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO'];
+const ACCIONES_VENDEDOR = ['FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'ENTREGAR_CHOFER'];
 
 // Descuenta el stock y deja las salidas como "Empacada". Solo el MAYOR descuenta aquí: el detal y las ventas web ya
 // descontaron al venderse (antes se descontaba de nuevo al empacar, restando el stock dos veces).
@@ -189,7 +190,7 @@ export async function PUT(request, { params }) {
     try {
         const { id } = await params;
         const body = await request.json();
-        const { accion, empacadorId, etiquetadorId, quienRetira, fechaHoraRetiro, costoFlete } = body;
+        let { accion, empacadorId, etiquetadorId, quienRetira, fechaHoraRetiro, costoFlete } = body;
 
         const venta = await Venta.findByPk(id, {
             include: [{ model: VentaDetalle, as: 'detalles' }],
@@ -386,9 +387,43 @@ export async function PUT(request, { params }) {
         // ==========================================================
         // 🔥 ACCIÓN 2: DESPACHAR (Chofer, Fecha/Hora, y Gasto de Flete)
         // ==========================================================
-        if (accion === 'DESPACHAR') {
+        // ENTREGAR_CHOFER: el despacho de siempre + la evidencia de la entrega (datos del chofer, su firma dibujada y la confirmación
+        // de que se le dio la factura). Lo puede hacer el vendedor del pedido desde su panel, o administración.
+        if (accion === 'DESPACHAR' || accion === 'ENTREGAR_CHOFER') {
             if (venta.statusDespacho === 'Completado') throw new ErrorLogistica('Este pedido ya fue despachado', 409);
             if (venta.statusDespacho === 'Cancelado') throw new ErrorLogistica('Este pedido está cancelado', 409);
+
+            if (accion === 'ENTREGAR_CHOFER') {
+                if (venta.tipoEntrega === 'pickup') throw new ErrorLogistica('Este pedido es retiro en tienda: no lo retira un chofer', 409);
+                if (rol === 'vendedor') {
+                    if (![venta.empacadorId, venta.etiquetadorId, venta.vendedorId].some((x) => Number(x) === yo)) throw new ErrorLogistica('Este pedido no es tuyo', 403);
+                    if (!venta.empacadoAt || !venta.etiquetadoAt) throw new ErrorLogistica('El pedido debe estar empacado y etiquetado antes de entregarlo', 409);
+                }
+                const limpia = (x, max) => String(x ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
+                const choferNombre = limpia(body.choferNombre, 120);
+                const choferCedula = limpia(body.choferCedula, 30);
+                const choferEmpresa = limpia(body.choferEmpresa, 120);
+                if (choferNombre.length < 3) throw new ErrorLogistica('Falta el nombre del chofer');
+                if (choferCedula.length < 5) throw new ErrorLogistica('Falta la cédula del chofer');
+                if (choferEmpresa.length < 2) throw new ErrorLogistica('Falta la empresa o agencia del chofer');
+                if (body.facturaEntregada !== true) throw new ErrorLogistica('Debes confirmar que le entregas la factura al chofer');
+                const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(body.firma || ''));
+                if (!m) throw new ErrorLogistica('Falta la firma del chofer');
+                const bytes = Buffer.from(m[1], 'base64');
+                if (bytes.length < 200) throw new ErrorLogistica('La firma está en blanco');
+                if (bytes.length > 1024 * 1024) throw new ErrorLogistica('La firma es demasiado grande');
+                const blob = await put(`entregas/${venta.numeroDocumento}/firma-chofer-${Date.now()}.png`, bytes, { access: 'public', contentType: 'image/png', addRandomSuffix: true });
+                venta.choferNombre = choferNombre;
+                venta.choferCedula = choferCedula;
+                venta.choferEmpresa = choferEmpresa;
+                venta.firmaChoferUrl = blob.url;
+                venta.facturaEntregadaChofer = true;
+                venta.entregadoPorId = yo;
+                venta.entregadoPorNombre = [acceso.sesion.nombre, acceso.sesion.apellido].filter(Boolean).join(' ').slice(0, 120) || null;
+                quienRetira = `${choferNombre} (C.I. ${choferCedula}) · ${choferEmpresa}`.slice(0, 255);
+                fechaHoraRetiro = null; // la hora de la entrega es la del momento
+                if (rol === 'vendedor') costoFlete = 0; // el gasto del flete lo asienta administración
+            }
             venta.statusDespacho = 'Completado';
             venta.quienRetira = quienRetira;
             venta.fechaHoraRetiro = fechaHoraRetiro ? desdeInputFechaHora(fechaHoraRetiro) : new Date(); // lo escrito en el formulario es hora de Caracas

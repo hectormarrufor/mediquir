@@ -49,10 +49,18 @@ const Venta = sequelize.define('Venta', {
         type: DataTypes.STRING, 
         allowNull: true // Nombre y Cédula del chofer
     },
-    fechaHoraRetiro: { 
-        type: DataTypes.DATE, 
-        allowNull: true 
+    fechaHoraRetiro: {
+        type: DataTypes.DATE,
+        allowNull: true
     },
+    // Evidencia de la entrega al chofer o agencia (despacho): quién se llevó la mercancía, su firma y si se le dio la factura
+    choferNombre: { type: DataTypes.STRING(120), allowNull: true },
+    choferCedula: { type: DataTypes.STRING(30), allowNull: true },
+    choferEmpresa: { type: DataTypes.STRING(120), allowNull: true },
+    firmaChoferUrl: { type: DataTypes.TEXT, allowNull: true },
+    facturaEntregadaChofer: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    entregadoPorId: { type: DataTypes.INTEGER, allowNull: true },
+    entregadoPorNombre: { type: DataTypes.STRING(120), allowNull: true },
     statusDespacho: {
         type: DataTypes.ENUM('Pendiente', 'Empacado', 'Parcial', 'Completado', 'Cancelado'),
         defaultValue: 'Pendiente'

@@ -56,9 +56,11 @@ export async function GET() {
         const desde = inicioDeHoy();
         const abiertas = { statusDespacho: { [Op.notIn]: CERRADOS } };
 
-        const [porEmpacar, porEtiquetar, firmadas, ventasHoy, pedidosEnCurso, tasa] = await Promise.all([
+        const [porEmpacar, porEtiquetar, porEntregar, firmadas, ventasHoy, pedidosEnCurso, tasa] = await Promise.all([
             Venta.findAll({ where: { empacadorId: yo, empacadoAt: null, ...abiertas }, include: INCLUDE_TAREA, order: [['createdAt', 'ASC']] }),
             Venta.findAll({ where: { etiquetadorId: yo, etiquetadoAt: null, ...abiertas }, include: INCLUDE_TAREA, order: [['createdAt', 'ASC']] }),
+            // Ya empacados y etiquetados, con envío: esperan que el chofer o la agencia los retire
+            Venta.findAll({ where: { [Op.or]: [{ empacadorId: yo }, { etiquetadorId: yo }, { vendedorId: yo }], empacadoAt: { [Op.ne]: null }, etiquetadoAt: { [Op.ne]: null }, tipoEntrega: { [Op.ne]: 'pickup' }, ...abiertas }, include: INCLUDE_TAREA, order: [['createdAt', 'ASC']] }),
             Venta.findAll({
                 where: { [Op.or]: [{ empacadorId: yo, empacadoAt: { [Op.ne]: null } }, { etiquetadorId: yo, etiquetadoAt: { [Op.ne]: null } }] },
                 include: [{ model: Cliente, as: 'cliente', attributes: ['nombre'] }],
@@ -88,6 +90,7 @@ export async function GET() {
             tasa,
             porEmpacar: porEmpacar.map((v) => ({ ...tarea(v), renglones: v.detalles.length, verificados: verificados.get(v.id) || 0, iniciado: Boolean(v.empaqueIniciadoAt) || verificados.has(v.id) })),
             porEtiquetar: porEtiquetar.map(tarea),
+            porEntregar: porEntregar.map((v) => ({ ...tarea(v), transporte: v.quienRetira || '' })),
             firmadas: firmadas.map((v) => ({
                 id: v.id, numero: v.numeroDocumento, cliente: v.cliente?.nombre || 'Cliente al detal',
                 empaque: v.empacadorId === yo ? v.empacadoAt : null,
