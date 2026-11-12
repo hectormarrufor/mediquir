@@ -166,8 +166,8 @@ export default function PagosEmpleadosPage() {
         <Box p={{ base: 'sm', sm: 'lg' }} maw={1200} mx="auto">
             <Group justify="space-between" mb="md" wrap="wrap">
                 <Group gap="sm">
-                    <Button variant="subtle" color="gray" leftSection={<IconArrowLeft size={18} />} onClick={() => router.push('/superuser/rrhh')}>Personal</Button>
-                    <Title order={2} c="navy.9">Pagos a empleados</Title>
+                    <Button variant="subtle" color="gray.2" leftSection={<IconArrowLeft size={18} />} onClick={() => router.push('/superuser/rrhh')}>Personal</Button>
+                    <Title order={2} c="white">Pagos a empleados</Title>
                 </Group>
                 <Button leftSection={<IconPlus size={18} />} onClick={() => setNuevo(true)}>Nuevo recibo</Button>
             </Group>

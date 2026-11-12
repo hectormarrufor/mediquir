@@ -52,11 +52,11 @@ export default function CierreCajaPage() {
         <Box p={{ base: 'sm', sm: 'lg' }} maw={1200} mx="auto">
             <Group justify="space-between" mb="md" wrap="wrap">
                 <Group gap="sm">
-                    <Button variant="subtle" color="gray" leftSection={<IconArrowLeft size={18} />} onClick={() => router.push('/superuser/ventas')}>Ventas</Button>
-                    <Title order={2} c="navy.9">Cierre de caja</Title>
+                    <Button variant="subtle" color="gray.2" leftSection={<IconArrowLeft size={18} />} onClick={() => router.push('/superuser/ventas')}>Ventas</Button>
+                    <Title order={2} c="white">Cierre de caja</Title>
                 </Group>
                 <Group gap="sm" align="flex-end">
-                    <TextInput type="date" label="Día" value={fecha} max={fechaCaracas()} onChange={(e) => e.currentTarget.value && setFecha(e.currentTarget.value)} />
+                    <TextInput type="date" label="Día" styles={{ label: { color: 'white' } }} value={fecha} max={fechaCaracas()} onChange={(e) => e.currentTarget.value && setFecha(e.currentTarget.value)} />
                     <Button variant="light" leftSection={<IconPrinter size={18} />} loading={generando} disabled={!data} onClick={imprimir}>PDF / Imprimir</Button>
                 </Group>
             </Group>
