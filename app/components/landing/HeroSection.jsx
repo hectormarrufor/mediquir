@@ -113,6 +113,18 @@ export default function HeroSection({ searchQuery, onSearch }) {
 
     return (
         <section className={classes.hero} aria-labelledby="titulo-tienda">
+            {sinVideo ? (
+                FOTOS.map((src, i) => (
+                    <img key={src} className={`${classes.heroVideo} ${classes.escenaFoto}`} data-activa={i === foto || undefined} src={src} alt="" loading={i === 0 ? 'eager' : 'lazy'} />
+                ))
+            ) : (
+                <video
+                    ref={videoRef} className={classes.heroVideo}
+                    src="/tenants/mediquir/hero-video.mp4" poster="/tenants/mediquir/hero-video-poster.jpg"
+                    autoPlay loop muted playsInline preload="metadata" aria-hidden="true"
+                    onError={() => setSinVideo(true)}
+                />
+            )}
             <div className={classes.heroFondo} aria-hidden="true">
                 <div className={classes.heroPapel} />
                 <svg className={classes.heroTraza} viewBox="0 0 1440 200" preserveAspectRatio="none">
@@ -154,23 +166,7 @@ export default function HeroSection({ searchQuery, onSearch }) {
                 </div>
 
                 <div className={classes.escena}>
-                    <div className={classes.escenaMarco}>
-                        {sinVideo ? (
-                            FOTOS.map((src, i) => (
-                                <img key={src} className={classes.escenaFoto} data-activa={i === foto || undefined} src={src} alt="" loading={i === 0 ? 'eager' : 'lazy'} />
-                            ))
-                        ) : (
-                            <video
-                                ref={videoRef}
-                                src="/tenants/mediquir/hero-video.mp4"
-                                poster="/tenants/mediquir/hero-video-poster.jpg"
-                                autoPlay loop muted playsInline preload="metadata"
-                                aria-label="La tienda de Mediquir en Ciudad Ojeda"
-                                onError={() => setSinVideo(true)}
-                            />
-                        )}
-                        <span className={classes.escenaPie}><IconMapPin size={15} stroke={2} aria-hidden="true" /> Nuestra tienda<span className={classes.escenaPieCiudad}> · Ciudad Ojeda, Zulia</span></span>
-                    </div>
+                    <div className={classes.escenaMarco} />
 
                     {tasa && (
                         <div className={`${classes.flot} ${classes.flotTasa}`}>

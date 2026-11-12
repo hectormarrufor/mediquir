@@ -239,9 +239,7 @@
     z-index: -1;
     pointer-events: none;
     background:
-        radial-gradient(900px 520px at 88% -8%, alpha(var(--mantine-color-brand-5), 0.5), transparent 62%),
-        radial-gradient(700px 460px at -6% 108%, alpha(var(--mq-blue), 0.55), transparent 60%),
-        linear-gradient(165deg, #061230 0%, #0a2053 58%, #0b2c6e 100%);
+        linear-gradient(90deg, rgba(6, 18, 48, 0.93) 0%, rgba(6, 18, 48, 0.72) 48%, rgba(6, 18, 48, 0.25) 100%);
 }
 
 /* Papel de electrocardiograma: cuadro fino y cuadro grueso cada cinco, como el papel real */
@@ -3525,4 +3523,34 @@
     .carritoBtn[data-salto] .carritoNum {
         animation: none;
     }
+}
+
+.heroVideo { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+.escenaMarco { background: transparent !important; box-shadow: none !important; }
+.escenaMarco::after { display: none; }
+@media (max-width: 61.99em) {
+    .escena { display: none; }
+    .heroFondo { background: linear-gradient(180deg, rgba(6, 18, 48, 0.88) 0%, rgba(6, 18, 48, 0.74) 60%, rgba(6, 18, 48, 0.92) 100%); }
+}
+/* Teléfono: 3 columnas, tarjeta compacta pero legible */
+@media (max-width: 35.99em) {
+    .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 6px; }
+    .card { margin-bottom: 6px; border-radius: 14px; }
+    .cardFoto { aspect-ratio: 1 / 0.9; }
+    .cardFoto img { padding: 5px; }
+    .cardMeta { padding: 6px 6px 0; }
+    .cardMarca { font-size: 10px; letter-spacing: 0.03em; }
+    .cardStock { font-size: 0; gap: 0; }
+    .cardStock::before { width: 8px; height: 8px; }
+    .cardNombre { padding: 3px 6px 0; font-size: 12px; line-height: 1.25; }
+    .cardPrecio { padding: 6px 6px 0; }
+    .precioRef { font-size: 15px; }
+    .precioRef small, .precioIva { display: none; }
+    .precioBs { font-size: 11px; }
+    .cardCaja { padding: 5px 6px 0; }
+    .cajaBtn { min-height: 30px; padding: 3px 6px; font-size: 11px; justify-content: center; }
+    .cajaBtn b { display: none; }
+    .cardAccion { padding: 6px 6px 8px; }
+    .agregar { height: 38px; font-size: 12px; gap: 3px; }
+    .etiqueta { font-size: 10.5px; padding: 0 6px; height: 20px; }
 }

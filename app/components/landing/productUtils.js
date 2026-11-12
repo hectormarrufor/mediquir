@@ -71,7 +71,7 @@ export const enStock = (p) => (Number(p?.stockAlmacen) > 0 ? 1 : 0);
 export function estadoStock(product) {
     const stock = Math.floor(Number(product?.stockAlmacen) || 0);
     if (stock <= 0) return { clave: 'agotado', texto: 'Agotado' };
-    if (stock <= 10) return { clave: 'pocas', texto: stock === 1 ? 'Queda 1' : `Quedan ${stock}` };
+    if (stock <= 10) return { clave: 'pocas', texto: 'Pocas unidades' };
     return { clave: 'disponible', texto: 'Disponible' };
 }
 
