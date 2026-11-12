@@ -15,6 +15,7 @@ import {
 } from '@tabler/icons-react';
 import imageCompression from 'browser-image-compression';
 import { RevisionRenglonesIA, CuadreFactura, prepararRenglones, normRif } from './LecturaFacturaIA';
+import NotaDebitoCompra from './NotaDebitoCompra';
 import SelectorRetencion, { validarRetencion } from './SelectorRetencion';
 import { notifications } from '@mantine/notifications';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
@@ -103,6 +104,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     // Lectura de la factura con IA: lo impreso (para el cuadre al céntimo), avisos y la ventana de revisión de renglones
     const [analizando, setAnalizando] = useState(false);
     const [lectura, setLectura] = useState(null); // { impreso, avisos, renglones, proveedorNombre, simbolo }
+    const [notaIA, setNotaIA] = useState(null); // nota de débito leída con IA (la llena NotaDebitoCompra)
     const [revision, setRevision] = useState(null); // renglones preparados para revisar (null = ventana cerrada)
     const [ivaAjustado, setIvaAjustado] = useState(null); // IVA tal como viene impreso, si difiere por céntimos del calculado
 
@@ -288,6 +290,31 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             const d = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(d.error || 'No se pudo leer la factura');
             const avisos = [];
+
+            // Nota de débito del proveedor: no lleva renglones ni va por el flujo de la factura; se llena su propio formulario
+            if (d.tipoDocumento === 'NOTA_DEBITO') {
+                formCompra.setFieldValue('tipoDocumento', 'NOTA_DEBITO');
+                const rifNota = normRif(d.proveedorRif);
+                const provNota = rifNota ? (proveedores || []).find((p) => normRif(p.identificacion) === rifNota) : null;
+                if (provNota) {
+                    formCompra.setFieldValue('proveedorId', String(provNota.id));
+                    setModoNuevoProveedor(false);
+                } else if (d.proveedorNombre || d.proveedorRif) {
+                    formCompra.setFieldValue('proveedorId', null);
+                    formNuevoProv.setValues({
+                        identificacion: d.proveedorRif || '', nombre: d.proveedorNombre || '', telefono: d.proveedorTelefono || '', email: d.proveedorEmail || '',
+                        direccion: d.proveedorDireccion || '', esContribuyenteEspecial: false, retencionIvaPorDefecto: null, notas: '',
+                    });
+                    setModalCrearProv(true);
+                }
+                setNotaIA({
+                    numero: d.numeroFactura, control: d.numeroControl, fecha: d.fechaEmision, concepto: d.concepto, facturaAfectada: d.facturaAfectada,
+                    bases: d.bases?.length ? d.bases : (d.baseImponible ? [{ porcentaje: d.porcentajeIva || 16, base: d.baseImponible }] : []),
+                    exento: d.montoExento, iva: d.montoIva, moneda: d.moneda,
+                });
+                notifications.update({ id, title: 'Nota de débito leída', message: 'Revisa los datos y elige la factura que afecta antes de procesar.', color: 'teal', loading: false, autoClose: 5000 });
+                return;
+            }
 
             // Cabecera (en modo gasto se lee igual; en vez de renglones de inventario se llenan la descripción y los montos del gasto)
             const comoGasto = esGasto;
@@ -717,7 +744,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 </Grid.Col>
                 <Grid.Col span={{ base: 6, md: 3 }}>
                     <Select size="sm" label="Tipo de documento" allowDeselect={false}
-                        data={[{ value: 'FACTURA', label: 'Factura (aplica IVA)' }, { value: 'NOTA_ENTREGA', label: 'Nota de entrega' }]}
+                        data={[{ value: 'FACTURA', label: 'Factura (aplica IVA)' }, { value: 'NOTA_ENTREGA', label: 'Nota de entrega' }, { value: 'NOTA_DEBITO', label: 'Nota de débito del proveedor' }]}
                         {...formCompra.getInputProps('tipoDocumento')} />
                 </Grid.Col>
                 <Grid.Col span={{ base: 6, md: 2 }}>
@@ -983,6 +1010,38 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         </Paper>
     );
 
+    // ---- Nota de débito del proveedor: cabecera mínima (proveedor, tipo, lectura con IA) y su propio formulario ----
+    const cuerpoNota = (
+        <Stack gap="sm" p={isMobile ? 'xs' : 0} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            <Paper withBorder p="sm" radius="md">
+                <Group justify="flex-end" mb="xs">
+                    <FileButton onChange={leerFactura} accept="image/*,application/pdf" disabled={analizando}>
+                        {(props) => (
+                            <Button {...props} size="xs" color="grape" variant="light" tt="none" loading={analizando} fullWidth={isMobile} leftSection={<IconSparkles size={16} />}>
+                                Leer nota con IA (foto o PDF)
+                            </Button>
+                        )}
+                    </FileButton>
+                </Group>
+                <Grid gutter="xs" align="flex-end">
+                    <Grid.Col span={{ base: 12, md: 7 }}>
+                        <Group gap="xs" wrap="nowrap" align="flex-end">
+                            <Select size="sm" style={{ flex: 1, minWidth: 0 }} label="Proveedor" placeholder="Seleccione proveedor..." searchable data={opcionesProveedores} {...formCompra.getInputProps('proveedorId')} />
+                            <Button size="sm" variant="light" color="grape" tt="none" style={{ flex: '0 0 auto' }} onClick={() => setModalCrearProv(true)}>+ Nuevo</Button>
+                        </Group>
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 5 }}>
+                        <Select size="sm" label="Tipo de documento" allowDeselect={false}
+                            data={[{ value: 'FACTURA', label: 'Factura (aplica IVA)' }, { value: 'NOTA_ENTREGA', label: 'Nota de entrega' }, { value: 'NOTA_DEBITO', label: 'Nota de débito del proveedor' }]}
+                            {...formCompra.getInputProps('tipoDocumento')} />
+                    </Grid.Col>
+                </Grid>
+            </Paper>
+            <NotaDebitoCompra key={notaIA ? JSON.stringify(notaIA) : 'manual'} proveedorId={formCompra.values.proveedorId} ia={notaIA}
+                onCancelar={onClose} onRegistrada={() => { setNotaIA(null); formCompra.setFieldValue('tipoDocumento', 'FACTURA'); onClose(); }} />
+        </Stack>
+    );
+
     const pieMovil = (
         <Box style={{ position: 'sticky', bottom: 0, zIndex: 15, background: '#fff', margin: '6px -8px -8px', padding: '8px 12px calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -6px 16px rgba(0,0,0,0.12)', borderTop: '1px solid var(--mantine-color-gray-3)' }}>
             {!esGasto && <NumberInput size="xs" mb={6} label="Descuento del proveedor sobre la base (%)" min={0} max={100} decimalScale={4} suffix=" %" placeholder="0" value={descuentoPct} onChange={setDescuentoPct} hideControls />}
@@ -1001,7 +1060,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                     ? { content: { padding: 0 }, header: { padding: '8px 12px', minHeight: 44, background: '#fff', zIndex: 30 }, body: { padding: '0 4px' } }
                     : { content: { display: 'flex', flexDirection: 'column', overflow: 'hidden' }, header: { padding: '10px 20px' }, body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '0 20px 16px', overflow: 'hidden' } }}>
 
-                {isMobile ? (
+                {formCompra.values.tipoDocumento === 'NOTA_DEBITO' ? cuerpoNota : isMobile ? (
                     <Box p={4}>
                         {declaracion}
                         {avisoRetencion && <Box mb={6}>{avisoRetencion}</Box>}

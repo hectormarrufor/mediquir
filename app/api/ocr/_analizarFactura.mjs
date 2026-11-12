@@ -20,8 +20,10 @@ const PROMPT_FACTURA = `
   moneda "VES", aunque la cabecera diga "Moneda: US$". Solo si la factura NO trae ningún monto en bolívares usa los dólares y moneda "USD".
   Los montos en dólares, si están, van aparte en precioUnitarioUsd y totalUsd.
 
-  1. tipoDocumento: "FACTURA" si dice factura (lleva número de control e IVA), "NOTA_ENTREGA" si es nota de entrega, presupuesto u orden sin valor fiscal.
-  2. numeroFactura: el "Nº de factura" (sin ceros de más ni prefijos como "Nro").
+  1. tipoDocumento: "FACTURA" si dice factura (lleva número de control e IVA), "NOTA_ENTREGA" si es nota de entrega, presupuesto u orden sin valor fiscal,
+     "NOTA_DEBITO" si es una NOTA DE DÉBITO emitida por el proveedor (o el formulario "Nota de débito a Proveedores" del sistema administrativo).
+     En una nota de débito NO hay renglones de artículos: lineas va vacío y se llenan concepto, facturaAfectada y bases (ver abajo).
+  2. numeroFactura: el "Nº de factura" (sin ceros de más ni prefijos como "Nro"); en una nota de débito, el número de la nota que asignó el proveedor.
   3. numeroControl: el "Nº de control". En facturas de formato libre suele empezar con "00-". En las facturas emitidas por
      impresora o máquina fiscal aparece ABAJO, al final del documento, con las letras "MH" a su izquierda (por ejemplo
      "MH Z7C7005010"): devuelve SOLO el código que sigue a "MH", sin las letras "MH". Mira siempre el pie de la factura.
@@ -58,10 +60,13 @@ const PROMPT_FACTURA = `
   12. montoIva: monto del IVA (o null).
   13. total: total a pagar de la factura, en la moneda de la factura (bolívares si los hay).
   14. totalUsd: el total en dólares si la factura también lo imprime; si no, null.
+  15. SOLO en NOTA_DEBITO (en los demás tipos null): concepto = el motivo o descripción de la nota; facturaAfectada = el número de la
+      factura que afecta ("Referencia/Fac. Afec."); bases = una entrada por cada base imponible con monto, con su alícuota
+      (por ejemplo B. Imponible 1 al 16 %, 2 al 8 %, 3 al 27 %): [{ "porcentaje": 16, "base": 100.5 }].
 
   Responde SOLO este JSON válido:
   {
-    "tipoDocumento": "FACTURA" | "NOTA_ENTREGA",
+    "tipoDocumento": "FACTURA" | "NOTA_ENTREGA" | "NOTA_DEBITO",
     "numeroFactura": "string" | null,
     "numeroControl": "string" | null,
     "fechaEmision": "YYYY-MM-DD" | null,
@@ -80,7 +85,10 @@ const PROMPT_FACTURA = `
     "porcentajeIva": number | null,
     "montoIva": number | null,
     "total": number | null,
-    "totalUsd": number | null
+    "totalUsd": number | null,
+    "concepto": "string" | null,
+    "facturaAfectada": "string" | null,
+    "bases": [ { "porcentaje": number, "base": number } ] | null
   }
 `;
 
@@ -113,7 +121,7 @@ export async function analizarFactura(buffer, mimeType) {
         }))
         .filter((l) => l.descripcion && l.cantidad > 0);
     return {
-        tipoDocumento: d.tipoDocumento === 'NOTA_ENTREGA' ? 'NOTA_ENTREGA' : 'FACTURA',
+        tipoDocumento: ['NOTA_ENTREGA', 'NOTA_DEBITO'].includes(d.tipoDocumento) ? d.tipoDocumento : 'FACTURA',
         numeroFactura: d.numeroFactura ? String(d.numeroFactura).trim() : null,
         numeroControl: d.numeroControl ? String(d.numeroControl).trim() : null,
         fechaEmision: /^\d{4}-\d{2}-\d{2}$/.test(d.fechaEmision || '') ? d.fechaEmision : null,
@@ -131,6 +139,9 @@ export async function analizarFactura(buffer, mimeType) {
         montoIva: numero(d.montoIva),
         total: numero(d.total),
         totalUsd: numero(d.totalUsd),
+        concepto: d.concepto ? String(d.concepto).trim().slice(0, 200) : null,
+        facturaAfectada: d.facturaAfectada ? String(d.facturaAfectada).trim().slice(0, 50) : null,
+        bases: (Array.isArray(d.bases) ? d.bases : []).map((b) => ({ porcentaje: numero(b?.porcentaje), base: numero(b?.base) })).filter((b) => b.base > 0),
         modelo,
     };
 }

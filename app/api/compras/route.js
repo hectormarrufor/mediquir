@@ -41,6 +41,10 @@ export async function GET(request) {
             whereClause = { [Op.or]: [{ '$cuentaPorPagar.saldoPendiente$': { [Op.gt]: 0.005 } }, { id: conRetPendiente.map((r) => r.facturaCompraId).filter(Boolean) }] };
         }
 
+        // ?proveedorId=..&soloFacturas=1: las facturas de un proveedor (para elegir la que afecta una nota de débito)
+        if (Number(searchParams.get('proveedorId')) > 0) whereClause.proveedorId = Number(searchParams.get('proveedorId'));
+        if (searchParams.get('soloFacturas') === '1') whereClause.tipoDocumento = 'FACTURA';
+
         // Un vendedor solo ve las compras que él registró
         if (rolDe(acceso.sesion) === 'vendedor') whereClause.registradoPorId = Number(acceso.sesion.id);
 
