@@ -82,19 +82,22 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
     }, [plan, tipo, cantidades]);
 
     const motivoFinal = motivo === 'Otro' ? detalle.trim() : `${motivo}${detalle.trim() ? `: ${detalle.trim()}` : ''}`;
-    const faltaAfecta = !deNotas && !afecta;
+    // Nota PARCIAL sobre una factura ya pagada: no toca cuentas por cobrar, ingresos, inventario ni saldo a favor (se pide confirmación al emitirla)
+    const parcialPagada = Boolean(plan?.factura.pagada) && (varias ? !completaVarias : tipo === 'PARCIAL');
+    const faltaAfecta = !deNotas && !parcialPagada && !afecta;
     const faltaControl = facturasNc.some((f) => !String(documentos[f.id]?.control || '').trim())
         || controles.slice(0, cuantas).some((c) => !String(c?.control || '').trim());
     const sinRenglones = varias ? Array.from({ length: cuantas }, (_, k) => k).some((k) => !(montoNota(k) > 0)) : tipo === 'PARCIAL' && !(montoParcial > 0);
     const bloqueado = !plan || faltaAfecta || faltaControl || sinRenglones || motivoFinal.length < 5 || (deNotas && plan.bloqueosNotas.length > 0);
 
     const anular = async () => {
+        if (parcialPagada && !window.confirm('Esta factura ya está pagada. La nota de crédito parcial NO afectará las cuentas por cobrar ni lo ya ingresado, no dejará saldo a favor y no moverá el inventario. ¿Confirmas?')) return;
         setEnviando(true);
         try {
             const r = await pedir(`/api/ventas/${pedido.id}/anular`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    tipo, motivo: motivoFinal, fecha: fecha || null, afectaCxc: deNotas ? null : afecta === 'si',
+                    tipo, motivo: motivoFinal, fecha: fecha || null, afectaCxc: deNotas || parcialPagada ? null : afecta === 'si', confirmarPagada: parcialPagada,
                     documentos: { ...documentos, [plan.factura.id]: controles[0] || {} },
                     notas: varias ? controles.slice(0, cuantas).map((c, k) => ({
                         numero: c.numero, control: c.control,
@@ -194,6 +197,10 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                         <Alert color="blue" title={`Esta factura salió de ${plan.notasEntrega.map((n) => n.numero).join(', ')}`}>
                             <Text size="sm">Al anularla, {plan.notasEntrega.length > 1 ? 'esas notas vuelven' : 'la nota vuelve'} a ser el documento principal y la deuda vuelve a {plan.notasEntrega.length > 1 ? 'ellas' : 'ella'} ({plan.notasEntrega.map((n) => `${n.numero}: $ ${nf(n.totalUsd)}`).join(' · ')}){plan.abonosUsd > 0 ? `, con los $ ${nf(plan.abonosUsd)} que ya se abonaron` : ''}. El inventario no se mueve.</Text>
                             {plan.facturas.length > 1 && <Text size="sm" mt={6}><b>{plan.notasEntrega.length > 1 ? 'Esas notas también están' : 'Esa nota también está'} en {plan.facturas.filter((f) => f.id !== plan.factura.id).map((f) => f.numero).join(', ')}:</b> se anulan juntas, una nota de crédito por cada factura.</Text>}
+                        </Alert>
+                    ) : parcialPagada ? (
+                        <Alert color="yellow" icon={<IconAlertTriangle size={18} />} title="Esta factura ya está pagada">
+                            <Text size="sm">Una nota de crédito parcial sobre una factura pagada no afecta las cuentas por cobrar ni lo ya ingresado, no deja saldo a favor del cliente y no mueve el inventario. Se te pedirá confirmar al emitirla.</Text>
                         </Alert>
                     ) : (
                         <Radio.Group label="¿Esta nota de crédito afecta la cuenta por cobrar?" withAsterisk value={afecta} onChange={setAfecta}>

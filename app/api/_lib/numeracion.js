@@ -4,8 +4,9 @@
 //  · F / NC / ND : el número del documento (F-00001, NC-02325...). Cada serie tiene su correlativo; para NC y ND la persona dice
 //                  con qué número empieza (no siempre es el 1: puede venir de un talonario anterior).
 //  · CONTROL     : el número de control (00-005432) sale de la FORMA LIBRE preimpresa y es UN SOLO correlativo compartido por facturas,
-//                  notas de crédito y notas de débito. Se asigna al imprimir el documento (así coincide con la forma que se gasta),
-//                  una sola vez por documento; si la forma se daña se puede pedir el siguiente.
+//                  notas de crédito y de débito. Se asigna AL NACER el documento (al asentar la factura o emitir la nota), una sola vez:
+//                  así nunca queda un documento sin control ni un hueco en la secuencia por un documento que no se imprimió.
+//                  Al imprimir solo se muestra el que ya tiene; si la forma se daña se puede pedir el siguiente.
 import db from '../../../models/index.js';
 import { fechaCaracas } from '../../constants/hora.js';
 import { primerLibre } from './correlativoLibre.js';
@@ -156,12 +157,21 @@ export async function configurarNumeracion({ clave, siguiente, transaction: t })
 export async function siguienteControl(t) {
     const c = await Correlativo.findOne({ where: { prefijo: 'CONTROL' }, transaction: t, lock: t.LOCK.UPDATE });
     if (!c || !c.configurado) {
-        throw new ErrorNumeracion('Antes de imprimir debes indicar el número de control de la forma libre con la que empiezas', 409, 'CONTROL_PENDIENTE');
+        throw new ErrorNumeracion('Antes de emitir documentos debes indicar el número de control de la forma libre con la que empiezas', 409, 'CONTROL_PENDIENTE');
     }
     const n = await primerControlLibre(c.siguienteNumero, t);
     c.siguienteNumero = await primerControlLibre(n + 1, t);
     await c.save({ transaction: t });
     return formatear('CONTROL', n, c.cerosRelleno || CLAVES.CONTROL.ceros);
+}
+
+/**
+ * Número de control de un documento que nace ahora: el que se indique (copiado de una forma ya impresa) o, si no, el siguiente del correlativo.
+ * Todo documento fiscal (factura, nota de crédito o débito) lo toma al crearse, dentro de la misma transacción.
+ */
+export async function controlAlNacer(texto, t) {
+    const dado = String(texto ?? '').trim().slice(0, 30);
+    return dado || siguienteControl(t);
 }
 
 /**

@@ -8,7 +8,7 @@ import { ErrorNota } from '@/app/api/_lib/notasFiscales';
 export const dynamic = 'force-dynamic';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const respuestaError = (error, contexto) => {
-    if (error instanceof ErrorAnulacion || error instanceof ErrorNota) return NextResponse.json({ error: error.message }, { status: error.status || 400 });
+    if (error instanceof ErrorAnulacion || error instanceof ErrorNota) return NextResponse.json({ error: error.message, ...(error.codigo ? { codigo: error.codigo } : {}) }, { status: error.status || 400 });
     console.error(contexto, error);
     return NextResponse.json({ error: 'No se pudo completar la anulación' }, { status: 500 });
 };
@@ -41,7 +41,7 @@ export async function POST(request, { params }) {
         const b = await request.json();
         const r = await anularFactura({
             venta, tipo: b.tipo, renglones: b.renglones, afectaCxc: typeof b.afectaCxc === 'boolean' ? b.afectaCxc : null, motivo: b.motivo,
-            documentos: b.documentos && typeof b.documentos === 'object' ? b.documentos : {}, notas: Array.isArray(b.notas) ? b.notas : null, fecha: b.fecha || null, usuarioId: Number(acceso.sesion.id) || null, transaction: t,
+            documentos: b.documentos && typeof b.documentos === 'object' ? b.documentos : {}, notas: Array.isArray(b.notas) ? b.notas : null, fecha: b.fecha || null, confirmarPagada: b.confirmarPagada === true, usuarioId: Number(acceso.sesion.id) || null, transaction: t,
         });
         await t.commit();
         return NextResponse.json({ success: true, ...r });

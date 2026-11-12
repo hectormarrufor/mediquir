@@ -26,8 +26,13 @@ const METODO_NC = 'Nota de crédito';
 export const MAX_NOTAS = 20;
 
 export class ErrorAnulacion extends Error {
-    constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
+    constructor(mensaje, status = 400, codigo = null) { super(mensaje); this.status = status; this.codigo = codigo; }
 }
+
+// Una nota de crédito PARCIAL sobre una factura que ya está pagada no toca nada de lo ya registrado: ni la cuenta por cobrar, ni los ingresos,
+// ni el inventario, ni deja saldo a favor del cliente. Siempre se pide confirmación antes de emitirla (regla del usuario, 11/11/2026).
+export const CONFIRMAR_PAGADA = 'CONFIRMAR_PAGADA';
+const MENSAJE_PAGADA = 'Esta factura ya está pagada: la nota de crédito parcial NO afectará las cuentas por cobrar ni lo ya ingresado, no dejará saldo a favor y no moverá el inventario. Confirma para emitirla.';
 
 // ¿La mercancía de la factura ya salió? (si no salió, no hay nada que devolver al inventario)
 const yaSalio = (v) => v.tipoVenta !== 'MAYOR' || Boolean(v.empacadoAt) || v.statusDespacho === 'Completado';
@@ -96,7 +101,7 @@ export async function planAnulacion({ venta, transaction }) {
         return { id: f.id, numero: f.numeroDocumento, moneda: f.moneda, total: Number(f.totalFinal), acreditable: n.acreditable, notas: numerosAnteriores(f.numeroDocumentoAnterior).filter((x) => x.startsWith('NE-')) };
     }));
     return {
-        factura: { id: venta.id, numero: venta.numeroDocumento, moneda: venta.moneda, tasa: Number(venta.tasaCambio), total: Number(venta.totalFinal), acreditable: propia.acreditable, yaSalio: yaSalio(venta) },
+        factura: { id: venta.id, numero: venta.numeroDocumento, moneda: venta.moneda, tasa: Number(venta.tasaCambio), total: Number(venta.totalFinal), acreditable: propia.acreditable, yaSalio: yaSalio(venta), pagada: venta.statusPago === 'Pagado' },
         renglones: propia.renglones,
         deNotas,
         notasEntrega: grupo.notas.map((n) => ({ id: n.id, numero: n.numeroDocumento, totalUsd: Number(n.totalFinal) })),
@@ -116,7 +121,7 @@ export async function planAnulacion({ venta, transaction }) {
  *   afectaCxc: obligatorio salvo en la anulación total de una factura que salió de notas de entrega (ahí la deuda vuelve a las notas)
  *   documentos: { [ventaId de la factura]: { numero?, control } } -> número de NC (si ya se emitió en el sistema anterior) y su control
  */
-export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = null, motivo, documentos = {}, notas = null, fecha = null, usuarioId = null, transaction: t }) {
+export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = null, motivo, documentos = {}, notas = null, fecha = null, usuarioId = null, confirmarPagada = false, transaction: t }) {
     const varias = Array.isArray(notas) && notas.length > 1;
     if (!varias && !['TOTAL', 'PARCIAL'].includes(tipo)) throw new ErrorAnulacion('Elige si la anulación es total o parcial');
     const motivoTxt = String(motivo || '').trim();
@@ -154,6 +159,10 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
         }
         const completa = plan.renglones.every((r) => (usado.get(r.id) || 0) === r.restante);
         const sinCxc = completa && plan.deNotas; // la deuda vuelve a las notas de entrega, sin mover inventario
+        if (!completa && plan.factura.pagada) { // parcial sobre factura pagada: no toca nada, previa confirmación
+            if (!confirmarPagada) throw new ErrorAnulacion(MENSAJE_PAGADA, 409, CONFIRMAR_PAGADA);
+            afectaCxc = false;
+        }
         if (sinCxc && plan.bloqueosNotas.length) throw new ErrorAnulacion(plan.bloqueosNotas[0], 409);
         if (!sinCxc && typeof afectaCxc !== 'boolean') throw new ErrorAnulacion('Indica si las notas de crédito afectan la cuenta por cobrar');
         const devuelve = !sinCxc && yaSalio(venta) && (completa || afectaCxc);
@@ -175,6 +184,10 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
 
     // ---------- Parcial
     if (!varias && tipo === 'PARCIAL') {
+        if (plan.factura.pagada) { // factura ya pagada: no toca cuentas por cobrar, ingresos, inventario ni saldo a favor, previa confirmación
+            if (!confirmarPagada) throw new ErrorAnulacion(MENSAJE_PAGADA, 409, CONFIRMAR_PAGADA);
+            afectaCxc = false;
+        }
         if (typeof afectaCxc !== 'boolean') throw new ErrorAnulacion('Indica si la nota de crédito afecta la cuenta por cobrar');
         const elegidos = (Array.isArray(renglones) ? renglones : []).filter((r) => Number(r.cantidad) > 0).map((r) => ({ ventaDetalleId: r.ventaDetalleId, cantidad: Number(r.cantidad) }));
         if (!elegidos.length) throw new ErrorAnulacion('Elige al menos un renglón y cuántas unidades se anulan');

@@ -23,6 +23,7 @@ import { CONFIG_FISCAL } from '../../constants/empresa.js';
 import { unirAnteriores } from '../../constants/documentosAnteriores.js';
 import { recalcularCobro } from './retencionesVenta.js';
 import { asegurarComisionFactura } from './comisionesPago.js';
+import { controlAlNacer } from './numeracion.js';
 import { ErrorConversion, fechaEmisionDe, siguienteNumeroFactura, convertirNotaEntregaAFactura } from './convertirFactura.js';
 
 const { sequelize, Venta, VentaDetalle, Producto, CuentaPorCobrar, Abono, ComisionVenta, SalidaInventario, NotaFiscal, Cliente } = db;
@@ -197,7 +198,7 @@ export async function emitirFacturasDeNotas({ cargadas, grupos, moneda = 'USD', 
         const factura = await Venta.create({
             clienteId: primera.clienteId, vendedorId: primera.vendedorId, tipoVenta: primera.tipoVenta, tipoEntrega: primera.tipoEntrega,
             quienRetira: primera.quienRetira, direccionEntrega: primera.direccionEntrega,
-            tipoDocumento: 'FACTURA', numeroDocumento: numero, numeroDocumentoAnterior: anteriores, numeroControl: String(g.control || '').trim().slice(0, 30) || null,
+            tipoDocumento: 'FACTURA', numeroDocumento: numero, numeroDocumentoAnterior: anteriores, numeroControl: await controlAlNacer(g.control, t),
             statusDespacho: 'Completado', condicionPago: 'Credito', statusPago: 'Pendiente', fechaVencimiento: venceEl,
             moneda, tasaCambio: tasaNum, subtotal: calc.subtotal, montoIva: calc.montoIva, totalFinal: calc.totalFinal, costoFlete: 0,
             fechaEmision: emision, createdAt: emision,

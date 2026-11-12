@@ -7,6 +7,7 @@ import { requerirStaff } from '../inventario/_lib';
 import { tasaVigente, tasaDelDia } from '../_lib/tasaBcv';
 import { primerLibre } from '../_lib/correlativoLibre';
 import { asegurarComisionFactura } from '../_lib/comisionesPago';
+import { controlAlNacer } from '../_lib/numeracion';
 import { calcularFactura, aBolivares, aDolares, REGLAS, precioPorTarifa, TARIFAS_VENDEDOR } from '@/app/constants/facturacion';
 import { rolDe } from '@/app/constants/roles';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
@@ -231,11 +232,13 @@ export async function POST(request) {
             }
         }
         const fechaVencimiento = condicionPago === 'Credito' ? new Date((momentoDoc ? momentoDoc.getTime() : Date.now()) + diasCredito * 86400000) : null;
+        // La factura nace con su número de control (el de la forma si se escribió, o el siguiente del correlativo)
+        const controlFactura = tipoDocumento === 'FACTURA' ? await controlAlNacer(numeroControl, t) : null;
         const nuevaVenta = await Venta.create({
             clienteId: clienteId || null,
             vendedorId: esVend ? Number(acceso.sesion.id) : (vendedorId || null),
             tipoVenta, tipoDocumento, numeroDocumento,
-            numeroControl: tipoDocumento === 'FACTURA' ? (String(numeroControl || '').trim().slice(0, 30) || null) : null,
+            numeroControl: controlFactura,
             statusDespacho: tipoVenta === 'DETAL' ? 'Completado' : 'Pendiente',
             moneda, tasaCambio,
             condicionPago, statusPago: condicionPago === 'Contado' ? 'Pagado' : 'Pendiente',

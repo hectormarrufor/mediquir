@@ -10,6 +10,7 @@ import { recalcularCobro } from './retencionesVenta.js';
 import { fechaCaracas } from '../../constants/hora.js';
 import { primerLibre } from './correlativoLibre.js';
 import { asegurarComisionFactura } from './comisionesPago.js';
+import { controlAlNacer } from './numeracion.js';
 
 const { sequelize, Correlativo, CategoriaFinanciera, MovimientoFinanciero, VentaDetalle, Producto, CuentaPorCobrar, Venta } = db;
 const { Op } = db.Sequelize;
@@ -64,7 +65,7 @@ export async function convertirAFactura({ venta, transaction: t, numeroManual = 
     venta.numeroDocumento = numero;
     venta.tipoDocumento = 'FACTURA';
     venta.fechaEmision = emision;
-    if (controlDe(numeroControl)) venta.numeroControl = controlDe(numeroControl);
+    venta.numeroControl = await controlAlNacer(numeroControl, t); // la factura nace con su número de control
     await venta.save({ transaction: t });
 
     // El IVA cobrado deja de ser ingreso de la tienda y pasa a estar reservado para el SENIAT
@@ -132,7 +133,7 @@ export async function convertirNotaEntregaAFactura({ venta, tasaHoy, transaction
     for (const k of ['id', 'createdAt', 'updatedAt', 'detalles']) delete datos[k];
     const factura = await Venta.create({
         ...datos, numeroDocumento: numero, numeroDocumentoAnterior: anterior, tipoDocumento: 'FACTURA', fechaEmision: emision,
-        numeroControl: controlDe(numeroControl), tasaCambio: tasaHoy, montoIva: p.ivaNuevo, totalFinal: p.totalNuevo,
+        numeroControl: await controlAlNacer(numeroControl, t), tasaCambio: tasaHoy, montoIva: p.ivaNuevo, totalFinal: p.totalNuevo,
     }, { transaction: t });
 
     // 2. Sus renglones (el IVA de cada producto gravado queda marcado); se recuerda cuál es cuál para pasar la evidencia de empaque

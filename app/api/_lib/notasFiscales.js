@@ -13,6 +13,7 @@ import db from '../../../models/index.js';
 import { calcularFactura, aBolivares, aDolares, REGLAS } from '../../constants/facturacion.js';
 import { hoyCaracas, recalcularCobro } from './retencionesVenta.js';
 import { fechaCaracas } from '../../constants/hora.js';
+import { controlAlNacer } from './numeracion.js';
 
 const {
     sequelize, NotaFiscal, NotaFiscalDetalle, Venta, VentaDetalle, Producto, Abono, CuentaPorCobrar, CuentaPorPagar, Correlativo,
@@ -188,7 +189,7 @@ export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelve
     // Fecha de la nota: hoy, o la que tiene en el sistema anterior (YYYY-MM-DD, nunca futura); y su control si ya lo tiene (si no, se asigna al imprimir)
     if (fecha && (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha)) || String(fecha) > hoyCaracas())) throw new ErrorNota('La fecha de la nota no es válida (no puede ser futura)');
     const nota = await NotaFiscal.create({
-        tipo, origen: 'VENTA', numeroDocumento: numero, numeroControl: String(numeroControl ?? '').trim().slice(0, 30) || null, fecha: fecha || hoyCaracas(), ventaId: venta.id, clienteId: venta.clienteId,
+        tipo, origen: 'VENTA', numeroDocumento: numero, numeroControl: await controlAlNacer(numeroControl, t), fecha: fecha || hoyCaracas(), ventaId: venta.id, clienteId: venta.clienteId,
         moneda, tasaCambio: tasa, subtotal: factura.subtotal, baseImponible: factura.baseImponible, montoExento: factura.exento,
         montoIva: factura.montoIva, alicuotaIva: REGLAS.alicuotaGeneral, totalFinal: factura.totalFinal, motivo: motivoTxt,
         devuelveInventario: Boolean(devuelveInventario) && tipo === 'CREDITO', facturasAfectadas, registradoPorId: usuarioId,
@@ -541,7 +542,7 @@ export async function emitirNotaDiferencial({ venta, tasaHoy, usdSolicitado, usu
     const texto = textoDiferencial(venta.numeroDocumento);
     const numero = await siguienteNumeroNota('DEBITO', t);
     const nota = await NotaFiscal.create({
-        tipo: 'DEBITO', origen: 'VENTA', numeroDocumento: numero, fecha: hoyCaracas(), ventaId: venta.id, clienteId: venta.clienteId,
+        tipo: 'DEBITO', origen: 'VENTA', numeroDocumento: numero, numeroControl: await controlAlNacer(null, t), fecha: hoyCaracas(), ventaId: venta.id, clienteId: venta.clienteId,
         moneda: 'BS', tasaCambio: c.tasaHoy, subtotal: r2(c.baseImponible + c.exento), baseImponible: c.baseImponible, montoExento: c.exento,
         montoIva: c.iva, alicuotaIva: REGLAS.alicuotaGeneral, totalFinal: c.total, motivo: texto, esDiferencial: true, diferencialUsd: c.usd, facturasAfectadas: [datosFactura(venta)], registradoPorId: usuarioId,
     }, { transaction: t });
