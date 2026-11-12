@@ -12,7 +12,7 @@ import PrecioVisual from './PrecioVisual';
 // onConfirmar(claveDePresentacion, cantidadDePresentaciones, precioUnitario) -> el que lo usa agrega al carrito.
 const iguales = (a, b) => Math.abs(Number(a) - Number(b)) < 0.0005;
 
-export default function CantidadProductoModal({ opened, onClose, nombre, presentaciones, claveInicial = 'UNIDAD', maxUnidades = Infinity, onConfirmar, zIndex, precio = null }) {
+export default function CantidadProductoModal({ opened, onClose, nombre, presentaciones, claveInicial = 'UNIDAD', maxUnidades = Infinity, onConfirmar, zIndex, precio = null, ocultarExistencias = false }) {
     const [clave, setClave] = useState(claveInicial);
     const [cantidad, setCantidad] = useState(1);
     const [precioTxt, setPrecioTxt] = useState(precio ? precio.valor : '');
@@ -50,7 +50,7 @@ export default function CantidadProductoModal({ opened, onClose, nombre, present
                     <NumberInput data-autofocus label={`¿Cuántas ${pres.plural}?`} min={1} max={maxPres} allowDecimal={false} allowNegative={false} value={cantidad} onChange={setCantidad}
                         inputMode="numeric" size="md" onKeyDown={(e) => { if (e.key === 'Enter') confirmar(); }} />
                     <Text size="sm" c={excede ? 'red.7' : 'dimmed'}>
-                        {excede ? `Solo hay ${maxUnidades} unidades disponibles.` : pres.unidades > 1 ? `${n} ${n === 1 ? pres.singular : pres.plural} × ${pres.unidades} = ${unidades} unidades` : `${unidades} ${unidades === 1 ? pres.singular : pres.plural}`}
+                        {excede ? (ocultarExistencias ? 'Esa cantidad supera lo que hay disponible ahora. Reduce la cantidad o consúltanos por WhatsApp.' : `Solo hay ${maxUnidades} unidades disponibles.`) : pres.unidades > 1 ? `${n} ${n === 1 ? pres.singular : pres.plural} × ${pres.unidades} = ${unidades} unidades` : `${unidades} ${unidades === 1 ? pres.singular : pres.plural}`}
                     </Text>
 
                     {precio && (

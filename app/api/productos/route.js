@@ -55,7 +55,7 @@ export async function GET(request) {
             const publicos = productos.map((p) => {
                 const j = p.toJSON();
                 // Internos del negocio que no se publican: costo, precio mayor, stock mínimo (punto de reposición) y cuánto se vende cada producto
-                const { costoUsd, precio6, stockMinimo, nroVentas, ...resto } = j;
+                const { costoUsd, precio6, stockMinimo, nroVentas, inventarioAuditado, inventarioAuditadoAt, inventarioAuditadoPorId, presentacionesVerificadasAt, presentacionesVerificadasPorId, ...resto } = j;
                 if (resto.grupoEquivalencia) { const { stockMinimoGlobal, ...grupo } = resto.grupoEquivalencia; resto.grupoEquivalencia = grupo; }
                 resto.nroVentas = puesto.get(j.id);
                 // La landing calcula el precio web con precio7; si falta se le entrega ya resuelto (sin revelar el costo)

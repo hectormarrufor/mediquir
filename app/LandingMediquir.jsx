@@ -215,7 +215,7 @@ export default function LandingMediquir({ seo = null }) {
                         <CantidadProductoModal
                             opened onClose={() => setPregunta(null)} nombre={pregunta.product.nombre}
                             presentaciones={presentacionesTienda(pregunta.product)} claveInicial={pregunta.clave}
-                            maxUnidades={Math.max(0, stockPregunta - unidadesEnCarrito(pregunta.product.id))} onConfirmar={confirmarCantidad}
+                            maxUnidades={Math.max(0, stockPregunta - unidadesEnCarrito(pregunta.product.id))} onConfirmar={confirmarCantidad} ocultarExistencias
                         />
                     )}
 
@@ -274,7 +274,7 @@ export default function LandingMediquir({ seo = null }) {
                                                     <span className={classes.renglonDato} style={{ marginTop: 1 }}>{iva > 0 ? `+ IVA ${iva}%` : 'Exento de IVA'}</span>
 
                                                     {isOut && <span className={classes.renglonAviso} data-tono="rojo">Agotado en almacén</span>}
-                                                    {exceedsStock && <span className={classes.renglonAviso}>Solo quedan {stockDisponible} disponibles</span>}
+                                                    {exceedsStock && <span className={classes.renglonAviso}>Esa cantidad supera lo disponible ahora: redúcela</span>}
 
                                                     {!isOut && (
                                                         <div className={classes.renglonPie}>
