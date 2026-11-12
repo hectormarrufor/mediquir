@@ -284,12 +284,16 @@ export async function POST(request) {
             const productoDB = productos.get(Number(item.productoId));
             const stock = Number(productoDB.stockAlmacen) || 0;
 
-            // Detal descuenta el stock de inmediato; el mayor lo descuenta al armar la caja
+            // Detal descuenta el stock de inmediato (solo si el producto ya fue auditado: si no, su stock no es confiable y no se mueve);
+            // el mayor lo descuenta al armar la caja.
             if (tipoVenta === 'DETAL') {
-                if (stock < renglon.cantidad) throw new ErrorNegocio(`Inventario insuficiente: ${productoDB.nombre} (disponible ${stock})`);
-                productoDB.stockAlmacen = stock - renglon.cantidad;
+                if (productoDB.inventarioAuditado) {
+                    if (stock < renglon.cantidad) throw new ErrorNegocio(`Inventario insuficiente: ${productoDB.nombre} (disponible ${stock})`);
+                    productoDB.stockAlmacen = stock - renglon.cantidad;
+                }
+                // Lo vendido se suma al venderse; el mayor lo suma al empacar (antes se sumaba dos veces: aquí y al empacar)
+                productoDB.nroVentas = (Number(productoDB.nroVentas) || 0) + renglon.cantidad;
             }
-            productoDB.nroVentas = (Number(productoDB.nroVentas) || 0) + renglon.cantidad;
             await productoDB.save({ transaction: t });
 
             await SalidaInventario.create({

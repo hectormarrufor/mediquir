@@ -13,7 +13,7 @@ export function buscarVentaParaEmpaque(id, opciones = {}) {
         where: UUID_REGEX.test(id) ? { id } : { numeroDocumento: id },
         include: [
             { model: VentaDetalle, as: 'detalles', include: [{
-                model: Producto, as: 'producto', attributes: ['id', 'nombre', 'codigo', 'codigoBarras', 'codigoBarrasCaja', 'codigoBarrasBulto', 'presentacion', 'unidadesPorCaja', 'cajasPorBulto', 'unidadesPorBulto', 'imagen'],
+                model: Producto, as: 'producto', attributes: ['id', 'nombre', 'codigo', 'codigoBarras', 'codigoBarrasCaja', 'codigoBarrasBulto', 'presentacion', 'unidadesPorCaja', 'cajasPorBulto', 'unidadesPorBulto', 'imagen', 'inventarioAuditado', 'presentacionesVerificadasAt'],
                 include: [
                     { model: Marca, as: 'marca', attributes: ['id', 'nombre', 'imagen'] },
                     { model: GrupoEquivalencia, as: 'grupoEquivalencia', attributes: ['id', 'nombre', 'imagen'] },
@@ -164,6 +164,16 @@ export async function opcionesDeMarca(detalle) {
     const orden = (n) => crypto.createHash('md5').update(`${detalle.id}:${n}`).digest('hex');
     const distractores = nombres.sort((a, b) => orden(a).localeCompare(orden(b))).slice(0, 3);
     return [correcta, ...distractores].sort((a, b) => orden(a).localeCompare(orden(b)));
+}
+
+// ¿Hay que preguntarle al empacador en qué presentaciones viene este producto? Cuando no tiene registrada la caja ni el bulto
+// y nadie con el producto en la mano ha confirmado ya sus presentaciones (aunque sea «no aplica»).
+export function faltanPresentaciones(detalle) {
+    const p = detalle.producto;
+    if (detalle.isFicticio || !p || p.presentacionesVerificadasAt) return false;
+    const tieneCaja = Number(p.unidadesPorCaja) > 0;
+    const tieneBulto = Number(p.cajasPorBulto) > 0 || Number(p.unidadesPorBulto) > 1;
+    return !(tieneCaja && tieneBulto);
 }
 
 // Lo que falta para poder firmar el empaque (vacío = todo comprobado)

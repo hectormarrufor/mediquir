@@ -120,7 +120,7 @@ export async function POST(request) {
         lineas.forEach((l) => pedidoPorProducto.set(l.producto.id, (pedidoPorProducto.get(l.producto.id) || 0) + l.cantidad));
         // NO se rechaza el pedido por falta de existencias: queda "en revisión" y administración confirma si consigue las cantidades
         // en 1 o pocos días, o ajusta los renglones. Hasta entonces no hay cuenta por cobrar ni retención (el cliente no paga nada aún).
-        const faltantes = [...pedidoPorProducto].filter(([id, unidades]) => (Number(porId.get(id).stockAlmacen) || 0) < unidades).map(([id]) => porId.get(id));
+        const faltantes = [...pedidoPorProducto].filter(([id, unidades]) => porId.get(id).inventarioAuditado && (Number(porId.get(id).stockAlmacen) || 0) < unidades).map(([id]) => porId.get(id));
         const enRevision = faltantes.length > 0;
 
         // La tarifa (Precio 6 o 7) la fija administración en el perfil del cliente; el servidor cobra con ella, no con lo que mande el navegador

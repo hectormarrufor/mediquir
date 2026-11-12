@@ -12,6 +12,7 @@ import {
     IconPackage, IconScan, IconPhotoOff, IconCamera, IconCheck, IconAlertTriangle, IconArrowLeft, IconLock,
 } from '@tabler/icons-react';
 import EscanerCodigo, { escanerDisponible } from '../../_components/EscanerCodigo';
+import PresentacionesForm from '../../_components/PresentacionesForm';
 
 // La foto del teléfono pesa varios MB y el servidor acepta ~4 MB: se reduce y se comprime antes de subirla
 async function comprimirFoto(archivo, maxLado = 1600, calidad = 0.8) {
@@ -177,6 +178,18 @@ export default function EmpacarPage() {
         );
     }
 
+    // ---------- Producto sin caja ni bulto registrados: primero se le pregunta al empacador en qué presentaciones viene ----------
+    if (actual && actual.faltanPresentaciones && actual.estado !== 'NOVEDAD') {
+        return (
+            <Container size="xs" py="md">
+                <Stack>
+                    {Cabecera}
+                    <PresentacionesForm key={actual.detalleId} item={actual} ventaId={id} onListo={() => refetch()} />
+                </Stack>
+            </Container>
+        );
+    }
+
     // ---------- Un producto por pantalla ----------
     if (actual) {
         const bloqueado = actual.estado === 'NOVEDAD';
@@ -206,6 +219,8 @@ export default function EmpacarPage() {
                                 : <Center h={160}><IconPhotoOff size={48} color="gray" /></Center>}
                             <Title order={3}>{actual.nombre}</Title>
                             {actual.marca && <Text c="dimmed" size="sm">Marca: {actual.marca}</Text>}
+                            {/* Solo personal: verde = su stock ya está auditado y se descuenta; naranja = sin auditar, no mueve stock */}
+                            <Badge color={actual.inventarioAuditado ? 'teal' : 'orange'} variant="light" tt="none" w="fit-content">{actual.inventarioAuditado ? 'Inventario auditado' : 'Inventario sin auditar: no mueve stock'}</Badge>
                             {/* Qué hay que meter, por nivel: no es lo mismo una caja de 100 que 100 unidades sueltas */}
                             <Stack gap={4}>
                                 {niveles.map((n) => (

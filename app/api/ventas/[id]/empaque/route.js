@@ -3,12 +3,13 @@ import { requerirStaff } from '@/app/api/inventario/_lib';
 import { rolDe } from '@/app/constants/roles';
 import { notificarCabezas } from '@/app/handlers/notificar';
 import db from '@/models/index';
+import { aplicarLote } from '@/app/api/inventario/productos/_lote';
 import { nivelMayor, textoEntrega } from '@/app/constants/presentaciones';
 import {
-    buscarVentaParaEmpaque, codigosDelRenglon, entregaDeDetalle, evaluarCodigo, imagenDe, nombreDe, modoVerificacion, opcionesDeMarca, registrarError,
+    buscarVentaParaEmpaque, codigosDelRenglon, faltanPresentaciones, entregaDeDetalle, evaluarCodigo, imagenDe, nombreDe, modoVerificacion, opcionesDeMarca, registrarError,
 } from '../../_empaque';
 
-const { sequelize, Venta, VentaEmpaqueItem } = db;
+const { sequelize, Venta, VentaEmpaqueItem, Producto } = db;
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +47,15 @@ export async function GET(request, { params }) {
             const entrega = entregaDeDetalle(d);
             items.push({
                 detalleId: d.id,
+                productoCodigo: d.producto?.codigo || null,
+                // Solo para el personal: si el stock de este producto ya se auditó (verde) o no (naranja: no mueve stock)
+                inventarioAuditado: Boolean(d.producto?.inventarioAuditado),
+                faltanPresentaciones: faltanPresentaciones(d),
+                presentaciones: d.producto ? {
+                    unidad: { codigo: d.producto.codigoBarras || null },
+                    caja: { unidades: d.producto.unidadesPorCaja || null, codigo: d.producto.codigoBarrasCaja || null },
+                    bulto: { cajas: d.producto.cajasPorBulto || null, unidades: d.producto.unidadesPorBulto > 1 ? d.producto.unidadesPorBulto : null, codigo: d.producto.codigoBarrasBulto || null },
+                } : null,
                 nombre: nombreDe(d),
                 marca: d.producto?.marca?.nombre || null,
                 imagen: imagenDe(d.producto),
@@ -96,7 +106,8 @@ export async function POST(request, { params }) {
     let novedad = null;
     try {
         const { id } = await params;
-        const { accion, detalleId, codigo, escaneado, marcaElegida, cantidad, empacado, observacion } = await request.json();
+        const body = await request.json();
+        const { accion, detalleId, codigo, escaneado, marcaElegida, cantidad, empacado, observacion } = body;
 
         const venta = await buscarVentaParaEmpaque(id, { transaction: t });
         if (!venta) throw new ErrorEmpaque('Documento no encontrado', 404);
@@ -121,8 +132,47 @@ export async function POST(request, { params }) {
             return NextResponse.json({ success: true });
         }
 
-        if (!['VERIFICAR_ITEM', 'COMPROBAR_CODIGO'].includes(accion)) throw new ErrorEmpaque('Acción no válida');
+        if (!['VERIFICAR_ITEM', 'COMPROBAR_CODIGO', 'GUARDAR_PRESENTACIONES'].includes(accion)) throw new ErrorEmpaque('Acción no válida');
         if (Number(venta.empacadorId) !== yo) throw new ErrorEmpaque('Este empaque no está asignado a ti', 403);
+
+        // El empacador, con el producto en la mano, dice en qué presentaciones viene (caja, bulto) y escanea sus códigos de barras.
+        // Cada nivel puede ser 'SI' (con sus datos), 'NO_APLICA' o 'NO_SE'. Si ninguno queda en «no sé», el producto queda confirmado y
+        // el empaque no vuelve a preguntarlo; con algún «no sé» se le vuelve a preguntar al siguiente que lo empaque.
+        if (accion === 'GUARDAR_PRESENTACIONES') {
+            if (!detalle.producto) throw new ErrorEmpaque('Este renglón no es un producto del inventario');
+            const { confirmaProducto, unidad, caja, bulto } = await Promise.resolve(body);
+            if (confirmaProducto !== true) throw new ErrorEmpaque('Confirma que el producto que tienes en la mano es exactamente el que dice la pantalla (marca y código)');
+            const estados = ['SI', 'NO_APLICA', 'NO_SE'];
+            if (!estados.includes(caja?.estado) || !estados.includes(bulto?.estado)) throw new ErrorEmpaque('Responde por la caja y por el bulto: sí, no aplica o no sé');
+            const cambios = {};
+            const entero = (v, que) => { const n = Number(v); if (!Number.isInteger(n) || n < 1) throw new ErrorEmpaque(`Escribe ${que} (número entero de 1 en adelante)`); return n; };
+            const codigo = (v) => String(v ?? '').replace(/s+/g, '').slice(0, 64);
+            if (codigo(unidad?.codigo)) cambios.codigoBarras = codigo(unidad.codigo);
+            if (caja.estado === 'SI') {
+                cambios.unidadesPorCaja = entero(caja.unidades, 'cuántas unidades trae la caja');
+                if (codigo(caja.codigo)) cambios.codigoBarrasCaja = codigo(caja.codigo);
+            }
+            if (bulto.estado === 'SI') {
+                if (caja.estado === 'SI' || detalle.producto.unidadesPorCaja) {
+                    cambios.cajasPorBulto = entero(bulto.cajas, 'cuántas cajas trae el bulto');
+                } else {
+                    cambios.unidadesPorBulto = entero(bulto.unidades, 'cuántas unidades trae el bulto');
+                }
+                if (codigo(bulto.codigo)) cambios.codigoBarrasBulto = codigo(bulto.codigo);
+            }
+            await t.commit(); // la validación y el guardado del producto usan su propia transacción
+            if (Object.keys(cambios).length) {
+                const r = await aplicarLote([{ id: detalle.producto.id, cambios }]);
+                if (r.error) throw new ErrorEmpaque(r.error, r.status || 400);
+                if (r.errores?.length) throw new ErrorEmpaque(r.errores[0].error, 400);
+            }
+            const completo = caja.estado !== 'NO_SE' && bulto.estado !== 'NO_SE';
+            await Producto.update(
+                { presentacionesVerificadasAt: completo ? new Date() : null, presentacionesVerificadasPorId: completo ? yo : null },
+                { where: { id: detalle.producto.id } },
+            );
+            return NextResponse.json({ success: true, confirmado: completo });
+        }
 
         // Evalúa el código (no cambia el renglón): el wizard lo usa al escanear para avisar de inmediato qué se tiene en la mano.
         // Si el producto o la presentación son equivocados queda constancia a nombre del empacador (reporte de errores).

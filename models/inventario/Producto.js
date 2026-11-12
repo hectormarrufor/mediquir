@@ -42,6 +42,14 @@ const Producto = sequelize.define('Producto', {
     },
     codigoBarrasCaja: { type: DataTypes.STRING(64), allowNull: true },
     codigoBarrasBulto: { type: DataTypes.STRING(64), allowNull: true },
+    // Auditoría de existencias: false (naranja) = el stock aún no se ha contado y corregido, así que vender o empacar NO lo mueve
+    // (solo suma las unidades vendidas); true (verde) = el stock es confiable y se descuenta. Solo lo ve el personal.
+    inventarioAuditado: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    inventarioAuditadoAt: { type: DataTypes.DATE, allowNull: true },
+    inventarioAuditadoPorId: { type: DataTypes.INTEGER, allowNull: true },
+    // Presentaciones (caja, bulto) confirmadas por alguien con el producto en la mano; vacío = el empaque se las pregunta al empacador
+    presentacionesVerificadasAt: { type: DataTypes.DATE, allowNull: true },
+    presentacionesVerificadasPorId: { type: DataTypes.INTEGER, allowNull: true },
     // --- ESTRUCTURA DE PRECIOS Y COSTOS (En USD) ---
     costoUsd: { 
         type: DataTypes.DECIMAL(12, 5), // costo de UNA unidad: necesita más decimales (p. ej. 0.00825 por guante)

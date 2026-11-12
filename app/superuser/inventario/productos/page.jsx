@@ -6,7 +6,7 @@ import { useLocalStorage, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { IconAlertCircle, IconBarcode, IconCategory, IconEye, IconPencil, IconPhotoCheck } from '@tabler/icons-react';
+import { IconAlertCircle, IconBarcode, IconCategory, IconClipboardCheck, IconEye, IconPencil, IconPhotoCheck } from '@tabler/icons-react';
 import { COLUMNAS, VISIBLES_POR_DEFECTO, aplanarEntradas } from './_lib/columnas';
 import { useInventarioParams } from './_hooks/useInventarioParams';
 import { useEdicionInventario, useListaInventario, useOpcionesInventario, useResumenInventario } from './_hooks/useInventario';
@@ -146,6 +146,9 @@ export default function InventarioProductosPage() {
                 <Group gap="xs" mb="sm" grow={isMobile}>
                     <Button variant="white" leftSection={<IconBarcode size={18} />} onClick={() => router.push('/superuser/inventario/codigos')}>
                         Cargar códigos de barras
+                    </Button>
+                    <Button variant="filled" color="orange" leftSection={<IconClipboardCheck size={18} />} onClick={() => router.push('/superuser/inventario/auditar-stock')}>
+                        Auditar existencias
                     </Button>
                     <Button variant="white" leftSection={<IconPhotoCheck size={18} />} onClick={() => router.push('/superuser/inventario/auditar')}>
                         Auditar fotos y precios

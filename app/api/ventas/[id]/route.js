@@ -41,6 +41,13 @@ async function ejecutarEmpaque(venta, t, empacadorId) {
             if (item.isFicticio || item.afectaInventario === false) continue;
             const productoDB = await Producto.findByPk(item.productoId, { transaction: t, lock: t.LOCK.UPDATE });
             if (!productoDB) continue;
+            // Producto sin auditar (naranja): su stock aún no es confiable, así que NO se mueve ni se exige existencia; solo se suma lo vendido.
+            // Cuando se audita (verde), el stock ya corregido sí se descuenta al empacar.
+            if (!productoDB.inventarioAuditado) {
+                productoDB.nroVentas = (Number(productoDB.nroVentas) || 0) + Number(item.cantidad);
+                await productoDB.save({ transaction: t });
+                continue;
+            }
             const stock = Number(productoDB.stockAlmacen) || 0;
             // Pedido confirmado tras la revisión de existencias: administración aseguró que consigue lo que falta por fuera, así que solo se
             // descuenta lo que sí hay en almacén (el stock nunca queda negativo y lo de afuera no pasa por el inventario)
