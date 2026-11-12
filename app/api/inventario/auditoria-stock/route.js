@@ -65,12 +65,16 @@ export async function POST(request) {
     const { sesion, error } = await exigirPermiso();
     if (error) return error;
     try {
-        const { productoId, stockReal, quitar } = await request.json();
+        const { productoId, stockReal, quitar, esperado, forzar } = await request.json();
         const producto = await Producto.findByPk(Number(productoId));
         if (!producto) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 });
         if (quitar) {
             await producto.update({ inventarioAuditado: false, inventarioAuditadoAt: null, inventarioAuditadoPorId: null });
         } else {
+            // El stock cambió desde que se mostró (una venta, un empaque o una compra mientras se contaba): se avisa antes de pisarlo
+            if (esperado !== undefined && esperado !== null && !forzar && Number(producto.stockAlmacen) !== Number(esperado)) {
+                return NextResponse.json({ error: `Mientras contabas, el stock de este producto cambió de ${Number(esperado)} a ${Number(producto.stockAlmacen)} (hubo una venta, un empaque o una compra). Si tu conteo ya considera eso, confirma de nuevo.`, cambio: true, stockActual: Number(producto.stockAlmacen) }, { status: 409 });
+            }
             const n = Number(stockReal);
             if (stockReal === '' || stockReal == null || !Number.isFinite(n) || n < 0) return NextResponse.json({ error: 'Escribe la cantidad contada (0 o más)' }, { status: 400 });
             await producto.update({ stockAlmacen: Math.round(n * 100) / 100, inventarioAuditado: true, inventarioAuditadoAt: new Date(), inventarioAuditadoPorId: Number(sesion.id) });

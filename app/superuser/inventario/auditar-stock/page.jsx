@@ -19,6 +19,7 @@ export default function AuditarStockPage() {
     const [pagina, setPagina] = useState(1);
     const [conteo, setConteo] = useState({}); // id -> cantidad escrita
     const [guardando, setGuardando] = useState(null);
+    const [avisoCambio, setAvisoCambio] = useState({}); // id -> stock nuevo, cuando cambió mientras se contaba
 
     const { data, isLoading, error } = useQuery({
         queryKey: ['auditoria-stock', busqueda, estado, pagina],
@@ -36,7 +37,15 @@ export default function AuditarStockPage() {
         try {
             const res = await fetch('/api/inventario/auditoria-stock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) });
             const j = await res.json();
+            if (res.status === 409 && j.cambio) {
+                // El stock cambió mientras se contaba: se muestra el valor nuevo y la siguiente confirmación ya lo da por visto
+                setAvisoCambio((a) => ({ ...a, [id]: j.stockActual }));
+                notifications.show({ color: 'orange', title: 'El stock cambió mientras contabas', message: j.error, autoClose: 12000 });
+                queryClient.invalidateQueries({ queryKey: ['auditoria-stock'] });
+                return;
+            }
             if (!res.ok) throw new Error(j.error || 'No se pudo guardar');
+            setAvisoCambio((a) => { const { [id]: _q, ...resto } = a; return resto; });
             notifications.show({ color: 'teal', message: mensaje });
             setConteo((c) => { const { [id]: _quitado, ...resto } = c; return resto; });
             queryClient.invalidateQueries({ queryKey: ['auditoria-stock'] });
@@ -89,14 +98,14 @@ export default function AuditarStockPage() {
                                                 <Badge color={p.auditado ? 'teal' : 'orange'} variant="filled">{p.auditado ? 'Auditado' : 'Sin auditar'}</Badge>
                                                 {p.auditado && p.auditadoAt && <Text size="xs" c="dimmed">{fmtFecha(p.auditadoAt)}</Text>}
                                             </Table.Td>
-                                            <Table.Td ta="right"><Text fw={700}>{p.stock}</Text></Table.Td>
+                                            <Table.Td ta="right"><Text fw={700}>{p.stock}</Text>{avisoCambio[p.id] !== undefined && <Badge color="orange" variant="light" size="xs">Cambió a {avisoCambio[p.id]}: confirma de nuevo</Badge>}</Table.Td>
                                             <Table.Td>
                                                 <NumberInput w={130} size="xs" min={0} allowNegative={false} decimalScale={2} hideControls placeholder="Lo que contaste" value={conteo[p.id] ?? ''} onChange={(v) => setConteo((c) => ({ ...c, [p.id]: v }))} />
                                             </Table.Td>
                                             <Table.Td>
                                                 <Group gap={6} wrap="nowrap">
                                                     <Button size="xs" color="teal" leftSection={<IconCheck size={14} />} loading={guardando === p.id} disabled={conteo[p.id] === '' || conteo[p.id] == null}
-                                                        onClick={() => enviar({ productoId: p.id, stockReal: conteo[p.id] }, p.id, `${p.nombre}: stock corregido a ${conteo[p.id]} y marcado como auditado`)}>Confirmar</Button>
+                                                        onClick={() => enviar({ productoId: p.id, stockReal: conteo[p.id], esperado: avisoCambio[p.id] ?? p.stock }, p.id, `${p.nombre}: stock corregido a ${conteo[p.id]} y marcado como auditado`)}>Confirmar</Button>
                                                     {p.auditado && <Button size="xs" variant="subtle" color="gray" leftSection={<IconUndo size={14} />} loading={guardando === p.id} onClick={() => enviar({ productoId: p.id, quitar: true }, p.id, `${p.nombre}: vuelve a sin auditar`)}>Quitar</Button>}
                                                 </Group>
                                             </Table.Td>

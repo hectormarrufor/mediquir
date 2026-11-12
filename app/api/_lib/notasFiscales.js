@@ -211,7 +211,8 @@ export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelve
             for (const l of lineas.filter((x) => x.productoId)) {
                 const producto = await Producto.findByPk(l.productoId, { transaction: t, lock: t.LOCK.UPDATE });
                 if (!producto) continue;
-                producto.stockAlmacen = Number(producto.stockAlmacen) + l.cantidad;
+                // Producto sin auditar: su stock no se movió al vender, así que tampoco se reintegra
+                if (producto.inventarioAuditado) producto.stockAlmacen = Number(producto.stockAlmacen) + l.cantidad;
                 producto.nroVentas = Math.max(0, (Number(producto.nroVentas) || 0) - l.cantidad);
                 await producto.save({ transaction: t });
             }
@@ -344,8 +345,10 @@ export async function anularNota({ nota, transaction: t }) {
                 for (const d of detalles.filter((x) => x.productoId)) {
                     const producto = await Producto.findByPk(d.productoId, { transaction: t, lock: t.LOCK.UPDATE });
                     if (!producto) continue;
-                    if (Number(producto.stockAlmacen) < d.cantidad) throw new ErrorNota(`No se puede anular: "${d.descripcion}" ya salió del inventario que esta nota había reintegrado`, 409);
-                    producto.stockAlmacen = Number(producto.stockAlmacen) - d.cantidad;
+                    if (producto.inventarioAuditado) {
+                        if (Number(producto.stockAlmacen) < d.cantidad) throw new ErrorNota(`No se puede anular: "${d.descripcion}" ya salió del inventario que esta nota había reintegrado`, 409);
+                        producto.stockAlmacen = Number(producto.stockAlmacen) - d.cantidad;
+                    }
                     producto.nroVentas = (Number(producto.nroVentas) || 0) + d.cantidad;
                     await producto.save({ transaction: t });
                 }

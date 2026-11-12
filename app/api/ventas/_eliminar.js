@@ -56,7 +56,7 @@ export async function eliminarVenta({ venta, transaction: t }) {
             if (aDevolver <= 0) continue;
             const producto = await Producto.findByPk(item.productoId, { transaction: t, lock: t.LOCK.UPDATE });
             if (!producto) continue;
-            producto.stockAlmacen = Number(producto.stockAlmacen) + aDevolver;
+            if (producto.inventarioAuditado) producto.stockAlmacen = Number(producto.stockAlmacen) + aDevolver; // sin auditar no se descontó: no se reintegra
             producto.nroVentas = Math.max(0, (Number(producto.nroVentas) || 0) - aDevolver);
             await producto.save({ transaction: t });
             unidadesDevueltas += aDevolver;

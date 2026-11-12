@@ -226,8 +226,11 @@ export async function emitirFacturasDeNotas({ cargadas, grupos, moneda = 'USD', 
                 const producto = await Producto.findByPk(l.productoId, { transaction: t, lock: t.LOCK.UPDATE });
                 if (!producto) continue;
                 const stock = Number(producto.stockAlmacen) || 0;
-                if (stock < r.cantidad) faltantes.push({ factura: numero, nombre: producto.nombre, codigo: producto.codigo, hay: stock, salen: r.cantidad });
-                producto.stockAlmacen = stock - Math.min(stock, r.cantidad);
+                // Producto sin auditar: su stock no es confiable, no se exige ni se descuenta (solo se suma lo vendido)
+                if (producto.inventarioAuditado) {
+                    if (stock < r.cantidad) faltantes.push({ factura: numero, nombre: producto.nombre, codigo: producto.codigo, hay: stock, salen: r.cantidad });
+                    producto.stockAlmacen = stock - Math.min(stock, r.cantidad);
+                }
                 producto.nroVentas = (Number(producto.nroVentas) || 0) + r.cantidad;
                 await producto.save({ transaction: t });
                 await SalidaInventario.create({
