@@ -9,17 +9,19 @@
 //      (su monto, con los abonos que ya hubo); el inventario no se mueve (la mercancía sigue con el cliente, ahora por la nota). Si esas
 //      notas también están en otras facturas (una nota larga repartida), se anulan todas juntas: una NC por factura, cada una con su
 //      número de control.
+//  · PARCIAL sobre factura YA PAGADA: no toca nada de lo registrado, salvo que se marque modificarPago (rebaja el ingreso ya registrado por el monto de la NC).
 //  · VARIAS NC a la vez (notas: [{ renglones, numero, control }]): la factura se reparte en varias notas de crédito en una sola transacción. Cada nota lleva
 //      sus renglones y cantidades (lo que una nota toma ya no queda para las siguientes). Si entre todas cubren la factura completa, se trata como
 //      una anulación total (de una factura que salió de notas de entrega: no mueve inventario y la deuda vuelve a las notas); si no la cubren, como parciales.
 //  · Cada NC toma el siguiente número de NC (o el que ya tiene en el sistema anterior) y el número de control que se indique.
 import db from '../../../models/index.js';
 import { numerosAnteriores, unirAnteriores } from '../../constants/documentosAnteriores.js';
+import { aBolivares, aDolares } from '../../constants/facturacion.js';
 import { emitirNotaVenta, notasDeVenta, ErrorNota } from './notasFiscales.js';
 import { controlesLibres, reservarControl, ErrorNumeracion } from './numeracion.js';
 import { recalcularCobro, hoyCaracas } from './retencionesVenta.js';
 
-const { sequelize, Venta, CuentaPorCobrar, Abono, ComisionVenta, RetencionIva, NotaFiscal, Correlativo, Cliente } = db;
+const { sequelize, Venta, CuentaPorCobrar, Abono, ComisionVenta, RetencionIva, NotaFiscal, Correlativo, Cliente, MovimientoFinanciero, CategoriaFinanciera } = db;
 const { Op } = db.Sequelize;
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const METODO_NC = 'Nota de crédito';
@@ -33,6 +35,55 @@ export class ErrorAnulacion extends Error {
 // ni el inventario, ni deja saldo a favor del cliente. Siempre se pide confirmación antes de emitirla (regla del usuario, 11/11/2026).
 export const CONFIRMAR_PAGADA = 'CONFIRMAR_PAGADA';
 const MENSAJE_PAGADA = 'Esta factura ya está pagada: la nota de crédito parcial NO afectará las cuentas por cobrar ni lo ya ingresado, no dejará saldo a favor y no moverá el inventario. Confirma para emitirla.';
+
+// Excepción a la regla anterior (11/11/2026): si el usuario marca «Sí, modifica el pago ya registrado», además de emitir la NC parcial se REBAJA el
+// ingreso ya registrado de esa factura por el monto de la NC (base e IVA por separado), para que quede: pago registrado = total de la factura - NC.
+// Si el pago está repartido en varios abonos o movimientos, o la NC supera lo cobrado, responde un error y no emite la nota (la transacción se revierte).
+const MENSAJE_SOLO_PAGADA = 'Modificar el pago ya registrado solo aplica a una nota de crédito parcial sobre una factura ya pagada';
+
+async function rebajarPago({ venta, nota, transaction: t }) {
+    const [abonos, movimientos] = await Promise.all([
+        Abono.findAll({ where: { ventaId: venta.id, metodoPago: { [Op.ne]: METODO_NC } }, transaction: t, lock: t.LOCK.UPDATE }),
+        MovimientoFinanciero.findAll({ where: { ventaId: venta.id, tipo: 'INGRESO' }, transaction: t, lock: t.LOCK.UPDATE }),
+    ]);
+    if (!movimientos.length) throw new ErrorAnulacion(`La factura ${venta.numeroDocumento} no tiene ingresos registrados que rebajar`, 409);
+    if (abonos.length > 1) throw new ErrorAnulacion(`El pago de la factura ${venta.numeroDocumento} está repartido en ${abonos.length} abonos: no hay una sola forma de rebajarlo`, 409);
+    const categorias = await CategoriaFinanciera.findAll({ where: { id: movimientos.map((m) => m.categoriaId).filter(Boolean) }, attributes: ['id', 'nombre'], transaction: t });
+    const esIva = (m) => categorias.find((c) => c.id === m.categoriaId)?.nombre === 'IVA Recaudado';
+    const deIva = movimientos.filter(esIva);
+    const deBase = movimientos.filter((m) => !esIva(m));
+    if (deBase.length !== 1 || deIva.length > 1) throw new ErrorAnulacion(`El ingreso de la factura ${venta.numeroDocumento} está repartido en ${movimientos.length} movimientos: no hay una sola forma de rebajarlo`, 409);
+    const tasa = Number(venta.tasaCambio) || 1;
+    // Lo que se rebaja en cada moneda: el monto de la nota está en la moneda de la factura; el de la otra moneda sale a la tasa de la factura
+    const montos = (monto) => (venta.moneda === 'BS' ? { bs: r2(monto), usd: aDolares(Number(monto), tasa) } : { usd: r2(monto), bs: aBolivares(Number(monto), tasa) });
+    const partes = [{ mov: deBase[0], ...montos(Number(nota.totalFinal) - Number(nota.montoIva)) }];
+    if (Number(nota.montoIva) > 0) {
+        if (!deIva.length) throw new ErrorAnulacion(`La factura ${venta.numeroDocumento} no tiene el ingreso del IVA registrado por separado: no hay una sola forma de rebajarlo`, 409);
+        partes.push({ mov: deIva[0], ...montos(nota.montoIva) });
+    }
+    for (const p of partes) {
+        if (r2(Number(p.mov.montoVes) - p.bs) < 0 || r2(Number(p.mov.montoUsd) - p.usd) < -0.01) {
+            throw new ErrorAnulacion(`La nota de crédito (${Number(nota.totalFinal).toFixed(2)} ${venta.moneda}) supera lo que se registró como pagado de la factura ${venta.numeroDocumento}`, 409);
+        }
+    }
+    for (const p of partes) {
+        p.mov.montoVes = r2(Number(p.mov.montoVes) - p.bs);
+        p.mov.montoUsd = Math.max(0, r2(Number(p.mov.montoUsd) - p.usd));
+        p.mov.descripcion = `${p.mov.descripcion || ''} · rebajado por la nota de crédito ${nota.numeroDocumento}`;
+        await p.mov.save({ transaction: t });
+    }
+    if (abonos.length === 1) {
+        const a = abonos[0];
+        const { bs, usd } = montos(nota.totalFinal);
+        if (r2(Number(a.montoVes) - bs) < 0) throw new ErrorAnulacion(`La nota de crédito supera el abono registrado de la factura ${venta.numeroDocumento}`, 409);
+        a.montoVes = r2(Number(a.montoVes) - bs);
+        a.montoBs = a.montoVes;
+        a.montoUsd = Math.max(0, r2(Number(a.montoUsd) - usd));
+        a.notas = `${a.notas || ''} Rebajado por la nota de crédito ${nota.numeroDocumento}.`.trim();
+        await a.save({ transaction: t });
+    }
+    return true;
+}
 
 // ¿La mercancía de la factura ya salió? (si no salió, no hay nada que devolver al inventario)
 const yaSalio = (v) => v.tipoVenta !== 'MAYOR' || Boolean(v.empacadoAt) || v.statusDespacho === 'Completado';
@@ -121,7 +172,7 @@ export async function planAnulacion({ venta, transaction }) {
  *   afectaCxc: obligatorio salvo en la anulación total de una factura que salió de notas de entrega (ahí la deuda vuelve a las notas)
  *   documentos: { [ventaId de la factura]: { numero?, control } } -> número de NC (si ya se emitió en el sistema anterior) y su control
  */
-export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = null, motivo, documentos = {}, notas = null, fecha = null, usuarioId = null, confirmarPagada = false, transaction: t }) {
+export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = null, motivo, documentos = {}, notas = null, fecha = null, usuarioId = null, confirmarPagada = false, modificarPago = false, transaction: t }) {
     const varias = Array.isArray(notas) && notas.length > 1;
     if (!varias && !['TOTAL', 'PARCIAL'].includes(tipo)) throw new ErrorAnulacion('Elige si la anulación es total o parcial');
     const motivoTxt = String(motivo || '').trim();
@@ -159,6 +210,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
         }
         const completa = plan.renglones.every((r) => (usado.get(r.id) || 0) === r.restante);
         const sinCxc = completa && plan.deNotas; // la deuda vuelve a las notas de entrega, sin mover inventario
+        if (modificarPago && (completa || !plan.factura.pagada)) throw new ErrorAnulacion(MENSAJE_SOLO_PAGADA);
         if (!completa && plan.factura.pagada) { // parcial sobre factura pagada: no toca nada, previa confirmación
             if (!confirmarPagada) throw new ErrorAnulacion(MENSAJE_PAGADA, 409, CONFIRMAR_PAGADA);
             afectaCxc = false;
@@ -176,7 +228,8 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
                 motivo: `Anulación ${completa ? 'total' : 'parcial'} de la factura ${venta.numeroDocumento} en ${grupos.length} notas de crédito (${i + 1} de ${grupos.length}): ${motivoTxt}`,
                 numeroManual: g.numero || null, numeroControl: ctrl, fecha,
             });
-            emitidasAqui.push({ numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda });
+            const pagoRebajado = modificarPago ? await rebajarPago({ venta, nota, transaction: t }) : false;
+            emitidasAqui.push({ numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda, pagoRebajado });
         }
         if (!sinCxc) return { notas: emitidasAqui, notasEntrega: [] };
         previas.set(venta.id, emitidasAqui);
@@ -184,6 +237,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
 
     // ---------- Parcial
     if (!varias && tipo === 'PARCIAL') {
+        if (modificarPago && !plan.factura.pagada) throw new ErrorAnulacion(MENSAJE_SOLO_PAGADA);
         if (plan.factura.pagada) { // factura ya pagada: no toca cuentas por cobrar, ingresos, inventario ni saldo a favor, previa confirmación
             if (!confirmarPagada) throw new ErrorAnulacion(MENSAJE_PAGADA, 409, CONFIRMAR_PAGADA);
             afectaCxc = false;
@@ -193,8 +247,10 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
         if (!elegidos.length) throw new ErrorAnulacion('Elige al menos un renglón y cuántas unidades se anulan');
         // Si afecta la deuda, lo anulado vuelve al inventario; si no la afecta, no se mueve nada
         const nota = await emitir(venta, elegidos, afectaCxc && yaSalio(venta), afectaCxc, `Anulación parcial de la factura ${venta.numeroDocumento}: ${motivoTxt}`);
-        return { notas: [{ numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda }], notasEntrega: [] };
+        const pagoRebajado = modificarPago ? await rebajarPago({ venta, nota, transaction: t }) : false;
+        return { notas: [{ numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda, pagoRebajado }], notasEntrega: [] };
     }
+    if (modificarPago) throw new ErrorAnulacion(MENSAJE_SOLO_PAGADA);
 
     // ---------- Total de una factura propia (no viene de notas de entrega)
     if (!varias && !plan.deNotas) {

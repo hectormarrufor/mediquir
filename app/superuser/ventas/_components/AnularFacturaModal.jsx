@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Alert, Button, Card, Group, Loader, Modal, NumberInput, Paper, Radio, SegmentedControl, Select, Stack, Table, Text, TextInput, Textarea,
+    Alert, Button, Card, Checkbox, Group, Loader, Modal, NumberInput, Paper, Radio, SegmentedControl, Select, Stack, Table, Text, TextInput, Textarea,
 } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
@@ -41,6 +41,7 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
     const [controles, setControles] = useState([]); // [{ numero, control }] de cada nota de esta factura
     const [repartos, setRepartos] = useState([{}]); // por nota: { [renglón]: cantidad }
     const [fecha, setFecha] = useState('');
+    const [modificarPago, setModificarPago] = useState(false); // excepción en nota parcial sobre factura pagada: rebajar también el pago ya registrado
     const [enviando, setEnviando] = useState(false);
 
     const { data: plan, isLoading, error } = useQuery({
@@ -91,13 +92,17 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
     const bloqueado = !plan || faltaAfecta || faltaControl || sinRenglones || motivoFinal.length < 5 || (deNotas && plan.bloqueosNotas.length > 0);
 
     const anular = async () => {
-        if (parcialPagada && !window.confirm('Esta factura ya está pagada. La nota de crédito parcial NO afectará las cuentas por cobrar ni lo ya ingresado, no dejará saldo a favor y no moverá el inventario. ¿Confirmas?')) return;
+        const pagoRebajar = parcialPagada && modificarPago;
+        const aviso = pagoRebajar
+            ? 'Esta factura ya está pagada. Se emitirá la nota de crédito parcial y se REBAJARÁ el pago ya registrado por el monto de la nota; no afectará las cuentas por cobrar, no dejará saldo a favor y no moverá el inventario. ¿Confirmas?'
+            : 'Esta factura ya está pagada. La nota de crédito parcial NO afectará las cuentas por cobrar ni lo ya ingresado, no dejará saldo a favor y no moverá el inventario. ¿Confirmas?';
+        if (parcialPagada && !window.confirm(aviso)) return;
         setEnviando(true);
         try {
             const r = await pedir(`/api/ventas/${pedido.id}/anular`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    tipo, motivo: motivoFinal, fecha: fecha || null, afectaCxc: deNotas || parcialPagada ? null : afecta === 'si', confirmarPagada: parcialPagada,
+                    tipo, motivo: motivoFinal, fecha: fecha || null, afectaCxc: deNotas || parcialPagada ? null : afecta === 'si', confirmarPagada: parcialPagada, modificarPago: pagoRebajar,
                     documentos: { ...documentos, [plan.factura.id]: controles[0] || {} },
                     notas: varias ? controles.slice(0, cuantas).map((c, k) => ({
                         numero: c.numero, control: c.control,
@@ -108,7 +113,7 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
             });
             notifications.show({
                 color: 'green', autoClose: 10000, title: 'Anulación registrada',
-                message: `${r.notas.map((n) => `${n.numero} (control ${n.control}) sobre ${n.factura}`).join('; ')}.${r.notasEntrega.length ? ` La deuda volvió a ${r.notasEntrega.join(', ')}.` : ''}`,
+                message: `${r.notas.map((n) => `${n.numero} (control ${n.control}) sobre ${n.factura}`).join('; ')}.${r.notasEntrega.length ? ` La deuda volvió a ${r.notasEntrega.join(', ')}.` : ''}${r.notas.some((n) => n.pagoRebajado) ? ' Se rebajó el pago ya registrado.' : ''}`,
             });
             onClose();
             onListo?.();
@@ -199,8 +204,10 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                             {plan.facturas.length > 1 && <Text size="sm" mt={6}><b>{plan.notasEntrega.length > 1 ? 'Esas notas también están' : 'Esa nota también está'} en {plan.facturas.filter((f) => f.id !== plan.factura.id).map((f) => f.numero).join(', ')}:</b> se anulan juntas, una nota de crédito por cada factura.</Text>}
                         </Alert>
                     ) : parcialPagada ? (
-                        <Alert color="yellow" icon={<IconAlertTriangle size={18} />} title="Esta factura ya está pagada">
+                        <Alert color="orange" icon={<IconAlertTriangle size={18} />} title="Esta factura ya está pagada">
                             <Text size="sm">Una nota de crédito parcial sobre una factura pagada no afecta las cuentas por cobrar ni lo ya ingresado, no deja saldo a favor del cliente y no mueve el inventario. Se te pedirá confirmar al emitirla.</Text>
+                            <Checkbox mt="sm" color="orange" checked={modificarPago} onChange={(e) => setModificarPago(e.currentTarget.checked)}
+                                label="Sí, modifica el pago ya registrado" description="Además de emitir la nota, se rebaja el pago (ingreso) ya registrado de esta factura por el monto de la nota: pago registrado = total de la factura − nota." />
                         </Alert>
                     ) : (
                         <Radio.Group label="¿Esta nota de crédito afecta la cuenta por cobrar?" withAsterisk value={afecta} onChange={setAfecta}>
