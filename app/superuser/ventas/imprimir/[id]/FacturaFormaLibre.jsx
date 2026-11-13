@@ -14,9 +14,11 @@ const ZONAS = {
     finPreimpresoSuperior: 0.86, // hasta aquí la forma trae el membrete: no se imprime nada
     inicioTabla: 1.72,           // línea superior del encabezado de la tabla de artículos
     altoEncabezado: 0.16,
-    altoFila: 0.15,              // 13 renglones caben entre 1,88 y 3,83 in
-    lineaSon: 3.86,              // "Son: Bs. ..."
-    inicioTotales: 4.0,          // caja de totales: termina en ~4,54 in
+    altoFila: 0.15,              // una línea; una descripción larga ocupa 2 líneas (máximo). Caben 11 líneas entre la cabecera y los totales
+    lineaSon: 4.293,             // "Son: Bs. ..."
+    inicioTotales: 4.433,        // caja de totales (bajó 1,1 cm el 12/11/2026 para aprovechar la forma)
+    inicioCliente: 1.159,        // cabecera con el cliente (bajó 2 mm el 12/11/2026)
+    maxLineas: CONFIG_FISCAL.maxRenglonesFactura,
     inicioFranjaImprenta: 4.64,  // aquí empieza la franja de la imprenta en la forma (no se debe pisar)
     margenIzq: 0.26,
     anchoUtil: 7.34,
@@ -24,6 +26,25 @@ const ZONAS = {
 
 const nf = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt = (v) => nf.format(Number(v) || 0);
+// Cuántas líneas ocupa una descripción en su columna (ancho útil menos columnas fijas y relleno). Mide con el tipo de letra real si hay navegador.
+const ANCHO_DESC_PX = (7.34 - (0.62 + 1.05 + 0.9 + 1.3)) * 96 - 6;
+let lienzo = null;
+const medir = (t) => {
+    if (typeof document === 'undefined') return t.length * 7.6 * 0.6;
+    lienzo = lienzo || document.createElement('canvas').getContext('2d');
+    lienzo.font = 'normal 7.6px Arial, Helvetica, sans-serif';
+    return lienzo.measureText(t).width;
+};
+export function lineasDeDescripcion(texto) {
+    let lineas = 1, actual = '';
+    for (const palabra of String(texto || '').split(/s+/).filter(Boolean)) {
+        const prueba = actual ? `${actual} ${palabra}` : palabra;
+        if (!actual || medir(prueba) <= ANCHO_DESC_PX) actual = prueba;
+        else { lineas++; actual = palabra; }
+    }
+    return lineas;
+}
+
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-VE', { timeZone: 'America/Caracas' }) : '');
 
 // titulo: 'Factura' (por defecto) o 'Nota de Crédito' / 'Nota de Débito'. Para una nota, `referencia` (en lugar de "ORDEN DE COMPRA") indica la factura
@@ -54,7 +75,9 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
 
     const dias = venta.fechaVencimiento ? Math.max(0, Math.round((new Date(venta.fechaVencimiento) - new Date(venta.fechaEmision || venta.createdAt)) / 86400000)) : 0;
     const condicion = condicionTexto || (venta.condicionPago === 'Credito' ? `CREDITO a ${dias} Días` : 'CONTADO');
-    const totalFilas = detalles.length + lineasExtra.length;
+    const nombreDe = (d) => (d.isFicticio ? d.nombreFicticio : nombreConMarca(d.producto?.nombre || d.nombreFicticio, d.producto?.marca?.nombre));
+    // Cada renglón ocupa 1 o 2 líneas según su descripción; las líneas extra de las notas ocupan 1
+    const totalFilas = detalles.reduce((a, d) => a + Math.min(2, lineasDeDescripcion(nombreDe(d))), 0) + lineasExtra.length;
     const demasiados = totalFilas > CONFIG_FISCAL.maxRenglonesFactura;
 
     return (
@@ -71,7 +94,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                         : <a href={guia ? '?' : '?guia=1'}>{guia ? 'Ocultar guía' : 'Ver guía sobre la forma'}</a>}
                 </span>
             </div>
-            {demasiados && <div className="fl-aviso">Esta hoja tiene {totalFilas} renglones y la forma libre admite {CONFIG_FISCAL.maxRenglonesFactura}: los que sobran se saldrán de la hoja.</div>}
+            {demasiados && <div className="fl-aviso">Esta hoja ocupa {totalFilas} líneas (una descripción larga ocupa 2) y la forma libre admite {CONFIG_FISCAL.maxRenglonesFactura}: lo que sobra se saldrá de la hoja.</div>}
 
             <div id="print-section" className="fl-hoja" style={{ zoom }}>
                 {guia && <img className={vistaPrevia ? 'fl-guia fl-guia-imprime' : 'fl-guia'} src="/tenants/mediquir/forma-libre.png" alt="" />}
@@ -94,7 +117,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                     </div>
                 </div>
 
-                {/* Artículos (hasta 13) */}
+                {/* Artículos (hasta 11 líneas) */}
                 <table className="fl-tabla">
                     <thead><tr><th style={{ width: '0.62in', textAlign: 'left' }}>CÓDIGO</th><th style={{ textAlign: 'left' }}>NOMBRE DEL ARTÍCULO</th><th style={{ width: '1.05in', textAlign: 'right' }}>PRECIO UNIT</th><th style={{ width: '0.9in', textAlign: 'center' }}>CANTIDAD</th><th style={{ width: '1.3in', textAlign: 'right' }}>TOTAL NETO</th></tr></thead>
                     <tbody>
@@ -102,7 +125,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                             <tr key={i}>
                                 {/* Un renglón escrito a mano se imprime con su texto aunque esté enlazado a un producto (el enlace solo cuenta lo vendido) */}
                                 <td>{d.isFicticio ? 'S/C' : (d.producto?.codigo || 'S/C')}</td>
-                                <td className="fl-nombre">{d.isFicticio ? d.nombreFicticio : nombreConMarca(d.producto?.nombre || d.nombreFicticio, d.producto?.marca?.nombre)}</td>
+                                <td className="fl-nombre"><div className="fl-nombre-in">{nombreDe(d)}</div></td>
                                 <td style={{ textAlign: 'right' }}>{fmt(aBs(d.precioUnitario))}</td>
                                 <td style={{ textAlign: 'center' }}>{fmt(d.cantidad)}</td>
                                 <td style={{ textAlign: 'right' }}>{fmt(aBs(d.subtotal))}</td>
@@ -153,7 +176,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                 .fl-azul { color: #0a1f8f !important; font-weight: 800; }
                 .fl-azul-b { color: #1c4fd8 !important; font-weight: 700; }
 
-                .fl-cliente { left: ${ZONAS.margenIzq}in; top: 1.08in; width: 4.35in; }
+                .fl-cliente { left: ${ZONAS.margenIzq}in; top: ${ZONAS.inicioCliente}in; width: 4.35in; }
                 .fl-linea { display: flex; align-items: flex-end; gap: 6px; border-bottom: 1px solid #000; padding-bottom: 1px; margin-bottom: 3px; min-height: 0.15in; }
                 .fl-linea .fl-rojo { width: 1.05in; flex-shrink: 0; font-size: 7.5px; }
                 .fl-valor { font-size: 8.5px; font-weight: 500; line-height: 1.05; }
@@ -173,8 +196,10 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
 
                 .fl-tabla { left: ${ZONAS.margenIzq}in; top: ${ZONAS.inicioTabla}in; width: ${ZONAS.anchoUtil}in; border-collapse: collapse; table-layout: fixed; }
                 .fl-tabla th { height: ${ZONAS.altoEncabezado}in; border-top: 1.6px solid #000; border-bottom: 1.6px solid #000; font-size: 7.6px; font-weight: 800; padding: 0 3px; }
-                .fl-tabla td { height: ${ZONAS.altoFila}in; padding: 0 3px; font-size: 7.6px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-                .fl-nombre { text-overflow: ellipsis; }
+                .fl-tabla td { height: ${ZONAS.altoFila}in; padding: 0 3px; font-size: 7.6px; line-height: ${ZONAS.altoFila}in; vertical-align: top; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                /* La descripción puede tomar hasta 2 líneas (cada una de la altura de un renglón); lo que pase se corta */
+                .fl-tabla td.fl-nombre { white-space: normal; }
+                .fl-nombre-in { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: ${ZONAS.altoFila}in; max-height: ${ZONAS.altoFila * 2}in; }
                 .fl-extra { font-weight: 700; font-style: italic; }
 
                 .fl-son { left: ${ZONAS.margenIzq}in; top: ${ZONAS.lineaSon}in; width: ${ZONAS.anchoUtil}in; font-size: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
