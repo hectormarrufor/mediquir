@@ -75,12 +75,17 @@ export async function PUT(req, { params }) {
     const acceso = await requerirStaff();
     if (acceso.error) return acceso.error;
     const rol = rolDe(acceso.sesion);
-    if (rol === 'vendedor') return NextResponse.json({ error: 'Tu rol no permite esta acción' }, { status: 403 });
-
     try {
         const { id } = await params;
-        // Solo se guardan los campos permitidos (el crédito, únicamente si quien edita es administrador)
-        const { cambios, error: errorCampo } = filtrarCambiosCliente(await req.json(), { esAdmin: rol === 'admin' });
+        // Solo se guardan los campos permitidos (el crédito, únicamente si quien edita es administrador).
+        // Un vendedor solo puede completar los datos de contacto del cliente (teléfono, correo y dirección) al hacerle una factura.
+        let cuerpo = await req.json();
+        if (rol === 'vendedor') {
+            const { telefono, email, direccion } = cuerpo || {};
+            cuerpo = Object.fromEntries(Object.entries({ telefono, email, direccion }).filter(([, v]) => v !== undefined));
+            if (!Object.keys(cuerpo).length) return NextResponse.json({ error: 'Tu rol no permite esta acción' }, { status: 403 });
+        }
+        const { cambios, error: errorCampo } = filtrarCambiosCliente(cuerpo, { esAdmin: rol === 'admin' });
         if (errorCampo) return NextResponse.json({ error: errorCampo }, { status: 400 });
 
         const cliente = await Cliente.findByPk(id);

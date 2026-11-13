@@ -160,6 +160,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const claveBorrador = esPresupuesto ? BORRADOR_PRESUPUESTO : BORRADOR_VENTA;
     const guardaBorrador = !editando && !controlInicial;
     const [borradorListo, setBorradorListo] = useState(false);
+    // Datos de contacto del cliente elegido, editables en el mismo formulario al hacer una factura (se guardan en el cliente al revisar la venta)
+    const [datosCli, setDatosCli] = useState({ direccion: '', telefono: '', email: '' });
     useEffect(() => {
         if (!guardaBorrador || !opened) return;
         try {
@@ -278,6 +280,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     // ---- Días de crédito: arrancan con los del cliente; solo administración los cambia (de esta factura o también de las futuras del cliente)
     const esCredito = formVenta.values.condicionPago === 'Credito';
+    useEffect(() => {
+        const c = clientes?.find((x) => x.id.toString() === formVenta.values.clienteId?.toString());
+        setDatosCli({ direccion: c?.direccion || '', telefono: c?.telefono || '', email: c?.email || '' });
+    }, [formVenta.values.clienteId, clientes]); // eslint-disable-line react-hooks/exhaustive-deps
     const clienteDelCredito = clientes?.find((c) => c.id.toString() === formVenta.values.clienteId?.toString());
     const diasDelCliente = Number(clienteDelCredito?.diasCredito) > 0 ? Number(clienteDelCredito.diasCredito) : 15;
     const [alcanceDias, setAlcanceDias] = useState(null); // { valor, alcance: 'factura' | 'cliente' } del cambio ya confirmado
@@ -455,11 +461,31 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const montoRenglonDe = (idx) => factura.renglones[idx]?.monto ?? 0;
     const simboloMoneda = esMonedaBs ? 'Bs' : '$';
 
-    const handleRevisarVenta = () => {
+    const handleRevisarVenta = async () => {
         // En el teléfono, si falta algo se abre la parte de la pantalla donde se arregla
         if (carrito.length === 0) { setVista('productos'); return notifications.show({ message: 'El carrito está vacío', color: 'orange' }); }
         if (tipoVenta === 'MAYOR' && !formVenta.values.clienteId) { setVista('datos'); return notifications.show({ message: 'Debe seleccionar un cliente mayorista', color: 'red' }); }
         if (!formVenta.values.numeroDocumento) { setVista('datos'); return notifications.show({ message: 'El número de documento es obligatorio', color: 'red' }); }
+        // Factura: el cliente debe tener dirección (obligatoria); teléfono y correo son opcionales. Lo escrito aquí se guarda de una vez en el cliente.
+        if (tipoDocumentoActual === 'FACTURA' && formVenta.values.clienteId) {
+            const c = clientes?.find((x) => x.id.toString() === formVenta.values.clienteId.toString());
+            const direccion = datosCli.direccion.trim(), telefono = datosCli.telefono.trim(), email = datosCli.email.trim();
+            if (!direccion) { setVista('datos'); return notifications.show({ message: 'La factura necesita la dirección del cliente: escríbela en «Datos del cliente»', color: 'red' }); }
+            if (email && !/^\S+@\S+\.\S+$/.test(email)) { setVista('datos'); return notifications.show({ message: 'El correo del cliente no es válido', color: 'red' }); }
+            const cambios = {};
+            if (direccion !== (c?.direccion || '')) cambios.direccion = direccion;
+            if (telefono !== (c?.telefono || '')) cambios.telefono = telefono;
+            if (email !== (c?.email || '')) cambios.email = email;
+            if (Object.keys(cambios).length) {
+                try {
+                    const res = await fetch(`/api/clientes/${formVenta.values.clienteId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cambios) });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(data.error || 'No se pudo guardar');
+                    await queryClient.invalidateQueries({ queryKey: ['clientes-pos'] });
+                    notifications.show({ color: 'teal', message: 'Datos guardados en el cliente' });
+                } catch (e) { setVista('datos'); return notifications.show({ title: 'No se guardaron los datos del cliente', message: e.message, color: 'red' }); }
+            }
+        }
         const lineasFactura = carrito.reduce((a, i) => a + lineasDeRenglon(i.isFicticio ? i.nombre : nombreConMarca(i.nombre, i.marcaNombre)), 0);
         if (tipoDocumentoActual === 'FACTURA' && lineasFactura > CONFIG_FISCAL.maxRenglonesFactura) {
             return notifications.show({ title: 'No caben en la forma libre', message: `Esta factura ocupa ${lineasFactura} líneas y entran ${CONFIG_FISCAL.maxRenglonesFactura} (una descripción larga ocupa 2). Quita renglones y hazlos en otra factura.`, color: 'orange' });
@@ -802,6 +828,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     // Al mayor el cliente es obligatorio; al detal es opcional (venta sola, sin cliente) y se puede crear uno nuevo con cédula, nombre y teléfono
     const campoCliente = (
+        <Stack gap="xs">
         <Group wrap="nowrap" gap="xs" align="flex-end">
             <Select
                 style={{ flex: 1, minWidth: 0 }} size={tamCampo}
@@ -818,6 +845,20 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 <IconPlus size={20} />
             </ActionIcon>
         </Group>
+        {esFactura && clienteSeleccionado && (
+            <Paper withBorder p="xs" radius="md" style={{ borderColor: datosCli.direccion.trim() ? undefined : '#e03131' }}>
+                <Text size="xs" fw={700} mb={4}>Datos del cliente (se guardan en su ficha)</Text>
+                <Stack gap={6}>
+                    <TextInput size={tamCampo} label="Dirección fiscal" withAsterisk placeholder="Obligatoria en la factura" value={datosCli.direccion} onChange={(e) => setDatosCli((d) => ({ ...d, direccion: e.currentTarget.value }))}
+                        error={datosCli.direccion.trim() ? null : 'Falta la dirección'} />
+                    <Group gap="xs" grow align="flex-start">
+                        <TextInput size={tamCampo} type="tel" inputMode="tel" label="Teléfono" placeholder="(opcional)" value={datosCli.telefono} onChange={(e) => setDatosCli((d) => ({ ...d, telefono: e.currentTarget.value }))} />
+                        <TextInput size={tamCampo} type="email" label="Correo" placeholder="(opcional)" value={datosCli.email} onChange={(e) => setDatosCli((d) => ({ ...d, email: e.currentTarget.value }))} />
+                    </Group>
+                </Stack>
+            </Paper>
+        )}
+        </Stack>
     );
 
     const campoTarifa = (
