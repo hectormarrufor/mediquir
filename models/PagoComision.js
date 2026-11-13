@@ -14,6 +14,8 @@ const PagoComision = sequelize.define('PagoComision', {
     lineas: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] }, // [{ id, documento, cliente, concepto, comisionUsd }]
     prestamoAntesUsd: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
     prestamoDespuesUsd: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
+    acumuladoAntesUsd: { type: DataTypes.DECIMAL(12, 2), allowNull: true }, // lo acumulado por pagar antes de este pago
+    acumuladoDespuesUsd: { type: DataTypes.DECIMAL(12, 2), allowNull: true }, // lo que quedó por pagar después
     observacion: { type: DataTypes.TEXT, allowNull: true },
 }, { tableName: 'PagosComision', timestamps: true });
 

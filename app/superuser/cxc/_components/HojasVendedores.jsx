@@ -48,10 +48,12 @@ export default function HojasVendedores() {
 
     // Pagar comisiones: se paga de lo acumulado (lo seleccionado o todo lo amarillo) en un solo pago, con abono al préstamo si lo hay
     const todasPorPagar = hoja.lineasActual.filter(porPagar);
-    const idsDePago = dialogo?.tipo === 'pagar' ? dialogo.ids : [];
-    const lineasDePago = hoja.lineasActual.filter((l) => idsDePago.includes(l.id));
+    // Siempre se paga de lo ACUMULADO (todas las líneas amarillas), menos lo que ya se le abonó en pagos parciales
+    const idsAcumulado = todasPorPagar.map((l) => l.id);
+    const acumulado = Math.max(0, r2(todasPorPagar.reduce((t, l) => t + (Number(l.comisionUsd) || 0), 0) - (Number(actual?.comisionAbonadaUsd) || 0)));
+    const abrirPago = () => setDialogo({ tipo: 'pagar' });
     const marcarSeleccion = async (estatus) => {
-        if (estatus === 'PAGADA') return setDialogo({ tipo: 'pagar', ids: [...hoja.sel] });
+        if (estatus === 'PAGADA') return abrirPago();
         const s = hoja.seleccion;
         const ok = await confirmar({
             titulo: estatus === 'PAGADA' ? 'Marcar comisiones pagadas' : 'Volver a pendientes',
@@ -153,9 +155,9 @@ export default function HojasVendedores() {
             <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} spacing={8}>
                 <Box style={{ gridColumn: tarjetas ? 'span 2' : undefined }}>
                     <Kpi
-                        titulo="Comisión por pagar" valor={dolares(tv.porPagar)} color={tv.porPagar > 0 ? '#8a4b00' : 'teal.8'} destacado="#e0b400" icono={IconCoin} colorIcono="yellow"
+                        titulo="Comisión por pagar" valor={dolares(acumulado)} color={acumulado > 0 ? '#8a4b00' : 'teal.8'} destacado="#e0b400" icono={IconCoin} colorIcono="yellow"
                         detalle={tasa ? `${bolivares(tv.porPagar * tasa)} · el cliente ya pagó` : 'El cliente ya pagó'}
-                        onClick={() => hoja.setFiltro('porpagar')} activo={hoja.filtro === 'porpagar'} ayuda="Toca para ver solo las comisiones por pagar (amarillas)"
+                        onClick={todasPorPagar.length ? abrirPago : undefined} ayuda="Toca para pagarle (todo o una parte). Las líneas amarillas se ven en el filtro «Por pagar»"
                     />
                 </Box>
                 <Box style={{ gridColumn: tarjetas ? 'span 2' : undefined }}>
@@ -186,7 +188,7 @@ export default function HojasVendedores() {
                             <Menu position="bottom-end" withinPortal shadow="md" width={260}>
                                 <Menu.Target><ActionIcon size={36} radius="md" variant="default" aria-label="Más opciones de la hoja"><IconDotsVertical size={20} /></ActionIcon></Menu.Target>
                                 <Menu.Dropdown>
-                                    <Menu.Item leftSection={<IconCash size={16} />} disabled={!todasPorPagar.length} onClick={() => setDialogo({ tipo: 'pagar', ids: todasPorPagar.map((l) => l.id) })}>Pagar comisión acumulada ({todasPorPagar.length})</Menu.Item>
+                                    <Menu.Item leftSection={<IconCash size={16} />} disabled={!todasPorPagar.length} onClick={abrirPago}>Pagar comisión acumulada ({todasPorPagar.length})</Menu.Item>
                                     <Menu.Item leftSection={<IconSelectAll size={16} />} disabled={!hoja.porPagarVisibles.length} onClick={seleccionarPorPagar}>Seleccionar las por pagar ({hoja.porPagarVisibles.length})</Menu.Item>
                                     <Menu.Item leftSection={<IconPlus size={16} />} onClick={agregarLinea}>Agregar factura o abono</Menu.Item>
                                     <Menu.Divider />
@@ -202,7 +204,7 @@ export default function HojasVendedores() {
                         {filtros}
                         {buscador}
                         <Group gap={6} ml="auto" wrap="nowrap">
-                            <Button size="compact-sm" color="teal" leftSection={<IconCash size={15} />} disabled={!todasPorPagar.length} onClick={() => setDialogo({ tipo: 'pagar', ids: todasPorPagar.map((l) => l.id) })}>Pagar comisión acumulada</Button>
+                            <Button size="compact-sm" color="teal" leftSection={<IconCash size={15} />} disabled={!todasPorPagar.length} onClick={abrirPago}>Pagar comisión acumulada</Button>
                             <Tooltip label={`Marca las ${hoja.porPagarVisibles.length} comisiones por pagar que se ven`}>
                                 <Button size="compact-sm" variant="default" leftSection={<IconSelectAll size={15} />} disabled={!hoja.porPagarVisibles.length} onClick={seleccionarPorPagar}>Seleccionar por pagar</Button>
                             </Tooltip>
@@ -274,11 +276,12 @@ export default function HojasVendedores() {
             )}
             <DialogoAgregarLinea abierto={dialogo?.tipo === 'agregar'} inicial={dialogo?.inicial} vendedor={actual} facturas={hoja.facturas} clientes={hoja.clientes} onCerrar={cerrar} onAgregar={hoja.agregar} />
             <DialogoNuevoVendedor abierto={dialogo?.tipo === 'vendedor'} onCerrar={cerrar} onCrear={hoja.crearVendedor} />
-            <DialogoPrestamo abierto={dialogo?.tipo === 'prestamo'} vendedor={actual} tasa={tasa} onCerrar={cerrar} onPrestar={hoja.prestar} />
+            <DialogoPrestamo abierto={dialogo?.tipo === 'prestamo'} vendedor={actual} tasa={tasa} acumulado={acumulado} onCerrar={cerrar} onPrestar={hoja.prestar} onBorrar={hoja.borrarPrestamo}
+                onAbonar={(monto) => hoja.pagarComision(idsAcumulado, { montoUsd: monto, abonoPrestamoUsd: monto })} />
             {dialogo?.tipo === 'pagar' && (
                 <DialogoPagarComision
-                    abierto vendedor={actual} tasa={tasa} cantidad={lineasDePago.length} total={r2(lineasDePago.reduce((t, l) => t + (Number(l.comisionUsd) || 0), 0))}
-                    onCerrar={cerrar} onPagar={(datos) => hoja.pagarComision(idsDePago, datos)}
+                    abierto vendedor={actual} tasa={tasa} total={acumulado}
+                    onCerrar={cerrar} onPagar={(datos) => hoja.pagarComision(idsAcumulado, datos)}
                 />
             )}
             {confirmacion}

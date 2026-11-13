@@ -113,6 +113,9 @@ export function useHojaVendedor() {
     const prestar = (datos) => enviar('/api/comisiones/prestamos', 'POST', { vendedorId: actual.id, ...datos })
         .then((r) => { refrescar(); notifications.show({ color: 'teal', title: 'Préstamo registrado', message: `${actual.nombre}: +$${Number(datos.montoUsd).toFixed(2)}` }); return r; })
         .catch(avisar);
+    const borrarPrestamo = (m) => enviar(`/api/comisiones/prestamos?id=${m.id}`, 'DELETE')
+        .then((r) => { refrescar(); notifications.show({ color: 'teal', message: 'Préstamo borrado' }); return r; })
+        .catch(avisar);
     const pagarComision = (lineaIds, datos) => enviar('/api/comisiones/pagos', 'POST', { vendedorId: actual.id, lineaIds, ...datos })
         .then((r) => { setSel(new Set()); refrescar(); return r; })
         .catch(avisar);
@@ -132,6 +135,6 @@ export function useHojaVendedor() {
         sel, seleccion, alternarSel, seleccionarVarias, limpiarSeleccion: () => setSel(new Set()), porPagarVisibles,
         abiertos, alternarGrupo, expandirTodo: () => setAbiertos(new Set(grupos.map((g) => g.k))), contraerTodo: () => setAbiertos(new Set()),
         plegadas, alternarPlegada,
-        prestar, pagarComision, editar, marcar, marcarUna, agregar, borrar, crearVendedor, cambiarPctVendedor,
+        prestar, borrarPrestamo, pagarComision, editar, marcar, marcarUna, agregar, borrar, crearVendedor, cambiarPctVendedor,
     };
 }
