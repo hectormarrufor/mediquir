@@ -13,7 +13,7 @@ import { useZoomHoja } from '@/app/components/ui/useZoomHoja';
 // aquí NO se imprime nada de eso. Todo se posiciona en pulgadas para que caiga en su lugar; ajústalo en ZONAS si cambia la forma.
 const ZONAS = {
     finPreimpresoSuperior: 0.86, // hasta aquí la forma trae el membrete: no se imprime nada
-    inicioTabla: 1.72,           // línea superior del encabezado de la tabla de artículos
+    inicioTabla: 1.799,          // línea superior del encabezado de la tabla de artículos (bajó 2 mm el 13/11/2026, igual que la cabecera del cliente)
     altoEncabezado: 0.16,
     altoFila: 0.15,              // una línea; una descripción larga ocupa 2 líneas (máximo). Caben 11 líneas entre la cabecera y los totales
     lineaSon: 4.293,             // "Son: Bs. ..."
