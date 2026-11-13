@@ -9,6 +9,8 @@ import { PANTALLA_COMPLETA_MOVIL } from '@/app/components/ui/modalMovil';
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 
 // Nota de débito fiscal por diferencial cambiario: la factura se emitió a una tasa y el cliente paga a otra. Entra al libro de ventas.
+import { avisarNotaEmitida } from './avisoNota';
+
 export default function DiferencialCambiarioModal({ opened, onClose, factura, onEmitida }) {
     const [usd, setUsd] = useState('');
     const usdEnviado = usd === '' ? '' : Number(usd);
@@ -36,7 +38,7 @@ export default function DiferencialCambiarioModal({ opened, onClose, factura, on
             return cuerpo;
         },
         onSuccess: (r) => {
-            notifications.show({ title: 'Nota de débito emitida', message: `${r.nota.numeroDocumento} por diferencial cambiario. Ya está en el libro de ventas.`, color: 'green' });
+            avisarNotaEmitida({ titulo: 'Nota de débito emitida', mensaje: `${r.nota.numeroDocumento} por diferencial cambiario. Ya está en el libro de ventas.`, notas: [{ id: r.nota.id, numero: r.nota.numeroDocumento }], color: 'green' });
             onClose();
             onEmitida?.();
         },

@@ -229,7 +229,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
                 numeroManual: g.numero || null, numeroControl: ctrl, fecha,
             });
             const pagoRebajado = modificarPago ? await rebajarPago({ venta, nota, transaction: t }) : false;
-            emitidasAqui.push({ numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda, pagoRebajado });
+            emitidasAqui.push({ id: nota.id, numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda, pagoRebajado });
         }
         if (!sinCxc) return { notas: emitidasAqui, notasEntrega: [] };
         previas.set(venta.id, emitidasAqui);
@@ -248,7 +248,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
         // Si afecta la deuda, lo anulado vuelve al inventario; si no la afecta, no se mueve nada
         const nota = await emitir(venta, elegidos, afectaCxc && yaSalio(venta), afectaCxc, `Anulación parcial de la factura ${venta.numeroDocumento}: ${motivoTxt}`);
         const pagoRebajado = modificarPago ? await rebajarPago({ venta, nota, transaction: t }) : false;
-        return { notas: [{ numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda, pagoRebajado }], notasEntrega: [] };
+        return { notas: [{ id: nota.id, numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda, pagoRebajado }], notasEntrega: [] };
     }
     if (modificarPago) throw new ErrorAnulacion(MENSAJE_SOLO_PAGADA);
 
@@ -256,7 +256,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
     if (!varias && !plan.deNotas) {
         if (typeof afectaCxc !== 'boolean') throw new ErrorAnulacion('Indica si la nota de crédito afecta la cuenta por cobrar');
         const nota = await emitir(venta, todos(plan.renglones), yaSalio(venta), afectaCxc, `Anulación total de la factura ${venta.numeroDocumento}: ${motivoTxt}`);
-        return { notas: [{ numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda }], notasEntrega: [] };
+        return { notas: [{ id: nota.id, numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda }], notasEntrega: [] };
     }
 
     // ---------- Total de factura(s) que salieron de notas de entrega: la deuda vuelve a las notas
@@ -272,7 +272,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
         const { renglones: r } = await notasDeVenta(f, t);
         // La NC no baja la deuda de la factura (esa deuda deja de existir: vuelve a la nota) ni mueve inventario
         const nota = await emitir(f, todos(r), false, false, `Anulación total de la factura ${f.numeroDocumento}: vuelve a ser documento principal ${textoNotas}. ${motivoTxt}`);
-        emitidas.push({ numero: nota.numeroDocumento, control: nota.numeroControl, factura: f.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda });
+        emitidas.push({ id: nota.id, numero: nota.numeroDocumento, control: nota.numeroControl, factura: f.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda });
     }
 
     const sql = (texto, reemplazos) => sequelize.query(texto, { replacements: reemplazos, transaction: t });

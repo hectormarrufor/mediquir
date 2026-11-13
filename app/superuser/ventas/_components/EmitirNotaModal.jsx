@@ -29,6 +29,8 @@ async function pedirJson(url, opciones) {
 // Emite una nota de crédito (devolver renglones de la factura y/o otros conceptos) o de débito (conceptos adicionales).
 // El servidor vuelve a calcular todo: aquí solo se ve el total antes de emitir.
 // controlInicial: número de control con el que se abre (la nota de un número que faltaba en la secuencia de la forma libre)
+import { avisarNotaEmitida } from './avisoNota';
+
 export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmitida, controlInicial = '' }) {
     const telefono = useEsTelefono();
     const esCredito = tipo === 'CREDITO';
@@ -88,7 +90,7 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
                     renglones: lineas.map((l) => (l.ventaDetalleId ? { ventaDetalleId: l.ventaDetalleId, cantidad: l.cantidad } : { descripcion: l.descripcion, cantidad: 1, precioUnitario: l.precioUnitario, aplicaIva: l.aplicaIva })),
                 }),
             });
-            notifications.show({ color: 'teal', title: `${esCredito ? 'Nota de crédito' : 'Nota de débito'} emitida`, message: `${r.nota.numeroDocumento} por ${simbolo}${nf(r.nota.totalFinal)}` });
+            avisarNotaEmitida({ titulo: `${esCredito ? 'Nota de crédito' : 'Nota de débito'} emitida`, mensaje: `${r.nota.numeroDocumento} por ${simbolo}${nf(r.nota.totalFinal)}`, notas: [{ id: r.nota.id, numero: r.nota.numeroDocumento }] });
             onEmitida?.(r.nota);
             onClose();
         } catch (e) {

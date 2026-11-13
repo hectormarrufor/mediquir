@@ -30,6 +30,8 @@ async function pedir(url, opciones) {
 // Anular una factura (total o parcial) con una nota de crédito. Pregunta si la nota afecta la cuenta por cobrar y el número de control
 // de cada nota. Una factura que salió de notas de entrega, al anularse por completo, devuelve la deuda a esas notas.
 // controlInicial: número de control que toma la nota de crédito de esta factura (desde «Números de control», el hueco que se está registrando)
+import { avisarNotaEmitida } from './avisoNota';
+
 export default function AnularFacturaModal({ opened, onClose, pedido, onListo, controlInicial = null }) {
     const [tipo, setTipo] = useState('TOTAL');
     const [cantidades, setCantidades] = useState({});
@@ -111,9 +113,9 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                     renglones: !varias && tipo === 'PARCIAL' ? plan.renglones.filter((x) => Number(cantidades[x.id]) > 0).map((x) => ({ ventaDetalleId: x.id, cantidad: Number(cantidades[x.id]) })) : [],
                 }),
             });
-            notifications.show({
-                color: 'green', autoClose: 10000, title: 'Anulación registrada',
-                message: `${r.notas.map((n) => `${n.numero} (control ${n.control}) sobre ${n.factura}`).join('; ')}.${r.notasEntrega.length ? ` La deuda volvió a ${r.notasEntrega.join(', ')}.` : ''}${r.notas.some((n) => n.pagoRebajado) ? ' Se rebajó el pago ya registrado.' : ''}`,
+            avisarNotaEmitida({
+                color: 'green', titulo: 'Anulación registrada', notas: r.notas.map((n) => ({ id: n.id, numero: n.numero })),
+                mensaje: `${r.notas.map((n) => `${n.numero} (control ${n.control}) sobre ${n.factura}`).join('; ')}.${r.notasEntrega.length ? ` La deuda volvió a ${r.notasEntrega.join(', ')}.` : ''}${r.notas.some((n) => n.pagoRebajado) ? ' Se rebajó el pago ya registrado.' : ''}`,
             });
             onClose();
             onListo?.();
