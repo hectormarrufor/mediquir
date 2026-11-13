@@ -158,6 +158,41 @@ export function construirPdf({ jsPDF, autoTable, datos, imagenes, logo, incluirP
 // ---------------------------------------------------------------------------------------------
 const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 
+// Caché de miniaturas en el navegador (IndexedDB): el nombre de cada foto lleva su marca de tiempo, así que su contenido nunca cambia
+// con la misma ruta. Con esto, desde la segunda lista de precios en un mismo equipo no se vuelve a pedir ninguna foto al Blob
+// (cada lectura al Blob cuenta como operación simple de Vercel). Si IndexedDB no está disponible, todo funciona como antes.
+const BD_MINIATURAS = 'mediquir-miniaturas';
+let bdAbierta = null;
+const abrirBd = () => {
+    if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+    bdAbierta = bdAbierta || new Promise((resolver) => {
+        try {
+            const pedido = indexedDB.open(BD_MINIATURAS, 1);
+            pedido.onupgradeneeded = () => pedido.result.createObjectStore('min');
+            pedido.onsuccess = () => resolver(pedido.result);
+            pedido.onerror = () => resolver(null);
+        } catch { resolver(null); }
+    });
+    return bdAbierta;
+};
+async function leerMiniatura(ruta, lado) {
+    try {
+        const bd = await abrirBd();
+        if (!bd) return null;
+        return await new Promise((resolver) => {
+            const r = bd.transaction('min').objectStore('min').get(`${lado}|${ruta}`);
+            r.onsuccess = () => resolver(r.result || null);
+            r.onerror = () => resolver(null);
+        });
+    } catch { return null; }
+}
+async function guardarMiniatura(ruta, lado, valor) {
+    try {
+        const bd = await abrirBd();
+        if (bd && valor) bd.transaction('min', 'readwrite').objectStore('min').put(valor, `${lado}|${ruta}`);
+    } catch { /* sin caché: no pasa nada */ }
+}
+
 // Descarga una imagen, la reduce (el PDF no necesita más de ~150 px) y la devuelve como JPEG en base64
 async function miniatura(url, lado = 150) {
     try {
@@ -199,7 +234,9 @@ async function prepararImagenes(rutas, onProgreso) {
     const trabajador = async () => {
         while (siguiente < rutas.length) {
             const ruta = rutas[siguiente++];
-            mapa.set(ruta, await miniatura(`${BLOB}/${ruta}`));
+            let m = await leerMiniatura(ruta, 150);
+            if (!m) { m = await miniatura(`${BLOB}/${ruta}`); await guardarMiniatura(ruta, 150, m); }
+            mapa.set(ruta, m);
             hechas += 1;
             onProgreso?.({ fase: 'imagenes', hecho: hechas, total: rutas.length });
         }
