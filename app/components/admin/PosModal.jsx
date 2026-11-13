@@ -132,6 +132,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const { data: productos } = useQuery({ queryKey: ['productos-pos'], queryFn: () => fetchSelect('/api/productos') });
     const { data: clientes } = useQuery({ queryKey: ['clientes-pos'], queryFn: () => fetchSelect('/api/clientes') });
     const { data: correlativos } = useQuery({ queryKey: ['correlativos-pos'], queryFn: () => fetchSelect('/api/correlativos') });
+    // Siguiente número de control libre de la forma libre (un vendedor no ve la numeración: ahí queda el formato de ejemplo)
+    const { data: numeracion } = useQuery({ queryKey: ['numeracion-pos'], enabled: !esVendedor && !esPresupuesto, queryFn: async () => { const r = await fetch('/api/numeracion'); return r.ok ? r.json() : null; } });
+    const siguienteControl = numeracion?.series?.find((x) => x.clave === 'CONTROL')?.siguiente || null;
 
     const formVenta = useForm({
         initialValues: {
@@ -578,6 +581,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             });
             // El próximo número de documento y el stock cambiaron: la siguiente venta debe verlos al día
             queryClient.invalidateQueries({ queryKey: ['correlativos-pos'] });
+            queryClient.invalidateQueries({ queryKey: ['numeracion-pos'] });
             queryClient.invalidateQueries({ queryKey: ['clientes-pos'] }); // por si cambiaron los días de crédito del cliente
             queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
             queryClient.invalidateQueries({ queryKey: ['ventas'] });
@@ -784,7 +788,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             {(esFactura || puedeEditarPrecio) && (
                 <SimpleGrid cols={!isMobile && esFactura && puedeEditarPrecio ? 2 : 1} spacing="xs" mt="xs">
                     {esFactura && (
-                        <TextInput label="N° de control" placeholder="00-000000" size={tamCampo} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
+                        <TextInput label="N° de control" placeholder={siguienteControl || '00-000000'} description={siguienteControl ? `Vacío = toma el siguiente: ${siguienteControl}. Si la forma que vas a imprimir trae otro, escríbelo.` : undefined} size={tamCampo} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
                     )}
                     {puedeEditarPrecio && (
                         <TextInput type="date" label="Fecha de emisión" description="Vacía = hoy. Si copias una factura de otro día, elige esa fecha (toma la tasa BCV de ese día)"
