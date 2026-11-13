@@ -125,6 +125,7 @@ export default function PresupuestoImprimible({ presupuesto, accionesExtra = nul
                         <thead>
                             <tr>
                                 <th className="pp-c-n">#</th>
+                                <th className="pp-c-cod">Código</th>
                                 <th className="pp-c-desc">Descripción</th>
                                 <th className="pp-c-num">Cant.</th>
                                 <th className="pp-c-num">Precio unit.</th>
@@ -135,12 +136,10 @@ export default function PresupuestoImprimible({ presupuesto, accionesExtra = nul
                             {renglones.map((r, i) => (
                                 <tr key={i}>
                                     <td className="pp-c-n">{dos(i + 1)}</td>
+                                    <td className="pp-c-cod">{r.codigo || 'S/C'}</td>
                                     <td className="pp-c-desc">
-                                        <div className="pp-art">{nombreConMarca(r.nombre, r.marca)}</div>
-                                        <div className="pp-sub">
-                                            <span>Cód. {r.codigo || 'S/C'}</span>
-                                            {!r.aplicaIva && <span className="pp-chip">Exento de IVA</span>}
-                                        </div>
+                                        <span className="pp-art">{nombreConMarca(r.nombre, r.marca)}</span>
+                                        {!r.aplicaIva && <span className="pp-chip">Exento</span>}
                                     </td>
                                     <td className="pp-c-num">{fmt(r.cantidad).replace(/,00$/, '')}</td>
                                     <td className="pp-c-num">{principal(r.precioUnitario)}</td>
@@ -252,15 +251,17 @@ export default function PresupuestoImprimible({ presupuesto, accionesExtra = nul
                 .pp-tabla { width: 100%; border-collapse: collapse; }
                 .pp-tabla thead th { font-size: 7.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--gris); padding: 0 8px 8px; border-bottom: 1.5px solid var(--navy); text-align: left; }
                 .pp-tabla tbody tr { break-inside: avoid; page-break-inside: avoid; }
-                .pp-tabla tbody td { padding: 9px 8px; border-bottom: 1px solid var(--linea); vertical-align: top; }
+                .pp-tabla tbody td { padding: 4px 8px; border-bottom: 1px solid var(--linea); vertical-align: middle; }
                 .pp-tabla tbody tr:nth-child(even) td { background: #fafbfd; }
                 .pp-tabla .pp-c-n { width: 34px; padding-left: 2px; color: var(--cian); font-weight: 700; font-size: 9px; }
                 .pp-tabla thead .pp-c-n { color: var(--gris); }
                 .pp-tabla .pp-c-desc { width: auto; }
-                .pp-tabla .pp-c-num { text-align: right; white-space: nowrap; width: 1%; padding-left: 18px; }
+                .pp-tabla .pp-c-cod { width: 1%; white-space: nowrap; font-size: 8px; color: var(--gris-claro); letter-spacing: .02em; padding-left: 8px; padding-right: 10px; }
+                .pp-tabla .pp-c-desc .pp-chip { margin-left: 6px; white-space: nowrap; }
+                .pp-tabla .pp-c-num { text-align: right; white-space: nowrap; width: 1%; padding-left: 14px; }
                 .pp-tabla td.pp-c-num { font-size: 10px; color: #334155; }
                 .pp-tabla td.pp-importe { font-weight: 700; color: var(--tinta); }
-                .pp-art { font-size: 10.5px; font-weight: 600; color: var(--tinta); line-height: 1.3; }
+                .pp-art { font-size: 10.5px; font-weight: 600; color: var(--tinta); line-height: 1.2; }
                 .pp-sub { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 8px; color: var(--gris-claro); letter-spacing: .02em; }
                 .pp-chip { font-size: 7px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #15803d; background: #dcfce7; border-radius: 999px; padding: 1px 7px; }
                 .pp-conteo { text-align: right; font-size: 8px; color: var(--gris-claro); letter-spacing: .04em; padding: 6px 8px 0; }
