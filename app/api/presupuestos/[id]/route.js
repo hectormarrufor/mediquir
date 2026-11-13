@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { Presupuesto, Cliente } from '@/models';
+import { Presupuesto, Cliente, Producto, Marca } from '@/models';
 import { requerirStaff } from '../../inventario/_lib';
 import { numeroDe } from '../_lib';
 import { armarPresupuesto } from '../_armar';
@@ -21,7 +21,15 @@ export async function GET(request, { params }) {
             include: [{ model: Cliente, as: 'cliente', attributes: ['id', 'nombre', 'identificacion', 'direccion'] }],
         });
         if (!presupuesto) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
-        return NextResponse.json({ ...presupuesto.toJSON(), numero: numeroDe(presupuesto.id) });
+        const json = presupuesto.toJSON();
+        // Renglones guardados sin marca (presupuestos viejos): se completa con la marca actual del producto
+        const sinMarca = (json.renglones || []).filter((r) => r.productoId && !String(r.marca || '').trim());
+        if (sinMarca.length) {
+            const productos = await Producto.findAll({ where: { id: [...new Set(sinMarca.map((r) => r.productoId))] }, attributes: ['id'], include: [{ model: Marca, as: 'marca', attributes: ['nombre'] }] });
+            const marcas = new Map(productos.map((p) => [p.id, p.marca?.nombre]));
+            json.renglones = json.renglones.map((r) => (r.productoId && !String(r.marca || '').trim() && marcas.get(r.productoId) ? { ...r, marca: marcas.get(r.productoId) } : r));
+        }
+        return NextResponse.json({ ...json, numero: numeroDe(presupuesto.id) });
     } catch (error) {
         console.error('Presupuesto (ver):', error);
         return NextResponse.json({ error: 'No se pudo cargar el presupuesto' }, { status: 500 });
