@@ -6,6 +6,7 @@ import { Button } from '@mantine/core';
 import { IconEdit, IconList, IconPlus, IconReceiptTax, IconTruckDelivery } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { armarBorradorVenta, BORRADOR_VENTA } from '@/app/constants/presupuestoAVenta';
+import { useTasaBcv } from '@/hooks/useTasaBcv';
 import PresupuestoImprimible from '../_components/PresupuestoImprimible';
 
 export default function VerPresupuesto() {
@@ -13,6 +14,7 @@ export default function VerPresupuesto() {
     const router = useRouter();
     const [presupuesto, setPresupuesto] = useState(null);
     const [error, setError] = useState('');
+    const { tasa } = useTasaBcv();
 
     useEffect(() => {
         (async () => {
@@ -27,10 +29,11 @@ export default function VerPresupuesto() {
 
     // Copia cliente y renglones al formulario de venta (POS) para hacer una factura o una nota de entrega; el presupuesto no se toca
     const pasarA = (tipo) => {
+        if (tipo === 'FACTURA' && presupuesto.moneda !== 'BS' && !(tasa > 0)) return notifications.show({ message: 'Todavía no hay tasa BCV: espera un momento e intenta de nuevo', color: 'red' });
         try {
             const previo = JSON.parse(localStorage.getItem(BORRADOR_VENTA) || 'null');
             if (previo && (previo.carrito?.length || previo.cola?.length) && !window.confirm('Ya hay una venta a medias en el formulario de venta: se reemplazará por este presupuesto. ¿Continuar?')) return;
-            const borrador = armarBorradorVenta(presupuesto, tipo);
+            const borrador = armarBorradorVenta(presupuesto, tipo, tasa);
             localStorage.setItem(BORRADOR_VENTA, JSON.stringify(borrador));
             if (borrador.origen.de > 1) notifications.show({ title: 'Varias facturas', message: `Este presupuesto no cabe en una sola forma libre: se harán ${borrador.origen.de} facturas, una tras otra.`, color: 'blue', autoClose: 8000 });
             router.push('/superuser/ventas?nueva=1');

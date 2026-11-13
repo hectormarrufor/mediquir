@@ -5,6 +5,7 @@
 // facturas; la 1.ª queda en el carrito y las demás en `cola` (el POS las va cargando conforme se asienta cada una).
 import { nombreConMarca } from './nombreConMarca';
 import { repartirEnFacturas } from './lineasFactura';
+import { aBolivares } from './facturacion';
 
 export const BORRADOR_VENTA = 'mediquir:borrador-venta';
 
@@ -14,14 +15,17 @@ const tarifaDe = (p) => (p.moneda === 'BS'
     : ({ precio4: 'precio7', precio5: 'precio6', precio1: 'precio7' }[p.tarifa] || p.tarifa || 'precio7'));
 
 /** @param {'FACTURA'|'NOTA'} tipo  @returns borrador listo para guardar en localStorage (BORRADOR_VENTA) */
-export function armarBorradorVenta(presupuesto, tipo) {
-    const enBs = presupuesto.moneda === 'BS';
+export function armarBorradorVenta(presupuesto, tipo, tasa = 0) {
+    // Una factura de un presupuesto en $ se pasa a bolívares a la tasa BCV de hoy, con los precios en $ del presupuesto (ya modificados a mano si fue el caso)
+    const aBs = tipo === 'FACTURA' && presupuesto.moneda !== 'BS' && Number(tasa) > 0;
+    const enBs = presupuesto.moneda === 'BS' || aBs;
+    const conv = (v) => (aBs ? aBolivares(v, tasa) : v);
     let flete = 0;
     const items = [];
     (presupuesto.renglones || []).forEach((r, i) => {
         // El flete del presupuesto es el costo de flete de la venta, no un renglón
-        if (!r.productoId && String(r.nombre).trim().toLowerCase() === 'flete' && !r.aplicaIva) { flete += Number(r.subtotal ?? r.precioUnitario) || 0; return; }
-        const base = { clave: `pres-${i}`, presentacion: 'UNIDAD', unidadesPorPres: 1, cantidadPres: r.cantidad, cantidad: r.cantidad, precio: Number(r.precioUnitario), precioManual: true, simbolo: enBs ? 'Bs' : '$', tieneDescuento: false };
+        if (!r.productoId && String(r.nombre).trim().toLowerCase() === 'flete' && !r.aplicaIva) { flete += conv(Number(r.subtotal ?? r.precioUnitario) || 0); return; }
+        const base = { clave: `pres-${i}`, presentacion: 'UNIDAD', unidadesPorPres: 1, cantidadPres: r.cantidad, cantidad: r.cantidad, precio: conv(Number(r.precioUnitario)), precioManual: true, simbolo: enBs ? 'Bs' : '$', tieneDescuento: false };
         items.push(r.productoId
             ? { ...base, id: r.productoId, nombre: r.nombre, codigo: r.codigo, marcaNombre: r.marca || undefined, porcentajeIva: Number(r.porcentajeIva) || 0, isFicticio: false, afectaInventario: true }
             : { ...base, id: `ficticio-pres-${i}`, nombre: r.nombre, codigo: r.codigo || '1010', aplicaIva: Boolean(r.aplicaIva), isFicticio: true, afectaInventario: false });
@@ -34,7 +38,7 @@ export function armarBorradorVenta(presupuesto, tipo) {
         tipoVenta: 'MAYOR', // el documento a un cliente (factura o nota de entrega) es una venta al mayor
         form: {
             clienteId: presupuesto.clienteId ? String(presupuesto.clienteId) : null,
-            tipoPrecio: tarifaDe(presupuesto), conIva: esFactura, costoFlete: flete > 0 ? flete : '',
+            tipoPrecio: aBs ? 'precio4' : tarifaDe(presupuesto), conIva: esFactura, costoFlete: flete > 0 ? flete : '',
         },
         carrito: carritos[0] || [],
         cola: carritos.slice(1),
