@@ -71,6 +71,9 @@ const DOC = {
     NOTA_CREDITO: { etiqueta: 'N. crédito', color: 'red' }, NOTA_DEBITO: { etiqueta: 'N. débito', color: 'blue' },
 };
 const esNota = (v) => v.tipoDocumento === 'NOTA_CREDITO' || v.tipoDocumento === 'NOTA_DEBITO';
+// Factura, nota de entrega o recibo se imprimen desde la venta; una nota de crédito o débito, desde la nota (solo las emitidas, y no las ve un vendedor)
+const urlImprimir = (v) => (esNota(v) ? `/superuser/notas/${v.id}/imprimir` : `/superuser/ventas/imprimir/${v.id}`);
+const sePuedeImprimir = (v, esVendedor) => (esNota(v) ? !esVendedor && v.estado === 'Emitida' : true);
 const COLOR_NOTA = { Emitida: 'teal', Anulada: 'gray' };
 
 function Indicador({ icono: Icono, color, titulo, valor, detalle, cargando }) {
@@ -120,10 +123,10 @@ function TarjetaVenta({ v, esVendedor, isAdmin, onAbrir, onEliminar }) {
                         </Group>
                     )}
                 </Group>
-                {!esNota(v) && (
+                {(!esNota(v) || sePuedeImprimir(v, esVendedor)) && (
                     <Group gap={2} wrap="nowrap" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                        <ActionIcon size="lg" variant="subtle" color="gray" aria-label="Imprimir" onClick={() => window.open(`/superuser/ventas/imprimir/${v.id}`, '_blank')}><IconPrinter size={18} /></ActionIcon>
-                        {isAdmin && <ActionIcon size="lg" variant="subtle" color="red" aria-label="Eliminar" onClick={onEliminar}><IconTrash size={18} /></ActionIcon>}
+                        {sePuedeImprimir(v, esVendedor) && <ActionIcon size="lg" variant="subtle" color="gray" aria-label="Imprimir" onClick={() => window.open(urlImprimir(v), '_blank')}><IconPrinter size={18} /></ActionIcon>}
+                        {isAdmin && !esNota(v) && <ActionIcon size="lg" variant="subtle" color="red" aria-label="Eliminar" onClick={onEliminar}><IconTrash size={18} /></ActionIcon>}
                     </Group>
                 )}
             </Group>
@@ -410,10 +413,10 @@ export default function VentasDashboard() {
                                                     ) : <Text size="sm" c="dimmed">—</Text>}
                                                 </Table.Td>
                                                 <Table.Td onClick={(e) => e.stopPropagation()}>
-                                                    {!esNota(v) && (
+                                                    {(!esNota(v) || sePuedeImprimir(v, esVendedor)) && (
                                                         <Group gap={4} wrap="nowrap" justify="flex-end">
-                                                            <Tooltip label="Imprimir"><ActionIcon variant="subtle" color="gray" onClick={() => window.open(`/superuser/ventas/imprimir/${v.id}`, '_blank')}><IconPrinter size={16} /></ActionIcon></Tooltip>
-                                                            {isAdmin && <Tooltip label="Eliminar"><ActionIcon variant="subtle" color="red" onClick={() => setPorEliminar(v)}><IconTrash size={16} /></ActionIcon></Tooltip>}
+                                                            {sePuedeImprimir(v, esVendedor) && <Tooltip label="Imprimir"><ActionIcon variant="subtle" color="gray" onClick={() => window.open(urlImprimir(v), '_blank')}><IconPrinter size={16} /></ActionIcon></Tooltip>}
+                                                            {isAdmin && !esNota(v) && <Tooltip label="Eliminar"><ActionIcon variant="subtle" color="red" onClick={() => setPorEliminar(v)}><IconTrash size={16} /></ActionIcon></Tooltip>}
                                                         </Group>
                                                     )}
                                                 </Table.Td>
