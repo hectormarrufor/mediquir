@@ -18,6 +18,7 @@ import { put } from '@vercel/blob';
 import { registrarAbono, asegurarCuentaContado, ErrorAbono } from '../../_lib/abonos';
 import { recalcularCobro, declararRetencion, MARCA_CIERRE } from '../../_lib/retencionesVenta';
 import { eliminarVenta, borrarArchivosDeVenta } from '../_eliminar';
+import { puedeCorregirFacturas } from '../../_lib/corregirFactura';
 import { convertirAFactura, convertirNotaEntregaAFactura, ErrorConversion } from '../../_lib/convertirFactura';
 import { tasaVigente, tasaDelDia } from '../../_lib/tasaBcv';
 import { avisarCliente } from '../../_lib/avisosCliente';
@@ -176,7 +177,9 @@ export async function GET(request, { params }) {
               WHERE cv."ventaId" = :v AND cv.concepto = 'FACTURA' ORDER BY cv.id LIMIT 1`,
             { replacements: { v: venta.id }, type: sequelize.QueryTypes.SELECT },
         );
-        return NextResponse.json(vendedorExterno ? { ...venta.toJSON(), vendedorExterno } : venta);
+        // Corregir o eliminar la factura (solo usuario 1 y jolexi); si está impresa o tiene otros impedimentos, el modal lo explica
+        const puedeCorregir = venta.tipoDocumento === 'FACTURA' && venta.statusDespacho !== 'Cancelado' && await puedeCorregirFacturas(acceso.sesion);
+        return NextResponse.json({ ...venta.toJSON(), ...(vendedorExterno ? { vendedorExterno } : {}), puedeCorregir });
     } catch (error) {
         console.error('Error obteniendo detalle de venta:', error);
         return NextResponse.json({ error: 'Error interno del servidor', detalle: error.message }, { status: 500 });

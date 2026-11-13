@@ -12,7 +12,7 @@ import { aBolivares, aDolares } from '@/app/constants/facturacion';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import {
     IconArrowLeft, IconPackage, IconTruck, IconCheck,
-    IconUser, IconCurrencyDollar, IconReceiptTax, IconCash, IconListDetails, IconReportMoney, IconUsers, IconPrinter
+    IconUser, IconCurrencyDollar, IconReceiptTax, IconCash, IconListDetails, IconReportMoney, IconUsers, IconPrinter, IconEdit
 } from '@tabler/icons-react';
 import { PANTALLA_COMPLETA_MOVIL, useEsTelefono } from '@/app/components/ui/modalMovil';
 import { notifications } from '@mantine/notifications';
@@ -28,6 +28,7 @@ import PagoPorVerificarCard from '../_components/PagoPorVerificarCard';
 import { aInputFechaHora, formatearFecha, formatearFechaHora } from '@/app/constants/hora';
 import NotasFacturaCard from '../_components/NotasFacturaCard';
 import FacturarNotasModal from '../_components/FacturarNotasModal';
+import CorregirFacturaModal from '../_components/CorregirFacturaModal';
 import DatosDeCopia from '@/app/components/admin/DatosDeCopia';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -46,6 +47,7 @@ export default function DetallePedidoMayorPage() {
     const [modalFactura, setModalFactura] = useState(false);
     const [copiaFactura, setCopiaFactura] = useState({ numero: '', control: '', fecha: '' }); // datos de la factura si ya se emitió en el sistema anterior
     const [modalNotaAFactura, setModalNotaAFactura] = useState(false);
+    const [modalCorregir, setModalCorregir] = useState(false); // corregir o eliminar una factura sin imprimir (usuario 1 y jolexi)
     const [isSubmitting, setIsSubmitting] = useState(false);
     const isMobile = useEsTelefono();
     // Tasa BCV de hoy: con ella se convierte un abono hecho en otra moneda que la de la cuenta
@@ -187,6 +189,9 @@ export default function DetallePedidoMayorPage() {
         ),
         rolUsuario === 'admin' && pedido.tipoDocumento === 'VENTA_RAPIDA' && pedido.clienteId && pedido.statusDespacho !== 'Cancelado' && (
             <Button key="convertir" size={tamAccion} variant="light" color="indigo" leftSection={<IconReceiptTax size={16} />} onClick={() => setModalFactura(true)}>Convertir en factura</Button>
+        ),
+        pedido.puedeCorregir && (
+            <Button key="corregir" size={tamAccion} variant="light" color="orange" leftSection={<IconEdit size={16} />} onClick={() => setModalCorregir(true)}>Corregir / eliminar</Button>
         ),
         <Button key="imprimir" size={tamAccion} variant="white" leftSection={<IconPrinter size={16} />} onClick={() => window.open(`/superuser/ventas/imprimir/${pedido.id}`, '_blank')}>Imprimir</Button>,
     ].filter(Boolean);
@@ -752,6 +757,7 @@ export default function DetallePedidoMayorPage() {
                 )}
             </Modal>
 
+            {modalCorregir && <CorregirFacturaModal opened onClose={() => setModalCorregir(false)} pedido={pedido} onListo={refetch} onEliminada={() => router.push('/superuser/ventas')} />}
             {modalNotaAFactura && <FacturarNotasModal opened onClose={() => setModalNotaAFactura(false)} pedido={pedido} onListo={refetch} />}
 
             <Modal {...PANTALLA_COMPLETA_MOVIL} opened={modalFactura} onClose={() => setModalFactura(false)} title={<Title order={4}>Convertir en factura</Title>} centered>

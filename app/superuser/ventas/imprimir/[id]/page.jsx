@@ -42,7 +42,11 @@ export default function ImprimirRecibo() {
     useEffect(() => {
         if (!venta || cargando || guia) return undefined;
         if (necesitaControl && ctl.estado !== 'listo') return undefined; // primero se asigna el número de control
-        const temporizador = setTimeout(() => window.print(), 800);
+        const temporizador = setTimeout(() => {
+            // Desde que se manda a imprimir, la factura ya no se corrige ni se elimina (solo con notas de crédito o débito)
+            if (venta.tipoDocumento === 'FACTURA' && venta.statusDespacho !== 'Cancelado') fetch(`/api/ventas/${venta.id}/impresa`, { method: 'POST' }).catch(() => {});
+            window.print();
+        }, 800);
         return () => clearTimeout(temporizador);
     }, [venta, cargando, guia, necesitaControl, ctl.estado]);
 
