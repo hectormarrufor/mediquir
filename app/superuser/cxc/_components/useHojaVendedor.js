@@ -109,6 +109,14 @@ export function useHojaVendedor() {
         .then(() => { notifications.show({ color: 'teal', message: `Porcentaje por defecto de ${actual.nombre}: ${porcentaje} %` }); refrescar(); })
         .catch(avisar);
 
+    // Préstamos y pago de lo acumulado (el servidor marca las líneas pagadas, asienta el abono al préstamo y deja el formato de pago)
+    const prestar = (datos) => enviar('/api/comisiones/prestamos', 'POST', { vendedorId: actual.id, ...datos })
+        .then((r) => { refrescar(); notifications.show({ color: 'teal', title: 'Préstamo registrado', message: `${actual.nombre}: +$${Number(datos.montoUsd).toFixed(2)}` }); return r; })
+        .catch(avisar);
+    const pagarComision = (lineaIds, datos) => enviar('/api/comisiones/pagos', 'POST', { vendedorId: actual.id, lineaIds, ...datos })
+        .then((r) => { setSel(new Set()); refrescar(); return r; })
+        .catch(avisar);
+
     function elegir(id) { setElegido(id); setSel(new Set()); setAbiertos(new Set()); setPlegadas(new Set()); }
     const alternar = (setter) => (k, valor) => setter((s) => { const n = new Set(s); const poner = valor === undefined ? !n.has(k) : valor; if (poner) n.add(k); else n.delete(k); return n; });
     const alternarSel = alternar(setSel);
@@ -124,6 +132,6 @@ export function useHojaVendedor() {
         sel, seleccion, alternarSel, seleccionarVarias, limpiarSeleccion: () => setSel(new Set()), porPagarVisibles,
         abiertos, alternarGrupo, expandirTodo: () => setAbiertos(new Set(grupos.map((g) => g.k))), contraerTodo: () => setAbiertos(new Set()),
         plegadas, alternarPlegada,
-        editar, marcar, marcarUna, agregar, borrar, crearVendedor, cambiarPctVendedor,
+        prestar, pagarComision, editar, marcar, marcarUna, agregar, borrar, crearVendedor, cambiarPctVendedor,
     };
 }

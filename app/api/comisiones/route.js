@@ -68,11 +68,24 @@ export async function GET() {
             comisionUsd: l.comisionUsd === null ? null : Number(l.comisionUsd), fecha: l.fecha ? new Date(l.fecha).toISOString().slice(0, 10) : null,
             vencimiento: l.vencimiento ? new Date(l.vencimiento).toISOString().slice(0, 10) : null, fechaPagoComision: l.fechaPagoComision ? new Date(l.fechaPagoComision).toISOString().slice(0, 10) : null,
         });
+        // Préstamos: movimientos por vendedor (si la migración prestamos-vendedores aún no corrió, se ven como sin préstamos)
+        const movs = new Map();
+        const pagosPor = new Map();
+        try {
+            const m = await sequelize.query(`SELECT id, "vendedorId", tipo, "montoUsd"::float AS "montoUsd", fecha::text AS fecha, nota, "pagoComisionId" FROM "MovimientosPrestamoVendedor" ORDER BY fecha DESC, id DESC`, { type: sequelize.QueryTypes.SELECT });
+            for (const x of m) (movs.get(x.vendedorId) || movs.set(x.vendedorId, []).get(x.vendedorId)).push(x);
+            const p = await sequelize.query(`SELECT id, "vendedorId", fecha::text AS fecha, "totalComisionUsd"::float AS "totalComisionUsd", "abonoPrestamoUsd"::float AS "abonoPrestamoUsd", "pagadoUsd"::float AS "pagadoUsd" FROM "PagosComision" ORDER BY fecha DESC, id DESC`, { type: sequelize.QueryTypes.SELECT });
+            for (const x of p) (pagosPor.get(x.vendedorId) || pagosPor.set(x.vendedorId, []).get(x.vendedorId)).push(x);
+        } catch { /* sin tablas todavía */ }
         const salida = vendedores.map((v) => {
             const ls = por.get(v.id) || [];
+            const ms = movs.get(v.id) || [];
+            const prestado = r2(ms.filter((x) => x.tipo === 'PRESTAMO').reduce((a, x) => a + x.montoUsd, 0));
+            const abonado = r2(ms.filter((x) => x.tipo === 'ABONO').reduce((a, x) => a + x.montoUsd, 0));
             const suma = (lista) => r2(lista.reduce((a, l) => a + (Number(l.comisionUsd) || 0), 0));
             return {
                 ...v, porcentaje: Number(v.porcentaje), lineas: ls,
+                prestamo: { saldo: r2(prestado - abonado), prestado, abonado, movimientos: ms }, pagos: (pagosPor.get(v.id) || []).slice(0, 20),
                 resumen: { lineas: ls.length, comisionPendiente: suma(ls.filter((l) => l.estatusComision !== 'PAGADA')), comisionPagada: suma(ls.filter((l) => l.estatusComision === 'PAGADA')) },
             };
         });

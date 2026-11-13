@@ -7,18 +7,20 @@ import React, { useState } from 'react';
 import { ActionIcon, Affix, Alert, Box, Button, CloseButton, Group, Menu, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Tooltip, Transition } from '@mantine/core';
 import {
     IconAlertTriangle, IconArrowBackUp, IconBuildingBank, IconChecks, IconCircleCheck, IconCoin, IconDotsVertical, IconFold, IconHourglass,
-    IconInbox, IconPercentage, IconPlus, IconSearch, IconSelectAll, IconUserPlus, IconUsers, IconX,
+    IconCash, IconInbox, IconPercentage, IconPlus, IconSearch, IconSelectAll, IconUserPlus, IconUsers, IconX,
 } from '@tabler/icons-react';
 import HojaTabla from './HojaTabla';
 import HojaTarjetas from './HojaTarjetas';
 import { DialogoAgregarLinea, DialogoEditarLinea, DialogoNuevoVendedor, LeyendaColores } from './PiezasVendedores';
 import { EstadoVacio, Esqueleto, Kpi, useConfirmar } from './Piezas';
-import { FILTROS, agruparFacturas, claveDoc, opcionesPct } from './comisiones';
+import { DialogoPagarComision, DialogoPrestamo } from './PrestamosPagos';
+import { FILTROS, agruparFacturas, claveDoc, opcionesPct, porPagar } from './comisiones';
 import { useHojaVendedor } from './useHojaVendedor';
 import { bolivares, dolares, useAltoElemento, usd, useVistaTarjetas } from './utilidades';
 import classes from './cxc.module.css';
 
-const SEGMENTOS = { root: classes.segRaiz, label: classes.segEtiqueta };
+const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+const SEGMENTOS ={ root: classes.segRaiz, label: classes.segEtiqueta };
 
 export default function HojasVendedores() {
     const hoja = useHojaVendedor();
@@ -44,8 +46,12 @@ export default function HojasVendedores() {
         },
     };
 
-    // Pagar comisiones: siempre con confirmación y el total en dólares y bolívares a la vista
+    // Pagar comisiones: se paga de lo acumulado (lo seleccionado o todo lo amarillo) en un solo pago, con abono al préstamo si lo hay
+    const todasPorPagar = hoja.lineasActual.filter(porPagar);
+    const idsDePago = dialogo?.tipo === 'pagar' ? dialogo.ids : [];
+    const lineasDePago = hoja.lineasActual.filter((l) => idsDePago.includes(l.id));
     const marcarSeleccion = async (estatus) => {
+        if (estatus === 'PAGADA') return setDialogo({ tipo: 'pagar', ids: [...hoja.sel] });
         const s = hoja.seleccion;
         const ok = await confirmar({
             titulo: estatus === 'PAGADA' ? 'Marcar comisiones pagadas' : 'Volver a pendientes',
@@ -152,6 +158,13 @@ export default function HojasVendedores() {
                         onClick={() => hoja.setFiltro('porpagar')} activo={hoja.filtro === 'porpagar'} ayuda="Toca para ver solo las comisiones por pagar (amarillas)"
                     />
                 </Box>
+                <Box style={{ gridColumn: tarjetas ? 'span 2' : undefined }}>
+                    <Kpi
+                        titulo="Préstamos" valor={dolares(actual.prestamo?.saldo || 0)} color={(actual.prestamo?.saldo || 0) > 0.004 ? 'red.8' : 'teal.8'} icono={IconCash} colorIcono="red"
+                        detalle={(actual.prestamo?.saldo || 0) > 0.004 ? (tasa ? `${bolivares(actual.prestamo.saldo * tasa)} · debe el vendedor` : 'Lo que debe el vendedor') : 'No tiene préstamos · toca para añadir'}
+                        onClick={() => setDialogo({ tipo: 'prestamo' })} ayuda="Toca para ver sus préstamos y añadir uno nuevo"
+                    />
+                </Box>
                 <Kpi titulo="Por generar (sin cobrar)" valor={dolares(tv.futura)} color="#5c6675" icono={IconHourglass} colorIcono="gray" detalle={tasa ? bolivares(tv.futura * tasa) : 'Facturas que el cliente aún no paga'} ayuda="Lo que dejarán las facturas que el cliente todavía no paga" />
                 <Kpi titulo="Comisión pagada" valor={dolares(actual.resumen.comisionPagada)} color="teal.8" icono={IconCircleCheck} colorIcono="teal" detalle={tasa ? bolivares(actual.resumen.comisionPagada * tasa) : undefined} onClick={() => hoja.setFiltro('pagadas')} activo={hoja.filtro === 'pagadas'} ayuda="Toca para ver las pagadas" />
                 <Kpi
@@ -173,6 +186,7 @@ export default function HojasVendedores() {
                             <Menu position="bottom-end" withinPortal shadow="md" width={260}>
                                 <Menu.Target><ActionIcon size={36} radius="md" variant="default" aria-label="Más opciones de la hoja"><IconDotsVertical size={20} /></ActionIcon></Menu.Target>
                                 <Menu.Dropdown>
+                                    <Menu.Item leftSection={<IconCash size={16} />} disabled={!todasPorPagar.length} onClick={() => setDialogo({ tipo: 'pagar', ids: todasPorPagar.map((l) => l.id) })}>Pagar comisión acumulada ({todasPorPagar.length})</Menu.Item>
                                     <Menu.Item leftSection={<IconSelectAll size={16} />} disabled={!hoja.porPagarVisibles.length} onClick={seleccionarPorPagar}>Seleccionar las por pagar ({hoja.porPagarVisibles.length})</Menu.Item>
                                     <Menu.Item leftSection={<IconPlus size={16} />} onClick={agregarLinea}>Agregar factura o abono</Menu.Item>
                                     <Menu.Divider />
@@ -188,6 +202,7 @@ export default function HojasVendedores() {
                         {filtros}
                         {buscador}
                         <Group gap={6} ml="auto" wrap="nowrap">
+                            <Button size="compact-sm" color="teal" leftSection={<IconCash size={15} />} disabled={!todasPorPagar.length} onClick={() => setDialogo({ tipo: 'pagar', ids: todasPorPagar.map((l) => l.id) })}>Pagar comisión acumulada</Button>
                             <Tooltip label={`Marca las ${hoja.porPagarVisibles.length} comisiones por pagar que se ven`}>
                                 <Button size="compact-sm" variant="default" leftSection={<IconSelectAll size={15} />} disabled={!hoja.porPagarVisibles.length} onClick={seleccionarPorPagar}>Seleccionar por pagar</Button>
                             </Tooltip>
@@ -259,6 +274,13 @@ export default function HojasVendedores() {
             )}
             <DialogoAgregarLinea abierto={dialogo?.tipo === 'agregar'} inicial={dialogo?.inicial} vendedor={actual} facturas={hoja.facturas} clientes={hoja.clientes} onCerrar={cerrar} onAgregar={hoja.agregar} />
             <DialogoNuevoVendedor abierto={dialogo?.tipo === 'vendedor'} onCerrar={cerrar} onCrear={hoja.crearVendedor} />
+            <DialogoPrestamo abierto={dialogo?.tipo === 'prestamo'} vendedor={actual} tasa={tasa} onCerrar={cerrar} onPrestar={hoja.prestar} />
+            {dialogo?.tipo === 'pagar' && (
+                <DialogoPagarComision
+                    abierto vendedor={actual} tasa={tasa} cantidad={lineasDePago.length} total={r2(lineasDePago.reduce((t, l) => t + (Number(l.comisionUsd) || 0), 0))}
+                    onCerrar={cerrar} onPagar={(datos) => hoja.pagarComision(idsDePago, datos)}
+                />
+            )}
             {confirmacion}
         </Stack>
     );

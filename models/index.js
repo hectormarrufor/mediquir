@@ -8,6 +8,8 @@ const db = {
     CuentaPorCobrar: require('./CuentaPorCobrar'),
     VendedorComision: require('./VendedorComision'),
     ComisionVenta: require('./ComisionVenta'),
+    PagoComision: require('./PagoComision'),
+    MovimientoPrestamoVendedor: require('./MovimientoPrestamoVendedor'),
     FacturaCompra: require('./FacturaCompra'),
     Proveedor: require('./Proveedor'),
     Venta: require('./Venta'),
