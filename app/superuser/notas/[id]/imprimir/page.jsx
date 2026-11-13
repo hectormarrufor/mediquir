@@ -7,7 +7,8 @@ import ControlFiscalPaso from '@/app/superuser/ventas/_components/ControlFiscalP
 import { useControlFiscal } from '@/app/superuser/ventas/_lib/useControlFiscal';
 import { fechaCaracas } from '@/app/constants/hora';
 import { useAuth } from '@/hooks/useAuth';
-import { lineasFacturasAfectadas, lineasTasaBcv } from '@/app/constants/notasTexto';
+import { lineasTasaBcv, textoSuperiorNota } from '@/app/constants/notasTexto';
+import { CONFIG_FISCAL } from '@/app/constants/empresa';
 
 // Nota de crédito o de débito impresa sobre la misma forma libre preimpresa que las facturas.
 // Al imprimirla se le asigna el número de control (el correlativo de la forma libre, compartido con las facturas).
@@ -61,7 +62,8 @@ export default function ImprimirNota() {
             guia={guia}
             titulo={esCredito ? 'Nota de Crédito' : 'Nota de Débito'}
             referencia=""
-            lineasExtra={[...lineasFacturasAfectadas(facturas), ...lineasTasaBcv(nota)]}
+            textoSuperior={textoSuperiorNota({ tipo: nota.tipo, cliente: nota.cliente?.nombre, fecha: nota.fecha, creadaEn: nota.createdAt, facturas, motivo: nota.motivo, estacion: CONFIG_FISCAL.estacion })}
+            lineasExtra={lineasTasaBcv(nota)}
             etiquetaCondicion="Motivo"
             condicionTexto={String(nota.motivo || '').slice(0, 38)}
             sinVence

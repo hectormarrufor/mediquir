@@ -7,7 +7,8 @@ import { IconPlus, IconTrash } from '@tabler/icons-react';
 import FacturaFormaLibre from '@/app/superuser/ventas/imprimir/[id]/FacturaFormaLibre';
 import { calcularFactura, REGLAS } from '@/app/constants/facturacion';
 import { fechaCaracas } from '@/app/constants/hora';
-import { lineasTasaBcv, partirTexto } from '@/app/constants/notasTexto';
+import { lineasTasaBcv, textoSuperiorNota } from '@/app/constants/notasTexto';
+import { CONFIG_FISCAL } from '@/app/constants/empresa';
 
 const fetchJson = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error('No se pudo cargar'); return r.json(); };
 
@@ -57,11 +58,12 @@ export default function VistaPreviaNota() {
     }, [renglones, moneda, tasa, cliente, numeroNota]);
 
     // Filas de descripción bajo los renglones: facturas que afecta y, si está en dólares, el párrafo de la tasa BCV
-    const lineasExtra = useMemo(() => {
-        const afectadas = tipo === 'DEBITO' ? facturaAfectada.split(',').map((x) => x.trim()).filter(Boolean) : [facturaAfectada.trim()].filter(Boolean);
-        const cab = afectadas.length > 1 ? 'AFECTA LAS FACTURAS' : 'AFECTA LA FACTURA';
-        return [...(afectadas.length ? partirTexto(`${cab} ${afectadas.join(', ')}`) : partirTexto(`${cab} ________ DEL __/__/____`)), ...lineasTasaBcv({ moneda, tasaCambio: tasa, totalFinal: documento?.totalFinal })];
-    }, [tipo, facturaAfectada, moneda, tasa, documento]);
+    const lineasExtra = useMemo(() => lineasTasaBcv({ moneda, tasaCambio: tasa, totalFinal: documento?.totalFinal }), [moneda, tasa, documento]);
+    // Texto de arriba de la tabla: las facturas se escriben como «F-00012 del 01/09/2026, F-00013 …» (se toma el número de cada una)
+    const textoSuperior = useMemo(() => {
+        const afectadas = (tipo === 'DEBITO' ? facturaAfectada.split(',') : [facturaAfectada]).map((x) => x.trim()).filter(Boolean).map((x) => ({ numeroDocumento: x.split(/\s+/)[0] }));
+        return textoSuperiorNota({ tipo, cliente: cliente.nombre, fecha: new Date().toISOString().slice(0, 10), creadaEn: new Date().toISOString(), facturas: afectadas, motivo, estacion: CONFIG_FISCAL.estacion });
+    }, [tipo, facturaAfectada, cliente.nombre, motivo]);
 
     return (
         <Container size="lg" py="md">
@@ -108,6 +110,7 @@ export default function VistaPreviaNota() {
                     venta={documento}
                     titulo={tipo === 'CREDITO' ? 'Nota de Crédito' : 'Nota de Débito'}
                     referencia=""
+                    textoSuperior={textoSuperior}
                     lineasExtra={lineasExtra}
                     etiquetaCondicion="Motivo"
                     condicionTexto={String(motivo || '').slice(0, 38)}

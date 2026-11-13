@@ -15,8 +15,10 @@ const ZONAS = {
     finPreimpresoSuperior: 0.86, // hasta aquí la forma trae el membrete: no se imprime nada
     inicioTabla: 1.799,          // línea superior del encabezado de la tabla de artículos (bajó 2 mm el 13/11/2026, igual que la cabecera del cliente)
     altoEncabezado: 0.16,
-    altoFila: 0.15,              // una línea; una descripción larga ocupa 2 líneas (máximo). Caben 11 líneas entre la cabecera y los totales
+    altoFila: 0.15,              // una línea; una descripción larga ocupa 2 líneas (máximo)
     lineaSon: 4.293,             // "Son: Bs. ..."
+    finTabla: 4.209,             // la última línea de la tabla debe terminar aquí (2 mm antes de «Son:»): de 1,799 a 4,209 caben cabecera + 15 líneas
+    huecoTexto: 0.04,            // aire entre el texto de arriba de la tabla (notas) y su cabecera
     inicioTotales: 4.433,        // caja de totales (bajó 1,1 cm el 12/11/2026 para aprovechar la forma)
     inicioCliente: 1.159,        // cabecera con el cliente (bajó 2 mm el 12/11/2026)
     maxLineas: CONFIG_FISCAL.maxRenglonesFactura,
@@ -27,12 +29,29 @@ const ZONAS = {
 
 const nf = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt = (v) => nf.format(Number(v) || 0);
+// Parte un párrafo en líneas del ancho de la hoja midiendo con el tipo de letra real (lienzo del navegador); sin lienzo (servidor) se estima por caracteres
+const FUENTE_TEXTO = '600 7.8px Arial, Helvetica, sans-serif';
+let lienzo = null;
+const ancho = (t) => { lienzo = lienzo || document.createElement('canvas').getContext('2d'); lienzo.font = FUENTE_TEXTO; return lienzo.measureText(t).width * 1.04; };
+function partirParrafo(texto, usarLienzo) {
+    const maxPx = ZONAS.anchoUtil * 96 - 6;
+    const cabe = (t) => (usarLienzo ? ancho(t) <= maxPx : t.length <= 130);
+    const lineas = [];
+    let actual = '';
+    for (const palabra of String(texto).split(/ +/).filter(Boolean)) {
+        const prueba = actual ? `${actual} ${palabra}` : palabra;
+        if (!actual || cabe(prueba)) actual = prueba; else { lineas.push(actual); actual = palabra; }
+    }
+    if (actual) lineas.push(actual);
+    return lineas;
+}
+
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-VE', { timeZone: 'America/Caracas' }) : '');
 
 // titulo: 'Factura' (por defecto) o 'Nota de Crédito' / 'Nota de Débito'. Para una nota, `referencia` (en lugar de "ORDEN DE COMPRA") indica la factura
 // que afecta y `condicionTexto` reemplaza las condiciones de pago; `sinVence` oculta la fecha de vencimiento.
 // `lineasExtra`: textos libres que salen como filas de descripción después de los artículos (facturas que afecta la nota, tasa BCV, etc.).
-export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factura', referencia = null, etiquetaCondicion = 'Condiciones de la Transacción', condicionTexto = null, sinVence = false, lineasExtra = [], onReasignarControl = null, vistaPrevia = false, onToggleGuia = null }) {
+export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factura', referencia = null, etiquetaCondicion = 'Condiciones de la Transacción', condicionTexto = null, sinVence = false, lineasExtra = [], textoSuperior = [], onReasignarControl = null, vistaPrevia = false, onToggleGuia = null }) {
     // Papel de la impresión: CARTA vertical por defecto (la hoja va centrada arriba); MEDIA CARTA = la hoja completa en horizontal.
     // Se recuerda la última elección en este navegador.
     const [papel, setPapel] = useState('carta');
@@ -42,6 +61,12 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
     const zoom = useZoomHoja(768, 24); // media carta horizontal (8 in): en el teléfono se achica al ancho de la pantalla
     // En la factura el número sale con el prefijo 00- (F-146870 -> 00-146870); las notas llevan el suyo (NC-, ND-)
     const numeroImpreso = titulo === 'Factura' ? String(venta.numeroDocumento || '').replace(/^F-/i, '00-') : venta.numeroDocumento;
+    // Texto de arriba de la tabla (notas de crédito y débito): empuja la tabla hacia abajo y le quita líneas a la capacidad
+    const [medido, setMedido] = useState(false);
+    useEffect(() => { setMedido(true); }, []);
+    const textoLineas = textoSuperior.flatMap((p) => partirParrafo(p, medido));
+    const tablaTop = ZONAS.inicioTabla + (textoLineas.length ? textoLineas.length * ZONAS.altoFila + ZONAS.huecoTexto : 0);
+    const capacidad = Math.floor((ZONAS.finTabla - tablaTop - ZONAS.altoEncabezado) / ZONAS.altoFila + 1e-6); // factura: 15; nota: menos, según su texto
     const tasa = Number(venta.tasaCambio) || 1;
     const esBs = venta.moneda === 'BS';
     const aBs = (v) => (esBs ? Number(Number(v).toFixed(2)) : aBolivares(Number(v), tasa));
@@ -62,7 +87,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
     const nombreDe = (d) => (d.isFicticio ? d.nombreFicticio : nombreConMarca(d.producto?.nombre || d.nombreFicticio, d.producto?.marca?.nombre));
     // Cada renglón ocupa 1 o 2 líneas según su descripción; las líneas extra de las notas ocupan 1
     const totalFilas = detalles.reduce((a, d) => a + lineasDeRenglon(nombreDe(d)), 0) + lineasExtra.length;
-    const demasiados = totalFilas > CONFIG_FISCAL.maxRenglonesFactura;
+    const demasiados = totalFilas > capacidad;
 
     return (
         <div className="fl-envoltura">
@@ -78,7 +103,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                         : <a href={guia ? '?' : '?guia=1'}>{guia ? 'Ocultar guía' : 'Ver guía sobre la forma'}</a>}
                 </span>
             </div>
-            {demasiados && <div className="fl-aviso">Esta hoja ocupa {totalFilas} líneas (una descripción larga ocupa 2) y la forma libre admite {CONFIG_FISCAL.maxRenglonesFactura}: lo que sobra se saldrá de la hoja.</div>}
+            {demasiados && <div className="fl-aviso">Esta hoja ocupa {totalFilas} líneas (una descripción larga ocupa 2) y la forma libre admite {capacidad} en este documento: lo que sobra se saldrá de la hoja.</div>}
 
             <div id="print-section" className="fl-hoja" style={{ zoom }}>
                 {guia && <img className={vistaPrevia ? 'fl-guia fl-guia-imprime' : 'fl-guia'} src="/tenants/mediquir/forma-libre.png" alt="" />}
@@ -101,8 +126,12 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                     </div>
                 </div>
 
-                {/* Artículos (hasta 11 líneas) */}
-                <table className="fl-tabla">
+                {textoLineas.length > 0 && (
+                    <div className="fl-texto">{textoLineas.map((l, i) => <div key={i}>{l}</div>)}</div>
+                )}
+
+                {/* Artículos: la factura admite 15 líneas; una nota, las que deje su texto de arriba */}
+                <table className="fl-tabla" style={{ top: `${tablaTop}in` }}>
                     <thead><tr><th style={{ width: '0.62in', textAlign: 'left' }}>CÓDIGO</th><th style={{ textAlign: 'left' }}>NOMBRE DEL ARTÍCULO</th><th style={{ width: '1.05in', textAlign: 'right' }}>PRECIO UNIT</th><th style={{ width: '0.9in', textAlign: 'center' }}>CANTIDAD</th><th style={{ width: '1.3in', textAlign: 'right' }}>TOTAL NETO</th></tr></thead>
                     <tbody>
                         {detalles.map((d, i) => (
@@ -179,7 +208,9 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                 .fl-control { text-align: right; line-height: 1; margin-top: 1px; }
                 .fl-ctl-num { color: #d32f2f !important; font-weight: 800; font-size: 11px; letter-spacing: .4px; }
 
-                .fl-tabla { left: ${ZONAS.margenIzq}in; top: ${ZONAS.inicioTabla}in; width: ${ZONAS.anchoUtil}in; border-collapse: collapse; table-layout: fixed; }
+                .fl-texto { left: ${ZONAS.margenIzq}in; top: ${ZONAS.inicioTabla}in; width: ${ZONAS.anchoUtil}in; }
+                .fl-texto div { height: ${ZONAS.altoFila}in; line-height: ${ZONAS.altoFila}in; font-size: 7.8px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+                .fl-tabla { left: ${ZONAS.margenIzq}in; width: ${ZONAS.anchoUtil}in; border-collapse: collapse; table-layout: fixed; }
                 .fl-tabla th { height: ${ZONAS.altoEncabezado}in; border-top: 1.6px solid #000; border-bottom: 1.6px solid #000; font-size: 7.6px; font-weight: 800; padding: 0 3px; }
                 .fl-tabla td { height: ${ZONAS.altoFila}in; padding: 0 3px; font-size: 7.6px; line-height: ${ZONAS.altoFila}in; vertical-align: top; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 /* La descripción puede tomar hasta 2 líneas (cada una de la altura de un renglón); lo que pase se corta */

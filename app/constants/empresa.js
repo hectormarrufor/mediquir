@@ -29,7 +29,7 @@ export const CONFIG_FISCAL = {
     // Mientras el sistema anterior siga emitiendo facturas, este NO le inventa números de factura: los pedidos B2B que piden factura entran como recibo (V-)
     // con el IVA incluido, y la factura se emite en el sistema anterior y se copia aquí con su número (botón «Convertir en factura»).
     convivenciaSistemaAnterior: true,
-    maxRenglonesFactura: 11, // LÍNEAS que caben entre la cabecera y los totales de la forma libre (una descripción larga ocupa 2 líneas)
+    maxRenglonesFactura: 15, // LÍNEAS que caben entre la cabecera y los totales de la forma libre (una descripción larga ocupa 2 líneas). 15 = (4,209 - 1,799 - 0,16) / 0,15 pulgadas: ver ZONAS en FacturaFormaLibre
     estacion: '001',
 };
 

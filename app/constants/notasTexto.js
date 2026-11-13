@@ -14,6 +14,38 @@ export function partirTexto(texto, ancho = ANCHO_LINEA) {
     return lineas;
 }
 
+const FORMAS_NUMERO = (n) => String(n || '').replace(/^F-/i, '');
+const diaLargo = (f) => {
+    if (!f) return '';
+    const t = new Date(`${String(f).slice(0, 10)}T12:00:00-04:00`).toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Caracas' });
+    return t.replace(',', '').charAt(0).toUpperCase() + t.replace(',', '').slice(1);
+};
+const horaCorta = (iso) => (iso ? new Date(iso).toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Caracas' }).replace(/\s*([ap])\.?\s*m\.?/i, ' $1m') : '');
+
+/**
+ * Texto que va ARRIBA de la tabla de renglones en la nota impresa (como en la forma del sistema anterior). Devuelve párrafos; la hoja los parte en líneas.
+ * `facturas`: [{ numeroDocumento, fecha }] · `creadaEn`: ISO opcional (para la hora) · `estacion`: opcional
+ */
+export function textoSuperiorNota({ tipo, cliente, fecha, creadaEn, facturas, motivo, estacion }) {
+    const nombre = String(cliente || '').trim().toUpperCase() || '________________';
+    const lista = (facturas || []).filter((f) => f?.numeroDocumento);
+    const una = lista.length === 1;
+    if (tipo === 'CREDITO') {
+        const num = lista.length ? lista.map((f) => `00-${FORMAS_NUMERO(f.numeroDocumento)}`).join(', ') : '________';
+        const hora = horaCorta(creadaEn);
+        return [
+            `Hemos emitido el presente documento a nombre de ${nombre} bajo el concepto de:`,
+            `NOTA DE CRÉDITO generada por devolución el día ${diaLargo(fecha)}${hora ? ` a las ${hora}` : ''}${estacion ? ` por la estación # ${estacion}` : ''} originada por ${una ? 'la Factura' : 'las Facturas'} # ${num}`,
+        ];
+    }
+    const num = lista.length ? lista.map((f) => FORMAS_NUMERO(f.numeroDocumento)).join('-') : '________';
+    const por = String(motivo || '').trim();
+    return [
+        `Hemos emitido la presente NOTA DE DÉBITO a nombre de ${nombre} por concepto de:`,
+        `nota de débito${por ? ` por ${por.charAt(0).toLowerCase()}${por.slice(1)}` : ''} sobre ${una ? 'la factura' : 'facturas'} ${num}`,
+    ];
+}
+
 /** Facturas que afecta la nota → líneas de texto. `facturas`: [{ numeroDocumento, fecha }] */
 export function lineasFacturasAfectadas(facturas) {
     const lista = (facturas || []).filter((f) => f?.numeroDocumento);
