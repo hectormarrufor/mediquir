@@ -205,7 +205,7 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                         </Alert>
                     ) : parcialPagada ? (
                         <Alert color="orange" icon={<IconAlertTriangle size={18} />} title="Esta factura ya está pagada">
-                            <Text size="sm">Una nota de crédito parcial sobre una factura pagada no afecta las cuentas por cobrar ni lo ya ingresado, no deja saldo a favor del cliente y no mueve el inventario. Se te pedirá confirmar al emitirla.</Text>
+                            <Text size="sm">Por eso aquí no se pregunta si la nota afecta la cuenta por cobrar: como la factura ya está pagada, <b>no la afecta</b> y la nota <b>solo se asienta en el libro de ventas</b>. No se suma saldo a favor del cliente, no cambia lo ya ingresado y no mueve el inventario. Se te pedirá confirmar al emitirla.</Text>
                             <Checkbox mt="sm" color="orange" checked={modificarPago} onChange={(e) => setModificarPago(e.currentTarget.checked)}
                                 label="Sí, modifica el pago ya registrado" description="Además de emitir la nota, se rebaja el pago (ingreso) ya registrado de esta factura por el monto de la nota: pago registrado = total de la factura − nota." />
                         </Alert>
