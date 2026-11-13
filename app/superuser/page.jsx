@@ -49,6 +49,7 @@ const menuOptions = [
     { title: 'Cuentas por Pagar (CxP)', href: '/superuser/cxp', description: 'Gestión de cuentas por pagar.', icon: IconAlertTriangle, color: 'red' },
     { title: 'Notas de crédito y débito', href: '/superuser/notas', description: 'Notas emitidas a clientes y recibidas de proveedores.', icon: IconCurrencyDollar, color: 'indigo' },
     { title: 'Presupuestos', href: '/superuser/presupuestos', description: 'Cotizaciones para clientes: no son factura, solo informativas.', icon: IconReceipt, color: 'teal' },
+    { title: 'Recibos', href: '/superuser/recibos', description: 'Recibos de pago (hemos pagado a / he recibido de) con correlativo propio.', icon: IconReceipt, color: 'cyan' },
     { title: 'Pagos Moviles recibidos', href: '/superuser/pagos-recibidos', description: 'Gestión de pagos móviles recibidos.', icon: IconCurrencyDollar, color: 'blue' },
 ];
 

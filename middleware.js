@@ -40,6 +40,7 @@ const VENDEDOR_API = [
     ['GET', /^\/api\/proveedores\/resumen$/],      // pantalla de proveedores (la ruta le quita lo que se les debe)
     ['GET', /^\/api\/clientes(\/[^/]+)?$/],
     ['POST', /^\/api\/clientes$/],
+    ['PUT', /^\/api\/clientes\/[^/]+$/],         // solo teléfono, correo y dirección (lo limita la ruta): se completan al hacer una factura
     ['GET', /^\/api\/presupuestos(\/[^/]+)?$/],   // cotizaciones: no son un documento fiscal, cualquier vendedor puede hacerlas
     ['POST', /^\/api\/presupuestos$/],
     ['GET', /^\/api\/ventas$/],
