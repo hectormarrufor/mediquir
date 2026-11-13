@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { nombreConMarca } from '@/app/constants/nombreConMarca';
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
+import { lineasDeRenglon } from '@/app/constants/lineasFactura';
 import { numeroALetras } from '@/app/utils/numeroALetras';
 import { useZoomHoja } from '@/app/components/ui/useZoomHoja';
 
@@ -26,25 +27,6 @@ const ZONAS = {
 
 const nf = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt = (v) => nf.format(Number(v) || 0);
-// Cuántas líneas ocupa una descripción en su columna (ancho útil menos columnas fijas y relleno). Mide con el tipo de letra real si hay navegador.
-const ANCHO_DESC_PX = (7.34 - (0.62 + 1.05 + 0.9 + 1.3)) * 96 - 6;
-let lienzo = null;
-const medir = (t) => {
-    if (typeof document === 'undefined') return t.length * 7.6 * 0.6;
-    lienzo = lienzo || document.createElement('canvas').getContext('2d');
-    lienzo.font = 'normal 7.6px Arial, Helvetica, sans-serif';
-    return lienzo.measureText(t).width;
-};
-export function lineasDeDescripcion(texto) {
-    let lineas = 1, actual = '';
-    for (const palabra of String(texto || '').split(/s+/).filter(Boolean)) {
-        const prueba = actual ? `${actual} ${palabra}` : palabra;
-        if (!actual || medir(prueba) <= ANCHO_DESC_PX) actual = prueba;
-        else { lineas++; actual = palabra; }
-    }
-    return lineas;
-}
-
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-VE', { timeZone: 'America/Caracas' }) : '');
 
 // titulo: 'Factura' (por defecto) o 'Nota de Crédito' / 'Nota de Débito'. Para una nota, `referencia` (en lugar de "ORDEN DE COMPRA") indica la factura
@@ -77,7 +59,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
     const condicion = condicionTexto || (venta.condicionPago === 'Credito' ? `CREDITO a ${dias} Días` : 'CONTADO');
     const nombreDe = (d) => (d.isFicticio ? d.nombreFicticio : nombreConMarca(d.producto?.nombre || d.nombreFicticio, d.producto?.marca?.nombre));
     // Cada renglón ocupa 1 o 2 líneas según su descripción; las líneas extra de las notas ocupan 1
-    const totalFilas = detalles.reduce((a, d) => a + Math.min(2, lineasDeDescripcion(nombreDe(d))), 0) + lineasExtra.length;
+    const totalFilas = detalles.reduce((a, d) => a + lineasDeRenglon(nombreDe(d)), 0) + lineasExtra.length;
     const demasiados = totalFilas > CONFIG_FISCAL.maxRenglonesFactura;
 
     return (

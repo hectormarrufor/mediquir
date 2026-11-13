@@ -1,7 +1,7 @@
 'use client';
 
 import { nombreConMarca } from '@/app/constants/nombreConMarca';
-import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import { 
     Modal, Button, Group, Title, TextInput, NumberInput, 
     Select, Paper, Stack, Grid, Table, ActionIcon, 
@@ -27,6 +27,7 @@ import { numeroALetras } from '@/app/utils/numeroALetras';
 import { calcularFactura, aBolivares, aDolares, precioPorTarifa } from '@/app/constants/facturacion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
+import { lineasDeRenglon } from '@/app/constants/lineasFactura';
 import { presentacionesDe, presentacionDe } from '@/app/constants/presentaciones';
 import { fechaCaracas, formatearFecha } from '@/app/constants/hora';
 import { CONTENIDO_SIN_RELLENO } from '@/app/components/ui/modalMovil';
@@ -63,6 +64,9 @@ function PrecioEditable({ valor, simbolo, editado, onCommit, onRestablecer, size
 // controlInicial: número de control con el que se abre (registrar la factura de un número que faltaba en la secuencia de la forma libre)
 // presupuestoEditar: presupuesto ya guardado (con modo="presupuesto"): se carga para modificarlo y al guardar se actualiza el mismo número
 export const BORRADOR_PRESUPUESTO = 'mediquir:borrador-presupuesto';
+// Borrador de la venta que se está llenando: sobrevive a refrescar la página o cerrar el POS (se borra al asentar la venta o con «Empezar de cero»).
+// Si viene de un presupuesto con más líneas de las que caben en una factura, trae `cola` (las facturas que faltan) y `origen` (de qué presupuesto).
+export const BORRADOR_VENTA = 'mediquir:borrador-venta';
 
 export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta', controlInicial = null, presupuestoEditar = null }) {
     const esPresupuesto = modo === 'presupuesto';
@@ -70,6 +74,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const queryClient = useQueryClient(); // 🔥 INSTANCIADO PARA INVALIDAR QUERIES
     const [tipoVenta, setTipoVenta] = useState('DETAL'); 
     const [carrito, setCarrito] = useState([]);
+    const [cola, setCola] = useState([]); // facturas que faltan por hacer de un mismo presupuesto (cada una es un carrito)
+    const [origen, setOrigen] = useState(null); // { numero, parte, de }: el presupuesto del que viene esta venta
     const [busquedaProducto, setBusquedaProducto] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [guardandoPresupuesto, setGuardandoPresupuesto] = useState(false);
@@ -146,18 +152,28 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         }
     });
 
-    // Borrador del presupuesto nuevo: si la página se refresca por accidente, el formulario y el carrito se recuperan.
-    // Se borra al guardar o al salir con «Cerrar» (ver BORRADOR_PRESUPUESTO en la página de nuevo presupuesto).
-    const guardaBorrador = esPresupuesto && !editando;
+    // Borrador: si la página se refresca por accidente (o se cierra el POS), el formulario y el carrito se recuperan.
+    // En el presupuesto nuevo se borra al guardar o al salir con «Cerrar»; en la venta, al asentarla o con «Empezar de cero».
+    const claveBorrador = esPresupuesto ? BORRADOR_PRESUPUESTO : BORRADOR_VENTA;
+    const guardaBorrador = !editando && !controlInicial;
     const [borradorListo, setBorradorListo] = useState(false);
     useEffect(() => {
         if (!guardaBorrador || !opened) return;
         try {
-            const b = JSON.parse(localStorage.getItem(BORRADOR_PRESUPUESTO) || 'null');
+            const b = JSON.parse(localStorage.getItem(claveBorrador) || 'null');
             if (b) {
                 if (b.tipoVenta) setTipoVenta(b.tipoVenta);
                 if (b.form) formVenta.setValues({ ...formVenta.values, ...b.form });
                 if (Array.isArray(b.carrito)) setCarrito(b.carrito);
+                if (Array.isArray(b.cola)) setCola(b.cola);
+                if (b.origen) setOrigen(b.origen);
+                if (!esPresupuesto && (b.carrito?.length || b.cola?.length)) {
+                    notifications.show({
+                        title: b.origen ? `Presupuesto ${b.origen.numero}${b.origen.de > 1 ? ` · factura ${b.origen.parte} de ${b.origen.de}` : ''}` : 'Venta recuperada',
+                        message: b.origen && !b.form?.clienteId ? 'Elige el cliente a quien se le hace el documento. Puedes cambiar renglones y precios.' : 'Seguías llenando esta venta: sus datos se recuperaron. Para borrarlos usa «Empezar de cero».',
+                        color: 'blue', autoClose: 8000,
+                    });
+                }
             }
         } catch { /* sin borrador legible: se empieza en blanco */ }
         setBorradorListo(true);
@@ -166,10 +182,25 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     useEffect(() => {
         if (!guardaBorrador || !borradorListo) return;
         try {
-            if (carrito.length === 0 && !formVenta.values.clienteId && !formVenta.values.notas) localStorage.removeItem(BORRADOR_PRESUPUESTO);
-            else localStorage.setItem(BORRADOR_PRESUPUESTO, JSON.stringify({ tipoVenta, form: formVenta.values, carrito }));
+            const vacio = esPresupuesto ? (carrito.length === 0 && !formVenta.values.clienteId && !formVenta.values.notas) : (carrito.length === 0 && cola.length === 0);
+            if (vacio) localStorage.removeItem(claveBorrador);
+            else localStorage.setItem(claveBorrador, JSON.stringify({ tipoVenta, form: formVenta.values, carrito, cola, origen }));
         } catch { /* almacenamiento lleno o bloqueado: no pasa nada */ }
-    }, [guardaBorrador, borradorListo, tipoVenta, carrito, formVenta.values]);
+    }, [guardaBorrador, borradorListo, tipoVenta, carrito, cola, origen, formVenta.values]);
+
+    // Borra el documento que se está llenando y deja la pantalla como nueva
+    const hayAlgoQueBorrar = guardaBorrador && (carrito.length > 0 || cola.length > 0 || Boolean(formVenta.values.clienteId) || Boolean(formVenta.values.notas));
+    const empezarDeCero = () => {
+        if (!window.confirm('¿Empezar de cero? Se borra el carrito y los datos de este documento (no se puede deshacer).')) return;
+        try { localStorage.removeItem(claveBorrador); } catch { /* sin almacenamiento */ }
+        setCarrito([]); setCola([]); setOrigen(null);
+        formVenta.reset();
+        setTipoVenta('DETAL');
+        setVista('productos');
+    };
+    const botonCero = hayAlgoQueBorrar && (
+        <Button size="compact-sm" variant="light" color="red" leftSection={<IconTrash size={14} />} onClick={empezarDeCero}>Empezar de cero</Button>
+    );
 
     // Abierto desde «Números de control»: es una factura (con IVA) y lleva ese número de control
     useEffect(() => {
@@ -231,7 +262,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formVenta.values.tipoPrecio]);
 
+    const tipoMontado = useRef(false);
     useEffect(() => {
+        // Al abrir no se toca nada: así no se borra el cliente de un borrador recuperado
+        if (!tipoMontado.current) { tipoMontado.current = true; return; }
         if (tipoVenta === 'DETAL') {
             formVenta.setFieldValue('condicionPago', 'Contado');
             formVenta.setFieldValue('clienteId', null);
@@ -423,8 +457,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         if (carrito.length === 0) { setVista('productos'); return notifications.show({ message: 'El carrito está vacío', color: 'orange' }); }
         if (tipoVenta === 'MAYOR' && !formVenta.values.clienteId) { setVista('datos'); return notifications.show({ message: 'Debe seleccionar un cliente mayorista', color: 'red' }); }
         if (!formVenta.values.numeroDocumento) { setVista('datos'); return notifications.show({ message: 'El número de documento es obligatorio', color: 'red' }); }
-        if (tipoDocumentoActual === 'FACTURA' && carrito.length > CONFIG_FISCAL.maxRenglonesFactura) {
-            return notifications.show({ title: 'Demasiados renglones', message: `Una factura admite hasta ${CONFIG_FISCAL.maxRenglonesFactura} renglones (es lo que cabe en la forma libre). Divide la venta en dos facturas.`, color: 'orange' });
+        const lineasFactura = carrito.reduce((a, i) => a + lineasDeRenglon(i.isFicticio ? i.nombre : nombreConMarca(i.nombre, i.marcaNombre)), 0);
+        if (tipoDocumentoActual === 'FACTURA' && lineasFactura > CONFIG_FISCAL.maxRenglonesFactura) {
+            return notifications.show({ title: 'No caben en la forma libre', message: `Esta factura ocupa ${lineasFactura} líneas y entran ${CONFIG_FISCAL.maxRenglonesFactura} (una descripción larga ocupa 2). Quita renglones y hazlos en otra factura.`, color: 'orange' });
         }
         
         // Una venta al mayor casi siempre es a crédito: si va de contado se confirma antes de asentar (se registra el pago de una vez)
@@ -547,9 +582,23 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
             queryClient.invalidateQueries({ queryKey: ['ventas'] });
 
-            setCarrito([]);
-            formVenta.reset();
             setPreviewAbierto(false);
+            if (cola.length > 0) {
+                // Quedan facturas del mismo presupuesto: se sigue con la siguiente, con el mismo cliente y condiciones
+                const { clienteId, tipoPrecio, conIva, condicionPago, diasCredito } = formVenta.values;
+                const [siguiente, ...resto] = cola;
+                formVenta.reset();
+                formVenta.setValues({ ...formVenta.values, clienteId, tipoPrecio, conIva, condicionPago, diasCredito });
+                setCarrito(siguiente);
+                setCola(resto);
+                setOrigen((o) => (o ? { ...o, parte: o.parte + 1 } : o));
+                setVista('carrito');
+                notifications.show({ title: 'Siguiente factura del presupuesto', message: `Sigue la factura ${(origen?.parte || 1) + 1} de ${origen?.de || cola.length + 1}: revísala y asiéntala.`, color: 'blue', autoClose: 9000 });
+                return;
+            }
+            try { localStorage.removeItem(BORRADOR_VENTA); } catch { /* sin almacenamiento */ }
+            setCarrito([]); setOrigen(null);
+            formVenta.reset();
             onClose();
 
         } catch (error) {
@@ -962,10 +1011,14 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const contenidoEscritorio = (
         <>
             <Paper p="xs" mb="sm" bg="blue.0" radius="md">
-                <Group gap="xs">
-                    <IconExchange size={20} color="#1971C2" />
-                    <Text fw={600} c="blue.9">Tasa BCV:</Text>
-                    <Badge size="lg" color="blue" variant="filled">{tasaBcv} Bs/$</Badge>
+                <Group gap="xs" justify="space-between">
+                    <Group gap="xs">
+                        <IconExchange size={20} color="#1971C2" />
+                        <Text fw={600} c="blue.9">Tasa BCV:</Text>
+                        <Badge size="lg" color="blue" variant="filled">{tasaBcv} Bs/$</Badge>
+                        {origen && <Badge size="lg" color="teal" variant="light">Presupuesto {origen.numero}{origen.de > 1 ? ` · factura ${origen.parte} de ${origen.de}` : ''}</Badge>}
+                    </Group>
+                    {botonCero}
                 </Group>
             </Paper>
 
@@ -1061,7 +1114,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                             <Text size="xs" c="dimmed" lh={1.2}>Tasa BCV: <b>{tasaBcv ? `${tasaBcv} Bs/$` : '…'}</b></Text>
                         </Group>
                     </Box>
-                    <CloseButton size="xl" onClick={onClose} aria-label="Cerrar" />
+                    <Group gap={4} wrap="nowrap">{botonCero}<CloseButton size="xl" onClick={onClose} aria-label="Cerrar" /></Group>
                 </Group>
                 <SegmentedControl
                     fullWidth value={vista} onChange={setVista} color="blue.8"
