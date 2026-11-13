@@ -40,6 +40,8 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
     const elegirPapel = (v) => { setPapel(v); try { localStorage.setItem('papelFormaLibre', v); } catch { /* sin almacenamiento */ } };
     const esCarta = papel === 'carta';
     const zoom = useZoomHoja(768, 24); // media carta horizontal (8 in): en el teléfono se achica al ancho de la pantalla
+    // En la factura el número sale con el prefijo 00- (F-146870 -> 00-146870); las notas llevan el suyo (NC-, ND-)
+    const numeroImpreso = titulo === 'Factura' ? String(venta.numeroDocumento || '').replace(/^F-/i, '00-') : venta.numeroDocumento;
     const tasa = Number(venta.tasaCambio) || 1;
     const esBs = venta.moneda === 'BS';
     const aBs = (v) => (esBs ? Number(Number(v).toFixed(2)) : aBolivares(Number(v), tasa));
@@ -90,12 +92,12 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
 
                 {/* Datos del documento */}
                 <div className="fl-doc">
-                    <div className="fl-titulo"><span className="fl-azul" style={titulo.length > 8 ? { fontSize: '11px' } : undefined}>{titulo}</span><span className="fl-numero">{venta.numeroDocumento}</span></div>
+                    <div className="fl-titulo"><span className="fl-azul" style={titulo.length > 8 ? { fontSize: '11px' } : undefined}>{titulo}</span><span className="fl-numero">{numeroImpreso}</span></div>
+                    {venta.numeroControl && <div className="fl-control"><span className="fl-cond-t">N° de control </span><span className="fl-ctl-num">{venta.numeroControl}</span></div>}
                     <div className="fl-oc">{referencia ?? 'ORDEN DE COMPRA'}</div>
                     <div className="fl-fechas"><span>Emisión: <b>{fecha(venta.fechaEmision || venta.createdAt)}</b></span>{!sinVence && <span>Vence: <b>{fecha(venta.fechaVencimiento || venta.fechaEmision || venta.createdAt)}</b></span>}</div>
                     <div className="fl-cond">
                         <div><div className="fl-cond-t">{etiquetaCondicion}</div><div className="fl-cond-v">{condicion}</div></div>
-                        {/* El N° de control NO se imprime: ya viene en la forma libre preimpresa (el sistema solo lo guarda) */}
                     </div>
                 </div>
 
@@ -174,7 +176,8 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                 .fl-cond { display: flex; justify-content: space-between; margin-top: 1px; }
                 .fl-cond-t { font-weight: 800; font-size: 7px; }
                 .fl-cond-v { font-weight: 800; font-size: 9px; }
-                .fl-control { text-align: right; }
+                .fl-control { text-align: right; line-height: 1; margin-top: 1px; }
+                .fl-ctl-num { color: #d32f2f !important; font-weight: 800; font-size: 11px; letter-spacing: .4px; }
 
                 .fl-tabla { left: ${ZONAS.margenIzq}in; top: ${ZONAS.inicioTabla}in; width: ${ZONAS.anchoUtil}in; border-collapse: collapse; table-layout: fixed; }
                 .fl-tabla th { height: ${ZONAS.altoEncabezado}in; border-top: 1.6px solid #000; border-bottom: 1.6px solid #000; font-size: 7.6px; font-weight: 800; padding: 0 3px; }
