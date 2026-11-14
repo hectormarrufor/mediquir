@@ -47,7 +47,8 @@ const VENDEDOR_API = [
     ['POST', /^\/api\/ventas$/],
     ['GET', /^\/api\/ventas\/[^/]+$/],
     ['PUT', /^\/api\/ventas\/[^/]+$/],       // solo las acciones de firma (lo valida la ruta)
-    ['GET', /^\/api\/numeracion$/],                    // solo lectura: la consulta al hacer una nota de crédito o débito
+    ['GET', /^\/api\/comisiones\/vendedores$/],       // solo nombres: el POS avisa de quién es el vendedor externo del cliente
+    ['GET', /^\/api\/numeracion$/],                  // solo lectura: la consulta al hacer una nota de crédito o débito
     ['GET', /^\/api\/ventas\/[^/]+\/anular$/],         // la nota de crédito de un vendedor usa el mismo formulario que la de administración
     ['POST', /^\/api\/ventas\/[^/]+\/anular$/],
     ['GET', /^\/api\/ventas\/[^/]+\/notas$/],        // notas de SUS facturas (lo valida la ruta)

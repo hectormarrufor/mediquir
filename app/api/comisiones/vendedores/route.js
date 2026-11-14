@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server';
 import db from '@/models';
-import { requerirNoVendedor } from '../../_lib/acceso';
+import { requerirNoVendedor, rolDe } from '../../_lib/acceso';
+import { requerirStaff } from '../../inventario/_lib';
 
 export const dynamic = 'force-dynamic';
 const { VendedorComision } = db;
 
 // Lista de vendedores a comisión (para elegir el vendedor externo de un cliente)
 export async function GET() {
-    const acceso = await requerirNoVendedor();
+    const acceso = await requerirStaff(); // el POS avisa de quién es el vendedor externo de un cliente; un vendedor interno no ve porcentajes
     if (acceso.error) return acceso.error;
     try {
-        const vendedores = await VendedorComision.findAll({ attributes: ['id', 'nombre', 'porcentaje', 'activo'], order: [['nombre', 'ASC']], raw: true });
+        const esVend = rolDe(acceso.sesion) === 'vendedor';
+        const vendedores = await VendedorComision.findAll({ attributes: esVend ? ['id', 'nombre', 'activo'] : ['id', 'nombre', 'porcentaje', 'activo'], order: [['nombre', 'ASC']], raw: true });
         return NextResponse.json({ vendedores });
     } catch (error) {
         console.error('Lista de vendedores a comisión:', error);

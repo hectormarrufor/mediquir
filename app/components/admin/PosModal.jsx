@@ -131,6 +131,11 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     const { data: productos } = useQuery({ queryKey: ['productos-pos'], queryFn: () => fetchSelect('/api/productos') });
     const { data: clientes } = useQuery({ queryKey: ['clientes-pos'], queryFn: () => fetchSelect('/api/clientes') });
+    // Vendedores externos (a comisión): el POS avisa de quién es el cliente elegido y, si es de nadie, ofrece asignarlo
+    const { data: datosVendExt } = useQuery({ queryKey: ['vendedores-comision-pos'], queryFn: async () => { const r = await fetch('/api/comisiones/vendedores'); return r.ok ? r.json() : { vendedores: [] }; } });
+    const vendedoresExternos = (datosVendExt?.vendedores || []).filter((v) => v.activo);
+    const [vendAsignar, setVendAsignar] = useState(null);
+    const [asignandoVend, setAsignandoVend] = useState(false);
     const { data: correlativos } = useQuery({ queryKey: ['correlativos-pos'], queryFn: () => fetchSelect('/api/correlativos') });
     // Siguiente número de control libre de la forma libre (un vendedor no ve la numeración: ahí queda el formato de ejemplo)
     const { data: numeracion } = useQuery({ queryKey: ['numeracion-pos'], enabled: !esVendedor && !esPresupuesto, queryFn: async () => { const r = await fetch('/api/numeracion'); return r.ok ? r.json() : null; } });
@@ -858,6 +863,39 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 <IconPlus size={20} />
             </ActionIcon>
         </Group>
+        {clienteSeleccionado && !esPresupuesto && ['FACTURA', 'NOTA DE ENTREGA'].includes(tipoDocumentoActual) && (() => {
+            const duenoExt = vendedoresExternos.find((v) => String(v.id) === String(clienteSeleccionado.vendedorComisionId));
+            const documento = tipoDocumentoActual === 'FACTURA' ? 'factura' : 'nota de entrega';
+            if (clienteSeleccionado.vendedorComisionId) {
+                const nombre = duenoExt?.nombre || datosVendExt?.vendedores?.find((v) => String(v.id) === String(clienteSeleccionado.vendedorComisionId))?.nombre || 'un vendedor externo';
+                return (
+                    <Alert color="grape" variant="light" p="xs" title={`Cliente del vendedor ${nombre}`}>
+                        <Text size="xs">Esta {documento} generará comisión para <b>{nombre}</b>{duenoExt?.porcentaje ? ` (${Number(duenoExt.porcentaje)} %)` : ''}.</Text>
+                    </Alert>
+                );
+            }
+            return (
+                <Alert color="yellow" variant="light" p="xs" title="Este cliente no es de ningún vendedor externo">
+                    <Text size="xs" mb={esVendedor ? 0 : 6}>Esta {documento} no generará comisión.{esVendedor ? ' Si es de un vendedor, pídele a administración que se lo asigne.' : ' Si es de uno de ellos, asígnalo aquí:'}</Text>
+                    {!esVendedor && vendedoresExternos.length > 0 && (
+                        <Group gap="xs" wrap="nowrap" align="flex-end">
+                            <Select size="xs" style={{ flex: 1 }} placeholder="Elige el vendedor" data={vendedoresExternos.map((v) => ({ value: String(v.id), label: `${v.nombre} (${Number(v.porcentaje)} %)` }))} value={vendAsignar} onChange={setVendAsignar} clearable />
+                            <Button size="xs" color="grape" disabled={!vendAsignar} loading={asignandoVend} onClick={async () => {
+                                setAsignandoVend(true);
+                                try {
+                                    const r = await fetch(`/api/clientes/${clienteSeleccionado.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vendedorComisionId: Number(vendAsignar) }) });
+                                    const c = await r.json().catch(() => ({}));
+                                    if (!r.ok) throw new Error(c.error || 'No se pudo asignar');
+                                    notifications.show({ color: 'teal', message: `${clienteSeleccionado.nombre} ahora es cliente de ${vendedoresExternos.find((v) => String(v.id) === vendAsignar)?.nombre}` });
+                                    setVendAsignar(null);
+                                    await queryClient.invalidateQueries({ queryKey: ['clientes-pos'] });
+                                } catch (e) { notifications.show({ color: 'red', title: 'No se asignó', message: e.message }); } finally { setAsignandoVend(false); }
+                            }}>Asignar</Button>
+                        </Group>
+                    )}
+                </Alert>
+            );
+        })()}
         {esFactura && clienteSeleccionado && (
             <Paper withBorder p="xs" radius="md" style={{ borderColor: datosCli.direccion.trim() ? undefined : '#e03131' }}>
                 <Text size="xs" fw={700} mb={4}>Datos del cliente (se guardan en su ficha)</Text>
