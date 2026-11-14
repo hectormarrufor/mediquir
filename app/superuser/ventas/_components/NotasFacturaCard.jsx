@@ -49,7 +49,7 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
         <Paper withBorder p="md" radius="md" bg="gray.0">
             <Text fw={700} mb="xs" c="blue.9"><IconFileDiff size={16} style={{ verticalAlign: 'middle' }} /> Notas de crédito y débito</Text>
             <Group gap="xs" mb="sm" grow>
-                <Button size="xs" variant="light" color="red" onClick={() => setAnulando(true)} disabled={data && data.acreditable <= 0}>Nota de crédito</Button>
+                <Button size="xs" variant="light" color="red" onClick={() => setAnulando(true)} disabled={data && data.acreditable <= 0}>Anular factura / nota de crédito</Button>
                 <Button size="xs" variant="light" color="blue" onClick={() => setEmitiendo('DEBITO')}>Nota de débito</Button>
             </Group>
 
