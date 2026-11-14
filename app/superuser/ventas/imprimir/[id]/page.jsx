@@ -72,15 +72,17 @@ export default function ImprimirRecibo() {
     let totalUsd = venta.moneda === 'USD' ? Number(venta.totalFinal) : Number(venta.totalFinal) / Number(venta.tasaCambio);
     
     // En la nota de entrega las líneas se guardan sin IVA (aplicaIva=false): el IVA referencial sale de la alícuota de cada producto. En la planilla impresa se muestra como una factura: base imponible, IVA y total con IVA (en el sistema la nota guarda y cobra solo la base)
-    const ivaReferencial = esNotaEntrega
+    // Nota de entrega y venta rápida sin IVA cobrado: se muestran como una factura (IVA referencial y total con IVA), pero no fiscales
+    const referencial = (esNotaEntrega || venta.tipoDocumento === 'VENTA_RAPIDA') && Number(venta.montoIva) === 0;
+    const ivaReferencial = referencial
         ? Math.round((venta.detalles || []).reduce((a, d) => a + Number(d.subtotal) * (d.isFicticio ? (d.aplicaIva ? 16 : 0) : Number(d.producto?.porcentajeIva ?? 16)) / 100, 0) * 100) / 100
         : 0;
-    const ivaDoc = esNotaEntrega ? ivaReferencial : Number(venta.montoIva);
+    const ivaDoc = referencial ? ivaReferencial : Number(venta.montoIva);
     const ivaBs = venta.moneda === 'BS' ? ivaDoc : ivaDoc * Number(venta.tasaCambio);
     const ivaUsd = venta.moneda === 'USD' ? ivaDoc : ivaDoc / Number(venta.tasaCambio);
 
     // El total de la nota guardada es la base: en la planilla se le suma el IVA
-    if (esNotaEntrega) { totalBs += ivaBs; totalUsd += ivaUsd; }
+    if (referencial) { totalBs += ivaBs; totalUsd += ivaUsd; }
 
     // Recibo de venta (V-) de la tienda: desglosa el IVA cobrado, pero NO es un documento fiscal
     const conIva = ivaDoc > 0;

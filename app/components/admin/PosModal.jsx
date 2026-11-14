@@ -547,8 +547,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         }
     };
 
-    const handleProcesarVenta = async () => {
+    // imprimir=true: «Asentar e imprimir». La ventana se abre YA (con el toque del botón) porque el navegador bloquea las que se abren después de esperar al servidor
+    const handleProcesarVenta = async (imprimir = false) => {
         setIsSubmitting(true);
+        const ventana = imprimir ? window.open('', '_blank') : null;
         try {
             const payload = {
                 vendedorId: userId,
@@ -591,6 +593,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Error al procesar la venta');
 
+            if (ventana) { if (data.porAprobar) ventana.close(); else ventana.location.href = `/superuser/ventas/imprimir/${data.ventaId}`; }
             // Se ofrece imprimir de una vez. Va en un aviso con botón (y no se abre sola) porque el navegador bloquea ventanas que no vienen de un toque;
             // el aviso sobrevive al cierre de esta pantalla
             notifications.show({
@@ -632,6 +635,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             onClose();
 
         } catch (error) {
+            ventana?.close();
             notifications.show({ title: 'Error', message: error.message, color: 'red' });
         } finally {
             setIsSubmitting(false);
@@ -656,14 +660,23 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     
     const aBs = (v) => (esMonedaBs ? v : aBolivares(v, tasaBcv));
     const aUsd = (v) => (esMonedaBs ? aDolares(v, tasaBcv) : v);
-    const prevTotalBs = aBs(totalFinal);
-    const prevTotalUsd = aUsd(totalFinal);
-    const prevIvaBs = aBs(montoIva);
-    const prevIvaUsd = aUsd(montoIva);
-    const prevExentoBs = aBs(totalExento);
-    const prevExentoUsd = aUsd(totalExento);
-    const prevBaseBs = aBs(baseImponible);
-    const prevBaseUsd = aUsd(baseImponible);
+    // Nota de entrega y venta rápida no cobran IVA, pero la hoja se ve como una factura (es para facturar a futuro): IVA referencial y total con IVA, como al imprimirla
+    const referencial = !conIva && tipoDocumentoActual !== 'FACTURA' && carrito.length > 0;
+    const facturaPrev = referencial
+        ? calcularFactura({
+            renglones: carrito.map((item) => ({ precioUnitario: item.precio, cantidad: item.cantidad, aplicaIva: item.isFicticio ? Boolean(item.aplicaIva) : item.porcentajeIva > 0, porcentajeIva: item.isFicticio ? undefined : item.porcentajeIva })),
+            costoFlete: costoFleteNum,
+        })
+        : factura;
+    const mostrarIvaPrev = conIva || referencial;
+    const prevTotalBs = aBs(facturaPrev.totalFinal);
+    const prevTotalUsd = aUsd(facturaPrev.totalFinal);
+    const prevIvaBs = aBs(facturaPrev.montoIva);
+    const prevIvaUsd = aUsd(facturaPrev.montoIva);
+    const prevExentoBs = aBs(facturaPrev.exento);
+    const prevExentoUsd = aUsd(facturaPrev.exento);
+    const prevBaseBs = aBs(facturaPrev.baseImponible);
+    const prevBaseUsd = aUsd(facturaPrev.baseImponible);
     
     const clienteSeleccionado = clientes?.find(c => c.id.toString() === formVenta.values.clienteId?.toString());
     const formatoNumero = (num) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
@@ -1473,7 +1486,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                 <tbody>
                                     <tr>
                                         <td className="total-cell border-right text-center">
-                                            {formVenta.values.conIva ? (
+                                            {mostrarIvaPrev ? (
                                                 <>
                                                     <span className="label-red">TOTAL IMPUESTO: 16%</span><br/>
                                                     <div className="monto-split">
@@ -1499,7 +1512,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                     </tr>
                                     <tr>
                                         <td className="total-cell border-right text-center">
-                                            {formVenta.values.conIva ? (
+                                            {mostrarIvaPrev ? (
                                                 <>
                                                     <span className="label-red">BASE IMPONIBLE:</span><br/>
                                                     <div className="monto-split">
@@ -1524,6 +1537,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                             </table>
 
                             <div className="monto-letras"><span className="label-blue">Son: Bs. </span><span className="text-black">{numeroALetras(prevTotalBs)}</span></div>
+                            {referencial && <div className="label-red text-center" style={{ fontWeight: 700, letterSpacing: 1 }}>{tipoDocumentoActual === 'NOTA DE ENTREGA' ? 'DOCUMENTO NO FISCAL' : 'COMPROBANTE NO FISCAL'}</div>}
                             <div className="original-label label-red text-center">VISTA PREVIA DE CONFIRMACIÓN</div>
                         </footer>
                     </div>
@@ -1543,9 +1557,14 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     <Button variant="outline" color="gray" onClick={() => setPreviewAbierto(false)} size={isMobile ? 'sm' : 'md'} h={isMobile ? 46 : undefined} style={isMobile ? { flex: 1 } : undefined}>
                         {isMobile ? 'Editar' : 'Volver a Editar'}
                     </Button>
-                    <Button color="green.8" leftSection={<IconCheck size={20} />} onClick={handleProcesarVenta} loading={isSubmitting} size={isMobile ? 'sm' : 'md'} h={isMobile ? 46 : undefined} style={isMobile ? { flex: 2 } : undefined}>
+                    <Button color="green.8" leftSection={<IconCheck size={20} />} onClick={() => handleProcesarVenta(false)} loading={isSubmitting} size={isMobile ? 'sm' : 'md'} h={isMobile ? 46 : undefined} style={isMobile ? { flex: 2 } : undefined}>
                         {esPresupuesto ? 'Asentar venta' : (esCredito ? 'Asentar A CRÉDITO' : 'Asentar DE CONTADO')}
                     </Button>
+                    {!esPresupuesto && !(esVendedor && esFactura) && (
+                        <Button color="blue.8" variant="filled" leftSection={<IconPrinter size={20} />} onClick={() => handleProcesarVenta(true)} loading={isSubmitting} size={isMobile ? 'sm' : 'md'} h={isMobile ? 46 : undefined} style={isMobile ? { flex: 2 } : undefined}>
+                            {isMobile ? 'Asentar e imprimir' : 'Asentar e imprimir'}
+                        </Button>
+                    )}
                 </Group>
 
                 <style dangerouslySetInnerHTML={{ __html: `
