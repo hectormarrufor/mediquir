@@ -33,6 +33,36 @@ export async function GET(request) {
     }
 }
 
+// Revierte un pago de comisión hecho por error: ?id=  Solo el ÚLTIMO pago del vendedor (así lo acumulado y el préstamo vuelven exactamente a como estaban).
+// Las líneas que cubrió vuelven a «por pagar», se borra el abono que hizo al préstamo y se borra el pago (su formato de pago deja de existir).
+export async function DELETE(request) {
+    const acceso = await requerirNoVendedor();
+    if (acceso.error) return acceso.error;
+    try {
+        const id = Number(new URL(request.url).searchParams.get('id'));
+        await sequelize.transaction(async (t) => {
+            const pago = await PagoComision.findByPk(id, { transaction: t, lock: t.LOCK.UPDATE });
+            if (!pago) throw Object.assign(new Error('Ese pago ya no existe'), { estado: 404 });
+            const vendedor = await VendedorComision.findByPk(pago.vendedorId, { transaction: t, lock: t.LOCK.UPDATE });
+            const posterior = await PagoComision.count({ where: { vendedorId: pago.vendedorId, id: { [db.Sequelize.Op.gt]: pago.id } }, transaction: t });
+            if (posterior) throw Object.assign(new Error('Solo se puede revertir el último pago del vendedor: revierte primero los más nuevos'), { estado: 409 });
+            const ids = (pago.lineas || []).map((l) => Number(l.id)).filter(Number.isInteger);
+            if (ids.length) await ComisionVenta.update({ estatusComision: 'PENDIENTE', fechaPagoComision: null }, { where: { id: ids, vendedorId: pago.vendedorId }, transaction: t });
+            await MovimientoPrestamoVendedor.destroy({ where: { pagoComisionId: pago.id }, transaction: t });
+            // Lo abonado a una línea parcial vuelve a lo que era antes del pago: abonado = lo que sobró después del pago - lo pagado + lo que cubrieron las líneas
+            const cubierto = r2((pago.lineas || []).reduce((a, l) => a + (Number(l.comisionUsd) || 0), 0));
+            const antes = Math.max(0, r2(Number(vendedor.comisionAbonadaUsd || 0) - Number(pago.totalComisionUsd) + cubierto));
+            await vendedor.update({ comisionAbonadaUsd: antes }, { transaction: t });
+            await pago.destroy({ transaction: t });
+        });
+        return NextResponse.json({ ok: true });
+    } catch (error) {
+        if (error?.estado) return NextResponse.json({ error: error.message }, { status: error.estado });
+        console.error('Revertir pago de comisión:', error);
+        return NextResponse.json({ error: 'No se pudo revertir el pago' }, { status: 500 });
+    }
+}
+
 // Paga al vendedor TODO o UNA PARTE de su comisión acumulada y, si hay préstamo, destina parte de ese pago a bajarlo.
 // { vendedorId, lineaIds: [..todas las líneas por pagar], montoUsd?: lo que se liquida de la comisión (vacío = todo), abonoPrestamoUsd?, observacion? }
 //   · montoUsd = en efectivo (o transferencia) al vendedor + abonoPrestamoUsd (lo que baja de su préstamo)

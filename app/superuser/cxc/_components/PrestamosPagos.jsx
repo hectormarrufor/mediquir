@@ -3,7 +3,7 @@
 // Préstamos a los vendedores a comisión y el pago de su comisión acumulada (completo o una parte, con abono al préstamo y formato de pago).
 import React, { useEffect, useState } from 'react';
 import { ActionIcon, Alert, Box, Button, Group, NumberInput, SegmentedControl, Stack, Table, Text, Textarea } from '@mantine/core';
-import { IconCash, IconCircleCheck, IconInfoCircle, IconPrinter, IconTrash } from '@tabler/icons-react';
+import { IconArrowBackUp, IconCash, IconCircleCheck, IconInfoCircle, IconPrinter, IconTrash } from '@tabler/icons-react';
 import { Dialogo } from './Piezas';
 import { bolivares, dolares, fmtFecha, hoy } from './utilidades';
 import classes from './cxc.module.css';
@@ -14,7 +14,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const SEG = { root: classes.segRaiz, label: classes.segEtiqueta };
 
 // ---------- Préstamos: saldo, historial (se puede borrar un préstamo), alta de uno nuevo y abono con la comisión acumulada ----------
-export function DialogoPrestamo({ abierto, vendedor, tasa, acumulado = 0, onCerrar, onPrestar, onBorrar, onAbonar }) {
+export function DialogoPrestamo({ abierto, vendedor, tasa, acumulado = 0, onCerrar, onPrestar, onBorrar, onAbonar, onRevertirPago }) {
     const [monto, setMonto] = useState('');
     const [nota, setNota] = useState('');
     const [fecha, setFecha] = useState(hoy());
@@ -74,6 +74,37 @@ export function DialogoPrestamo({ abierto, vendedor, tasa, acumulado = 0, onCerr
                     <Button variant="default" size="sm" onClick={onCerrar}>Cerrar</Button>
                     <Button size="sm" disabled={!(Number(monto) > 0)} loading={guardando} onClick={guardar}>{tiene ? 'Añadir préstamo' : 'Registrar préstamo'}</Button>
                 </Group>
+                {(vendedor?.pagos || []).length > 0 && (
+                    <>
+                        <Text fz={13} fw={700}>Pagos de comisión</Text>
+                        <Box style={{ overflowX: 'auto' }}>
+                            <Table fz={12.5} withRowBorders verticalSpacing={4}>
+                                <Table.Thead><Table.Tr><Table.Th>Pago</Table.Th><Table.Th>Fecha</Table.Th><Table.Th ta="right">Comisión</Table.Th><Table.Th ta="right">Al préstamo</Table.Th><Table.Th w={70} /></Table.Tr></Table.Thead>
+                                <Table.Tbody>
+                                    {vendedor.pagos.map((pg, i) => (
+                                        <Table.Tr key={pg.id}>
+                                            <Table.Td>#{pg.id}</Table.Td>
+                                            <Table.Td>{fmtFecha(pg.fecha)}</Table.Td>
+                                            <Table.Td ta="right" fw={700}>{dolares(pg.totalComisionUsd)}</Table.Td>
+                                            <Table.Td ta="right">{dolares(pg.abonoPrestamoUsd)}</Table.Td>
+                                            <Table.Td>
+                                                <Group gap={2} wrap="nowrap">
+                                                    <ActionIcon variant="subtle" color="gray" size="sm" aria-label="Imprimir formato de pago" title="Imprimir formato de pago" onClick={() => imprimirFormatoPago(pg.id).catch((e) => alert(e.message))}><IconPrinter size={15} /></ActionIcon>
+                                                    {i === 0 && onRevertirPago && (
+                                                        <ActionIcon variant="subtle" color="red" size="sm" aria-label="Revertir este pago" title="Revertir este pago (me equivoqué)"
+                                                            onClick={() => { if (window.confirm(`¿Revertir el pago #${pg.id} de ${dolares(pg.totalComisionUsd)}? Sus comisiones vuelven a «por pagar» y se quita lo que abonó al préstamo.`)) onRevertirPago(pg).catch(() => {}); }}>
+                                                            <IconArrowBackUp size={15} />
+                                                        </ActionIcon>
+                                                    )}
+                                                </Group>
+                                            </Table.Td>
+                                        </Table.Tr>
+                                    ))}
+                                </Table.Tbody>
+                            </Table>
+                        </Box>
+                    </>
+                )}
                 {p.movimientos.length > 0 && (
                     <>
                         <Text fz={13} fw={700}>Historial</Text>
