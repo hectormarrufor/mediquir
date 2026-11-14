@@ -14,6 +14,7 @@ import HojaTarjetas from './HojaTarjetas';
 import { DialogoAgregarLinea, DialogoEditarLinea, DialogoNuevoVendedor, LeyendaColores } from './PiezasVendedores';
 import { EstadoVacio, Esqueleto, Kpi, useConfirmar } from './Piezas';
 import { DialogoPagarComision, DialogoPrestamo } from './PrestamosPagos';
+import DialogoClientesVendedor from './ClientesVendedor';
 import { FILTROS, agruparFacturas, claveDoc, opcionesPct, porPagar } from './comisiones';
 import { useHojaVendedor } from './useHojaVendedor';
 import { bolivares, dolares, useAltoElemento, usd, useVistaTarjetas } from './utilidades';
@@ -115,7 +116,8 @@ export default function HojasVendedores() {
             <Stack gap={8}>
                 {encabezado}
                 <EstadoVacio icono={IconUserPlus} titulo="Crea el primer vendedor a comisión" texto="Cada vendedor tiene su hoja: sus facturas, los abonos de sus clientes y las comisiones que se le deben." accion={<Button size="sm" leftSection={<IconUserPlus size={16} />} onClick={() => setDialogo({ tipo: 'vendedor' })}>Nuevo vendedor</Button>} />
-                <DialogoNuevoVendedor abierto={dialogo?.tipo === 'vendedor'} onCerrar={cerrar} onCrear={hoja.crearVendedor} />
+                <DialogoClientesVendedor abierto={dialogo?.tipo === 'clientes'} vendedor={actual} vendedores={hoja.vendedores} onCerrar={cerrar} />
+            <DialogoNuevoVendedor abierto={dialogo?.tipo === 'vendedor'} onCerrar={cerrar} onCrear={hoja.crearVendedor} />
             </Stack>
         );
     }
@@ -142,6 +144,7 @@ export default function HojasVendedores() {
     );
     const seleccionarPorPagar = () => hoja.seleccionarVarias(hoja.porPagarVisibles, true);
     const agregarLinea = () => setDialogo({ tipo: 'agregar', inicial: null });
+    const verClientes = () => setDialogo({ tipo: 'clientes' });
     const resumenSeleccion = (
         <Text fz={13} fw={700} c="#4d3800">
             {hoja.seleccion.cantidad} seleccionada(s) · {dolares(hoja.seleccion.comision)}{tasa ? ` · ${bolivares(hoja.seleccion.comision * tasa)}` : ''}
@@ -191,6 +194,7 @@ export default function HojasVendedores() {
                                     <Menu.Item leftSection={<IconCash size={16} />} disabled={!todasPorPagar.length} onClick={abrirPago}>Pagar comisión acumulada ({todasPorPagar.length})</Menu.Item>
                                     <Menu.Item leftSection={<IconSelectAll size={16} />} disabled={!hoja.porPagarVisibles.length} onClick={seleccionarPorPagar}>Seleccionar las por pagar ({hoja.porPagarVisibles.length})</Menu.Item>
                                     <Menu.Item leftSection={<IconPlus size={16} />} onClick={agregarLinea}>Agregar factura o abono</Menu.Item>
+                                    <Menu.Item leftSection={<IconUsers size={16} />} onClick={verClientes}>Clientes de {actual?.nombre}</Menu.Item>
                                     <Menu.Divider />
                                     <Menu.Item leftSection={<IconFold size={16} />} onClick={hoja.expandirTodo}>Desplegar todos los clientes</Menu.Item>
                                     <Menu.Item leftSection={<IconFold size={16} />} onClick={hoja.contraerTodo}>Plegar todos los clientes</Menu.Item>
@@ -210,6 +214,7 @@ export default function HojasVendedores() {
                             </Tooltip>
                             <Button size="compact-sm" variant="default" onClick={hoja.expandirTodo}>Desplegar todo</Button>
                             <Button size="compact-sm" variant="default" onClick={hoja.contraerTodo}>Plegar todo</Button>
+                            <Button size="compact-sm" variant="default" leftSection={<IconUsers size={15} />} onClick={verClientes}>Sus clientes</Button>
                             <Button size="compact-sm" leftSection={<IconPlus size={15} />} onClick={agregarLinea}>Agregar línea</Button>
                         </Group>
                     </Group>
