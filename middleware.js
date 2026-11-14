@@ -48,7 +48,9 @@ const VENDEDOR_API = [
     ['GET', /^\/api\/ventas\/[^/]+$/],
     ['PUT', /^\/api\/ventas\/[^/]+$/],       // solo las acciones de firma (lo valida la ruta)
     ['GET', /^\/api\/numeracion$/],                    // solo lectura: la consulta al hacer una nota de crédito o débito
-    ['GET', /^\/api\/ventas\/[^/]+\/notas$/],          // notas de SUS facturas (lo valida la ruta)
+    ['GET', /^\/api\/ventas\/[^/]+\/anular$/],         // la nota de crédito de un vendedor usa el mismo formulario que la de administración
+    ['POST', /^\/api\/ventas\/[^/]+\/anular$/],
+    ['GET', /^\/api\/ventas\/[^/]+\/notas$/],        // notas de SUS facturas (lo valida la ruta)
     ['POST', /^\/api\/ventas\/[^/]+\/notas$/],         // nota de crédito o débito de un vendedor: queda por aprobar
     ['GET', /^\/api\/ventas\/[^/]+\/empaque$/],        // wizard de empaque: solo el empacador asignado (lo valida la ruta)
     ['POST', /^\/api\/ventas\/[^/]+\/empaque(\/foto)?$/],

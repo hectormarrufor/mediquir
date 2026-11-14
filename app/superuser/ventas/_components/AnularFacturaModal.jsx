@@ -114,7 +114,7 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                 }),
             });
             avisarNotaEmitida({
-                color: 'green', titulo: 'Anulación registrada', notas: r.notas.map((n) => ({ id: n.id, numero: n.numero })),
+                color: 'green', titulo: 'Nota de crédito emitida', porAprobar: r.porAprobar, notas: r.notas.map((n) => ({ id: n.id, numero: n.numero })),
                 mensaje: `${r.notas.map((n) => `${n.numero} (control ${n.control}) sobre ${n.factura}`).join('; ')}.${r.notasEntrega.length ? ` La deuda volvió a ${r.notasEntrega.join(', ')}.` : ''}${r.notas.some((n) => n.pagoRebajado) ? ' Se rebajó el pago ya registrado.' : ''}`,
             });
             onClose();
@@ -125,7 +125,7 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
     };
 
     return (
-        <Modal {...PANTALLA_COMPLETA_MOVIL} size="lg" opened={opened} onClose={onClose} centered title={<Text fw={800}>Anular la factura {pedido.numeroDocumento}</Text>}>
+        <Modal {...PANTALLA_COMPLETA_MOVIL} size="lg" opened={opened} onClose={onClose} centered title={<Text fw={800}>Nota de crédito · factura {pedido.numeroDocumento}</Text>}>
             {isLoading ? <Group justify="center" py="md"><Loader /></Group> : error ? <Alert color="red">{error.message}</Alert> : (
                 <Stack gap="sm">
                     <Text size="sm">La factura no se borra: se emite una <b>nota de crédito</b> con el siguiente número ({plan.siguienteNc || 'NC'}) y su propio número de control, que la compensa en el libro de ventas.</Text>

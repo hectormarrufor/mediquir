@@ -29,7 +29,8 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
         const tipo = p.get('nota');
         if (!['CREDITO', 'DEBITO'].includes(tipo) || pedido.tipoDocumento !== 'FACTURA' || pedido.statusDespacho === 'Cancelado') return;
         setControlInicial(p.get('control') || '');
-        setEmitiendo(tipo);
+        if (tipo === 'CREDITO') setAnulando(true); // la nota de crédito es siempre el mismo formulario: el de anular (total o parcial)
+        else setEmitiendo(tipo);
     }, [pedido.tipoDocumento, pedido.statusDespacho]);
     const { data, refetch } = useQuery({
         queryKey: ['notas-venta', pedido.id],
@@ -48,16 +49,12 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
         <Paper withBorder p="md" radius="md" bg="gray.0">
             <Text fw={700} mb="xs" c="blue.9"><IconFileDiff size={16} style={{ verticalAlign: 'middle' }} /> Notas de crédito y débito</Text>
             <Group gap="xs" mb="sm" grow>
-                <Button size="xs" variant="light" color="red" onClick={() => setEmitiendo('CREDITO')} disabled={data && data.acreditable <= 0}>Nota de crédito</Button>
+                <Button size="xs" variant="light" color="red" onClick={() => setAnulando(true)} disabled={data && data.acreditable <= 0}>Nota de crédito</Button>
                 <Button size="xs" variant="light" color="blue" onClick={() => setEmitiendo('DEBITO')}>Nota de débito</Button>
             </Group>
 
             {!esVendedor && pedido.moneda === 'USD' && (
                 <Button size="xs" variant="light" color="indigo" fullWidth mb="sm" onClick={() => setDiferencial(true)}>Nota de débito por diferencial cambiario</Button>
-            )}
-            {/* Anular la factura (total o parcial) con una nota de crédito: solo administración */}
-            {isAdmin && data && data.acreditable > 0 && (
-                <Button size="xs" variant="outline" color="red" fullWidth mb="sm" onClick={() => setAnulando(true)}>Anular factura (total o parcial)</Button>
             )}
             {data && data.acreditable <= 0 && notas.some((n) => n.tipo === 'CREDITO' && n.estado === 'EMITIDA') && (
                 <Badge color="red" variant="light" size="lg" fullWidth mb="sm">Factura anulada por completo con nota de crédito</Badge>
@@ -97,7 +94,7 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
             {diferencial && <DiferencialCambiarioModal opened onClose={() => setDiferencial(false)} factura={pedido} onEmitida={refrescar} />}
             {emitiendo && <EmitirNotaModal opened onClose={() => { setEmitiendo(null); setControlInicial(''); }} factura={pedido} tipo={emitiendo} controlInicial={controlInicial} onEmitida={(nota) => { refrescar(); if (nota?.tipo === 'CREDITO' && Number(nota.saldoAFavorUsd) > 0.005) setCompensar(nota); }} />}
             {compensar && <CompensarNotaModal nota={compensar} desdeEmision onClose={() => setCompensar(null)} onCambio={refrescar} />}
-            {anulando && <AnularFacturaModal opened onClose={() => setAnulando(false)} pedido={pedido} onListo={refrescar} />}
+            {anulando && <AnularFacturaModal opened onClose={() => { setAnulando(false); setControlInicial(''); }} pedido={pedido} onListo={refrescar} controlInicial={controlInicial || null} />}
         </Paper>
     );
 }
