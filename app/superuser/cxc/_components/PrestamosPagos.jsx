@@ -14,15 +14,17 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const SEG = { root: classes.segRaiz, label: classes.segEtiqueta };
 
 // ---------- Préstamos: saldo, historial (se puede borrar un préstamo), alta de uno nuevo y abono con la comisión acumulada ----------
-export function DialogoPrestamo({ abierto, vendedor, tasa, acumulado = 0, onCerrar, onPrestar, onBorrar, onAbonar, onRevertirPago }) {
+export function DialogoPrestamo({ abierto, vendedor, tasa, acumulado = 0, onCerrar, onPrestar, onBorrar, onAbonar, onRevertirPago, onAbonarSuelto }) {
     const [monto, setMonto] = useState('');
     const [nota, setNota] = useState('');
     const [fecha, setFecha] = useState(hoy());
     const [guardando, setGuardando] = useState(false);
     const [rebaja, setRebaja] = useState('');
     const [rebajando, setRebajando] = useState(false);
+    const [abSuelto, setAbSuelto] = useState({ monto: '', fecha: hoy(), nota: '' }); // abono anterior a la comisión (no sale de ella)
+    const [guardandoSuelto, setGuardandoSuelto] = useState(false);
     const [ultimoPago, setUltimoPago] = useState(null); // pago hecho desde aquí, para imprimir su formato
-    useEffect(() => { if (abierto) { setMonto(''); setNota(''); setFecha(hoy()); setRebaja(''); setUltimoPago(null); } }, [abierto]);
+    useEffect(() => { if (abierto) { setMonto(''); setNota(''); setFecha(hoy()); setRebaja(''); setUltimoPago(null); setAbSuelto({ monto: '', fecha: hoy(), nota: '' }); } }, [abierto]);
     const p = vendedor?.prestamo || { saldo: 0, movimientos: [] };
     const tiene = p.saldo > 0.004 || p.movimientos.length > 0;
     const topeRebaja = r2(Math.min(p.saldo, acumulado));
@@ -33,6 +35,10 @@ export function DialogoPrestamo({ abierto, vendedor, tasa, acumulado = 0, onCerr
     const abonar = async () => {
         setRebajando(true);
         try { const r = await onAbonar(Number(rebaja)); setUltimoPago({ id: r.pagoId, monto: Number(rebaja) }); setRebaja(''); } catch { /* ya se avisó */ } finally { setRebajando(false); }
+    };
+    const abonarSuelto = async () => {
+        setGuardandoSuelto(true);
+        try { await onAbonarSuelto({ montoUsd: Number(abSuelto.monto), fecha: abSuelto.fecha, nota: abSuelto.nota }); setAbSuelto({ monto: '', fecha: hoy(), nota: '' }); } catch { /* ya se avisó */ } finally { setGuardandoSuelto(false); }
     };
     return (
         <Dialogo abierto={abierto} onCerrar={onCerrar} titulo={`Préstamos de ${vendedor?.nombre || ''}`} ancho="md">
@@ -60,6 +66,19 @@ export function DialogoPrestamo({ abierto, vendedor, tasa, acumulado = 0, onCerr
                                 <Text span td="underline" fw={700} style={{ cursor: 'pointer' }} onClick={() => imprimirFormatoPago(ultimoPago.id).catch((e) => alert(e.message))}>Imprimir formato de pago</Text>
                             </Alert>
                         )}
+                    </Box>
+                )}
+
+                {p.saldo > 0.004 && onAbonarSuelto && (
+                    <Box p="xs" style={{ background: '#f4f7fc', borderRadius: 8 }}>
+                        <Text fz={13} fw={700}>Registrar un abono anterior</Text>
+                        <Text fz={12} c="#5c6675" mb={6}>Un pago que el vendedor hizo por su cuenta (no sale de su comisión): solo baja lo que debe.</Text>
+                        <Group gap="xs" align="flex-end" wrap="wrap">
+                            <NumberInput label="Monto USD" decimalScale={2} min={0} max={p.saldo} hideControls value={abSuelto.monto} onChange={(v) => setAbSuelto((s) => ({ ...s, monto: v }))} inputMode="decimal" w={150} description={`Máximo ${dolares(p.saldo)}`} />
+                            <Box><Text fz="sm" fw={500} mb={4}>Fecha</Text><input type="date" value={abSuelto.fecha} onChange={(e) => { const f = e.currentTarget.value; setAbSuelto((s) => ({ ...s, fecha: f })); }} style={{ height: 36, padding: '0 8px', borderRadius: 4, border: '1px solid #ced4da' }} /></Box>
+                            <Textarea label="Nota (opcional)" autosize minRows={1} maxRows={2} value={abSuelto.nota} onChange={(e) => { const n = e.currentTarget.value; setAbSuelto((s) => ({ ...s, nota: n })); }} style={{ flex: 1, minWidth: 160 }} />
+                            <Button disabled={!(Number(abSuelto.monto) > 0)} loading={guardandoSuelto} onClick={abonarSuelto}>Registrar abono</Button>
+                        </Group>
                     </Box>
                 )}
 
@@ -118,9 +137,9 @@ export function DialogoPrestamo({ abierto, vendedor, tasa, acumulado = 0, onCerr
                                             <Table.Td>{m.tipo === 'PRESTAMO' ? 'Préstamo' : 'Abono'}{m.nota ? ` · ${m.nota}` : ''}</Table.Td>
                                             <Table.Td ta="right" fw={700} c={m.tipo === 'PRESTAMO' ? 'red.8' : 'teal.8'}>{m.tipo === 'PRESTAMO' ? '+' : '−'}{dolares(m.montoUsd)}</Table.Td>
                                             <Table.Td>
-                                                {m.tipo === 'PRESTAMO' && (
-                                                    <ActionIcon variant="subtle" color="red" size="sm" aria-label="Borrar este préstamo" title="Borrar este préstamo (por error)"
-                                                        onClick={() => { if (window.confirm(`¿Borrar el préstamo de ${dolares(m.montoUsd)} del ${fmtFecha(m.fecha)}? Es para un préstamo registrado por error.`)) onBorrar(m).catch(() => {}); }}>
+                                                {(m.tipo === 'PRESTAMO' || !m.pagoComisionId) && (
+                                                    <ActionIcon variant="subtle" color="red" size="sm" aria-label={m.tipo === 'PRESTAMO' ? 'Borrar este préstamo' : 'Borrar este abono'} title={m.tipo === 'PRESTAMO' ? 'Borrar este préstamo (por error)' : 'Borrar este abono (por error)'}
+                                                        onClick={() => { if (window.confirm(`¿Borrar ${m.tipo === 'PRESTAMO' ? 'el préstamo' : 'el abono'} de ${dolares(m.montoUsd)} del ${fmtFecha(m.fecha)}? Es para uno registrado por error.`)) onBorrar(m).catch(() => {}); }}>
                                                         <IconTrash size={15} />
                                                     </ActionIcon>
                                                 )}

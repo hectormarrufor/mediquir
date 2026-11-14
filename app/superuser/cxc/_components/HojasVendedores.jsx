@@ -276,7 +276,7 @@ export default function HojasVendedores() {
             )}
             <DialogoAgregarLinea abierto={dialogo?.tipo === 'agregar'} inicial={dialogo?.inicial} vendedor={actual} facturas={hoja.facturas} clientes={hoja.clientes} onCerrar={cerrar} onAgregar={hoja.agregar} />
             <DialogoNuevoVendedor abierto={dialogo?.tipo === 'vendedor'} onCerrar={cerrar} onCrear={hoja.crearVendedor} />
-            <DialogoPrestamo abierto={dialogo?.tipo === 'prestamo'} vendedor={actual} tasa={tasa} acumulado={acumulado} onCerrar={cerrar} onPrestar={hoja.prestar} onBorrar={hoja.borrarPrestamo} onRevertirPago={hoja.revertirPago}
+            <DialogoPrestamo abierto={dialogo?.tipo === 'prestamo'} vendedor={actual} tasa={tasa} acumulado={acumulado} onCerrar={cerrar} onPrestar={hoja.prestar} onBorrar={hoja.borrarPrestamo} onRevertirPago={hoja.revertirPago} onAbonarSuelto={hoja.abonarPrestamo}
                 onAbonar={(monto) => hoja.pagarComision(idsAcumulado, { montoUsd: monto, abonoPrestamoUsd: monto })} />
             {dialogo?.tipo === 'pagar' && (
                 <DialogoPagarComision
