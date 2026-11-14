@@ -56,8 +56,11 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
     const movil = useMediaQuery('(max-width: 48em)');
     const { data, isLoading } = useQuery({ queryKey: ['dashboard', 'resumen'], queryFn: () => pedirJson('/api/dashboard/resumen'), refetchInterval: 120000, refetchOnWindowFocus: true });
     const d = data;
+    // Facturas y notas de vendedores por aprobar (solo responde para quien las aprueba: jolexi y el usuario 1)
+    const porAprobar = useQuery({ queryKey: ['por-aprobar-conteo'], retry: false, refetchInterval: 60000, queryFn: async () => { const r = await fetch('/api/ventas/por-aprobar'); return r.ok ? r.json() : null; } });
 
     const atencion = [];
+    if (porAprobar.data?.total > 0) atencion.push({ color: 'orange', icono: IconReceipt, texto: `${porAprobar.data.total} factura(s) o nota(s) de vendedores por aprobar`, detalle: 'Revísalas, corrígelas y apruébalas para imprimir', href: '/superuser/ventas/por-aprobar' });
     if (d?.porCobrar.vencidas > 0) atencion.push({ color: 'red', icono: IconClockExclamation, texto: `${d.porCobrar.vencidas} cuenta(s) por cobrar vencida(s)`, detalle: fmtUsd(d.porCobrar.montoVencido), href: '/superuser/cxc' });
     if (d?.porPagar.vencidas > 0) atencion.push({ color: 'red', icono: IconClockExclamation, texto: `${d.porPagar.vencidas} cuenta(s) por pagar vencida(s)`, detalle: 'Revisa tus proveedores', href: '/superuser/cxp' });
     if (d?.porPagar.porVencer > 0) atencion.push({ color: 'orange', icono: IconWallet, texto: `${d.porPagar.porVencer} pago(s) a proveedor vencen esta semana`, detalle: 'Próximos 7 días', href: '/superuser/cxp' });

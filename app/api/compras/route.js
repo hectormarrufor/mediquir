@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
 import sequelize from '@/sequelize';
 import db from '@/models';
-import { requerirStaff } from '../inventario/_lib';
+import { requerirNoVendedor } from '../_lib/acceso';
 import { rolDe } from '@/app/constants/roles';
 import { aBolivaresExacto, retencionCompra } from '@/app/constants/facturacion';
 import { exacto, formatoExacto } from '@/app/helpers/sinRedondeo';
@@ -21,7 +21,7 @@ class ErrorCompra extends Error {
 
 // GET: Listar historial de compras
 export async function GET(request) {
-    const acceso = await requerirStaff();
+    const acceso = await requerirNoVendedor();
     if (acceso.error) return acceso.error;
     try {
         const { searchParams } = new URL(request.url);
@@ -73,7 +73,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-    const acceso = await requerirStaff();
+    const acceso = await requerirNoVendedor();
     if (acceso.error) return acceso.error;
     const esVend = rolDe(acceso.sesion) === 'vendedor';
     try {

@@ -52,11 +52,7 @@ const VENDEDOR_API = [
     ['POST', /^\/api\/ventas\/[^/]+\/notas$/],         // nota de crédito o débito de un vendedor: queda por aprobar
     ['GET', /^\/api\/ventas\/[^/]+\/empaque$/],        // wizard de empaque: solo el empacador asignado (lo valida la ruta)
     ['POST', /^\/api\/ventas\/[^/]+\/empaque(\/foto)?$/],
-    ['GET', /^\/api\/compras$/],
-    ['POST', /^\/api\/compras$/],
-    ['GET', /^\/api\/finanzas\/categorias$/],      // al registrar un gasto en Compras elige la categoría (solo lectura)
-    ['POST', /^\/api\/ocr\/factura$/],             // leer con IA la factura del proveedor para proponer el formulario de compras
-    ['GET', /^\/api\/compras\/equivalencias$/],    // productos ya enlazados a los renglones de ese proveedor
+    // Los vendedores NO registran compras: solo ventas (y esas las aprueba jolexi antes de imprimirse)
     ['GET', /^\/api\/vendedor\/[^/]+$/],
     ['GET', /^\/api\/inventario\/lista-precios$/],
     // Tareas: cada quien ve y gestiona las suyas (la ruta valida por sesión quién puede qué)
@@ -66,7 +62,7 @@ const VENDEDOR_API = [
     ['DELETE', /^\/api\/tareas\/[^/]+$/],
 ];
 const VENDEDOR_PAGINAS = [
-    /^\/superuser$/, /^\/superuser\/ventas(\/.*)?$/, /^\/superuser\/compras$/,
+    /^\/superuser$/, /^\/superuser\/ventas(\/.*)?$/,
     /^\/superuser\/inventario\/consulta$/, /^\/superuser\/clientes(\/nuevo)?$/, /^\/superuser\/notificaciones$/,
     /^\/superuser\/presupuestos(\/.*)?$/, /^\/superuser\/proveedores$/,
 ];
