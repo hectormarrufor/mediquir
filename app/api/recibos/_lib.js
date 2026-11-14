@@ -1,16 +1,22 @@
 // Recibos: correlativo propio y validación de lo que se escribe en el formulario.
 import db from '@/models';
 
-export const RECIBO_INICIO = 12501; // el primer número del talonario actual (el 12501 de la foto); si cambia, se escribe a mano en el primer recibo
+export const RECIBO_INICIO = 1; // el correlativo de recibos arranca en 1; se cambia desde la pantalla «Numeración» (fila REC de correlativos)
 export const FORMAS = ['EFECTIVO', 'CHEQUE', 'TRANSFERENCIA', 'OTRO'];
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
-// El siguiente número libre: el mayor que existe + 1 (o el inicio del talonario si no hay ninguno)
-export async function siguienteNumero() {
-    const max = await db.Recibo.max('numero');
-    return max ? Number(max) + 1 : RECIBO_INICIO;
+// Primer número de recibo libre desde el que dice la pantalla «Numeración» (o desde 1): si ya existe, se salta al siguiente
+export async function primerReciboLibre() {
+    const c = await db.Correlativo.findOne({ where: { prefijo: 'REC' }, attributes: ['siguienteNumero'] });
+    const desde = Number(c?.siguienteNumero) || RECIBO_INICIO;
+    const filas = await db.Recibo.findAll({ where: { numero: { [db.Sequelize.Op.gte]: desde } }, attributes: ['numero'], raw: true });
+    const usados = new Set(filas.map((f) => Number(f.numero)));
+    let n = desde;
+    while (usados.has(n)) n += 1;
+    return n;
 }
+export const siguienteNumero = primerReciboLibre;
 
 // Del cuerpo de la petición, solo lo permitido y validado. Devuelve { datos } o { error }.
 export function armarRecibo(b) {
