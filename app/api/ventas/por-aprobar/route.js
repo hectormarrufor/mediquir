@@ -30,7 +30,7 @@ export async function GET() {
                     n."numeroDocumento" AS numero, n."numeroControl", n."createdAt" AS fecha, n."moneda"::text AS moneda, n."totalFinal"::float AS total,
                     COALESCE(c."nombre", 'Cliente al detal') AS cliente, ${nombre} AS vendedor, n."estado" AS estado
                 FROM "NotasFiscales" n LEFT JOIN "Ventas" v ON v."id" = COALESCE(n."ventaId", (n."facturasAfectadas"->0->>'ventaId')::uuid)
-                    LEFT JOIN "Clientes" c ON c."id" = n."clienteId" LEFT JOIN "Usuarios" u ON u."id" = COALESCE(v."vendedorId", n."registradoPorId") LEFT JOIN "Empleados" e ON e."id" = u."empleadoId"
+                    LEFT JOIN "Clientes" c ON c."id" = n."clienteId" LEFT JOIN "Usuarios" u ON u."id" = COALESCE(n."registradoPorId", v."vendedorId") LEFT JOIN "Empleados" e ON e."id" = u."empleadoId"
                 WHERE n."aprobacionEstado" = 'PENDIENTE' AND n."origen" = 'VENTA'`),
         ]);
         // Orden por número de control (con ceros a la izquierda); sin control, al final por fecha

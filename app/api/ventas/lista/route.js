@@ -62,7 +62,8 @@ export async function GET(request) {
         if (q) filtroNota += ' AND (n."numeroDocumento" ILIKE :q OR c."nombre" ILIKE :q OR c."identificacion" ILIKE :q)';
         const desdeNota = `FROM "NotasFiscales" n LEFT JOIN "Ventas" v ON v."id" = COALESCE(n."ventaId", (n."facturasAfectadas"->0->>'ventaId')::uuid)
             LEFT JOIN "Clientes" c ON c."id" = n."clienteId"
-            LEFT JOIN "Usuarios" u ON u."id" = v."vendedorId" LEFT JOIN "Empleados" e ON e."id" = u."empleadoId"`;
+            LEFT JOIN "Usuarios" u ON u."id" = v."vendedorId" LEFT JOIN "Empleados" e ON e."id" = u."empleadoId"
+            LEFT JOIN "Usuarios" ue ON ue."id" = n."registradoPorId" LEFT JOIN "Empleados" ee ON ee."id" = ue."empleadoId"`;
 
         const partes = [];
         if (incluyeVentas) partes.push(`SELECT v."id", v."id" AS "ventaId", v."numeroDocumento" AS numero, v."createdAt" AS fecha, v."tipoVenta" AS tipo, v."tipoDocumento"::text AS "tipoDocumento", v."moneda"::text AS moneda,
@@ -77,7 +78,7 @@ export async function GET(request) {
                 (n."totalFinal" * (CASE WHEN n."tipo" = 'CREDITO' THEN -1 ELSE 1 END))::float AS total, ${NOTA_USD}::float AS "totalUsd",
                 (CASE WHEN n."estado" = 'ANULADA' THEN 'Anulada' ELSE 'Emitida' END) AS estado, NULL::text AS pago, NULL::text AS "condicionPago",
                 NULL::timestamptz AS "empacadoAt", NULL::timestamptz AS "etiquetadoAt", NULL::int AS "empacadorId", NULL::int AS "etiquetadorId",
-                COALESCE(c."nombre", 'Cliente al detal') AS cliente, COALESCE(e."nombre" || ' ' || e."apellido", u."user") AS vendedor, NULL::int AS articulos,
+                COALESCE(c."nombre", 'Cliente al detal') AS cliente, COALESCE(ee."nombre" || ' ' || ee."apellido", ue."user", e."nombre" || ' ' || e."apellido", u."user") AS vendedor, NULL::int AS articulos,
                 NULL::text AS retencion
                 ${desdeNota} WHERE ${filtroNota}`);
         if (!partes.length) return NextResponse.json({ ventas: [], total: 0, pagina, paginas: 1 });
