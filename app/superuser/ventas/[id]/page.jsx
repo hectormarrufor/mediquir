@@ -434,12 +434,28 @@ export default function DetallePedidoMayorPage() {
 
                                 {/* Totales del documento: lo que se cobra (y su equivalente con la tasa del documento) */}
                                 <Stack gap={4} mt="md" ml="auto" maw={isMobile ? undefined : 360}>
+                                    {/* Nota de entrega: no se cobra IVA, pero se muestra como en una factura (es para facturar a futuro): IVA referencial y total con IVA */}
+                                    {pedido.tipoDocumento === 'NOTA_ENTREGA' && (() => {
+                                        const ivaRef = Math.round((pedido.detalles || []).reduce((a, d) => a + Number(d.subtotal) * (d.isFicticio ? (d.aplicaIva ? 16 : 0) : Number(d.producto?.porcentajeIva ?? 16)) / 100, 0) * 100) / 100;
+                                        return (
+                                            <>
+                                                <Group justify="space-between"><Text size="sm" c="dimmed">Base imponible</Text><PrecioVisual valor={pedido.subtotal} simbolo={pedido.moneda} size="sm" fw={600} /></Group>
+                                                <Group justify="space-between"><Text size="sm" c="dimmed">IVA 16 % (referencial)</Text><PrecioVisual valor={ivaRef} simbolo={pedido.moneda} size="sm" fw={600} /></Group>
+                                                <Divider />
+                                                <Group justify="space-between"><Text fw={800}>Total con IVA</Text><PrecioVisual valor={Number(pedido.totalFinal) + ivaRef} simbolo={pedido.moneda} size="lg" fw={900} c="blue.9" /></Group>
+                                                <Text size="xs" c="dimmed" ta="right">≈ {equivalente(Number(pedido.totalFinal) + ivaRef)} · tasa {tasaDoc} Bs/$</Text>
+                                                <Text size="xs" c="orange.8" ta="right">Documento no fiscal: el IVA no se cobra. Lo que se cobra es {pedido.moneda === 'BS' ? 'Bs ' : '$'}{Number(pedido.totalFinal).toFixed(2)}.</Text>
+                                            </>
+                                        );
+                                    })()}
+                                    {pedido.tipoDocumento !== 'NOTA_ENTREGA' && (<>
                                     <Group justify="space-between"><Text size="sm" c="dimmed">Subtotal</Text><PrecioVisual valor={pedido.subtotal} simbolo={pedido.moneda} size="sm" fw={600} /></Group>
                                     {Number(pedido.montoIva) > 0 && <Group justify="space-between"><Text size="sm" c="dimmed">IVA</Text><PrecioVisual valor={pedido.montoIva} simbolo={pedido.moneda} size="sm" fw={600} /></Group>}
                                     {Number(pedido.costoFlete) > 0 && <Group justify="space-between"><Text size="sm" c="dimmed">{pedido.tipoVenta === 'ONLINE' ? 'Delivery' : 'Flete'}</Text><PrecioVisual valor={pedido.costoFlete} simbolo={pedido.moneda} size="sm" fw={600} /></Group>}
                                     <Divider />
                                     <Group justify="space-between"><Text fw={800}>Total</Text><PrecioVisual valor={pedido.totalFinal} simbolo={pedido.moneda} size="lg" fw={900} c="blue.9" /></Group>
                                     <Text size="xs" c="dimmed" ta="right">≈ {equivalente(pedido.totalFinal)} · tasa {tasaDoc} Bs/$</Text>
+                                    </>)}
                                 </Stack>
                             </Paper>
                         </Grid.Col>
