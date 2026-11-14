@@ -47,6 +47,7 @@ export default function DetallePedidoMayorPage() {
     const [modalFactura, setModalFactura] = useState(false);
     const [copiaFactura, setCopiaFactura] = useState({ numero: '', control: '', fecha: '' }); // datos de la factura si ya se emitió en el sistema anterior
     const [modalNotaAFactura, setModalNotaAFactura] = useState(false);
+    const [aprobando, setAprobando] = useState(false);
     const [modalCorregir, setModalCorregir] = useState(false); // corregir o eliminar una factura sin imprimir (usuario 1 y jolexi)
     const [isSubmitting, setIsSubmitting] = useState(false);
     const isMobile = useEsTelefono();
@@ -179,6 +180,17 @@ export default function DetallePedidoMayorPage() {
         return lista;
     };
 
+    // Factura de un vendedor por aprobar: jolexi (o el usuario 1) la revisa, la corrige con «Corregir / eliminar» y la aprueba; recién entonces se imprime
+    const aprobarFactura = async () => {
+        setAprobando(true);
+        try {
+            const res = await fetch('/api/ventas/por-aprobar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: 'VENTA', id: pedido.id }) });
+            const cuerpo = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(cuerpo.error || 'No se pudo aprobar');
+            notifications.show({ title: 'Factura aprobada', message: `${pedido.numeroDocumento} ya se puede imprimir.`, color: 'green' });
+            refetch();
+        } catch (e) { notifications.show({ title: 'Error', message: e.message, color: 'red' }); } finally { setAprobando(false); }
+    };
     const tituloDoc = `${pedido.tipoDocumento === 'FACTURA' ? 'Factura' : pedido.tipoDocumento === 'NOTA_ENTREGA' ? 'Nota de entrega' : 'Recibo'} ${pedido.numeroDocumento}`;
     const volver = () => router.push('/superuser/ventas');
     const tamAccion = isMobile ? 'sm' : 'xs';
@@ -193,7 +205,12 @@ export default function DetallePedidoMayorPage() {
         pedido.puedeCorregir && (
             <Button key="corregir" size={tamAccion} variant="light" color="orange" leftSection={<IconEdit size={16} />} onClick={() => setModalCorregir(true)}>Corregir / eliminar</Button>
         ),
-        <Button key="imprimir" size={tamAccion} variant="white" leftSection={<IconPrinter size={16} />} onClick={() => window.open(`/superuser/ventas/imprimir/${pedido.id}`, '_blank')}>Imprimir</Button>,
+        pedido.aprobacionPendiente && pedido.puedeAprobar && (
+            <Button key="aprobar" size={tamAccion} color="green" leftSection={<IconCheck size={16} />} loading={aprobando} onClick={aprobarFactura}>Aprobar</Button>
+        ),
+        !pedido.aprobacionPendiente && (
+            <Button key="imprimir" size={tamAccion} variant="white" leftSection={<IconPrinter size={16} />} onClick={() => window.open(`/superuser/ventas/imprimir/${pedido.id}`, '_blank')}>Imprimir</Button>
+        ),
     ].filter(Boolean);
     // Una nota puede haber pasado a una factura o, si tenía muchos renglones, a varias
     const reemplazos = pedido.reemplazadaPorTodas || (pedido.reemplazadaPor ? [pedido.reemplazadaPor] : []);
@@ -208,6 +225,7 @@ export default function DetallePedidoMayorPage() {
     );
     const etiquetasEstado = (
         <>
+            {pedido.aprobacionPendiente && <Badge size="lg" variant="filled" color="orange">Por aprobar: aún no se puede imprimir</Badge>}
             {/* Fecha de la factura (la de emisión si se copió de otro sistema) y condición de pago */}
             <Badge size="lg" variant="outline" color="gray.3">Fecha: {formatearFecha(pedido.fechaEmision || pedido.createdAt)}</Badge>
             <Badge size="lg" variant="filled" color={esCredito ? 'red' : 'teal'}>
@@ -460,7 +478,7 @@ export default function DetallePedidoMayorPage() {
 
                                 {!esVendedor && <RetencionIvaCard pedido={pedido} onCambio={refetch} />}
 
-                                {!esVendedor && <NotasFacturaCard pedido={pedido} onCambio={refetch} />}
+                                <NotasFacturaCard pedido={pedido} onCambio={refetch} />
 
                                 {/* 👈 BLOQUE MODIFICADO EN LA TARJETA LATERAL */}
                                 <Paper withBorder p="md" radius="md" bg="gray.0">

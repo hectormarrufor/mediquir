@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sequelize } from '@/models';
 import { requerirAdmin, requerirNoVendedor } from '@/app/api/_lib/acceso';
+import { requerirStaff } from '@/app/api/inventario/_lib';
 import { rolDe } from '@/app/constants/roles';
 import { ErrorNumeracion, configurarNumeracion, estadoNumeracion } from '@/app/api/_lib/numeracion';
 
@@ -8,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 // Estado de la numeración fiscal: facturas, notas de crédito, notas de débito y número de control
 export async function GET() {
-    const acceso = await requerirNoVendedor();
+    const acceso = await requerirStaff(); // un vendedor la consulta al hacer una nota (no puede editarla)
     if (acceso.error) return acceso.error;
     try {
         return NextResponse.json({ series: await estadoNumeracion(), puedeEditar: rolDe(acceso.sesion) === 'admin' });

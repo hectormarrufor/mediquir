@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { Marca, Producto, Cliente, NotaFiscal, NotaFiscalDetalle, Proveedor, Venta, FacturaCompra, sequelize } from '@/models';
 import { requerirAdmin, requerirNoVendedor } from '@/app/api/_lib/acceso';
 import { tasaVigente } from '@/app/api/_lib/tasaBcv';
+import { estaPorAprobar } from '@/app/api/_lib/aprobacion';
 import { ErrorNota, anularNota, registrarReintegro, compensarSaldoAFavor } from '@/app/api/_lib/notasFiscales';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,7 @@ export async function GET(request, { params }) {
             const marcas = Object.fromEntries(productos.map((p) => [p.id, p.marca?.nombre]));
             json.detalles = json.detalles.map((d) => ({ ...d, marcaNombre: marcas[d.productoId] || null }));
         }
+        json.aprobacionPendiente = await estaPorAprobar('NOTA', nota.id);
         return NextResponse.json(json);
     } catch (error) {
         console.error('Detalle de nota:', error);

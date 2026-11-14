@@ -29,6 +29,7 @@ class ErrorNegocio extends Error {
     constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
 }
 import { notificarTodos } from '@/app/handlers/notificar';
+import { marcarPorAprobar, avisarPorAprobar, nombreDeUsuario } from '@/app/api/_lib/aprobacion';
 
 export async function GET(request) {
     const acceso = await requerirStaff();
@@ -342,6 +343,13 @@ export async function POST(request) {
 
         await t.commit();
 
+        // La factura de un vendedor queda por aprobar: jolexi la revisa, la corrige si hace falta, la aprueba y la imprime (el vendedor no la imprime)
+        let porAprobar = false;
+        if (esVend && tipoDocumento === 'FACTURA') {
+            porAprobar = await marcarPorAprobar('VENTA', nuevaVenta.id);
+            if (porAprobar) await avisarPorAprobar({ tipoDoc: 'la factura', numero: numeroDocumento, vendedor: await nombreDeUsuario(acceso.sesion.id).catch(() => null) });
+        }
+
         // --- 7. NOTIFICACIÓN PUSH AL MAYOR ---
         if (tipoVenta === 'MAYOR') {
             try {
@@ -369,7 +377,7 @@ export async function POST(request) {
             }
         }
 
-        return NextResponse.json({ success: true, message: 'Venta registrada', numeroDocumento, ventaId: nuevaVenta.id }, { status: 201 });
+        return NextResponse.json({ success: true, message: 'Venta registrada', numeroDocumento, ventaId: nuevaVenta.id, porAprobar }, { status: 201 });
 
     } catch (error) {
         if (!t.finished) await t.rollback();

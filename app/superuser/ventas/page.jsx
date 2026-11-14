@@ -73,7 +73,8 @@ const DOC = {
 const esNota = (v) => v.tipoDocumento === 'NOTA_CREDITO' || v.tipoDocumento === 'NOTA_DEBITO';
 // Factura, nota de entrega o recibo se imprimen desde la venta; una nota de crédito o débito, desde la nota (solo las emitidas, y no las ve un vendedor)
 const urlImprimir = (v) => (esNota(v) ? `/superuser/notas/${v.id}/imprimir` : `/superuser/ventas/imprimir/${v.id}`);
-const sePuedeImprimir = (v, esVendedor) => (esNota(v) ? !esVendedor && v.estado === 'Emitida' : true);
+// Lo que un vendedor asentó (factura o nota) no se imprime hasta que jolexi lo apruebe
+const sePuedeImprimir = (v, esVendedor) => !v.porAprobar && (esNota(v) ? !esVendedor && v.estado === 'Emitida' : true);
 const COLOR_NOTA = { Emitida: 'teal', Anulada: 'gray' };
 
 function Indicador({ icono: Icono, color, titulo, valor, detalle, cargando }) {
@@ -184,6 +185,11 @@ export default function VentasDashboard() {
     const { esVendedor, isAdmin } = useAuth();
     const { tasa } = useTasaBcv();
     const telefono = useEsTelefono();
+    // Cuántos documentos de vendedores esperan aprobación (solo responde para quien los aprueba: jolexi y el usuario 1)
+    const porAprobar = useQuery({
+        queryKey: ['por-aprobar-conteo'], enabled: !esVendedor, retry: false, refetchInterval: 60000,
+        queryFn: async () => { const r = await fetch('/api/ventas/por-aprobar'); return r.ok ? r.json() : null; },
+    });
 
     const [periodo, setPeriodo] = useState('SEMANA');
     const [rango, setRango] = useState(rangoDe('SEMANA'));
@@ -276,6 +282,7 @@ export default function VentasDashboard() {
                     </Box>
                     {/* En el teléfono la venta nueva va primero y a todo el ancho */}
                     <Group gap="xs" w={telefono ? '100%' : undefined} wrap={telefono ? 'nowrap' : 'wrap'}>
+                        {porAprobar.data && <Button size="md" variant="filled" color={porAprobar.data.total ? 'orange' : 'gray'} leftSection={<IconFileInvoice size={18} />} onClick={() => router.push('/superuser/ventas/por-aprobar')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 1, flexShrink: 0 } : undefined}>{telefono ? 'Por aprobar' : 'Facturas por aprobar'}{porAprobar.data.total ? ` (${porAprobar.data.total})` : ''}</Button>}
                         {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconCashRegister size={18} />} onClick={() => router.push('/superuser/ventas/cierre')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 3, flexShrink: 0 } : undefined}>{telefono ? 'Cierre' : 'Cierre de caja'}</Button>}
                         {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconListNumbers size={18} />} onClick={() => router.push('/superuser/ventas/controles')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 3, flexShrink: 0 } : undefined}>{telefono ? 'Controles' : 'Números de control'}</Button>}
                         <Button size="md" variant="light" color="teal" leftSection={<IconFileInvoice size={18} />} onClick={() => router.push('/superuser/presupuestos')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 2, flexShrink: 0 } : undefined}>Presupuestos</Button>

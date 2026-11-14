@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import sequelize from '@/sequelize';
 import { requerirStaff } from '../../inventario/_lib';
 import { USD, alcanceDe } from '../_lib';
+import { idsPorAprobar } from '../../_lib/aprobacion';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,7 +88,14 @@ export async function GET(request) {
             consultar(`SELECT COUNT(*)::int AS total FROM (${unidas}) x`),
         ]);
 
-        return NextResponse.json({ ventas: filas, total, pagina, paginas: Math.max(1, Math.ceil(total / TAMANO)) });
+        // Facturas y notas de vendedores que esperan aprobación (no se imprimen todavía)
+        const esNotaFila = (f) => f.tipoDocumento === 'NOTA_CREDITO' || f.tipoDocumento === 'NOTA_DEBITO';
+        const [pv, pn] = await Promise.all([
+            idsPorAprobar('VENTA', filas.filter((f) => f.tipoDocumento === 'FACTURA').map((f) => f.id)),
+            idsPorAprobar('NOTA', filas.filter(esNotaFila).map((f) => f.id)),
+        ]);
+        const ventas = filas.map((f) => ((esNotaFila(f) ? pn : pv).has(String(f.id)) ? { ...f, porAprobar: true } : f));
+        return NextResponse.json({ ventas, total, pagina, paginas: Math.max(1, Math.ceil(total / TAMANO)) });
     } catch (error) {
         console.error('Lista de ventas:', error);
         return NextResponse.json({ error: 'No se pudo cargar la lista de ventas' }, { status: 500 });

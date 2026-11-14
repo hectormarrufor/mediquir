@@ -19,6 +19,7 @@ import { registrarAbono, asegurarCuentaContado, ErrorAbono } from '../../_lib/ab
 import { recalcularCobro, declararRetencion, MARCA_CIERRE } from '../../_lib/retencionesVenta';
 import { eliminarVenta, borrarArchivosDeVenta } from '../_eliminar';
 import { puedeCorregirFacturas } from '../../_lib/corregirFactura';
+import { estaPorAprobar, puedeAprobar } from '../../_lib/aprobacion';
 import { convertirAFactura, convertirNotaEntregaAFactura, ErrorConversion } from '../../_lib/convertirFactura';
 import { tasaVigente, tasaDelDia } from '../../_lib/tasaBcv';
 import { avisarCliente } from '../../_lib/avisosCliente';
@@ -155,6 +156,7 @@ export async function GET(request, { params }) {
             j.cuentaPorCobrar = [];
             j.abonos = [];
             j.salidasInventario = (j.salidasInventario || []).map(({ costoAlMomento, ...resto }) => resto);
+            j.aprobacionPendiente = venta.tipoDocumento === 'FACTURA' && await estaPorAprobar('VENTA', venta.id);
             return NextResponse.json(j);
         }
 
@@ -179,7 +181,10 @@ export async function GET(request, { params }) {
         );
         // Corregir o eliminar la factura (solo usuario 1 y jolexi); si está impresa o tiene otros impedimentos, el modal lo explica
         const puedeCorregir = venta.tipoDocumento === 'FACTURA' && venta.statusDespacho !== 'Cancelado' && await puedeCorregirFacturas(acceso.sesion);
-        return NextResponse.json({ ...venta.toJSON(), ...(vendedorExterno ? { vendedorExterno } : {}), puedeCorregir });
+        // Factura de un vendedor por aprobar: no se imprime hasta que jolexi (o el usuario 1) la apruebe
+        const aprobacionPendiente = venta.tipoDocumento === 'FACTURA' && await estaPorAprobar('VENTA', venta.id);
+        const puedeAprobarla = aprobacionPendiente && await puedeAprobar(acceso.sesion);
+        return NextResponse.json({ ...venta.toJSON(), ...(vendedorExterno ? { vendedorExterno } : {}), puedeCorregir, aprobacionPendiente, puedeAprobar: puedeAprobarla });
     } catch (error) {
         console.error('Error obteniendo detalle de venta:', error);
         return NextResponse.json({ error: 'Error interno del servidor', detalle: error.message }, { status: 500 });

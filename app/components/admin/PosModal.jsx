@@ -596,7 +596,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             notifications.show({
                 id: `venta-${data.ventaId}`, color: 'green', autoClose: 20000, withCloseButton: true,
                 title: `Venta registrada: ${data.numeroDocumento}`,
-                message: (
+                message: data.porAprobar ? 'La factura quedó por aprobar: Jolexi la revisa, la aprueba y la imprime.' : (
                     <Group gap="sm" mt={4}>
                         <Button size="xs" color="blue.8" leftSection={<IconPrinter size={14} />}
                             onClick={() => { window.open(`/superuser/ventas/imprimir/${data.ventaId}`, '_blank'); notifications.hide(`venta-${data.ventaId}`); }}>

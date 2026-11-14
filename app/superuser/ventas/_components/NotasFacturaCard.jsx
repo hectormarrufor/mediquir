@@ -22,7 +22,7 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
     const [compensar, setCompensar] = useState(null); // nota de crédito recién emitida que dejó saldo a favor: se ofrece compensarlo
     const [controlInicial, setControlInicial] = useState('');
     const [anulando, setAnulando] = useState(false);
-    const { isAdmin } = useAuth();
+    const { isAdmin, esVendedor } = useAuth(); // un vendedor solo emite notas de crédito o débito normales (quedan por aprobar)
     // Abierta desde «Números de control» (?nota=CREDITO&control=00-0122660): se abre la nota con ese número de control
     useEffect(() => {
         const p = new URLSearchParams(window.location.search);
@@ -52,7 +52,7 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
                 <Button size="xs" variant="light" color="blue" onClick={() => setEmitiendo('DEBITO')}>Nota de débito</Button>
             </Group>
 
-            {pedido.moneda === 'USD' && (
+            {!esVendedor && pedido.moneda === 'USD' && (
                 <Button size="xs" variant="light" color="indigo" fullWidth mb="sm" onClick={() => setDiferencial(true)}>Nota de débito por diferencial cambiario</Button>
             )}
             {/* Anular la factura (total o parcial) con una nota de crédito: solo administración */}
@@ -87,7 +87,7 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
                                 <Text size="sm" fw={800} c={n.tipo === 'CREDITO' ? 'red.7' : 'blue.7'} style={{ whiteSpace: 'nowrap', textDecoration: n.estado === 'ANULADA' ? 'line-through' : undefined }}>
                                     {n.tipo === 'CREDITO' ? '−' : '+'}{simbolo}{nf(n.totalFinal)}
                                 </Text>
-                                <NotaAcciones nota={n} onCambio={refrescar} />
+                                {!esVendedor && <NotaAcciones nota={n} onCambio={refrescar} />}
                             </Group>
                         </Group>
                     ))}

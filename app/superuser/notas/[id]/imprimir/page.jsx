@@ -24,19 +24,21 @@ export default function ImprimirNota() {
     }, [id]);
 
     // Con ?guia=1 solo se revisa cómo cae sobre la forma: no se asigna número de control ni se imprime solo
-    const necesitaControl = Boolean(nota && !nota.error && nota.origen === 'VENTA' && nota.estado === 'EMITIDA' && !guia);
+    const pendiente = Boolean(nota?.aprobacionPendiente); // nota de un vendedor por aprobar: no se imprime todavía
+    const necesitaControl = Boolean(nota && !nota.error && nota.origen === 'VENTA' && nota.estado === 'EMITIDA' && !guia && !pendiente);
     const ctl = useControlFiscal({ origen: 'NOTA', id, activo: necesitaControl });
 
     useEffect(() => {
-        if (!nota || nota.error || cargando || guia) return undefined;
+        if (!nota || nota.error || cargando || guia || pendiente) return undefined;
         if (necesitaControl && ctl.estado !== 'listo') return undefined; // primero se asigna el número de control
         const temporizador = setTimeout(() => window.print(), 800);
         return () => clearTimeout(temporizador);
-    }, [nota, cargando, guia, necesitaControl, ctl.estado]);
+    }, [nota, cargando, guia, pendiente, necesitaControl, ctl.estado]);
 
     if (cargando) return <div style={{ padding: '2rem', textAlign: 'center' }}>Cargando nota para imprimir...</div>;
     if (!nota || nota.error) return <div style={{ padding: '2rem', textAlign: 'center' }}>Nota no encontrada.</div>;
     if (nota.origen !== 'VENTA') return <div style={{ padding: '2rem', textAlign: 'center' }}>Solo se imprimen las notas que emite la empresa (las de proveedores se registran, no se imprimen).</div>;
+    if (pendiente) return <div style={{ padding: '2rem', textAlign: 'center' }}>Esta nota está por aprobar: se podrá imprimir cuando la apruebe Jolexi.</div>;
     if (nota.estado !== 'EMITIDA') return <div style={{ padding: '2rem', textAlign: 'center' }}>Esta nota está anulada.</div>;
     if (necesitaControl && ctl.estado !== 'listo') return <ControlFiscalPaso estado={ctl.estado} mensaje={ctl.mensaje} onReintentar={() => ctl.asignar(false)} />;
 

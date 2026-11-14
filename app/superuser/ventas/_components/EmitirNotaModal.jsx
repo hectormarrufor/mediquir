@@ -90,7 +90,7 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
                     renglones: lineas.map((l) => (l.ventaDetalleId ? { ventaDetalleId: l.ventaDetalleId, cantidad: l.cantidad } : { descripcion: l.descripcion, cantidad: 1, precioUnitario: l.precioUnitario, aplicaIva: l.aplicaIva })),
                 }),
             });
-            avisarNotaEmitida({ titulo: `${esCredito ? 'Nota de crédito' : 'Nota de débito'} emitida`, mensaje: `${r.nota.numeroDocumento} por ${simbolo}${nf(r.nota.totalFinal)}`, notas: [{ id: r.nota.id, numero: r.nota.numeroDocumento }] });
+            avisarNotaEmitida({ titulo: `${esCredito ? 'Nota de crédito' : 'Nota de débito'} emitida`, mensaje: `${r.nota.numeroDocumento} por ${simbolo}${nf(r.nota.totalFinal)}`, notas: [{ id: r.nota.id, numero: r.nota.numeroDocumento }], porAprobar: r.nota.porAprobar });
             onEmitida?.(r.nota);
             onClose();
         } catch (e) {

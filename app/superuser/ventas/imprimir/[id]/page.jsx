@@ -20,7 +20,8 @@ export default function ImprimirRecibo() {
     const zoom = useZoomHoja(816); // hoja carta: en el teléfono se achica al ancho de la pantalla
     const guia = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('guia') === '1';
     // A la factura se le asigna el número de control de la forma libre (correlativo compartido con las notas) al imprimirla
-    const necesitaControl = Boolean(venta && venta.tipoDocumento === 'FACTURA' && venta.statusDespacho !== 'Cancelado' && !guia);
+    const pendiente = Boolean(venta?.aprobacionPendiente); // factura de un vendedor por aprobar: no se imprime ni se le asigna control todavía
+    const necesitaControl = Boolean(venta && venta.tipoDocumento === 'FACTURA' && venta.statusDespacho !== 'Cancelado' && !guia && !pendiente);
     const ctl = useControlFiscal({ origen: 'VENTA', id: venta?.id, activo: necesitaControl });
 
     useEffect(() => {
@@ -40,7 +41,7 @@ export default function ImprimirRecibo() {
 
     // Con ?guia=1 solo se revisa cómo cae la factura sobre la forma preimpresa: no se asigna número de control ni se imprime sola
     useEffect(() => {
-        if (!venta || cargando || guia) return undefined;
+        if (!venta || cargando || guia || pendiente) return undefined;
         if (necesitaControl && ctl.estado !== 'listo') return undefined; // primero se asigna el número de control
         const temporizador = setTimeout(() => {
             // Desde que se manda a imprimir, la factura ya no se corrige ni se elimina (solo con notas de crédito o débito)
@@ -48,11 +49,12 @@ export default function ImprimirRecibo() {
             window.print();
         }, 800);
         return () => clearTimeout(temporizador);
-    }, [venta, cargando, guia, necesitaControl, ctl.estado]);
+    }, [venta, cargando, guia, pendiente, necesitaControl, ctl.estado]);
 
     if (cargando) return <div style={{ padding: '2rem', textAlign: 'center' }}>Cargando documento para imprimir...</div>;
     if (!venta || venta.error) return <div style={{ padding: '2rem', textAlign: 'center' }}>Venta no encontrada.</div>;
 
+    if (pendiente) return <div style={{ padding: '2rem', textAlign: 'center' }}>Esta factura está por aprobar: se podrá imprimir cuando la apruebe Jolexi.</div>;
     const esFactura = venta.tipoDocumento === 'FACTURA';
     // Las facturas se imprimen sobre la forma libre preimpresa (media carta): sin membrete, logo ni franja legal
     if (esFactura) {
