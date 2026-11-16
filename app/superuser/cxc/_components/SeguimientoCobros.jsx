@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { EstadoVacio, Esqueleto } from './Piezas';
 import { bolivares, dolares, fmtFechaLarga } from './utilidades';
 import DatosRetencionModal from '../../ventas/_components/DatosRetencionModal';
+import BuscadorRetenciones from './BuscadorRetenciones';
 
 function Fila({ titulo, cliente, rif, detalle, cifra, dias, accion, telefono, extra }) {
     return (
@@ -45,8 +46,10 @@ export default function SeguimientoCobros() {
     const abrir = (id) => router.push(`/superuser/ventas/${id}`);
     const ret = data.retencionSinComprobante;
     const dicen = data.dicenPagaron;
+    const alActualizar = () => { refetch(); queryClient.invalidateQueries({ queryKey: ['cxc-libro'] }); };
     return (
         <>
+            <BuscadorRetenciones onCambio={alActualizar} onAbrirFactura={abrir} />
             <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="sm">
                 <Stack gap={6}>
                     <Group gap={6}><IconReceiptTax size={18} /><Text fw={800}>Retención sin comprobante ({ret.length})</Text></Group>

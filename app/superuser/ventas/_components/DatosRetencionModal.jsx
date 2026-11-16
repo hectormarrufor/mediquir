@@ -14,7 +14,8 @@ const hoy = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas'
 
 /**
  * retencion: { ventaId, documento, numeroControl, cliente, rif, pct, ivaRetenidoBs (calculado al declararla), estado,
- *              comprobante?, fecha?, montoDeclarado? (lo que subió el cliente desde su portal, si lo hizo) }
+ *              comprobante?, fecha?, montoDeclarado? (lo que subió el cliente desde su portal, si lo hizo),
+ *              nueva? (retención creada desde el buscador: el monto NO viene puesto, se escribe el del comprobante y se compara con el calculado) }
  */
 export default function DatosRetencionModal({ opened, onClose, retencion, onListo }) {
     const [comprobante, setComprobante] = useState('');
@@ -29,7 +30,7 @@ export default function DatosRetencionModal({ opened, onClose, retencion, onList
         if (!opened || !retencion) return;
         setComprobante(subidoPorCliente ? (retencion.comprobante || '') : '');
         setFecha(subidoPorCliente && retencion.fecha ? String(retencion.fecha).slice(0, 10) : hoy());
-        setMonto(subidoPorCliente && Number(retencion.montoDeclarado) > 0 ? Number(retencion.montoDeclarado) : Number(retencion.ivaRetenidoBs));
+        setMonto(retencion.nueva ? '' : subidoPorCliente && Number(retencion.montoDeclarado) > 0 ? Number(retencion.montoDeclarado) : Number(retencion.ivaRetenidoBs));
         setControl('');
         setDiferencia(null);
         // Solo al abrirse (o al cambiar de factura): quien la usa arma `retencion` en cada render y no debe borrar lo que se escribe
@@ -68,14 +69,15 @@ export default function DatosRetencionModal({ opened, onClose, retencion, onList
                 <Paper withBorder p="sm" radius="md" bg="gray.0">
                     <Text size="sm"><b>{retencion.documento}</b>{retencion.numeroControl ? ` · control ${retencion.numeroControl}` : ''}</Text>
                     <Text size="sm">{retencion.cliente} <Text span size="xs" c="dimmed">{retencion.rif}</Text></Text>
-                    <Text size="sm">Retención del <b>{pctDeclarado} %</b> del IVA: <b>Bs {bs(retencion.ivaRetenidoBs)}</b> <Text span size="xs" c="dimmed">(ya descontada de lo que debe)</Text></Text>
+                    <Text size="sm">Retención del <b>{pctDeclarado} %</b> del IVA: <b>Bs {bs(retencion.ivaRetenidoBs)}</b> <Text span size="xs" c="dimmed">{retencion.nueva ? '(lo que el sistema calcula para esta factura)' : '(ya descontada de lo que debe)'}</Text></Text>
                 </Paper>
                 {subidoPorCliente && <Alert color="blue" variant="light" p="xs">El cliente ya subió su comprobante desde el portal: revisa los datos y confírmalos.</Alert>}
                 <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm">
                     <TextInput label="N° de comprobante" placeholder="20261100001835" withAsterisk value={comprobante} onChange={(e) => setComprobante(e.currentTarget.value)} data-autofocus />
                     <TextInput type="date" label="Fecha del comprobante" withAsterisk max={hoy()} value={fecha} onChange={(e) => setFecha(e.currentTarget.value)} />
                 </SimpleGrid>
-                <NumberInput label="Monto retenido según el comprobante (Bs)" description="Ya viene con lo calculado: cámbialo solo si el comprobante trae otro monto"
+                <NumberInput label="Monto retenido según el comprobante (Bs)" description={retencion.nueva ? 'Escribe el monto que trae el comprobante del cliente: se compara con el calculado' : 'Ya viene con lo calculado: cámbialo solo si el comprobante trae otro monto'}
+                    withAsterisk={Boolean(retencion.nueva)}
                     value={monto} onChange={(v) => { setMonto(v); setDiferencia(null); }} decimalScale={2} thousandSeparator="." decimalSeparator="," hideControls inputMode="decimal" />
                 {pct !== pctDeclarado && <Text size="xs" c="orange.8">Ese monto es el {pct} % del IVA: la retención queda registrada al {pct} %.</Text>}
                 {!retencion.numeroControl && (
