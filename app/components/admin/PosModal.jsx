@@ -141,6 +141,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const { data: numeracion } = useQuery({ queryKey: ['numeracion-pos'], enabled: !esVendedor && !esPresupuesto, queryFn: async () => { const r = await fetch('/api/numeracion'); return r.ok ? r.json() : null; } });
     const siguienteControl = numeracion?.series?.find((x) => x.clave === 'CONTROL')?.siguiente || null;
 
+    // Última factura de talonario cargada: solo de guía para la siguiente (el número y el control los trae el talonario, nunca se inventan)
+    const { data: guiaTalonario } = useQuery({ queryKey: ['talonario-pos'], enabled: !esVendedor && !esPresupuesto, queryFn: async () => { const r = await fetch('/api/ventas/talonario'); return r.ok ? r.json() : null; } });
+
     const formVenta = useForm({
         initialValues: {
             clienteId: null,
@@ -620,6 +623,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             // El próximo número de documento y el stock cambiaron: la siguiente venta debe verlos al día
             queryClient.invalidateQueries({ queryKey: ['correlativos-pos'] });
             queryClient.invalidateQueries({ queryKey: ['numeracion-pos'] });
+            queryClient.invalidateQueries({ queryKey: ['talonario-pos'] });
             queryClient.invalidateQueries({ queryKey: ['clientes-pos'] }); // por si cambiaron los días de crédito del cliente
             queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
             queryClient.invalidateQueries({ queryKey: ['ventas'] });
@@ -841,7 +845,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             {(esFactura || puedeEditarPrecio) && (
                 <SimpleGrid cols={!isMobile && esFactura && puedeEditarPrecio ? 2 : 1} spacing="xs" mt="xs">
                     {esFactura && (
-                        <TextInput label={talonario ? 'N° de control del talonario' : 'N° de control'} withAsterisk={talonario} placeholder={talonario ? '00-0122009' : (siguienteControl || '00-000000')} description={talonario ? 'Es el control impreso en la factura del talonario (distinto al de la forma libre).' : (siguienteControl ? `Vacío = toma el siguiente: ${siguienteControl}. Si la forma que vas a imprimir trae otro, escríbelo.` : undefined)} size={tamCampo} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
+                        <TextInput label={talonario ? 'N° de control del talonario' : 'N° de control'} withAsterisk={talonario} placeholder={talonario ? (guiaTalonario?.controlSugerido || '00-0000000') : (siguienteControl || '00-000000')} description={talonario ? `Escribe el control impreso en esta factura del talonario (distinto al de la forma libre).${guiaTalonario?.ultima ? ` La última cargada fue ${guiaTalonario.ultima.numero}, control ${guiaTalonario.ultima.control}.` : ''}` : (siguienteControl ? `Vacío = toma el siguiente: ${siguienteControl}. Si la forma que vas a imprimir trae otro, escríbelo.` : undefined)} size={tamCampo} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
                     )}
                     {puedeEditarPrecio && (
                         <TextInput type="date" label="Fecha de emisión" description="Vacía = hoy. Si copias una factura de otro día, elige esa fecha (toma la tasa BCV de ese día)"

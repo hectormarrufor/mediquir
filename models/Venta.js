@@ -45,7 +45,7 @@ const Venta = sequelize.define('Venta', {
     // Destino marcado por el cliente en el mapa de la tienda: dirección que entendió Google + "(GPS: lat, lng)"
     direccionEntrega: { type: DataTypes.TEXT, allowNull: true },
     numeroDocumentoAnterior: { type: DataTypes.STRING, allowNull: true },
-    // Factura hecha a mano en un talonario: su número (FM-) y su control (00-0122009) los trae el talonario y NO son los de la forma libre
+    // Factura hecha a mano en un talonario: su número (FM-) y su control (otro formato, ej. 00-1234567) los trae el talonario y NO son los de la forma libre
     facturaTalonario: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     quienRetira: {
         type: DataTypes.STRING, 

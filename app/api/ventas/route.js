@@ -139,7 +139,7 @@ export async function POST(request) {
         if (esTalonario) {
             if (esVend) throw new ErrorNegocio('Solo administración carga facturas de talonario', 403);
             if (!(parseInt(String(numeroDocumentoManual || '').replace(/\D/g, ''), 10) > 0)) throw new ErrorNegocio('Escribe el número de la factura del talonario');
-            if (!/^[0-9]{2,3}-[0-9]{4,10}$/.test(controlTalonario)) throw new ErrorNegocio('El número de control del talonario debe verse así: 00-0122009');
+            if (!/^[0-9]{2,3}-[0-9]{4,10}$/.test(controlTalonario)) throw new ErrorNegocio('El número de control del talonario debe llevar el prefijo, un guion y los dígitos (por ejemplo 00-1234567)');
         }
         if (!['USD', 'BS'].includes(moneda)) throw new ErrorNegocio('Moneda inválida');
         if (condicionPago === 'Credito' && !clienteId) throw new ErrorNegocio('Una venta a crédito requiere un cliente');
