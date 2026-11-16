@@ -16,3 +16,6 @@ respaldos/
 
 # datos personales de clientes y proveedores (nunca al repositorio)
 scripts/migraciones/datos/privado/
+
+.vercel
+.env*
