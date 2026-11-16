@@ -18,7 +18,7 @@ export async function GET(request, { params }) {
         const n = Number(String(id).replace(/^P-/i, ''));
         if (!Number.isInteger(n) || n < 1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
         const presupuesto = await Presupuesto.findByPk(n, {
-            include: [{ model: Cliente, as: 'cliente', attributes: ['id', 'nombre', 'identificacion', 'direccion'] }],
+            include: [{ model: Cliente, as: 'cliente', attributes: ['id', 'nombre', 'identificacion', 'direccion', 'telefono'] }],
         });
         if (!presupuesto) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
         const json = presupuesto.toJSON();

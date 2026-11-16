@@ -31,7 +31,7 @@ export default function SiteHeader({ opened, toggle }) {
     return (
         <AppShell.Header className={classes.header}>
             <Group className={classes.barra} data-scrolled={scrolled || undefined} px={{ base: 'sm', sm: 'lg' }} justify="space-between" wrap="nowrap">
-                <UnstyledButton onClick={() => router.push('/')} aria-label={`Ir al inicio de ${tenant.name}`}>
+                <UnstyledButton className={classes.logoChip} onClick={() => router.push('/')} aria-label={`Ir al inicio de ${tenant.name}`}>
                     <BrandLogo />
                 </UnstyledButton>
 

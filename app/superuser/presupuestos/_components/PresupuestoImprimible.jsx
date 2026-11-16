@@ -2,8 +2,11 @@
 
 import { nombreConMarca } from '@/app/constants/nombreConMarca';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Group, Text } from '@mantine/core';
-import { IconPrinter } from '@tabler/icons-react';
+import { Button, Drawer, Group, Stack, Text, UnstyledButton } from '@mantine/core';
+import { IconBrandWhatsapp, IconDots, IconPrinter } from '@tabler/icons-react';
+import { useEsTelefono } from '@/app/components/ui/modalMovil';
+import CompartirPresupuestoModal from './CompartirWhatsapp';
+import { generarPdfDeHojas } from './pdfPresupuesto';
 import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
 import { fuenteTienda } from '@/app/fonts/tienda';
@@ -35,6 +38,30 @@ function Pulso({ mini = false }) {
                 points="0,28 600,28 618,28 626,20 634,28 652,28 662,33 676,2 690,38 700,28 722,28 736,18 750,28 1000,28"
             />
         </svg>
+    );
+}
+
+// Fondo de la hoja: brillos suaves en las esquinas, una malla de puntos que se desvanece arriba a la derecha, un pulso muy tenue y el logo como marca de agua.
+// Todo va MUY claro (no estorba la lectura ni gasta tinta) y se imprime/exporta igual.
+function Decor() {
+    return (
+        <>
+            <svg className="pp-decor" viewBox="0 0 816 1056" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                <defs>
+                    <pattern id="pp-puntos" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.15" fill="#0ea5e9" fillOpacity="0.22" /></pattern>
+                    <linearGradient id="pp-desvanece" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#ffffff" stopOpacity="0" /><stop offset="1" stopColor="#ffffff" stopOpacity="1" /></linearGradient>
+                    <radialGradient id="pp-brillo-cian"><stop offset="0" stopColor="#0ea5e9" stopOpacity="0.17" /><stop offset="1" stopColor="#0ea5e9" stopOpacity="0" /></radialGradient>
+                    <radialGradient id="pp-brillo-verde"><stop offset="0" stopColor="#22a55a" stopOpacity="0.15" /><stop offset="1" stopColor="#22a55a" stopOpacity="0" /></radialGradient>
+                </defs>
+                <rect x="376" y="0" width="440" height="340" fill="url(#pp-puntos)" />
+                <rect x="376" y="0" width="440" height="340" fill="url(#pp-desvanece)" />
+                <circle cx="790" cy="70" r="330" fill="url(#pp-brillo-cian)" />
+                <circle cx="20" cy="1030" r="360" fill="url(#pp-brillo-verde)" />
+                <polyline fill="none" stroke="#0ea5e9" strokeOpacity="0.09" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round"
+                    points="0,880 300,880 330,880 346,862 362,880 400,880 420,892 450,800 480,918 500,880 540,880 566,858 592,880 816,880" />
+            </svg>
+            <img src={MEMBRETE_MEDIQUIR.logo} alt="" className="pp-marca" />
+        </>
     );
 }
 
@@ -79,7 +106,12 @@ function paginar(renglones, notas) {
     return paginas;
 }
 
-export default function PresupuestoImprimible({ presupuesto, accionesExtra = null }) {
+// `acciones`: [{ clave, label, icono, color, onClick }]. En la computadora van como botones junto a «Imprimir»; en el teléfono, en una barra fija abajo
+// (Imprimir, WhatsApp y «Más», que abre la lista completa con botones grandes). `accionesExtra` sigue admitiendo botones sueltos.
+export default function PresupuestoImprimible({ presupuesto, accionesExtra = null, acciones = [] }) {
+    const telefono = useEsTelefono();
+    const [masAbierto, setMasAbierto] = useState(false);
+    const [compartiendo, setCompartiendo] = useState(false);
     // En un teléfono la hoja carta no cabe: se achica (zoom) al ancho de la pantalla. Al imprimir vuelve a tamaño real.
     const [zoom, setZoom] = useState(1);
     useEffect(() => {
@@ -106,16 +138,53 @@ export default function PresupuestoImprimible({ presupuesto, accionesExtra = nul
     // Sin cliente: las líneas salen en blanco para llenarlas a mano
     const sinCliente = !cliente?.nombre;
     const unidades = renglones.reduce((s, r) => s + (Number(r.cantidad) || 0), 0);
+    const nombreArchivo = `Presupuesto-${String(presupuesto.numero || 'Mediquir').replace(/[^\w-]+/g, '')}.pdf`;
+    const mensajeWhatsapp = `Hola${cliente?.nombre ? ` ${cliente.nombre}` : ''}, ¡un gusto saludarte! 👋\n\n`
+        + `Te comparto el presupuesto *${presupuesto.numero || ''}* de *Mediquir* con los productos que conversamos, por un total de *${principal(presupuesto.totalFinal)}* (${equivalente(presupuesto.totalFinal)} a la tasa del día).\n\n`
+        + `Es válido hasta el ${fecha(vence)}. Quedo atento a cualquier duda o para coordinar tu pedido. ¡Gracias por preferirnos! 🙌\n\n— Equipo Mediquir`;
+    const obtenerPdf = () => generarPdfDeHojas(document.getElementById('pp-print-section'), fuenteTienda.className);
 
     return (
         <div className="pp-envoltura">
             <Group className="pp-barra" justify="space-between" gap="xs">
                 <Text c="white" fw={700} size="sm">Presupuesto {presupuesto.numero || ''}</Text>
-                <Group gap="xs" className="pp-acciones">
-                    {accionesExtra}
-                    <Button size="sm" color="teal" leftSection={<IconPrinter size={16} />} onClick={() => window.print()}>Imprimir</Button>
-                </Group>
+                {!telefono && (
+                    <Group gap="xs" className="pp-acciones">
+                        {accionesExtra}
+                        {acciones.map((a) => (
+                            <Button key={a.clave} size="sm" variant="white" color={a.color || 'dark'} leftSection={a.icono ? <a.icono size={16} /> : null} onClick={a.onClick}>{a.label}</Button>
+                        ))}
+                        <Button size="sm" color="green" leftSection={<IconBrandWhatsapp size={16} />} onClick={() => setCompartiendo(true)}>WhatsApp</Button>
+                        <Button size="sm" color="teal" leftSection={<IconPrinter size={16} />} onClick={() => window.print()}>Imprimir</Button>
+                    </Group>
+                )}
             </Group>
+
+            {telefono && (
+                <>
+                    <div className="pp-movil-barra" role="toolbar" aria-label="Acciones del presupuesto">
+                        <Button size="md" color="teal" leftSection={<IconPrinter size={18} />} onClick={() => window.print()}>Imprimir</Button>
+                        <Button size="md" color="green" leftSection={<IconBrandWhatsapp size={18} />} onClick={() => setCompartiendo(true)}>WhatsApp</Button>
+                        {(acciones.length > 0 || accionesExtra) && <Button size="md" variant="white" color="dark" leftSection={<IconDots size={18} />} onClick={() => setMasAbierto(true)}>Más</Button>}
+                    </div>
+                    <Drawer opened={masAbierto} onClose={() => setMasAbierto(false)} position="bottom" title={<Text fw={800}>Presupuesto {presupuesto.numero || ''}</Text>}
+                        styles={{ content: { height: 'auto', maxHeight: '88dvh', borderTopLeftRadius: 16, borderTopRightRadius: 16 }, body: { paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' } }}>
+                        <Stack gap={8}>
+                            {acciones.map((a) => (
+                                <UnstyledButton key={a.clave} onClick={() => { setMasAbierto(false); a.onClick(); }} className="pp-fila-accion">
+                                    {a.icono ? <a.icono size={22} /> : null}
+                                    <span>{a.label}</span>
+                                </UnstyledButton>
+                            ))}
+                        </Stack>
+                    </Drawer>
+                </>
+            )}
+
+            <CompartirPresupuestoModal
+                opened={compartiendo} onClose={() => setCompartiendo(false)} mensajeInicial={mensajeWhatsapp}
+                telefonoInicial={cliente?.telefono || ''} nombreArchivo={nombreArchivo} generarPdf={obtenerPdf}
+            />
 
             <div id="pp-print-section" className={fuenteTienda.className}>
                 {paginas.map((filas, n) => {
@@ -124,6 +193,7 @@ export default function PresupuestoImprimible({ presupuesto, accionesExtra = nul
                     return (
                         <div className="pp-hoja" key={n} style={{ '--pp-zoom': zoom }}>
                             <div className="pp-franja" />
+                            <Decor />
                             <div className="pp-cuerpo">
                                 {primera ? (
                                     <>
@@ -277,20 +347,28 @@ export default function PresupuestoImprimible({ presupuesto, accionesExtra = nul
                 .pp-envoltura, .pp-envoltura * { box-sizing: border-box; }
                 .pp-envoltura { background: #525659; min-height: 100vh; padding: 12px 8px; font-family: Arial, Helvetica, sans-serif; overflow-x: hidden; }
                 .pp-barra { max-width: 8.5in; margin: 0 auto 10px; position: sticky; top: 0; z-index: 5; background: #525659; padding: 6px 0; }
-                @media (max-width: 600px) {
-                    .pp-acciones { width: 100%; }
-                    .pp-acciones > * { flex: 1 1 0; padding-inline: 6px; }
+                /* En el teléfono las acciones van en una barra fija abajo (con el dedo se alcanzan) y la hoja deja espacio para que no la tape */
+                @media (max-width: 48em) {
+                    .pp-envoltura { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
+                    .pp-barra { position: static; }
                 }
+                .pp-movil-barra { position: fixed; left: 0; right: 0; bottom: 0; z-index: 200; display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+                    background: rgba(8, 21, 48, 0.94); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-top: 1px solid rgba(255,255,255,.14); }
+                .pp-movil-barra > * { flex: 1 1 0; min-width: 0; height: 48px; padding-inline: 8px; }
+                .pp-fila-accion { display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 0 14px; border-radius: 12px; background: #f1f5f9; font-weight: 700; font-size: 15px; color: #0b2a6f; }
+                .pp-fila-accion:active { background: #e2e8f0; }
 
                 .pp-hoja {
                     --navy: #0b2a6f; --azul: #1d4ed8; --cian: #0ea5e9; --verde: #22a55a;
                     --tinta: #0f172a; --gris: #64748b; --gris-claro: #94a3b8; --linea: #e2e8f0; --fondo: #f5f8fc;
-                    width: 8.5in; min-height: 11in; height: max-content; margin: 0 auto 14px; position: relative; background: #fff; color: var(--tinta);
+                    width: 8.5in; min-height: 11in; height: max-content; margin: 0 auto 14px; position: relative; background: linear-gradient(180deg, #ffffff 0%, #f6f9fe 100%); color: var(--tinta); overflow: hidden;
                     box-shadow: 0 0 10px rgba(0,0,0,.5); display: flex; flex-direction: column; zoom: var(--pp-zoom, 1);
                     font-size: 10px; line-height: 1.45; font-feature-settings: "tnum" 1, "lnum" 1;
                 }
                 .pp-franja { height: 6px; background: linear-gradient(90deg, var(--navy) 0%, var(--azul) 35%, var(--cian) 70%, var(--verde) 100%); flex-shrink: 0; }
-                .pp-cuerpo { flex: 1; display: flex; flex-direction: column; padding: 0.42in 0.55in 0.35in; }
+                .pp-cuerpo { flex: 1; display: flex; flex-direction: column; padding: 0.42in 0.55in 0.35in; position: relative; z-index: 1; }
+                .pp-decor { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+                .pp-marca { position: absolute; left: 50%; top: 47%; width: 6.2in; height: auto; transform: translate(-50%, -50%) rotate(-12deg); opacity: .06; pointer-events: none; z-index: 0; }
 
                 .pp-et { font-size: 7.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--cian); margin-bottom: 6px; }
 
@@ -333,7 +411,7 @@ export default function PresupuestoImprimible({ presupuesto, accionesExtra = nul
                 .pp-tabla thead th { font-size: 7.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--gris); padding: 0 6px 8px; border-bottom: 1.5px solid var(--navy); text-align: left; }
                 .pp-tabla tbody tr { break-inside: avoid; page-break-inside: avoid; }
                 .pp-tabla tbody td { padding: 4px 6px; border-bottom: 1px solid var(--linea); vertical-align: middle; overflow: hidden; }
-                .pp-tabla tbody tr:nth-child(even) td { background: #fafbfd; }
+                .pp-tabla tbody tr:nth-child(even) td { background: rgba(241, 246, 253, .72); }
                 .pp-tabla .pp-c-n { width: 30px; padding-left: 2px; color: var(--cian); font-weight: 700; font-size: 9px; }
                 .pp-tabla thead .pp-c-n { color: var(--gris); }
                 .pp-tabla .pp-c-desc { width: auto; }

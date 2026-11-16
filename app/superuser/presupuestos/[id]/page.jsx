@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Button } from '@mantine/core';
 import { IconEdit, IconList, IconPlus, IconReceiptTax, IconTruckDelivery } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { armarBorradorVenta, BORRADOR_VENTA } from '@/app/constants/presupuestoAVenta';
@@ -43,14 +42,12 @@ export default function VerPresupuesto() {
     if (error) return <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>{error}</div>;
     if (!presupuesto) return <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Cargando presupuesto…</div>;
     return (
-        <PresupuestoImprimible presupuesto={presupuesto} accionesExtra={(
-            <>
-                <Button size="sm" variant="white" color="indigo" leftSection={<IconReceiptTax size={16} />} onClick={() => pasarA('FACTURA')}>Pasar a factura</Button>
-                <Button size="sm" variant="white" color="grape" leftSection={<IconTruckDelivery size={16} />} onClick={() => pasarA('NOTA')}>Pasar a nota de entrega</Button>
-                <Button size="sm" variant="white" color="blue" leftSection={<IconEdit size={16} />} onClick={() => router.push(`/superuser/presupuestos/${params.id}/editar`)}>Modificar</Button>
-                <Button size="sm" variant="white" color="dark" leftSection={<IconList size={16} />} onClick={() => router.push('/superuser/presupuestos')}>Ver todos</Button>
-                <Button size="sm" variant="white" color="teal" leftSection={<IconPlus size={16} />} onClick={() => router.push('/superuser/presupuestos/nuevo')}>Nuevo</Button>
-            </>
-        )} />
+        <PresupuestoImprimible presupuesto={presupuesto} acciones={[
+            { clave: 'factura', label: 'Pasar a factura', icono: IconReceiptTax, color: 'indigo', onClick: () => pasarA('FACTURA') },
+            { clave: 'nota', label: 'Pasar a nota de entrega', icono: IconTruckDelivery, color: 'grape', onClick: () => pasarA('NOTA') },
+            { clave: 'editar', label: 'Modificar', icono: IconEdit, color: 'blue', onClick: () => router.push(`/superuser/presupuestos/${params.id}/editar`) },
+            { clave: 'todos', label: 'Ver todos', icono: IconList, color: 'dark', onClick: () => router.push('/superuser/presupuestos') },
+            { clave: 'nuevo', label: 'Nuevo presupuesto', icono: IconPlus, color: 'teal', onClick: () => router.push('/superuser/presupuestos/nuevo') },
+        ]} />
     );
 }
