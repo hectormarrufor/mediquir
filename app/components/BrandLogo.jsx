@@ -7,7 +7,7 @@ import { tenant } from '@/config/tenant';
 // Logo del header: el logo completo de Mediquir (con el RIF, que es obligatorio) en escritorio y en el teléfono, con su proporción
 // original. PNG transparente sacado del logo en alta: logo-header.png (112 px de alto) y @2x (224 px), así que el navegador siempre
 // lo reduce y nunca lo amplía: se ve nítido también en pantallas de alta densidad.
-// Va sobre una «pastilla» clara (ver .logoChip en navigation.module.css): las letras del logo son azul marino y se perdían sobre el header azul oscuro.
+// Es la versión para fondo oscuro (logo-header-oscuro*.png): las letras azul marino llevan un contorno claro y un halo cian suaves (sin caja), para que contrasten con el header.
 export default function BrandLogo() {
     return (
         <Box
@@ -17,7 +17,7 @@ export default function BrandLogo() {
             alt={`Logo ${tenant.name}`}
             fetchPriority="high"
             display="block"
-            h={{ base: 38, sm: 46 }}
+            h={{ base: 46, sm: 54 }}
             w="auto"
         />
     );
