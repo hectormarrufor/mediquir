@@ -122,7 +122,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                     <div className="fl-oc">{referencia ?? 'ORDEN DE COMPRA'}</div>
                     <div className="fl-fechas"><span>Emisión: <b>{fecha(venta.fechaEmision || venta.createdAt)}</b></span>{!sinVence && <span>Vence: <b>{fecha(venta.fechaVencimiento || venta.fechaEmision || venta.createdAt)}</b></span>}</div>
                     <div className="fl-cond">
-                        <div><div className="fl-cond-t">{etiquetaCondicion}</div><div className="fl-cond-v">{condicion}</div></div>
+                        <div><div className="fl-cond-t">{etiquetaCondicion}</div><div className="fl-cond-v" width="auto">{condicion}</div></div>
                     </div>
                 </div>
 
