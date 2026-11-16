@@ -18,6 +18,8 @@ const Recibo = sequelize.define('Recibo', {
     formaPago: { type: DataTypes.STRING(15), allowNull: false, defaultValue: 'EFECTIVO' }, // EFECTIVO | CHEQUE | TRANSFERENCIA | OTRO
     referencia: { type: DataTypes.STRING(100), allowNull: true }, // N° de cheque o de transferencia
     banco: { type: DataTypes.STRING(120), allowNull: true },
+    // Solo en los recibos de cobranza (cuentas por cobrar): { clave, abonoIds, lineas: [{ emision, tipo, documento, cliente, montoBs, montoUsd }], totalUsd, pago: {...}, vendedor }
+    detalle: { type: DataTypes.JSONB, allowNull: true },
     anulado: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     creadoPorId: { type: DataTypes.INTEGER, allowNull: true },
 }, { tableName: 'Recibos', timestamps: true });

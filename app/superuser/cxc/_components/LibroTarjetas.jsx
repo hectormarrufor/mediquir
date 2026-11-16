@@ -5,12 +5,12 @@
 // para cambiar algo se toca un botón y se abre una hoja desde abajo.
 import React, { useEffect, useState } from 'react';
 import { Badge, Box, Button, Collapse, Group, Stack, Text, UnstyledButton } from '@mantine/core';
-import { IconAlertTriangle, IconChevronDown, IconCoin, IconPencil } from '@tabler/icons-react';
+import { IconAlertTriangle, IconChevronDown, IconCoin, IconPencil, IconReceipt } from '@tabler/icons-react';
 import { MenuDocumento } from './PiezasLibro';
 import { bolivares, dolares, fmtFecha, usd, vencimientoEnPalabras } from './utilidades';
 import classes from './cxc.module.css';
 
-function TarjetaDocumento({ f, acc }) {
+function TarjetaDocumento({ f, g, acc }) {
     const [verAbonos, setVerAbonos] = useState(f.abonos.length > 0); // los abonos se ven debajo de su factura, como en la hoja de los vendedores
     const venc = vencimientoEnPalabras(f.vence, f.saldo, f.dias);
     const colorVenc = venc.tono === 'vencida' ? 'red.8' : venc.tono === 'pronto' ? 'orange.9' : venc.tono === 'pagada' ? 'teal.8' : '#5c6675';
@@ -58,8 +58,9 @@ function TarjetaDocumento({ f, acc }) {
                 <Stack gap={4} mt={8}>
                     {!f.abonos.length && <Text fz={12.5} c="#5c6675">Todavía no tiene abonos registrados.</Text>}
                     {f.abonos.map((a) => (
+                        <React.Fragment key={a.id}>
                         <UnstyledButton
-                            key={a.id} onClick={() => acc.editarAbono(f, a)} aria-label={`Corregir el abono del ${fmtFecha(a.fecha)} por ${usd(a.monto)}`}
+                            onClick={() => acc.editarAbono(f, a)} aria-label={`Corregir el abono del ${fmtFecha(a.fecha)} por ${usd(a.monto)}`}
                             px={8} py={6} style={{ background: '#fff', border: '1px solid #e1e6ee', borderRadius: 8, minHeight: 44 }}
                         >
                             <Group justify="space-between" wrap="nowrap" gap={8}>
@@ -73,6 +74,8 @@ function TarjetaDocumento({ f, acc }) {
                                 </Group>
                             </Group>
                         </UnstyledButton>
+                        {!f.manual && a.monto > 0 && <Button size="compact-sm" variant="light" color="teal" leftSection={<IconReceipt size={14} />} onClick={() => acc.recibo(g, a.id)}>Recibo de este abono</Button>}
+                        </React.Fragment>
                     ))}
                 </Stack>
             </Collapse>
@@ -106,7 +109,8 @@ export default function LibroTarjetas({ grupos, acc, buscando }) {
                         </UnstyledButton>
                         {abierto && (
                             <Stack gap={8} p={8}>
-                                {g.filas.map((f) => <TarjetaDocumento key={f.id} f={f} acc={acc} />)}
+                                {g.filas.some((x) => !x.manual && x.abonos.some((a) => a.monto > 0)) && <Button size="sm" variant="light" color="teal" leftSection={<IconReceipt size={16} />} onClick={() => acc.recibo(g)}>Recibo de cobro de {g.nombre}</Button>}
+                                {g.filas.map((f) => <TarjetaDocumento key={f.id} f={f} g={g} acc={acc} />)}
                             </Stack>
                         )}
                     </section>

@@ -39,7 +39,7 @@ export default function VerRecibo() {
     return (
         <ReciboImprimible recibo={recibo} accionesExtra={(
             <>
-                <Button size="sm" variant="white" color="blue" leftSection={<IconEdit size={16} />} onClick={() => router.push(`/superuser/recibos/${id}/editar`)}>Modificar</Button>
+                {!recibo.detalle && <Button size="sm" variant="white" color="blue" leftSection={<IconEdit size={16} />} onClick={() => router.push(`/superuser/recibos/${id}/editar`)}>Modificar</Button>}
                 {recibo.anulado
                     ? <Button size="sm" variant="white" color="teal" leftSection={<IconRestore size={16} />} onClick={() => anular(false)}>Reactivar</Button>
                     : <Button size="sm" variant="white" color="red" leftSection={<IconBan size={16} />} onClick={() => anular(true)}>Anular</Button>}

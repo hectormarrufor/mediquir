@@ -29,6 +29,84 @@ function Pulso() {
     );
 }
 
+const fmtDia = (f) => (f ? String(f).slice(0, 10).split('-').reverse().join('/') : '');
+
+// Recibo de cobranza (cuentas por cobrar): una hoja completa por copia, con la tabla de facturas que cubre el pago, el total, la forma de pago y los datos del depósito.
+function CopiaCobranza({ recibo, etiqueta }) {
+    const d = recibo.detalle;
+    const lineas = d.lineas || [];
+    const pago = d.pago || {};
+    const totalBs = Number(recibo.monto) || 0;
+    const f = fechaLarga(recibo.fecha);
+    const marcas = (k) => (recibo.formaPago === k ? '☑' : '☐');
+    const rangoFechas = pago.desde && pago.hasta && pago.desde !== pago.hasta ? `${fmtDia(pago.desde)} al ${fmtDia(pago.hasta)}` : fmtDia(pago.desde);
+    return (
+        <section className="rc-copia rc-cobro">
+            {recibo.anulado && <div className="rc-anulado">ANULADO</div>}
+            <header className="rc-header">
+                <img src={MEMBRETE_MEDIQUIR.logo} alt="Mediquir" className="rc-logo" />
+                <div className="rc-titular">
+                    <div className="rc-ceja">{etiqueta} · Constancia de pago</div>
+                    <h1 className="rc-titulo">Recibo de cobro</h1>
+                    <div className="rc-numero">N.º <b>{recibo.numero}</b> · {fmtDia(recibo.fecha)}</div>
+                </div>
+            </header>
+            <Pulso />
+            <div className="rc-empresa"><b>{MEMBRETE_MEDIQUIR.nombre}</b> · RIF {MEMBRETE_MEDIQUIR.rif}<br />{MEMBRETE_MEDIQUIR.direccion}</div>
+
+            <div className="rc-fila-sup">
+                <div className="rc-fecha rc-fecha-cobro">
+                    <div><span>Lugar</span><b>{recibo.lugar || ''}</b></div>
+                    <div><span>Día</span><b>{f.dia}</b></div>
+                    <div><span>Mes</span><b>{f.mes}</b></div>
+                    <div><span>Año</span><b>{f.anio}</b></div>
+                </div>
+                <div className="rc-monto"><span>Total recibido Bs.</span><b>{nf.format(totalBs)}</b>{d.totalUsd ? <em>Equivale a $ {nf.format(Number(d.totalUsd))}</em> : null}</div>
+            </div>
+
+            <div className="rc-campos rc-campos-cobro">
+                <div className="rc-campo"><span>Hemos recibido de</span><b>{recibo.personaNombre}{recibo.personaIdentificacion ? ` · ${recibo.personaIdentificacion}` : ''}</b></div>
+                <div className="rc-campo rc-alto"><span>La cantidad de</span><b>***{nf.format(totalBs)}*** {recibo.montoLetras || ''}</b></div>
+                <div className="rc-campo"><span>Por concepto de</span><b className="rc-concepto">{recibo.concepto || ''}</b></div>
+            </div>
+
+            <table className="rc-tabla">
+                <thead><tr><th>Emisión</th><th>Tipo</th><th>Documento</th><th>Cliente</th><th className="rc-der">Monto abonado Bs.</th></tr></thead>
+                <tbody>
+                    {lineas.map((l, i) => (
+                        <tr key={`${l.abonoId}-${i}`}><td>{fmtDia(l.emision)}</td><td>{l.tipo}</td><td>{l.documento}</td><td>{l.cliente}</td><td className="rc-der">{nf.format(Number(l.montoBs) || 0)}</td></tr>
+                    ))}
+                </tbody>
+                <tfoot><tr><td colSpan={4}>TOTAL · {lineas.length} documento{lineas.length === 1 ? '' : 's'}</td><td className="rc-der">{nf.format(totalBs)}</td></tr></tfoot>
+            </table>
+
+            <div className="rc-pago rc-pago-cobro">
+                <span className="rc-chk">{marcas('EFECTIVO')} Efectivo</span>
+                <span className="rc-chk">{marcas('CHEQUE')} Cheque</span>
+                <span className="rc-chk">{marcas('TRANSFERENCIA')} Transferencia</span>
+                {recibo.formaPago === 'OTRO' && <span className="rc-chk">{marcas('OTRO')} Otro</span>}
+            </div>
+
+            <div className="rc-deposito">
+                <div className="rc-dep-titulo">Datos del pago</div>
+                <div className="rc-dep-grid">
+                    <div><span>Fecha del pago</span><b>{rangoFechas}</b></div>
+                    <div><span>Forma</span><b>{(pago.metodos || []).join(' / ') || FORMAS[recibo.formaPago] || ''}</b></div>
+                    <div><span>Referencia / comprobante</span><b>{(pago.referencias || []).join(', ')}</b></div>
+                    <div><span>Banco</span><b>{recibo.banco || ''}</b></div>
+                </div>
+            </div>
+
+            <div className="rc-firmas rc-firmas-cobro">
+                <div><i />{d.vendedor ? <><b>{d.vendedor}</b><br />Vendedor</> : 'Vendedor'}</div>
+                <div><i />Por MEDIQUIR, C.A.</div>
+                <div><i />Recibí conforme (cliente)</div>
+            </div>
+            <footer className="rc-pie">{MEMBRETE_MEDIQUIR.nombre} · RIF {MEMBRETE_MEDIQUIR.rif} · {MEMBRETE_MEDIQUIR.telefonos} · Documento no fiscal</footer>
+        </section>
+    );
+}
+
 function Copia({ recibo, etiqueta }) {
     const f = fechaLarga(recibo.fecha);
     const pagado = recibo.tipo === 'PAGADO_A';
@@ -100,12 +178,19 @@ export default function ReciboImprimible({ recibo, accionesExtra = null }) {
             </Group>
 
             <div id="rc-print-section" className={fuenteTienda.className}>
-                <div className="rc-hoja" style={{ '--rc-zoom': zoom }}>
-                    <div className="rc-franja" />
-                    <Copia recibo={recibo} etiqueta="Original" />
-                    <div className="rc-corte" aria-hidden="true">✂ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</div>
-                    <Copia recibo={recibo} etiqueta="Copia" />
-                </div>
+                {recibo.detalle?.lineas ? ['Original', 'Copia'].map((et) => (
+                    <div key={et} className="rc-hoja rc-hoja-cobro" style={{ '--rc-zoom': zoom }}>
+                        <div className="rc-franja" />
+                        <CopiaCobranza recibo={recibo} etiqueta={et} />
+                    </div>
+                )) : (
+                    <div className="rc-hoja" style={{ '--rc-zoom': zoom }}>
+                        <div className="rc-franja" />
+                        <Copia recibo={recibo} etiqueta="Original" />
+                        <div className="rc-corte" aria-hidden="true">✂ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</div>
+                        <Copia recibo={recibo} etiqueta="Copia" />
+                    </div>
+                )}
             </div>
 
             <style dangerouslySetInnerHTML={{ __html: `
@@ -148,6 +233,27 @@ export default function ReciboImprimible({ recibo, accionesExtra = null }) {
                 .rc-firmas i { display: block; border-top: 1px solid var(--tinta); margin-bottom: 3px; height: 22px; border-top-width: 0; border-bottom: 1px solid var(--tinta); }
                 .rc-pie { margin-top: 8px; text-align: center; font-size: 7.5px; color: var(--gris-claro); letter-spacing: .04em; }
                 .rc-anulado { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 70px; font-weight: 900; color: rgba(193, 18, 31, .22); transform: rotate(-12deg); pointer-events: none; letter-spacing: 8px; }
+                .rc-empresa { font-size: 8px; color: var(--gris); line-height: 1.35; margin-bottom: 8px; }
+                .rc-empresa b { color: var(--navy); font-size: 9px; }
+                .rc-cobro { padding-top: 0.35in; }
+                .rc-cobro .rc-campos-cobro { flex: 0 0 auto; margin-bottom: 10px; }
+                .rc-fecha-cobro { max-width: 3.6in; }
+                .rc-monto em { font-style: normal; font-size: 8.5px; color: var(--gris); }
+                .rc-tabla { width: 100%; border-collapse: collapse; font-size: 9.5px; margin-bottom: 8px; }
+                .rc-tabla th { text-align: left; background: var(--navy); color: #fff; font-size: 8px; letter-spacing: .1em; text-transform: uppercase; padding: 5px 7px; font-weight: 700; }
+                .rc-tabla td { padding: 4px 7px; border-bottom: 1px solid var(--linea); }
+                .rc-tabla tbody tr:nth-child(even) td { background: var(--fondo); }
+                .rc-tabla tfoot td { padding: 6px 7px; font-weight: 800; color: var(--navy); border-top: 2px solid var(--navy); font-size: 10.5px; }
+                .rc-der { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+                .rc-pago-cobro { margin: 2px 0 8px; }
+                .rc-deposito { border: 1px solid var(--linea); border-radius: 10px; padding: 7px 12px; margin-top: auto; }
+                .rc-dep-titulo { font-size: 8px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--navy); margin-bottom: 4px; }
+                .rc-dep-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
+                .rc-dep-grid span { display: block; font-size: 7px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--gris); }
+                .rc-dep-grid b { font-size: 10px; font-weight: 600; min-height: 13px; display: block; }
+                .rc-firmas-cobro { gap: 24px; margin-top: 34px; }
+                .rc-firmas-cobro > div b { color: var(--tinta); font-size: 9.5px; }
+                .rc-hoja-cobro { break-after: page; page-break-after: always; }
                 @media print {
                     @page { size: letter portrait; margin: 0; }
                     html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }

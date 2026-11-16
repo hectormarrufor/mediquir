@@ -11,6 +11,7 @@ import { IconFold } from '@tabler/icons-react';
 import { DialogoGrupos, PestanasGrupos } from './GruposLibro';
 import LibroTabla from './LibroTabla';
 import LibroTarjetas from './LibroTarjetas';
+import { DialogoReciboCobro } from './ReciboCobro';
 import { DialogoCorregirMonto, DialogoCuentaManual, DialogoEditarAbono, DialogoEditarCuenta } from './PiezasLibro';
 import { EstadoVacio, Esqueleto, Kpi, useConfirmar } from './Piezas';
 import { ORDENES_LIBRO, VISTAS_LIBRO, useLibroCobranza } from './useLibroCobranza';
@@ -33,6 +34,7 @@ export default function LibroCobranza() {
         corregirMonto: (cuenta, nuevo = null) => setDialogo({ tipo: 'monto', cuenta, nuevo }),
         editar: (cuenta) => setDialogo({ tipo: 'editar', cuenta }),
         editarAbono: (cuenta, abono) => setDialogo({ tipo: 'abono', cuenta, abono }),
+        recibo: (grupo, abonoId = null) => setDialogo({ tipo: 'recibo', grupo, abonoId }),
         guardar: libro.editarCuenta,
         guardarAbono: libro.editarAbono,
         borrarAbono: async (cuenta, abono) => {
@@ -143,6 +145,7 @@ export default function LibroCobranza() {
             {dialogo?.tipo === 'monto' && <DialogoCorregirMonto cuenta={dialogo.cuenta} nuevo={dialogo.nuevo} onCerrar={cerrar} onGuardar={libro.editarCuenta} />}
             {dialogo?.tipo === 'editar' && <DialogoEditarCuenta cuenta={dialogo.cuenta} onCerrar={cerrar} onGuardar={libro.editarCuenta} />}
             {dialogo?.tipo === 'abono' && <DialogoEditarAbono cuenta={dialogo.cuenta} abono={dialogo.abono} onCerrar={cerrar} onGuardar={libro.editarAbono} onBorrar={acc.borrarAbono} />}
+            {dialogo?.tipo === 'recibo' && <DialogoReciboCobro grupo={dialogo.grupo} abonoInicial={dialogo.abonoId} onCerrar={cerrar} />}
             <DialogoGrupos abierto={gruposAbierto} onCerrar={() => setGruposAbierto(false)} libro={libro} confirmar={confirmar} />
             {confirmacion}
         </Stack>

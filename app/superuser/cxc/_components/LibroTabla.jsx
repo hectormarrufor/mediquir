@@ -4,7 +4,7 @@
 // Cada celda con fondo al pasar el mouse se edita ahí mismo; el saldo y el monto abren su registro (abono/ajuste o corrección con motivo).
 import React from 'react';
 import { ActionIcon, Badge, Box, Button, Group, Table, Text, Tooltip } from '@mantine/core';
-import { IconChevronDown, IconChevronRight, IconCoin, IconTrash } from '@tabler/icons-react';
+import { IconChevronDown, IconChevronRight, IconCoin, IconReceipt, IconTrash } from '@tabler/icons-react';
 import CeldaEditable from './CeldaEditable';
 import { EstadoDocumento, MenuDocumento } from './PiezasLibro';
 import { DESPLAZAMIENTO_CABECERA, fmtFecha, useAnchoGrande, usd } from './utilidades';
@@ -21,7 +21,7 @@ function formatoVence(f) {
     );
 }
 
-function Abonos({ f, acc }) {
+function Abonos({ f, g, acc }) {
     if (!f.abonos.length) {
         return (
             <Group gap="sm" py={6} pl={4}>
@@ -32,7 +32,7 @@ function Abonos({ f, acc }) {
     }
     return (
         <Table withRowBorders verticalSpacing={0} horizontalSpacing={6} fz="xs" my={4} style={{ color: '#1a1b1e', background: '#fff' }}>
-            <Table.Thead><Table.Tr><Table.Th w={110}>Fecha</Table.Th><Table.Th w={110} ta="right">Monto</Table.Th><Table.Th w={170}>Método</Table.Th><Table.Th>Referencia</Table.Th><Table.Th>Notas</Table.Th><Table.Th w={40} /></Table.Tr></Table.Thead>
+            <Table.Thead><Table.Tr><Table.Th w={110}>Fecha</Table.Th><Table.Th w={110} ta="right">Monto</Table.Th><Table.Th w={170}>Método</Table.Th><Table.Th>Referencia</Table.Th><Table.Th>Notas</Table.Th><Table.Th w={64} /></Table.Tr></Table.Thead>
             <Table.Tbody>
                 {f.abonos.map((a) => (
                     <Table.Tr key={a.id}>
@@ -41,7 +41,7 @@ function Abonos({ f, acc }) {
                         <Table.Td><CeldaEditable valor={a.metodo} etiqueta="Método" onGuardar={(v) => acc.guardarAbono(f, a, { metodo: v })} /></Table.Td>
                         <Table.Td><CeldaEditable valor={a.referencia} placeholder="Referencia" etiqueta="Referencia" onGuardar={(v) => acc.guardarAbono(f, a, { referencia: v })} /></Table.Td>
                         <Table.Td><CeldaEditable valor={a.notas} placeholder="Notas" etiqueta="Notas" onGuardar={(v) => acc.guardarAbono(f, a, { notas: v })} /></Table.Td>
-                        <Table.Td ta="center"><Tooltip label="Borrar este abono"><ActionIcon variant="subtle" color="red" size="sm" onClick={() => acc.borrarAbono(f, a)} aria-label={`Borrar el abono de ${usd(a.monto)}`}><IconTrash size={14} /></ActionIcon></Tooltip></Table.Td>
+                        <Table.Td ta="center" style={{ whiteSpace: 'nowrap' }}>{!f.manual && a.monto > 0 && <Tooltip label="Recibo de cobro de este abono"><ActionIcon variant="subtle" color="teal" size="sm" onClick={() => acc.recibo(g, a.id)} aria-label={`Recibo de cobro del abono de ${usd(a.monto)}`}><IconReceipt size={14} /></ActionIcon></Tooltip>}<Tooltip label="Borrar este abono"><ActionIcon variant="subtle" color="red" size="sm" onClick={() => acc.borrarAbono(f, a)} aria-label={`Borrar el abono de ${usd(a.monto)}`}><IconTrash size={14} /></ActionIcon></Tooltip></Table.Td>
                     </Table.Tr>
                 ))}
             </Table.Tbody>
@@ -108,7 +108,9 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
                             <Table.Td colSpan={3} />
                             <Table.Td ta="right"><Text fz={12} fw={700} pr={6} c="#1971c2">{usd(g.abonado)}</Text></Table.Td>
                             <Table.Td ta="right"><Text size="sm" fw={800} pr={6} c={g.vencido > 0 ? 'red.8' : 'navy.9'}>{usd(g.saldo)}</Text></Table.Td>
-                            <Table.Td colSpan={columnas - 11} />
+                            <Table.Td colSpan={columnas - 11} ta="right">
+                                {g.filas.some((f) => !f.manual && f.abonos.some((a) => a.monto > 0)) && <Button size="compact-xs" variant="light" color="teal" leftSection={<IconReceipt size={13} />} onClick={(e) => { e.stopPropagation(); acc.recibo(g); }} aria-label={`Recibo de cobro de ${g.nombre}`}>Recibo</Button>}
+                            </Table.Td>
                         </Table.Tr>
                         {abierto(g.id) && g.filas.map((f) => (
                             <React.Fragment key={f.id}>
@@ -151,7 +153,7 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
                                 {abonosVisibles(f) && (
                                     <Table.Tr className={classes.filaAbonos}>
                                         <Table.Td />
-                                        <Table.Td colSpan={columnas - 1} style={{ height: 'auto' }}><Box pr={6}><Abonos f={f} acc={acc} /></Box></Table.Td>
+                                        <Table.Td colSpan={columnas - 1} style={{ height: 'auto' }}><Box pr={6}><Abonos f={f} g={g} acc={acc} /></Box></Table.Td>
                                     </Table.Tr>
                                 )}
                             </React.Fragment>
