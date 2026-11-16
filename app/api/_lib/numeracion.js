@@ -44,7 +44,7 @@ export async function ultimoUsado(clave, transaction) {
         [fila] = await consulta(`SELECT MAX(${numerico('"numeroDocumento"')}) AS n FROM "NotasFiscales" WHERE "origen" = 'VENTA' AND "numeroDocumento" LIKE :patron`, { patron: `${clave}-%` });
     } else {
         [fila] = await consulta(`SELECT MAX(n) AS n FROM (
-            SELECT CAST(substring("numeroControl" from 4) AS bigint) AS n FROM "Ventas" WHERE "numeroControl" ~ '^00-[0-9]+$'
+            SELECT CAST(substring("numeroControl" from 4) AS bigint) AS n FROM "Ventas" WHERE "facturaTalonario" = false AND "numeroControl" ~ '^00-[0-9]+$'
             UNION ALL
             SELECT CAST(substring("numeroControl" from 4) AS bigint) FROM "NotasFiscales" WHERE "origen" = 'VENTA' AND "numeroControl" ~ '^00-[0-9]+$'
             UNION ALL
@@ -58,7 +58,7 @@ export async function ultimoUsado(clave, transaction) {
 // Tampoco se asigna una forma anulada (hoja dañada o saltada).
 async function primerControlLibre(desde, transaction) {
     const filas = await sequelize.query(
-        `SELECT CAST(substring("numeroControl" from 4) AS bigint) AS n FROM "Ventas" WHERE "numeroControl" ~ '^00-[0-9]+$'
+        `SELECT CAST(substring("numeroControl" from 4) AS bigint) AS n FROM "Ventas" WHERE "facturaTalonario" = false AND "numeroControl" ~ '^00-[0-9]+$'
          UNION SELECT CAST(substring("numeroControl" from 4) AS bigint) FROM "NotasFiscales" WHERE "origen" = 'VENTA' AND "numeroControl" ~ '^00-[0-9]+$'
          UNION SELECT numero FROM "FormasAnuladas"`,
         { type: sequelize.QueryTypes.SELECT, transaction },

@@ -113,7 +113,7 @@ export async function POST(request) {
         const {
             tipoVenta, tipoDocumento, clienteId, moneda, condicionPago, quienRetira, costoFlete,
             detalles, metodoPago, referencia, numeroDocumentoManual, vendedorId, numeroControl, fechaEmision: fechaEmisionBody,
-            diasCredito: diasCreditoBody, actualizarDiasCliente,
+            diasCredito: diasCreditoBody, actualizarDiasCliente, facturaTalonario,
         } = body;
 
         if (!Array.isArray(detalles) || detalles.length === 0) {
@@ -132,6 +132,14 @@ export async function POST(request) {
         if (esVend) {
             if (detalles.some((d) => d.isFicticio)) throw new ErrorNegocio('Solo administración puede vender productos genéricos con precio libre', 403);
             if (!TARIFAS_VENDEDOR.includes(body.tipoPrecio)) throw new ErrorNegocio('Tarifa de precio no permitida', 403);
+        }
+        // Factura de talonario: la hecha a mano. Solo administración la carga, con SU número y SU control (sin tocar los correlativos del sistema ni el control de la forma libre)
+        const esTalonario = facturaTalonario === true && tipoDocumento === 'FACTURA';
+        const controlTalonario = String(numeroControl ?? '').trim().slice(0, 30);
+        if (esTalonario) {
+            if (esVend) throw new ErrorNegocio('Solo administración carga facturas de talonario', 403);
+            if (!(parseInt(String(numeroDocumentoManual || '').replace(/\D/g, ''), 10) > 0)) throw new ErrorNegocio('Escribe el número de la factura del talonario');
+            if (!/^[0-9]{2,3}-[0-9]{4,10}$/.test(controlTalonario)) throw new ErrorNegocio('El número de control del talonario debe verse así: 00-0122009');
         }
         if (!['USD', 'BS'].includes(moneda)) throw new ErrorNegocio('Moneda inválida');
         if (condicionPago === 'Credito' && !clienteId) throw new ErrorNegocio('Una venta a crédito requiere un cliente');
@@ -185,6 +193,14 @@ export async function POST(request) {
         }
 
         // --- 2. CORRELATIVO ---
+        let numeroDocumento = '';
+        if (esTalonario) {
+            // Serie propia FM-: se escribe a mano; no mueve ningún correlativo y no se renumera en silencio
+            numeroDocumento = `FM-${String(parseInt(String(numeroDocumentoManual).replace(/\D/g, ''), 10)).padStart(5, '0')}`;
+            if (await Venta.findOne({ where: { numeroDocumento }, attributes: ['id'], transaction: t })) throw new ErrorNegocio(`Ya existe la factura de talonario ${numeroDocumento}`, 409);
+            if (await Venta.findOne({ where: { numeroControl: controlTalonario, facturaTalonario: true }, attributes: ['id'], transaction: t })) throw new ErrorNegocio(`El control ${controlTalonario} ya está en otra factura de talonario`, 409);
+        }
+        if (!esTalonario) {
         const prefijo = tipoDocumento === 'FACTURA' ? 'F' : (tipoDocumento === 'NOTA_ENTREGA' ? 'NE' : 'V');
         let corr = await Correlativo.findOne({ where: { prefijo }, transaction: t, lock: t.LOCK.UPDATE });
         if (!corr) corr = await Correlativo.create({ prefijo, siguienteNumero: 1, cerosRelleno: 5 }, { transaction: t });
@@ -203,7 +219,7 @@ export async function POST(request) {
         // encontraban la numeración fiscal ni el correlativo, y una factura podía quedar con el prefijo de otro documento
         const numeroExtraido = parseInt(String(numeroDocumentoManual || '').replace(/\D/g, ''), 10);
         let numeroBase = (!isNaN(numeroExtraido) && numeroExtraido > 0) ? numeroExtraido : siguienteLibre;
-        let numeroDocumento = numeroDocumentoManual ? `${prefijo}-${String(numeroBase).padStart(corr.cerosRelleno || 5, '0')}` : '';
+        numeroDocumento = numeroDocumentoManual ? `${prefijo}-${String(numeroBase).padStart(corr.cerosRelleno || 5, '0')}` : '';
         const yaExiste = numeroDocumento ? await Venta.findOne({ where: { numeroDocumento }, attributes: ['id'], transaction: t }) : null;
         // Una FACTURA con número escrito a mano es la copia de una que ya existe en el sistema anterior: si ese número ya está tomado NO se cambia en silencio por otro (saldría con un número que no es el de la factura)
         if (yaExiste && tipoDocumento === 'FACTURA' && numeroDocumentoManual) throw new ErrorNegocio(`Ya existe el documento ${numeroDocumento}: revisa el número de la factura`, 409);
@@ -214,6 +230,7 @@ export async function POST(request) {
         if (prefijo === 'F') corr.siguienteNumero = await primerLibre({ prefijo, desde: Math.max(corr.siguienteNumero, numeroBase < corr.siguienteNumero ? corr.siguienteNumero : 0), ocupados: [numeroBase], transaction: t });
         else corr.siguienteNumero = Math.max(corr.siguienteNumero, numeroBase + 1);
         await corr.save({ transaction: t });
+        }
 
         // --- 3. VENTA ---
         // A crédito vence a los días de crédito del cliente (los de su ficha); si no tiene, a los 15 días
@@ -234,12 +251,13 @@ export async function POST(request) {
         }
         const fechaVencimiento = condicionPago === 'Credito' ? new Date((momentoDoc ? momentoDoc.getTime() : Date.now()) + diasCredito * 86400000) : null;
         // La factura nace con su número de control (el de la forma si se escribió, o el siguiente del correlativo)
-        const controlFactura = tipoDocumento === 'FACTURA' ? await controlAlNacer(numeroControl, t) : null;
+        const controlFactura = esTalonario ? controlTalonario : (tipoDocumento === 'FACTURA' ? await controlAlNacer(numeroControl, t) : null);
         const nuevaVenta = await Venta.create({
             clienteId: clienteId || null,
             vendedorId: esVend ? Number(acceso.sesion.id) : (vendedorId || null),
             tipoVenta, tipoDocumento, numeroDocumento,
             numeroControl: controlFactura,
+            facturaTalonario: esTalonario,
             statusDespacho: tipoVenta === 'DETAL' ? 'Completado' : 'Pendiente',
             moneda, tasaCambio,
             condicionPago, statusPago: condicionPago === 'Contado' ? 'Pagado' : 'Pendiente',

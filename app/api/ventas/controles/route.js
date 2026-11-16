@@ -21,7 +21,7 @@ async function documentosEntre(desde, hasta) {
                (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date::text AS fecha, c.nombre AS cliente,
                v."totalFinal"::float AS total, v.moneda::text AS moneda, (v."statusDespacho" = 'Cancelado') AS anulado
           FROM "Ventas" v LEFT JOIN "Clientes" c ON c.id = v."clienteId"
-         WHERE v."tipoDocumento" = 'FACTURA' AND v."numeroControl" ~ '^00-[0-9]+$' AND CAST(substring(v."numeroControl" from 4) AS bigint) BETWEEN :desde AND :hasta
+         WHERE v."tipoDocumento" = 'FACTURA' AND v."facturaTalonario" = false AND v."numeroControl" ~ '^00-[0-9]+$' AND CAST(substring(v."numeroControl" from 4) AS bigint) BETWEEN :desde AND :hasta
         UNION ALL
         SELECT CAST(substring(n."numeroControl" from 4) AS bigint)::int, CASE WHEN n.tipo = 'CREDITO' THEN 'NOTA_CREDITO' ELSE 'NOTA_DEBITO' END, n.id::text, n."ventaId"::text, n."numeroDocumento",
                n.fecha::text, c.nombre, n."totalFinal"::float, n.moneda, (n.estado <> 'EMITIDA')
@@ -47,7 +47,7 @@ export async function GET(request) {
 
         const corr = await Correlativo.findOne({ where: { prefijo: 'CONTROL' }, attributes: ['siguienteNumero', 'cerosRelleno'] });
         const [{ maximo }] = await consulta(`SELECT GREATEST(
-              (SELECT MAX(CAST(substring("numeroControl" from 4) AS bigint)) FROM "Ventas" WHERE "tipoDocumento" = 'FACTURA' AND "numeroControl" ~ '^00-[0-9]+$'),
+              (SELECT MAX(CAST(substring("numeroControl" from 4) AS bigint)) FROM "Ventas" WHERE "tipoDocumento" = 'FACTURA' AND "facturaTalonario" = false AND "numeroControl" ~ '^00-[0-9]+$'),
               (SELECT MAX(CAST(substring("numeroControl" from 4) AS bigint)) FROM "NotasFiscales" WHERE origen = 'VENTA' AND "numeroControl" ~ '^00-[0-9]+$'),
               (SELECT MAX(numero) FROM "FormasAnuladas"))::int AS maximo`);
         const siguiente = Number(corr?.siguienteNumero) || null;

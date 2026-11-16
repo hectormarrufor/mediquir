@@ -6,7 +6,7 @@ import {
     Modal, Button, Group, Title, TextInput, NumberInput, 
     Select, Paper, Stack, Grid, Table, ActionIcon, 
     Text, Divider, Badge, Checkbox, Box, ScrollArea, Avatar, ThemeIcon, Textarea,
-    Alert, SegmentedControl, SimpleGrid, CloseButton, UnstyledButton
+    Alert, SegmentedControl, SimpleGrid, CloseButton, UnstyledButton, Switch
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query'; // 🔥 AÑADIDO useQueryClient
@@ -154,6 +154,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             costoFlete: '',
             numeroDocumento: '',
             numeroControl: '',
+            facturaTalonario: false, // factura hecha a mano en un talonario: su número y su control se escriben (solo administración)
             fechaEmision: '', // vacía = hoy; solo administración (copiar un documento que el sistema anterior emitió otro día)
             validoDias: 15, // solo presupuesto
             notas: ''       // solo presupuesto
@@ -246,6 +247,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         if (tipoDocumentoActual === 'FACTURA') prefijo = 'F';
         if (tipoDocumentoActual === 'NOTA DE ENTREGA') prefijo = 'NE';
 
+        // Factura de talonario: el número lo trae el talonario, no el correlativo del sistema
+        if (tipoDocumentoActual === 'FACTURA' && formVenta.values.facturaTalonario) { formVenta.setFieldValue('numeroDocumento', ''); return; }
         if (correlativos) {
             const corr = correlativos.find(c => c.prefijo === prefijo);
             const num = corr ? corr.siguienteNumero : 1;
@@ -255,7 +258,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             formVenta.setFieldValue('numeroDocumento', `${prefijo}-00001`);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [tipoDocumentoActual, correlativos]);
+    }, [tipoDocumentoActual, correlativos, formVenta.values.facturaTalonario]);
 
     const esMonedaBs = ['precio1', 'precio4', 'precio5'].includes(formVenta.values.tipoPrecio);
     const opcionesMetodoPago = esMonedaBs 
@@ -564,6 +567,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 tipoDocumento: tipoDocumentoActual === 'VENTA RAPIDA' ? 'VENTA_RAPIDA' : (tipoDocumentoActual === 'NOTA DE ENTREGA' ? 'NOTA_ENTREGA' : 'FACTURA'),
                 numeroDocumentoManual: formVenta.values.numeroDocumento,
                 numeroControl: tipoDocumentoActual === 'FACTURA' ? formVenta.values.numeroControl : null,
+                facturaTalonario: tipoDocumentoActual === 'FACTURA' && puedeEditarPrecio && formVenta.values.facturaTalonario ? true : undefined,
                 fechaEmision: puedeEditarPrecio && formVenta.values.fechaEmision ? formVenta.values.fechaEmision : undefined,
                 clienteId: formVenta.values.clienteId ? Number(formVenta.values.clienteId) : null,
                 moneda: simboloMoneda === 'Bs' ? 'BS' : 'USD',
@@ -693,6 +697,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     // ---------------- Piezas de la pantalla (las mismas en el teléfono y en la computadora) ----------------
     const esFactura = tipoDocumentoActual === 'FACTURA';
+    const talonario = esFactura && puedeEditarPrecio && Boolean(formVenta.values.facturaTalonario);
     const tamCampo = isMobile ? 'md' : 'sm'; // en el teléfono, campos más altos (se tocan con el dedo y la letra no obliga a acercar)
     const opcionesTarifa = [
         { value: 'precio7', label: 'P7 (Detal USD)' },
@@ -826,13 +831,17 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                         <Text size={isMobile ? 'md' : 'lg'} fw={800} lh={1.2} c={esFactura ? 'red.9' : 'blue.9'}>{tipoDocumentoActual}</Text>
                     </Box>
                 </Group>
-                <TextInput label="Correlativo" size={tamCampo} w={isMobile ? 128 : 150} fw={700} autoComplete="off" style={{ flexShrink: 0 }} {...formVenta.getInputProps('numeroDocumento')} />
+                <TextInput label={talonario ? 'N° de factura (talonario)' : 'Correlativo'} placeholder={talonario ? '0123' : undefined} size={tamCampo} w={isMobile ? 128 : 150} fw={700} autoComplete="off" style={{ flexShrink: 0 }} {...formVenta.getInputProps('numeroDocumento')} />
             </Group>
+            {esFactura && puedeEditarPrecio && (
+                <Switch mt="xs" color="grape" size="sm" label="Factura de talonario (hecha a mano)" description="Se carga con el número y el control que trae el talonario (serie FM-). No usa el correlativo ni el control de la forma libre."
+                    checked={Boolean(formVenta.values.facturaTalonario)} onChange={(e) => formVenta.setFieldValue('facturaTalonario', e.currentTarget.checked)} />
+            )}
             {/* En la computadora van lado a lado (la explicación debajo del campo) para que el carrito tenga espacio */}
             {(esFactura || puedeEditarPrecio) && (
                 <SimpleGrid cols={!isMobile && esFactura && puedeEditarPrecio ? 2 : 1} spacing="xs" mt="xs">
                     {esFactura && (
-                        <TextInput label="N° de control" placeholder={siguienteControl || '00-000000'} description={siguienteControl ? `Vacío = toma el siguiente: ${siguienteControl}. Si la forma que vas a imprimir trae otro, escríbelo.` : undefined} size={tamCampo} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
+                        <TextInput label={talonario ? 'N° de control del talonario' : 'N° de control'} withAsterisk={talonario} placeholder={talonario ? '00-0122009' : (siguienteControl || '00-000000')} description={talonario ? 'Es el control impreso en la factura del talonario (distinto al de la forma libre).' : (siguienteControl ? `Vacío = toma el siguiente: ${siguienteControl}. Si la forma que vas a imprimir trae otro, escríbelo.` : undefined)} size={tamCampo} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
                     )}
                     {puedeEditarPrecio && (
                         <TextInput type="date" label="Fecha de emisión" description="Vacía = hoy. Si copias una factura de otro día, elige esa fecha (toma la tasa BCV de ese día)"
