@@ -82,7 +82,9 @@ export async function GET() {
             const ms = movs.get(v.id) || [];
             const prestado = r2(ms.filter((x) => x.tipo === 'PRESTAMO').reduce((a, x) => a + x.montoUsd, 0));
             const abonado = r2(ms.filter((x) => x.tipo === 'ABONO').reduce((a, x) => a + x.montoUsd, 0));
-            const suma = (lista) => r2(lista.reduce((a, l) => a + (Number(l.comisionUsd) || 0), 0));
+            // La comisión de una factura con abonos vive en sus abonos: la línea de la factura no se vuelve a sumar (duplicaba la comisión al cobrar completo)
+            const conAbonos = new Set(ls.filter((l) => l.concepto === 'ABONO' && l.ventaId).map((l) => l.ventaId));
+            const suma = (lista) => r2(lista.filter((l) => !(l.concepto === 'FACTURA' && l.ventaId && conAbonos.has(l.ventaId))).reduce((a, l) => a + (Number(l.comisionUsd) || 0), 0));
             return {
                 ...v, porcentaje: Number(v.porcentaje), comisionAbonadaUsd: Number(v.comisionAbonadaUsd) || 0, lineas: ls,
                 prestamo: { saldo: r2(prestado - abonado), prestado, abonado, movimientos: ms }, pagos: (pagosPor.get(v.id) || []).slice(0, 20),

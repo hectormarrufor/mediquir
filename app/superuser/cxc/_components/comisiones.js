@@ -98,13 +98,33 @@ export function totales(filas) {
         if (!pa || pa.estatusComision === 'PAGADA' || porPagar(pa)) continue;
         futura += Math.max(0, (Number(pa.comisionUsd) || 0) - d.pagos.reduce((t, x) => t + (Number(x.comisionUsd) || 0), 0));
     }
+    // Base y comisión de cada factura se cuentan UNA sola vez: con los de la factura. Los abonos son parte de esa misma factura (su comisión es un pedazo de la de la
+    // factura), así que no se vuelven a sumar a «sin IVA» ni a «comisión»; si no, al cobrar completo el vendedor veía duplicada su comisión.
+    // Un abono sin factura en la hoja (huérfano) sí cuenta por sí mismo.
+    let base = 0, comision = 0, pendiente = 0;
+    for (const d of agruparFacturas(filas)) {
+        const pa = d.padre;
+        const abonos = d.pagos.filter((x) => x.concepto !== 'NOTA' && Number(x.comisionUsd) > 0 && esPago(x));
+        if (!pa) {
+            for (const x of d.pagos) { base += Number(x.baseUsd) || 0; comision += Number(x.comisionUsd) || 0; if (x.estatusComision !== 'PAGADA') pendiente += Number(x.comisionUsd) || 0; }
+            continue;
+        }
+        base += Number(pa.baseUsd) || 0;
+        comision += Number(pa.comisionUsd) || 0;
+        // pendiente de pago: con abonos, lo de sus abonos aún no pagados + lo que falta por generar; sin abonos, la de la factura si no se ha pagado
+        if (abonos.length) {
+            const generada = abonos.reduce((t, x) => t + (Number(x.comisionUsd) || 0), 0);
+            pendiente += abonos.filter((x) => x.estatusComision !== 'PAGADA').reduce((t, x) => t + (Number(x.comisionUsd) || 0), 0);
+            if (pa.estatusComision !== 'PAGADA') pendiente += Math.max(0, (Number(pa.comisionUsd) || 0) - generada);
+        } else if (pa.estatusComision !== 'PAGADA') pendiente += Number(pa.comisionUsd) || 0;
+    }
     return {
         monto: sumar(filas, 'montoUsd'), // la columna tal cual (las facturas suman, los abonos y notas de crédito restan)
         abonos: r2(filas.filter((x) => esPago(x) && x.concepto !== 'NOTA').reduce((t, x) => t + Math.abs(Number(x.montoUsd) || 0), 0)), // lo abonado, en positivo
         facturas: sumar(filas.filter((x) => x.concepto === 'FACTURA' && !esPago(x)), 'montoUsd'), // total de las facturas, con IVA, tal como se facturaron
-        base: sumar(filas, 'baseUsd'), // SIN IVA: sobre esto se calcula la comisión
-        comision: sumar(filas, 'comisionUsd'),
-        pendiente: sumar(filas.filter((x) => x.estatusComision !== 'PAGADA'), 'comisionUsd'),
+        base: r2(base), // SIN IVA: sobre esto se calcula la comisión (una vez por factura)
+        comision: r2(comision),
+        pendiente: r2(pendiente),
         porPagar: sumar(filas.filter((x) => porPagar(x)), 'comisionUsd'), // la que ya se puede pagar: el cliente ya cobró
         futura: r2(futura),
     };
