@@ -17,81 +17,44 @@
     height: 52px;
     margin: 8px 10px 0;
     border-radius: 18px;
+    /* CRISTAL con RESPLANDOR. De arriba hacia abajo, las capas son:
+       1) destello diagonal que cruza la barra despacio (animado) · 2) brillo especular del borde superior del vidrio ·
+       3) resplandor azul cielo que nace del extremo derecho · 4) base: blanco sólido del lado del logo, translúcido (vidrio esmerilado) desde el 25 %
+       y virando al azul cielo de la marca desde el 70 %. */
+    background:
+        linear-gradient(105deg, transparent 0%, transparent 38%, rgba(255, 255, 255, 0.8) 46%, rgba(255, 255, 255, 0.18) 52%, transparent 60%, transparent 100%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.26) 38%, rgba(255, 255, 255, 0) 62%),
+        radial-gradient(38% 190% at 100% 55%, alpha(var(--mantine-color-sky-3), 1) 0%, alpha(var(--mantine-color-sky-3), 0.55) 45%, transparent 78%),
+        linear-gradient(90deg,
+            rgba(255, 255, 255, 0.99) 0%,
+            rgba(255, 255, 255, 0.97) 25%,
+            rgba(244, 249, 255, 0.72) 45%,
+            rgba(222, 238, 255, 0.64) 70%,
+            alpha(var(--mantine-color-sky-3), 0.9) 100%);
+    background-size: 260% 100%, 100% 100%, 100% 100%, 100% 100%;
+    background-repeat: no-repeat;
+    -webkit-backdrop-filter: blur(28px) saturate(200%) brightness(1.08);
+    backdrop-filter: blur(28px) saturate(200%) brightness(1.08);
     border: 1px solid rgba(255, 255, 255, 0.9);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 1),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+        inset 0 -10px 22px -12px alpha(var(--mantine-color-sky-3), 0.75),
         0 0 0 1px alpha(var(--mantine-color-sky-3), 0.35),
         0 0 22px alpha(var(--mantine-color-sky-3), 0.6),
         0 0 58px alpha(var(--mantine-color-brand-5), 0.38),
         0 16px 34px -14px rgba(2, 8, 23, 0.55);
-    transition: box-shadow 0.3s ease;
+    animation: barraBrillo 8s ease-in-out infinite alternate;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-/* El contenido (logo, enlaces, menú) va por encima de las placas */
-.barra > * {
-    z-index: 1;
+@keyframes barraBrillo {
+    from { background-position: 135% 0, 0 0, 0 0, 0 0; }
+    to { background-position: -35% 0, 0 0, 0 0, 0 0; }
 }
 
-/* Fondo: tres placas de cristal INCLINADAS (como ‹ / ›), una al lado de la otra y montadas en diagonal:
-   blanca hasta el 25 %, vidrio esmerilado desde el 25 % y vidrio azul cielo desde el 70 %. Cada placa lleva su canto brillante y su sombra.
-   El contenedor las recorta con las esquinas redondeadas de la barra (así el resplandor de la barra no se corta). */
-.cristales {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    overflow: hidden;
-    border-radius: 17px;
-    pointer-events: none;
-}
-
-.cristalA,
-.cristalB,
-.cristalC {
-    position: absolute;
-    top: -2px;
-    bottom: -2px;
-    transform: skewX(-18deg);
-}
-
-/* Placa blanca (del lado del logo): su canto derecho es la diagonal */
-.cristalA {
-    left: -90px;
-    width: calc(25% + 90px);
-    background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
-    box-shadow: 8px 0 18px -8px rgba(2, 8, 23, 0.28);
-}
-
-/* Placa de vidrio esmerilado (25 % → ...): casi incolora, con desenfoque propio; el canto izquierdo brilla */
-.cristalB {
-    left: 25%;
-    right: -120px;
-    -webkit-backdrop-filter: blur(26px) saturate(210%) brightness(1.08);
-    backdrop-filter: blur(26px) saturate(210%) brightness(1.08);
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.24) 40%, rgba(255, 255, 255, 0.1) 100%),
-        rgba(226, 240, 255, 0.34);
-    border-left: 2px solid rgba(255, 255, 255, 1);
-    box-shadow:
-        inset 1px 0 0 alpha(var(--mantine-color-sky-3), 0.65),
-        inset 0 1px 0 rgba(255, 255, 255, 0.95),
-        inset 0 -8px 18px -10px alpha(var(--mantine-color-sky-3), 0.55);
-}
-
-/* Placa de vidrio azul cielo de la marca (70 % → ...): encima de la anterior, con su canto brillante y su sombra */
-.cristalC {
-    left: 70%;
-    right: -120px;
-    -webkit-backdrop-filter: blur(26px) saturate(220%) brightness(1.06);
-    backdrop-filter: blur(26px) saturate(220%) brightness(1.06);
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.12) 45%, rgba(255, 255, 255, 0) 100%),
-        linear-gradient(135deg, alpha(var(--mantine-color-sky-3), 0.62), alpha(var(--mantine-color-brand-5), 0.55));
-    border-left: 2px solid rgba(255, 255, 255, 1);
-    box-shadow:
-        inset 1px 0 0 rgba(255, 255, 255, 0.7),
-        inset 0 1px 0 rgba(255, 255, 255, 0.95),
-        inset 0 -8px 18px -10px rgba(255, 255, 255, 0.6),
-        -12px 0 22px -8px rgba(2, 8, 23, 0.32);
+@media (prefers-reduced-motion: reduce) {
+    .barra { animation: none; background-position: 60% 0, 0 0, 0 0, 0 0; }
 }
 
 @media (min-width: 48em) {
@@ -113,22 +76,20 @@
     background: linear-gradient(90deg, transparent 0%, alpha(var(--mantine-color-sky-3), 1) 28%, alpha(var(--mantine-color-accent-6), 0.85) 72%, transparent 100%);
     box-shadow: 0 0 10px alpha(var(--mantine-color-sky-3), 0.9), 0 0 24px alpha(var(--mantine-color-brand-5), 0.6);
     opacity: 0.85;
-    z-index: 2;
     transition: opacity 0.3s ease;
 }
 
-/* Al hacer scroll: las placas de vidrio se vuelven un poco más opacas y la barra proyecta más sombra (sigue siendo vidrio) */
+/* Al hacer scroll: un poco más opaco y con más sombra para separar del contenido (conserva el vidrio y el resplandor) */
 .barra[data-scrolled] {
+    background-color: rgba(255, 255, 255, 0.35);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 1),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.45),
+        inset 0 -10px 22px -12px alpha(var(--mantine-color-sky-3), 0.75),
         0 0 0 1px alpha(var(--mantine-color-sky-3), 0.4),
         0 0 24px alpha(var(--mantine-color-sky-3), 0.7),
         0 0 62px alpha(var(--mantine-color-brand-5), 0.45),
         0 20px 40px -14px rgba(2, 8, 23, 0.7);
-}
-
-.barra[data-scrolled] .cristalB {
-    background-color: rgba(226, 240, 255, 0.62);
 }
 
 .barra[data-scrolled]::after {
