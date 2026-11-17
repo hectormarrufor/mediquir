@@ -9,7 +9,7 @@ import { IconChevronDown, IconChevronRight, IconLinkOff } from '@tabler/icons-re
 import CeldaEditable from './CeldaEditable';
 import { Cifra } from './Piezas';
 import { CobroFactura, EstadoComision, MenuLinea, cifrasDe } from './PiezasVendedores';
-import { esPago, estadoLinea, opcionesPct } from './comisiones';
+import { baseAbonadaDe, esPago, estadoLinea, opcionesPct } from './comisiones';
 import { DESPLAZAMIENTO_CABECERA, fmtFecha, useAnchoGrande, useAnchoMuyGrande, usd } from './utilidades';
 import classes from './cxc.module.css';
 import NumeroFactura from './NumeroFactura';
@@ -82,7 +82,7 @@ function ResumenAbonos({ d, cols, tasa }) {
     if (!d.padre || !abonos.length) return null;
     const suma = (campo) => abonos.reduce((t, x) => t + Math.abs(Number(x[campo]) || 0), 0);
     const abonado = suma('montoUsd');
-    const baseAbonada = suma('baseUsd');
+    const baseAbonada = baseAbonadaDe(d); // nunca más que el sin IVA de la factura
     const comision = suma('comisionUsd');
     const explicable = Number(d.padre.retenidoUsd) > 0.005 || Number(d.padre.exentoUsd) > 0.005 || d.padre.baseUsd !== null;
     const saldo = d.padre.saldoCxc !== null && d.padre.saldoCxc !== undefined ? Number(d.padre.saldoCxc) : Math.max(0, Number(d.padre.montoUsd) - abonado);

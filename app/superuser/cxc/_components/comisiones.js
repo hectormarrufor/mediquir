@@ -54,6 +54,11 @@ const sumar = (filas, campo) => r2(filas.reduce((t, x) => t + (Number(x[campo]) 
 // Una factura con sus renglones de pago (abonos y notas de crédito)
 export const esPago = (l) => l.concepto === 'ABONO' || l.concepto === 'NOTA' || Number(l.montoUsd) < 0;
 export const claveDoc = (l) => (l.ventaId ? `v${l.ventaId}` : `d${claveCliente(l)}|${String(l.documentoTexto || '').trim().toUpperCase()}`);
+// Sin IVA abonado de una factura (el azul): la suma de sus abonos, pero NUNCA más que el sin IVA de la propia factura
+export function baseAbonadaDe(d) {
+    const suma = d.pagos.filter((x) => x.concepto !== 'NOTA' && esPago(x)).reduce((t, x) => t + Math.abs(Number(x.baseUsd) || 0), 0);
+    return r2(d.padre && d.padre.baseUsd !== null && d.padre.baseUsd !== undefined ? Math.min(suma, Number(d.padre.baseUsd)) : suma);
+}
 export function agruparFacturas(filas) {
     const m = new Map();
     for (const l of filas) { const k = claveDoc(l); if (!m.has(k)) m.set(k, { k, padre: null, pagos: [], todas: [] }); m.get(k).todas.push(l); }
@@ -129,7 +134,7 @@ export function totales(filas) {
         monto: sumar(filas, 'montoUsd'), // la columna tal cual (las facturas suman, los abonos y notas de crédito restan)
         abonos: r2(filas.filter((x) => esPago(x) && x.concepto !== 'NOTA').reduce((t, x) => t + Math.abs(Number(x.montoUsd) || 0), 0)), // lo abonado, en positivo
         facturas: sumar(filas.filter((x) => x.concepto === 'FACTURA' && !esPago(x)), 'montoUsd'), // total de las facturas, con IVA, tal como se facturaron
-        baseAbonada: sumar(filas.filter((x) => esPago(x) && x.concepto !== 'NOTA'), 'baseUsd'), // SIN IVA de lo abonado (ya prorrateado): va DENTRO del sin IVA de las facturas
+        baseAbonada: r2(agruparFacturas(filas).reduce((t, d) => t + baseAbonadaDe(d), 0)), // SIN IVA de lo abonado (prorrateado): va DENTRO del sin IVA de las facturas y nunca lo supera
         base: r2(base), // SIN IVA: sobre esto se calcula la comisión (una vez por factura)
         comision: r2(comision),
         pendiente: r2(pendiente),

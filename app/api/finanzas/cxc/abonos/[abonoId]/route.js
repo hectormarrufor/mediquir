@@ -72,6 +72,7 @@ export async function DELETE(request, { params }) {
         const { abono, venta } = await cargar(abonoId, t);
         await MovimientoFinanciero.destroy({ where: { abonoId: abono.id }, transaction: t });
         await RetencionIva.update({ abonoId: null }, { where: { abonoId: abono.id }, transaction: t });
+        await sequelize.query(`DELETE FROM "ComisionesVenta" WHERE concepto = 'ABONO' AND "estatusComision" = 'PENDIENTE' AND observacion LIKE :marca`, { replacements: { marca: `Pago #${abono.id} %` }, transaction: t });
         await abono.destroy({ transaction: t });
         await recalcularCobro(venta, t);
         await t.commit();

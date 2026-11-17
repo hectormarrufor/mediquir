@@ -8,7 +8,7 @@ import { ActionIcon, Badge, Box, Button, Checkbox, Collapse, Group, SimpleGrid, 
 import { IconChevronDown, IconLinkOff, IconPencil, IconPlus } from '@tabler/icons-react';
 import { Cifra } from './Piezas';
 import { CobroFactura, EstadoComision, MenuLinea, cifrasDe } from './PiezasVendedores';
-import { esPago, estadoLinea } from './comisiones';
+import { baseAbonadaDe, esPago, estadoLinea } from './comisiones';
 import { bolivares, dolares, fmtFecha } from './utilidades';
 import classes from './cxc.module.css';
 import NumeroFactura from './NumeroFactura';
@@ -137,7 +137,7 @@ function TarjetaFactura({ d, hoja, acc, tasa }) {
                             <SimpleGrid cols={2} spacing={6} px={4} py={2}>
                                 <Dato titulo="Abonado a la factura" valor={dolares(abonado)} color="#1971c2" />
                                 <Dato titulo={saldo > 0.005 ? 'Falta por cobrar' : 'Estado'} valor={saldo > 0.005 ? dolares(saldo) : 'Cobrada'} color={saldo > 0.005 ? 'orange.9' : 'teal.8'} />
-                                <Dato titulo="Sin IVA abonado" valor={dolares(suma('baseUsd'))} color="#1971c2" />
+                                <Dato titulo="Sin IVA abonado" valor={dolares(baseAbonadaDe(d))} color="#1971c2" />
                                 <Dato titulo="Comisión generada" valor={dolares(suma('comisionUsd'))} />
                             </SimpleGrid>
                         )}
