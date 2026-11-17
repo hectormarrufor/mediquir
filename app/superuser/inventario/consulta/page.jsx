@@ -7,6 +7,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { IconAlertTriangle, IconLock, IconSearch } from '@tabler/icons-react';
 import { aBolivares } from '@/app/constants/facturacion';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
+import { useAuth } from '@/hooks/useAuth';
 import { getMainImage, PLACEHOLDER_IMG, getPresentacionLabel } from '@/app/components/landing/productUtils';
 
 const precio = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
@@ -31,6 +32,8 @@ export default function ConsultaInventario() {
     const [pagina, setPagina] = useState(1);
     const [filtros, setFiltros] = useState({ categorias: [], marcas: [] });
     const { tasa } = useTasaBcv();
+    const { esVendedor } = useAuth();
+    const soloBs = esVendedor && tasa > 0; // el vendedor ve los precios solo en bolívares (los dólares son de administración y de los presupuestos)
 
     useEffect(() => { setPagina(1); }, [q, categoriaId, marcaId, estado]);
 
@@ -53,7 +56,7 @@ export default function ConsultaInventario() {
                 <Group justify="space-between" align="flex-end" wrap="wrap">
                     <Box>
                         <Title order={2} c="white">Inventario</Title>
-                        <Text size="sm" c="gray.4">Consulta de existencia y precios de venta{tasa ? ` · en bolívares a la tasa BCV de hoy (${bs.format(tasa)})` : ''}.</Text>
+                        <Text size="sm" c="gray.4">Consulta de existencia y precios de venta{tasa ? ` · ${soloBs ? 'en bolívares' : 'con su equivalente en bolívares'} a la tasa BCV de hoy (${bs.format(tasa)})` : ''}.</Text>
                     </Box>
                     <Badge variant="light" color="gray" leftSection={<IconLock size={12} />} size="lg" tt="none">Solo lectura</Badge>
                 </Group>
@@ -97,13 +100,13 @@ export default function ConsultaInventario() {
                                                             : <Badge color={p.bajo ? 'orange' : 'teal'} variant="light">{p.stock}{p.bajo ? ' · bajo' : ''}</Badge>}
                                                     </Table.Td>
                                                     <Table.Td ta="right">
-                                                        <Text size="sm" fw={700}>{fmtPrecio(p.precio7)}</Text>
-                                                        {fmtBs(p.precio7, tasa) && <Text size="xs" c="dimmed" fw={600}>{fmtBs(p.precio7, tasa)}</Text>}
+                                                        <Text size="sm" fw={700}>{soloBs ? (fmtBs(p.precio7, tasa) || <Text span c="dimmed" size="sm">—</Text>) : fmtPrecio(p.precio7)}</Text>
+                                                        {!soloBs && fmtBs(p.precio7, tasa) && <Text size="xs" c="dimmed" fw={600}>{fmtBs(p.precio7, tasa)}</Text>}
                                                         {p.descuento > 0 && <Text size="xs" c="red.7">-{p.descuento}% en oferta</Text>}
                                                     </Table.Td>
                                                     <Table.Td ta="right">
-                                                        <Text size="sm" fw={700}>{fmtPrecio(p.precio6)}</Text>
-                                                        {fmtBs(p.precio6, tasa) && <Text size="xs" c="dimmed" fw={600}>{fmtBs(p.precio6, tasa)}</Text>}
+                                                        <Text size="sm" fw={700}>{soloBs ? (fmtBs(p.precio6, tasa) || <Text span c="dimmed" size="sm">—</Text>) : fmtPrecio(p.precio6)}</Text>
+                                                        {!soloBs && fmtBs(p.precio6, tasa) && <Text size="xs" c="dimmed" fw={600}>{fmtBs(p.precio6, tasa)}</Text>}
                                                     </Table.Td>
                                                 </Table.Tr>
                                             ))}

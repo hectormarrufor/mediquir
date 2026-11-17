@@ -141,6 +141,7 @@ export default function PresupuestoImprimible({ presupuesto, accionesExtra = nul
     const nombreArchivo = `Presupuesto-${String(presupuesto.numero || 'Mediquir').replace(/[^\w-]+/g, '')}.pdf`;
     const mensajeWhatsapp = `Hola${cliente?.nombre ? ` ${cliente.nombre}` : ''}, ¡un gusto saludarte! 👋\n\n`
         + `Te comparto el presupuesto *${presupuesto.numero || ''}* de *Mediquir* con los productos que conversamos, por un total de *${principal(presupuesto.totalFinal)}* (${equivalente(presupuesto.totalFinal)} a la tasa del día).\n\n`
+        + `Ten en cuenta que el precio que se mantiene es el expresado en dólares; el monto en bolívares solo es válido por 1 día.\n\n`
         + `Es válido hasta el ${fecha(vence)}. Quedo atento a cualquier duda o para coordinar tu pedido. ¡Gracias por preferirnos! 🙌\n\n— Equipo Mediquir`;
     const obtenerPdf = () => generarPdfDeHojas(document.getElementById('pp-print-section'), fuenteTienda.className);
 
@@ -303,7 +304,7 @@ export default function PresupuestoImprimible({ presupuesto, accionesExtra = nul
                                                         <div className="pp-et">Condiciones</div>
                                                         <ul>
                                                             <li>Oferta válida por <b>{validoDias} días</b>, hasta el {fecha(vence)}.</li>
-                                                            <li>Montos expresados en {enBs ? 'bolívares' : 'dólares'}; equivalente en {enBs ? 'dólares' : 'bolívares'} a la tasa de {fmt(tasa)} Bs/$.</li>
+                                                            <li><b>El precio que se mantiene es el expresado en dólares (US$).</b> El monto en bolívares es referencial, calculado a la tasa de {fmt(tasa)} Bs/$ del {fecha(creado)}, y <b>solo se mantiene por 1 día</b>: pasado ese día se recalcula a la tasa vigente.</li>
                                                             <li>Precios y disponibilidad sujetos a cambio sin previo aviso.</li>
                                                             <li>Documento informativo: no es una factura ni un documento fiscal.</li>
                                                         </ul>

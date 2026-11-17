@@ -723,7 +723,16 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const esFactura = tipoDocumentoActual === 'FACTURA';
     const talonario = esFactura && puedeEditarPrecio && Boolean(formVenta.values.facturaTalonario);
     const tamCampo = isMobile ? 'md' : 'sm'; // en el teléfono, campos más altos (se tocan con el dedo y la letra no obliga a acercar)
-    const opcionesTarifa = [
+    // Los vendedores, al VENDER, solo trabajan y ven bolívares (tarifas P4/P5); los dólares son solo de los presupuestos y de administración.
+    const soloBs = esVendedor && !esPresupuesto;
+    useEffect(() => {
+        if (soloBs && ['precio7', 'precio6', 'precio1'].includes(formVenta.values.tipoPrecio)) formVenta.setFieldValue('tipoPrecio', formVenta.values.tipoPrecio === 'precio6' ? 'precio5' : 'precio4');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [soloBs, formVenta.values.tipoPrecio]);
+    const opcionesTarifa = soloBs ? [
+        { value: 'precio4', label: 'Detal (Bs)' },
+        { value: 'precio5', label: 'Mayor (Bs)' },
+    ] : [
         { value: 'precio7', label: 'P7 (Detal USD)' },
         { value: 'precio6', label: 'P6 (Mayor USD)' },
         // P4/P5: P7/P6 en Bs a la tasa del día (el presupuesto en Bs se guarda en Bs y muestra el equivalente en $)
@@ -743,13 +752,13 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         return {
             valor: info.precio, simbolo: info.simbolo, editable: puedeEditarPrecio, etiqueta: etiquetaTarifa,
             opciones: mismas.map((t) => ({ etiqueta: CORTO_TARIFA[t], valor: calcularPrecioInfo(producto, t).precio })),
-            equivalente: tasaBcv > 0 ? (v) => (esMonedaBs ? `≈ $${formatoNumero(aDolares(v, tasaBcv))}` : `≈ Bs ${formatoNumero(aBolivares(v, tasaBcv))}`) : null,
+            equivalente: tasaBcv > 0 && !soloBs ? (v) => (esMonedaBs ? `≈ $${formatoNumero(aDolares(v, tasaBcv))}` : `≈ Bs ${formatoNumero(aBolivares(v, tasaBcv))}`) : null,
         };
     };
     const esEfectivo = ['Efectivo ($)', 'Efectivo (Bs)'].includes(formVenta.values.metodoPago);
     const unidadesCarrito = carrito.reduce((a, i) => a + i.cantidad, 0);
     // Lo que se cobra en la otra moneda (a la tasa de hoy): la persona en caja lo ve sin hacer la cuenta
-    const equivalenteTotal = tasaBcv > 0 && totalFinal > 0 ? (esMonedaBs ? `≈ $${formatoNumero(prevTotalUsd)}` : `≈ Bs ${formatoNumero(prevTotalBs)}`) : null;
+    const equivalenteTotal = tasaBcv > 0 && totalFinal > 0 && !soloBs ? (esMonedaBs ? `≈ $${formatoNumero(prevTotalUsd)}` : `≈ Bs ${formatoNumero(prevTotalBs)}`) : null;
     const esExento = (item) => (item.isFicticio ? !item.aplicaIva : item.porcentajeIva === 0);
 
     const selectorTipoVenta = !esPresupuesto && (isMobile ? (
@@ -1672,7 +1681,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                                     <span className="label-red">TOTAL IMPUESTO: 16%</span><br/>
                                                     <div className="monto-split">
                                                         <strong>{formatoNumero(prevIvaBs)} <span className="label-red">Bs.</span></strong>
-                                                        <strong>{formatoNumero(prevIvaUsd)} <span className="label-red">USD</span></strong>
+                                                        {!soloBs && <strong>{formatoNumero(prevIvaUsd)} <span className="label-red">USD</span></strong>}
                                                     </div>
                                                 </>
                                             ) : (
@@ -1683,7 +1692,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                             <span className="label-red">TOTAL EXENTO:</span><br/>
                                             <div className="monto-split">
                                                 <strong>{formatoNumero(prevExentoBs)} <span className="label-red">Bs.</span></strong>
-                                                <strong>{formatoNumero(prevExentoUsd)} <span className="label-red">USD</span></strong>
+                                                {!soloBs && <strong>{formatoNumero(prevExentoUsd)} <span className="label-red">USD</span></strong>}
                                             </div>
                                         </td>
                                         <td className="total-cell text-center" style={{ backgroundColor: '#f9f9f9' }}>
@@ -1698,7 +1707,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                                     <span className="label-red">BASE IMPONIBLE:</span><br/>
                                                     <div className="monto-split">
                                                         <strong>{formatoNumero(prevBaseBs)} <span className="label-red">Bs.</span></strong>
-                                                        <strong>{formatoNumero(prevBaseUsd)} <span className="label-red">USD</span></strong>
+                                                        {!soloBs && <strong>{formatoNumero(prevBaseUsd)} <span className="label-red">USD</span></strong>}
                                                     </div>
                                                 </>
                                             ) : (
@@ -1710,8 +1719,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                             <strong>{formatoNumero(tasaBcv)} <span className="label-red">Bs.</span></strong>
                                         </td>
                                         <td className="total-cell text-center" style={{ backgroundColor: '#f9f9f9' }}>
-                                            <span className="label-red">TOTAL GENERAL USD$</span><br/>
-                                            <strong style={{fontSize: '1.1rem'}}>{formatoNumero(prevTotalUsd)}</strong>
+                                            {!soloBs && (<>
+                                                <span className="label-red">TOTAL GENERAL USD$</span><br/>
+                                                <strong style={{fontSize: '1.1rem'}}>{formatoNumero(prevTotalUsd)}</strong>
+                                            </>)}
                                         </td>
                                     </tr>
                                 </tbody>
