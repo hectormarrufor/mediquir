@@ -9,7 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
     IconAlertTriangle, IconArchive, IconBuildingStore, IconCash, IconChevronDown, IconCircleCheck, IconClock,
-    IconPackage, IconReceipt2, IconShoppingCart, IconTag, IconTruckDelivery,
+    IconFileText, IconPackage, IconShoppingCart, IconTag, IconTruckDelivery,
 } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
 import TareasPanel from '@/app/components/tareas/TareasPanel';
@@ -17,7 +17,6 @@ import { useTasaBcv } from '@/hooks/useTasaBcv';
 
 const PosModal = dynamic(() => import('../../components/admin/PosModal'), { ssr: false });
 const EntregaChoferForm = dynamic(() => import('../../components/admin/EntregaChoferForm'), { ssr: false });
-const CompraModal = dynamic(() => import('../../components/admin/CompraModal'), { ssr: false });
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtUsd = (v) => `$${usd.format(Number(v) || 0)}`;
@@ -144,7 +143,6 @@ export default function DashboardVendedor() {
     const { tasa } = useTasaBcv();
 
     const [posAbierto, setPosAbierto] = useState(false);
-    const [compraAbierta, setCompraAbierta] = useState(false);
     const [porFirmar, setPorFirmar] = useState(null); // { tarea, tipo }
     const [firmando, setFirmando] = useState(false);
     const [porEntregar, setPorEntregar] = useState(null); // tarea que se va a entregar al chofer
@@ -214,7 +212,7 @@ export default function DashboardVendedor() {
 
                 <SimpleGrid cols={{ base: 2, lg: 4 }} spacing={{ base: 6, sm: 'md' }}>
                     <Acceso icono={IconShoppingCart} color="navy.9" titulo="Nueva venta o pedido" descripcion="Al detal o pedido al mayor" onClick={() => setPosAbierto(true)} />
-                    <Acceso icono={IconReceipt2} color="orange.6" titulo="Registrar compra" descripcion="Factura de un proveedor" onClick={() => setCompraAbierta(true)} />
+                    <Acceso icono={IconFileText} color="orange.6" titulo="Presupuestos" descripcion="Cotizaciones para tus clientes" onClick={() => router.push('/superuser/presupuestos')} />
                     <Acceso icono={IconArchive} color="brand.6" titulo="Inventario" descripcion="Existencia y precios" onClick={() => router.push('/superuser/inventario/consulta')} />
                     <Acceso icono={IconTruckDelivery} color="grape.6" titulo="Mis ventas y pedidos" descripcion="Historial y seguimiento" onClick={() => router.push('/superuser/ventas')} />
                 </SimpleGrid>
@@ -307,7 +305,6 @@ export default function DashboardVendedor() {
             </Modal>
 
             {posAbierto && <PosModal opened={posAbierto} onClose={() => { setPosAbierto(false); queryClient.invalidateQueries({ queryKey: ['vendedor'] }); }} tasaBcv={tasa || 0} />}
-            {compraAbierta && <CompraModal opened={compraAbierta} onClose={() => setCompraAbierta(false)} tasaBcv={tasa || 0} />}
         </Box>
     );
 }

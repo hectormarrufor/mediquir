@@ -5,10 +5,15 @@ import { Alert, Avatar, Badge, Box, Center, Group, Pagination, Paper, SegmentedC
 import { useDebouncedValue } from '@mantine/hooks';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { IconAlertTriangle, IconLock, IconSearch } from '@tabler/icons-react';
+import { aBolivares } from '@/app/constants/facturacion';
+import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { getMainImage, PLACEHOLDER_IMG, getPresentacionLabel } from '@/app/components/landing/productUtils';
 
 const precio = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
 const fmtPrecio = (v) => (v === null || v === undefined ? <Text span c="dimmed" size="sm">—</Text> : `$${precio.format(v)}`);
+const bs = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// el precio en bolívares, a la tasa BCV del día (debajo del precio en dólares)
+const fmtBs = (v, tasa) => (v === null || v === undefined || !(tasa > 0) ? null : `Bs ${bs.format(aBolivares(Number(v), tasa))}`);
 
 async function pedirJson(url) {
     const res = await fetch(url);
@@ -25,6 +30,7 @@ export default function ConsultaInventario() {
     const [estado, setEstado] = useState('todos');
     const [pagina, setPagina] = useState(1);
     const [filtros, setFiltros] = useState({ categorias: [], marcas: [] });
+    const { tasa } = useTasaBcv();
 
     useEffect(() => { setPagina(1); }, [q, categoriaId, marcaId, estado]);
 
@@ -47,7 +53,7 @@ export default function ConsultaInventario() {
                 <Group justify="space-between" align="flex-end" wrap="wrap">
                     <Box>
                         <Title order={2} c="white">Inventario</Title>
-                        <Text size="sm" c="gray.4">Consulta de existencia y precios de venta.</Text>
+                        <Text size="sm" c="gray.4">Consulta de existencia y precios de venta{tasa ? ` · en bolívares a la tasa BCV de hoy (${bs.format(tasa)})` : ''}.</Text>
                     </Box>
                     <Badge variant="light" color="gray" leftSection={<IconLock size={12} />} size="lg" tt="none">Solo lectura</Badge>
                 </Group>
@@ -92,9 +98,13 @@ export default function ConsultaInventario() {
                                                     </Table.Td>
                                                     <Table.Td ta="right">
                                                         <Text size="sm" fw={700}>{fmtPrecio(p.precio7)}</Text>
+                                                        {fmtBs(p.precio7, tasa) && <Text size="xs" c="dimmed" fw={600}>{fmtBs(p.precio7, tasa)}</Text>}
                                                         {p.descuento > 0 && <Text size="xs" c="red.7">-{p.descuento}% en oferta</Text>}
                                                     </Table.Td>
-                                                    <Table.Td ta="right"><Text size="sm" fw={700}>{fmtPrecio(p.precio6)}</Text></Table.Td>
+                                                    <Table.Td ta="right">
+                                                        <Text size="sm" fw={700}>{fmtPrecio(p.precio6)}</Text>
+                                                        {fmtBs(p.precio6, tasa) && <Text size="xs" c="dimmed" fw={600}>{fmtBs(p.precio6, tasa)}</Text>}
+                                                    </Table.Td>
                                                 </Table.Tr>
                                             ))}
                                         </Table.Tbody>
