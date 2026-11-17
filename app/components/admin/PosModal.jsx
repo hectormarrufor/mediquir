@@ -27,7 +27,7 @@ import { numeroALetras } from '@/app/utils/numeroALetras';
 import { calcularFactura, aBolivares, aDolares, precioPorTarifa } from '@/app/constants/facturacion';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
-import { lineasDeRenglon } from '@/app/constants/lineasFactura';
+import { lineasDeRenglon, repartirEnFacturas } from '@/app/constants/lineasFactura';
 import { presentacionesDe, presentacionDe } from '@/app/constants/presentaciones';
 import { fechaCaracas, formatearFecha } from '@/app/constants/hora';
 import { CONTENIDO_SIN_RELLENO } from '@/app/components/ui/modalMovil';
@@ -515,9 +515,22 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 } catch (e) { setVista('datos'); return notifications.show({ title: 'No se guardaron los datos del cliente', message: e.message, color: 'red' }); }
             }
         }
-        const lineasFactura = carrito.reduce((a, i) => a + lineasDeRenglon(i.isFicticio ? i.nombre : nombreConMarca(i.nombre, i.marcaNombre)), 0);
+        const textoRenglon = (i) => (i.isFicticio ? i.nombre : nombreConMarca(i.nombre, i.marcaNombre));
+        const lineasFactura = carrito.reduce((a, i) => a + lineasDeRenglon(textoRenglon(i)), 0);
         if (tipoDocumentoActual === 'FACTURA' && lineasFactura > CONFIG_FISCAL.maxRenglonesFactura) {
-            return notifications.show({ title: 'No caben en la forma libre', message: `Esta factura ocupa ${lineasFactura} líneas y entran ${CONFIG_FISCAL.maxRenglonesFactura} (una descripción larga ocupa 2). Quita renglones y hazlos en otra factura.`, color: 'orange' });
+            // No caben en la forma libre: en vez de una sola factura se hacen las que hagan falta, con los renglones en orden.
+            // La 1.ª queda en el carrito y las demás en la cola (el POS las va cargando al asentar cada una).
+            const grupos = repartirEnFacturas(carrito.map(textoRenglon));
+            const carritos = grupos.map((idx) => idx.map((k) => carrito[k]));
+            setCarrito(carritos[0]);
+            setCola([...carritos.slice(1), ...cola]);
+            setOrigen((o) => (o ? { ...o, de: o.de + carritos.length - 1 } : { numero: null, parte: 1, de: carritos.length + cola.length }));
+            setVista('carrito');
+            return notifications.show({
+                title: `Se dividió en ${carritos.length} facturas`,
+                message: `Esto ocupa ${lineasFactura} líneas y en la forma libre entran ${CONFIG_FISCAL.maxRenglonesFactura}. Quedó la factura 1 de ${carritos.length} en el carrito (las demás siguen solas al asentar cada una): revísala y asiéntala.`,
+                color: 'blue', autoClose: 12000,
+            });
         }
         
         // Una venta al mayor casi siempre es a crédito: si va de contado se confirma antes de asentar (se registra el pago de una vez)
@@ -1266,7 +1279,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                         <IconExchange size={20} color="#1971C2" />
                         <Text fw={600} c="blue.9">Tasa BCV:</Text>
                         <Badge size="md" color="blue" variant="filled">{tasaBcv} Bs/$</Badge>
-                        {origen && <Badge size="lg" color="teal" variant="light">Presupuesto {origen.numero}{origen.de > 1 ? ` · factura ${origen.parte} de ${origen.de}` : ''}</Badge>}
+                        {origen && <Badge size="lg" color="teal" variant="light">{origen.numero ? `Presupuesto ${origen.numero}` : 'Venta dividida'}{origen.de > 1 ? ` · factura ${origen.parte} de ${origen.de}` : ''}</Badge>}
                     </Group>
                     {botonCero}
                 </Group>
