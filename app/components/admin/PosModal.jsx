@@ -64,7 +64,7 @@ function PrecioEditable({ valor, simbolo, editado, onCommit, onRestablecer, size
 // controlInicial: número de control con el que se abre (registrar la factura de un número que faltaba en la secuencia de la forma libre)
 // presupuestoEditar: presupuesto ya guardado (con modo="presupuesto"): se carga para modificarlo y al guardar se actualiza el mismo número
 // Altos del POS en la computadora: los paneles ocupan casi toda la pantalla y el carrito siempre deja lugar a 11 renglones (11 x ~34 px + encabezado)
-const ALTO_PANELES = 'calc(100dvh - 128px)';
+const ALTO_PANELES = 'calc(100dvh - 108px)'; // pantalla completa: título (~44) + barra de la tasa (~40) + márgenes
 const ALTO_CARRITO = 11 * 34 + 40;
 
 export const BORRADOR_PRESUPUESTO = 'mediquir:borrador-presupuesto';
@@ -862,8 +862,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     );
 
     // Al mayor el cliente es obligatorio; al detal es opcional (venta sola, sin cliente) y se puede crear uno nuevo con cédula, nombre y teléfono
-    const campoCliente = (
-        <Stack gap="xs">
+    const selectClienteFila = (
         <Group wrap="nowrap" gap="xs" align="flex-end">
             <Select
                 style={{ flex: 1, minWidth: 0 }} size={tamCampo}
@@ -880,22 +879,26 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 <IconPlus size={20} />
             </ActionIcon>
         </Group>
+    );
+
+    const extrasCliente = (
+        <>
         {clienteSeleccionado && !esPresupuesto && ['FACTURA', 'NOTA DE ENTREGA'].includes(tipoDocumentoActual) && (() => {
             const duenoExt = vendedoresExternos.find((v) => String(v.id) === String(clienteSeleccionado.vendedorComisionId));
             const documento = tipoDocumentoActual === 'FACTURA' ? 'factura' : 'nota de entrega';
             if (clienteSeleccionado.vendedorComisionId) {
                 const nombre = duenoExt?.nombre || datosVendExt?.vendedores?.find((v) => String(v.id) === String(clienteSeleccionado.vendedorComisionId))?.nombre || 'un vendedor externo';
                 return (
-                    <Alert color="grape" variant="light" p="xs" title={`Cliente del vendedor ${nombre}`}>
+                    <Alert color="grape" variant="light" p={isMobile ? 'xs' : 6} title={isMobile ? `Cliente del vendedor ${nombre}` : undefined}>
                         <Text size="xs">Esta {documento} generará comisión para <b>{nombre}</b>{duenoExt?.porcentaje ? ` (${Number(duenoExt.porcentaje)} %)` : ''}.</Text>
                     </Alert>
                 );
             }
             return (
-                <Alert color="yellow" variant="light" p="xs" title="Este cliente no es de ningún vendedor externo">
-                    <Text size="xs" mb={esVendedor ? 0 : 6}>Esta {documento} no generará comisión.{esVendedor ? ' Si es de un vendedor, pídele a administración que se lo asigne.' : ' Si es de uno de ellos, asígnalo aquí:'}</Text>
+                <Alert color="yellow" variant="light" p={isMobile ? 'xs' : 6} title={isMobile ? 'Este cliente no es de ningún vendedor externo' : undefined}>
+                    <Text size="xs" mb={esVendedor || !isMobile ? 0 : 6}>{!isMobile && <b>Cliente sin vendedor externo. </b>}Esta {documento} no generará comisión.{esVendedor ? ' Si es de un vendedor, pídele a administración que se lo asigne.' : ' Si es de uno de ellos, asígnalo aquí:'}</Text>
                     {!esVendedor && vendedoresExternos.length > 0 && (
-                        <Group gap="xs" wrap="nowrap" align="flex-end">
+                        <Group gap="xs" wrap="nowrap" align="flex-end" mt={isMobile ? 0 : 4}>
                             <Select size="xs" style={{ flex: 1 }} placeholder="Elige el vendedor" data={vendedoresExternos.map((v) => ({ value: String(v.id), label: `${v.nombre} (${Number(v.porcentaje)} %)` }))} value={vendAsignar} onChange={setVendAsignar} clearable />
                             <Button size="xs" color="grape" disabled={!vendAsignar} loading={asignandoVend} onClick={async () => {
                                 setAsignandoVend(true);
@@ -915,17 +918,36 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         })()}
         {esFactura && clienteSeleccionado && (
             <Paper withBorder p="xs" radius="md" style={{ borderColor: datosCli.direccion.trim() ? undefined : '#e03131' }}>
-                <Text size="xs" fw={700} mb={4}>Datos del cliente (se guardan en su ficha)</Text>
-                <Stack gap={6}>
-                    <TextInput size={tamCampo} label="Dirección fiscal" withAsterisk placeholder="Obligatoria en la factura" value={datosCli.direccion} onChange={(e) => setDatosCli((d) => ({ ...d, direccion: e.currentTarget.value }))}
-                        error={datosCli.direccion.trim() ? null : 'Falta la dirección'} />
-                    <Group gap="xs" grow align="flex-start">
-                        <TextInput size={tamCampo} type="tel" inputMode="tel" label="Teléfono" placeholder="(opcional)" value={datosCli.telefono} onChange={(e) => setDatosCli((d) => ({ ...d, telefono: e.currentTarget.value }))} />
-                        <TextInput size={tamCampo} type="email" label="Correo" placeholder="(opcional)" value={datosCli.email} onChange={(e) => setDatosCli((d) => ({ ...d, email: e.currentTarget.value }))} />
+                {isMobile ? (
+                    <>
+                        <Text size="xs" fw={700} mb={4}>Datos del cliente (se guardan en su ficha)</Text>
+                        <Stack gap={6}>
+                            <TextInput size={tamCampo} label="Dirección fiscal" withAsterisk placeholder="Obligatoria en la factura" value={datosCli.direccion} onChange={(e) => setDatosCli((d) => ({ ...d, direccion: e.currentTarget.value }))}
+                                error={datosCli.direccion.trim() ? null : 'Falta la dirección'} />
+                            <Group gap="xs" grow align="flex-start">
+                                <TextInput size={tamCampo} type="tel" inputMode="tel" label="Teléfono" placeholder="(opcional)" value={datosCli.telefono} onChange={(e) => setDatosCli((d) => ({ ...d, telefono: e.currentTarget.value }))} />
+                                <TextInput size={tamCampo} type="email" label="Correo" placeholder="(opcional)" value={datosCli.email} onChange={(e) => setDatosCli((d) => ({ ...d, email: e.currentTarget.value }))} />
+                            </Group>
+                        </Stack>
+                    </>
+                ) : (
+                    /* Computadora: los tres datos en una sola fila */
+                    <Group gap="xs" align="flex-start" wrap="nowrap">
+                        <TextInput size="xs" style={{ flex: 2, minWidth: 0 }} label="Dirección fiscal (se guarda en su ficha)" withAsterisk placeholder="Obligatoria en la factura" value={datosCli.direccion} onChange={(e) => setDatosCli((d) => ({ ...d, direccion: e.currentTarget.value }))}
+                            error={datosCli.direccion.trim() ? null : 'Falta la dirección'} />
+                        <TextInput size="xs" style={{ flex: 1, minWidth: 0 }} type="tel" inputMode="tel" label="Teléfono" placeholder="(opcional)" value={datosCli.telefono} onChange={(e) => setDatosCli((d) => ({ ...d, telefono: e.currentTarget.value }))} />
+                        <TextInput size="xs" style={{ flex: 1, minWidth: 0 }} type="email" label="Correo" placeholder="(opcional)" value={datosCli.email} onChange={(e) => setDatosCli((d) => ({ ...d, email: e.currentTarget.value }))} />
                     </Group>
-                </Stack>
+                )}
             </Paper>
         )}
+        </>
+    );
+
+    const campoCliente = (
+        <Stack gap="xs">
+            {selectClienteFila}
+            {extrasCliente}
         </Stack>
     );
 
@@ -1123,6 +1145,78 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         </Table>
     );
 
+    // ---------------- Computadora: filas compactas (el carrito es lo que importa, así que lo de arriba ocupa lo mínimo) ----------------
+    const ayudaDocEscritorio = [
+        talonario ? `Control del talonario (distinto al de la forma libre).${guiaTalonario?.ultima ? ` Última cargada: ${guiaTalonario.ultima.numero}, control ${guiaTalonario.ultima.control}.` : ''}` : (esFactura && siguienteControl ? `Control vacío = toma el siguiente (${siguienteControl}).` : ''),
+        puedeEditarPrecio ? 'Fecha vacía = hoy; si copias una factura de otro día, elige esa fecha (toma la tasa BCV de ese día).' : '',
+    ].filter(Boolean).join(' ');
+    const docEscritorio = esPresupuesto ? bloqueDocumento : (
+        <Paper p={6} bg={esFactura ? 'red.0' : 'gray.1'} radius="md" withBorder>
+            <Group gap="sm" align="flex-end" wrap="wrap">
+                <Group gap={6} wrap="nowrap" pb={2}>
+                    <ThemeIcon size="md" variant="light" color={esFactura ? 'red' : 'blue'}><IconReceiptTax size={16} /></ThemeIcon>
+                    <Box>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700} lh={1}>Emitir</Text>
+                        <Text size="md" fw={800} lh={1.15} c={esFactura ? 'red.9' : 'blue.9'}>{tipoDocumentoActual}</Text>
+                    </Box>
+                </Group>
+                <TextInput label={talonario ? 'N° de factura (talonario)' : 'Correlativo'} placeholder={talonario ? '0123' : undefined} size="xs" w={talonario ? 150 : 120} autoComplete="off" {...formVenta.getInputProps('numeroDocumento')} />
+                {esFactura && (
+                    <TextInput label={talonario ? 'N° de control del talonario' : 'N° de control'} withAsterisk={talonario} placeholder={talonario ? (guiaTalonario?.controlSugerido || '00-0000000') : (siguienteControl || '00-000000')} size="xs" w={170} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
+                )}
+                {puedeEditarPrecio && (
+                    <TextInput type="date" label="Fecha de emisión" size="xs" w={150} max={fechaCaracas()} {...formVenta.getInputProps('fechaEmision')} />
+                )}
+                {esFactura && puedeEditarPrecio && (
+                    <Switch color="grape" size="xs" pb={6} label="Factura de talonario (hecha a mano)" checked={Boolean(formVenta.values.facturaTalonario)} onChange={(e) => formVenta.setFieldValue('facturaTalonario', e.currentTarget.checked)} />
+                )}
+            </Group>
+            {ayudaDocEscritorio && <Text size="xs" c="dimmed" mt={4} lh={1.25}>{ayudaDocEscritorio}</Text>}
+        </Paper>
+    );
+
+    // Cliente, tarifa e IVA en la misma fila
+    const filaClienteEscritorio = (
+        <Group gap="xs" align="flex-end" wrap="nowrap">
+            <Box style={{ flex: 1, minWidth: 0 }}>{selectClienteFila}</Box>
+            <Box w={210} style={{ flexShrink: 0 }}>{campoTarifa}</Box>
+            {!esPresupuesto && (
+                <Checkbox size="sm" pb={8} style={{ flexShrink: 0 }} label={<Text fw={600} size="sm">IVA (16%)</Text>} {...formVenta.getInputProps('conIva', { type: 'checkbox' })} />
+            )}
+        </Group>
+    );
+
+    // Forma de cobro, días de crédito o método de pago, y el aviso de lo que va a pasar, todo en una fila
+    const mensajeCobro = formVenta.values.condicionPago === 'Credito'
+        ? `Saldrá A CRÉDITO${formVenta.values.clienteId ? ` a ${Number(formVenta.values.diasCredito) || diasDelCliente} días` : ' (elige el cliente)'}: no se registra pago, queda en Cuentas por cobrar.`
+        : 'Saldrá DE CONTADO: se registra el pago ahora.';
+    const filaCobroEscritorio = !esPresupuesto && (
+        <Group gap="sm" align="flex-end" wrap="wrap">
+            {(tipoVenta === 'MAYOR' || puedeEditarPrecio) && (
+                <Box>
+                    <Text size="xs" fw={700} mb={2}>Forma de cobro</Text>
+                    <SegmentedControl size="xs" w={320} value={formVenta.values.condicionPago} onChange={(v) => formVenta.setFieldValue('condicionPago', v)}
+                        color={formVenta.values.condicionPago === 'Credito' ? 'orange.7' : 'green.7'}
+                        data={[{ value: 'Contado', label: 'Contado (cobra ahora)' }, { value: 'Credito', label: 'Crédito (por cobrar)' }]} />
+                </Box>
+            )}
+            {esCredito && (
+                <NumberInput label="Días de crédito" size="xs" w={110} min={0} max={365} allowDecimal={false} allowNegative={false} inputMode="numeric"
+                    readOnly={!puedeEditarPrecio} disabled={!formVenta.values.clienteId}
+                    {...formVenta.getInputProps('diasCredito')} onBlur={confirmarDias} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmarDias(); } }} />
+            )}
+            {formVenta.values.condicionPago === 'Contado' && (
+                <>
+                    <Select label="Método de pago" size="xs" w={190} data={opcionesMetodoPago} allowDeselect={false} {...formVenta.getInputProps('metodoPago')} />
+                    {!esEfectivo && <TextInput label="Referencia" placeholder="Últimos 6 dígitos" size="xs" w={150} autoComplete="off" {...formVenta.getInputProps('referencia')} />}
+                </>
+            )}
+            <Text size="xs" fw={600} pb={6} style={{ flex: 1, minWidth: 220 }} c={formVenta.values.condicionPago === 'Credito' ? 'orange.8' : 'green.8'}>
+                {mensajeCobro}{esCredito && alcanceDias ? (alcanceDias.alcance === 'cliente' ? ` Se guardará también como los días de crédito de ${clienteDelCredito?.nombre || 'este cliente'}.` : ' Solo para esta factura.') : ''}
+            </Text>
+        </Group>
+    );
+
     // ---------------- Computadora: productos a la izquierda, documento y carrito a la derecha ----------------
     const contenidoEscritorio = (
         <>
@@ -1155,19 +1249,13 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 <Grid.Col span={{ base: 7, xl: 8 }} p={0}>
                     {/* Si la pantalla es baja, el panel se desplaza entero en vez de achicar el carrito (que siempre deja lugar para 11 renglones) */}
                     <Paper withBorder p="sm" radius="md" h={ALTO_PANELES} style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-                        {/* Los datos del documento van en franja de columnas (no apilados), para que el carrito gane altura */}
-                        <SimpleGrid cols={{ base: 1, md: 2, xl: 3 }} spacing="xs" mb="xs" style={{ alignItems: 'start' }}>
-                            <Box>{bloqueDocumento}</Box>
-                            <Stack gap="xs">
-                                {campoCliente}
-                                {campoTarifa}
-                            </Stack>
-                            <Box>
-                                {filaIvaCondicion}
-                                {filaPago}
-                                {filaCredito}
-                            </Box>
-                        </SimpleGrid>
+                        {/* Datos del documento: cada cosa en UNA fila compacta, para que casi todo el panel sea del carrito */}
+                        <Stack gap={6} mb="xs">
+                            {docEscritorio}
+                            {filaClienteEscritorio}
+                            {extrasCliente}
+                            {filaCobroEscritorio}
+                        </Stack>
 
                         <ScrollArea style={{ flex: `1 0 ${ALTO_CARRITO}px` }} offsetScrollbars type="auto" mb="xs">
                             {carrito.length ? tablaCarrito : <Text c="dimmed" ta="center" size="sm" py="xl">Haz clic en un producto de la lista para agregarlo.</Text>}
@@ -1308,7 +1396,6 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                 {filaIvaCondicion}
                                 {filaPago}
                                 {filaCredito}
-                        {filaCredito}
                                 {formVenta.values.condicionPago !== 'Contado' && <Text size="xs" c="dimmed">A crédito: el cliente queda debiendo y los abonos se registran después en Cuentas por cobrar.</Text>}
                             </Paper>
                         )}
@@ -1362,9 +1449,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 </Modal>
             ) : (
                 <Modal
-                    opened={opened} onClose={onClose} size="98%" centered
+                    opened={opened} onClose={onClose} fullScreen
                     title={<Title order={4} c="blue.9" component="div">{esPresupuesto ? (editando ? `Modificar ${editando.numero}` : 'Nuevo presupuesto') : 'Terminal POS - Nueva Venta'}</Title>}
-                    styles={{ inner: { padding: '8px' }, content: { borderRadius: '8px' }, body: { padding: '10px 14px 12px' }, header: { padding: '8px 14px' } }}
+                    styles={{ content: { borderRadius: 0, overflow: 'hidden' }, body: { padding: '4px 12px 8px' }, header: { padding: '6px 12px', minHeight: 44 } }}
                 >
                     {contenidoEscritorio}
                 </Modal>
