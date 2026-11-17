@@ -4,7 +4,7 @@
 // el estado de la comisión (color + ícono + texto), el menú «⋯» de cada línea, la leyenda y los diálogos.
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActionIcon, Alert, Autocomplete, Box, Button, Group, Menu, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Text, Textarea, TextInput } from '@mantine/core';
-import { IconArrowBackUp, IconCircleCheck, IconCoin, IconDotsVertical, IconHourglass, IconInfoCircle, IconListCheck, IconPencil, IconPlus, IconReceiptRefund, IconTrash } from '@tabler/icons-react';
+import { IconArrowBackUp, IconCircleCheck, IconCoin, IconDotsVertical, IconHourglass, IconInfoCircle, IconListCheck, IconPencil, IconPlus, IconReceipt, IconReceiptRefund, IconTrash } from '@tabler/icons-react';
 import { CONCEPTOS, ESTADOS, PORCENTAJES, esPago, estadoLinea, opcionesPct, r2 } from './comisiones';
 import { Dialogo } from './Piezas';
 import { bolivares, dolares, fmtFecha, hoy } from './utilidades';
@@ -57,6 +57,7 @@ export function MenuLinea({ l, acc, tamano = 'md' }) {
                 <Menu.Label>{pago ? (l.concepto === 'NOTA' ? 'Nota de crédito' : 'Abono') : 'Factura'} {l.documentoTexto || ''}</Menu.Label>
                 <Menu.Item leftSection={<IconPencil size={16} />} onClick={() => acc.editarLinea(l)}>Editar esta línea</Menu.Item>
                 {!pago && <Menu.Item leftSection={<IconPlus size={16} />} onClick={() => acc.agregarAbono(l)}>Agregar un abono a esta factura</Menu.Item>}
+                {l.ventaId && l.concepto !== 'NOTA' && <Menu.Item color="teal" leftSection={<IconReceipt size={16} />} onClick={() => acc.recibo(l)}>Imprimir recibo de cobro</Menu.Item>}
                 <Menu.Divider />
                 <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => acc.borrarLinea(l)}>Borrar de la hoja</Menu.Item>
             </Menu.Dropdown>

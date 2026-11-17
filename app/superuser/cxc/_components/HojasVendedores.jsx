@@ -15,6 +15,7 @@ import { DialogoAgregarLinea, DialogoEditarLinea, DialogoNuevoVendedor, LeyendaC
 import { EstadoVacio, Esqueleto, Kpi, useConfirmar } from './Piezas';
 import { DialogoPagarComision, DialogoPrestamo } from './PrestamosPagos';
 import DialogoClientesVendedor from './ClientesVendedor';
+import { DialogoReciboDeFactura } from './ReciboCobro';
 import { FILTROS, agruparFacturas, claveDoc, opcionesPct, porPagar } from './comisiones';
 import { useHojaVendedor } from './useHojaVendedor';
 import { bolivares, dolares, useAltoElemento, usd, useVistaTarjetas } from './utilidades';
@@ -34,6 +35,7 @@ export default function HojasVendedores() {
 
     const acc = {
         editarLinea: (l) => setDialogo({ tipo: 'editar', linea: l }),
+        recibo: (l) => setDialogo({ tipo: 'recibo', linea: l }),
         // el abono se arma con los datos de su factura (número, cliente y su %): solo falta escribir el monto
         agregarAbono: (factura) => {
             const inicial = { concepto: 'ABONO', documento: factura.documentoTexto || '', cliente: factura.clienteTexto || factura.clienteNombre || '' };
@@ -272,6 +274,7 @@ export default function HojasVendedores() {
                 </Affix>
             )}
 
+            {dialogo?.tipo === 'recibo' && <DialogoReciboDeFactura key={dialogo.linea.id} linea={dialogo.linea} onCerrar={cerrar} />}
             {dialogo?.tipo === 'editar' && (
                 <DialogoEditarLinea
                     linea={dialogo.linea} tasa={tasa} /* la línea tal como estaba al abrir: una actualización en segundo plano no debe borrar lo que se está escribiendo */

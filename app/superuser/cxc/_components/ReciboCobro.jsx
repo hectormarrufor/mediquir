@@ -5,6 +5,7 @@
 // Si ya existe un recibo con esos mismos abonos se abre ese (reimprimir no gasta otro número).
 import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Checkbox, Group, ScrollArea, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconReceipt } from '@tabler/icons-react';
@@ -82,4 +83,32 @@ export function DialogoReciboCobro({ grupo, abonoInicial = null, onCerrar }) {
             </Stack>
         </Dialogo>
     );
+}
+
+// Recibo de cobro desde la hoja de un vendedor: toma los abonos reales de la factura de la línea (los de la hoja son solo de comisión) y abre el mismo diálogo del libro.
+// Si la línea es un abono, deja marcado el que coincide en fecha y monto.
+export function DialogoReciboDeFactura({ linea, onCerrar }) {
+    const { data: venta, isLoading, error } = useQuery({
+        queryKey: ['cxc-recibo-factura', linea.ventaId],
+        queryFn: async () => {
+            const res = await fetch(`/api/ventas/${linea.ventaId}`);
+            if (!res.ok) throw new Error('No se pudo cargar la factura');
+            return res.json();
+        },
+    });
+    const dia = (f) => String(f || '').slice(0, 10);
+    const { grupo, inicial } = useMemo(() => {
+        if (!venta) return {};
+        const abonos = (venta.abonos || []).filter((a) => a.metodoPago !== 'Retención IVA').map((a) => ({ id: a.id, monto: Number(a.montoUsd), fecha: dia(a.fechaPago), metodo: a.metodoPago, referencia: a.referencia }));
+        const coincide = linea.concepto === 'ABONO' ? abonos.find((a) => a.fecha === dia(linea.fecha) && Math.abs(a.monto - Math.abs(Number(linea.montoUsd))) < 0.01) || abonos.find((a) => Math.abs(a.monto - Math.abs(Number(linea.montoUsd))) < 0.01) : null;
+        return { grupo: { nombre: venta.cliente?.nombre || linea.clienteNombre || 'Cliente', filas: [{ manual: false, documento: venta.numeroDocumento, abonos }] }, inicial: coincide?.id || null };
+    }, [venta, linea]);
+    if (!grupo) {
+        return (
+            <Dialogo abierto onCerrar={onCerrar} titulo={`Recibo de cobro · ${linea.documentoTexto || ''}`}>
+                {error ? <Alert color="red" variant="light">{error.message}</Alert> : <Text size="sm" c="#5c6675">{isLoading ? 'Cargando los abonos de la factura…' : ''}</Text>}
+            </Dialogo>
+        );
+    }
+    return <DialogoReciboCobro grupo={grupo} abonoInicial={inicial} onCerrar={onCerrar} />;
 }
