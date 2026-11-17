@@ -31,9 +31,12 @@ export default function SiteHeader({ opened, toggle }) {
     return (
         <AppShell.Header className={classes.header}>
             <Group className={classes.barra} data-scrolled={scrolled || undefined} px={{ base: 'sm', sm: 'lg' }} justify="space-between" wrap="nowrap">
-                {/* Placas de cristal del fondo (ver navigation.module.css): solo decoración */}
-                <span className={classes.cristalB} aria-hidden="true" />
-                <span className={classes.cristalC} aria-hidden="true" />
+                {/* Placas de cristal inclinadas del fondo (ver navigation.module.css): solo decoración */}
+                <span className={classes.cristales} aria-hidden="true">
+                    <span className={classes.cristalA} />
+                    <span className={classes.cristalB} />
+                    <span className={classes.cristalC} />
+                </span>
                 <UnstyledButton onClick={() => router.push('/')} aria-label={`Ir al inicio de ${tenant.name}`}>
                     <BrandLogo />
                 </UnstyledButton>

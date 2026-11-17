@@ -17,9 +17,6 @@
     height: 52px;
     margin: 8px 10px 0;
     border-radius: 18px;
-    /* Del lado del logo: blanco sólido, hasta el 25 %. Después vienen DOS PLACAS DE CRISTAL superpuestas (.cristalB desde el 25 % y .cristalC desde el 70 %):
-       cada una es un vidrio con su propio desenfoque, su canto brillante y su sombra sobre la placa de al lado, en vez de un degradado de un color a otro. */
-    background: linear-gradient(90deg, #ffffff 0, #ffffff 25%, transparent 25%);
     border: 1px solid rgba(255, 255, 255, 0.9);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 1),
@@ -35,46 +32,66 @@
     z-index: 1;
 }
 
+/* Fondo: tres placas de cristal INCLINADAS (como ‹ / ›), una al lado de la otra y montadas en diagonal:
+   blanca hasta el 25 %, vidrio esmerilado desde el 25 % y vidrio azul cielo desde el 70 %. Cada placa lleva su canto brillante y su sombra.
+   El contenedor las recorta con las esquinas redondeadas de la barra (así el resplandor de la barra no se corta). */
+.cristales {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    border-radius: 17px;
+    pointer-events: none;
+}
+
+.cristalA,
 .cristalB,
 .cristalC {
     position: absolute;
-    top: -1px;
-    bottom: -1px;
-    right: -1px;
-    z-index: 0;
-    pointer-events: none;
-    border-radius: 0 18px 18px 0;
-    -webkit-backdrop-filter: blur(26px) saturate(210%) brightness(1.08);
-    backdrop-filter: blur(26px) saturate(210%) brightness(1.08);
+    top: -2px;
+    bottom: -2px;
+    transform: skewX(-18deg);
 }
 
-/* Placa 1 (25 % → 100 %): vidrio esmerilado casi incoloro; canto izquierdo brillante y sombra que cae sobre el blanco */
+/* Placa blanca (del lado del logo): su canto derecho es la diagonal */
+.cristalA {
+    left: -90px;
+    width: calc(25% + 90px);
+    background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+    box-shadow: 8px 0 18px -8px rgba(2, 8, 23, 0.28);
+}
+
+/* Placa de vidrio esmerilado (25 % → ...): casi incolora, con desenfoque propio; el canto izquierdo brilla */
 .cristalB {
     left: 25%;
+    right: -120px;
+    -webkit-backdrop-filter: blur(26px) saturate(210%) brightness(1.08);
+    backdrop-filter: blur(26px) saturate(210%) brightness(1.08);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.24) 40%, rgba(255, 255, 255, 0.1) 100%),
         rgba(226, 240, 255, 0.34);
-    border-left: 1.5px solid rgba(255, 255, 255, 1);
+    border-left: 2px solid rgba(255, 255, 255, 1);
     box-shadow:
-        inset 1px 0 0 alpha(var(--mantine-color-sky-3), 0.6),
+        inset 1px 0 0 alpha(var(--mantine-color-sky-3), 0.65),
         inset 0 1px 0 rgba(255, 255, 255, 0.95),
-        inset 0 -8px 18px -10px alpha(var(--mantine-color-sky-3), 0.55),
-        -16px 0 26px -10px rgba(2, 8, 23, 0.3);
+        inset 0 -8px 18px -10px alpha(var(--mantine-color-sky-3), 0.55);
 }
 
-/* Placa 2 (70 % → 100 %): vidrio azul cielo de la marca, encima de la primera; su canto también brilla y proyecta sombra */
+/* Placa de vidrio azul cielo de la marca (70 % → ...): encima de la anterior, con su canto brillante y su sombra */
 .cristalC {
     left: 70%;
+    right: -120px;
+    -webkit-backdrop-filter: blur(26px) saturate(220%) brightness(1.06);
+    backdrop-filter: blur(26px) saturate(220%) brightness(1.06);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.12) 45%, rgba(255, 255, 255, 0) 100%),
-        linear-gradient(135deg, alpha(var(--mantine-color-sky-3), 0.6), alpha(var(--mantine-color-brand-5), 0.55));
-    border-left: 1.5px solid rgba(255, 255, 255, 1);
+        linear-gradient(135deg, alpha(var(--mantine-color-sky-3), 0.62), alpha(var(--mantine-color-brand-5), 0.55));
+    border-left: 2px solid rgba(255, 255, 255, 1);
     box-shadow:
         inset 1px 0 0 rgba(255, 255, 255, 0.7),
         inset 0 1px 0 rgba(255, 255, 255, 0.95),
         inset 0 -8px 18px -10px rgba(255, 255, 255, 0.6),
-        -14px 0 24px -8px rgba(2, 8, 23, 0.34),
-        0 0 30px alpha(var(--mantine-color-sky-3), 0.55);
+        -12px 0 22px -8px rgba(2, 8, 23, 0.32);
 }
 
 @media (min-width: 48em) {
@@ -100,7 +117,7 @@
     transition: opacity 0.3s ease;
 }
 
-/* Al hacer scroll: las placas se vuelven un poco más opacas y la barra proyecta más sombra (sigue siendo vidrio) */
+/* Al hacer scroll: las placas de vidrio se vuelven un poco más opacas y la barra proyecta más sombra (sigue siendo vidrio) */
 .barra[data-scrolled] {
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 1),
