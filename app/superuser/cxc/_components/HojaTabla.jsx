@@ -9,7 +9,7 @@ import { IconChevronDown, IconChevronRight, IconLinkOff } from '@tabler/icons-re
 import CeldaEditable from './CeldaEditable';
 import { Cifra } from './Piezas';
 import { CobroFactura, EstadoComision, MenuLinea, cifrasDe } from './PiezasVendedores';
-import { baseAbonadaDe, esPago, estadoLinea, opcionesPct } from './comisiones';
+import { baseAbonadaDe, esPago, estadoLinea, opcionesPct, porPagar } from './comisiones';
 import { DESPLAZAMIENTO_CABECERA, fmtFecha, useAnchoGrande, useAnchoMuyGrande, usd } from './utilidades';
 import classes from './cxc.module.css';
 import NumeroFactura from './NumeroFactura';
@@ -84,6 +84,8 @@ function ResumenAbonos({ d, cols, tasa }) {
     const abonado = suma('montoUsd');
     const baseAbonada = baseAbonadaDe(d); // nunca más que el sin IVA de la factura
     const comision = suma('comisionUsd');
+    const yaPagada = abonos.filter((x) => x.estatusComision === 'PAGADA').reduce((t, x) => t + (Number(x.comisionUsd) || 0), 0);
+    const debida = abonos.filter((x) => porPagar(x)).reduce((t, x) => t + (Number(x.comisionUsd) || 0), 0); // la sumatoria de las amarillas: lo que se le debe al vendedor
     const explicable = Number(d.padre.retenidoUsd) > 0.005 || Number(d.padre.exentoUsd) > 0.005 || d.padre.baseUsd !== null;
     const saldo = d.padre.saldoCxc !== null && d.padre.saldoCxc !== undefined ? Number(d.padre.saldoCxc) : Math.max(0, Number(d.padre.montoUsd) - abonado);
     const nCols = 11 + (cols.vence ? 1 : 0) + (cols.bs ? 1 : 0) + (cols.estatus ? 1 : 0) + (cols.obs ? 1 : 0);
@@ -96,9 +98,17 @@ function ResumenAbonos({ d, cols, tasa }) {
             <Table.Td ta="right"><Text fz={12} fw={800} pr={6} c="#1971c2">{usd(abonado)}</Text></Table.Td>
             <Table.Td ta="right"><Text fz={12} fw={800} pr={6} c="#1971c2" title={`Sin IVA de lo abonado (de ${usd(d.padre.baseUsd)} de la factura)`}>{usd(baseAbonada)}</Text></Table.Td>
             <Table.Td />
-            <Table.Td ta="right"><Text fz={12} fw={800} pr={6} title="Comisión que ya generaron sus abonos">{usd(comision)}</Text></Table.Td>
-            {cols.bs && <Table.Td ta="right"><Text fz={12} fw={700} pr={6}>{usd(comision * tasa)}</Text></Table.Td>}
-            <Table.Td colSpan={2 + (cols.estatus ? 1 : 0) + (cols.obs ? 1 : 0)} />
+            <Table.Td ta="right" title="Comisión que generaron todos los abonos (la ya pagada más la por pagar). NO es lo que se le debe al vendedor.">
+                <Text fz={9.5} fw={700} c="#868e96" pr={6} lh={1} tt="uppercase">Generada</Text>
+                <Text fz={12} fw={700} pr={6} c="#5c6675" lh={1.2}>{usd(comision)}</Text>
+            </Table.Td>
+            {cols.bs && <Table.Td ta="right"><Text fz={12} fw={600} pr={6} c="#868e96">{usd(comision * tasa)}</Text></Table.Td>}
+            <Table.Td colSpan={2 + (cols.estatus ? 1 : 0) + (cols.obs ? 1 : 0)}>
+                <Group gap={6} px={4} wrap="wrap">
+                    <Badge size="sm" variant="light" color="teal" style={{ textTransform: 'none' }} title="Comisión de abonos que ya se le pagó al vendedor">Ya pagada {usd(yaPagada)}</Badge>
+                    <Badge size="md" variant={debida > 0.005 ? 'filled' : 'light'} color={debida > 0.005 ? 'orange' : 'gray'} style={{ textTransform: 'none' }} title="Suma de las filas amarillas: lo que se le debe al vendedor por esta factura">{debida > 0.005 ? `Por pagar ${usd(debida)}` : 'Nada por pagar'}</Badge>
+                </Group>
+            </Table.Td>
         </Table.Tr>
         {explicable && (
             <Table.Tr className={classes.resumenAbonos}>

@@ -8,7 +8,7 @@ import { ActionIcon, Badge, Box, Button, Checkbox, Collapse, Group, SimpleGrid, 
 import { IconChevronDown, IconLinkOff, IconPencil, IconPlus } from '@tabler/icons-react';
 import { Cifra } from './Piezas';
 import { CobroFactura, EstadoComision, MenuLinea, cifrasDe } from './PiezasVendedores';
-import { baseAbonadaDe, esPago, estadoLinea } from './comisiones';
+import { baseAbonadaDe, esPago, estadoLinea, porPagar } from './comisiones';
 import { bolivares, dolares, fmtFecha } from './utilidades';
 import classes from './cxc.module.css';
 import NumeroFactura from './NumeroFactura';
@@ -138,7 +138,9 @@ function TarjetaFactura({ d, hoja, acc, tasa }) {
                                 <Dato titulo="Abonado a la factura" valor={dolares(abonado)} color="#1971c2" />
                                 <Dato titulo={saldo > 0.005 ? 'Falta por cobrar' : 'Estado'} valor={saldo > 0.005 ? dolares(saldo) : 'Cobrada'} color={saldo > 0.005 ? 'orange.9' : 'teal.8'} />
                                 <Dato titulo="Sin IVA abonado" valor={dolares(baseAbonadaDe(d))} color="#1971c2" />
-                                <Dato titulo="Comisión generada" valor={dolares(suma('comisionUsd'))} />
+                                <Dato titulo="Comisión generada (total)" valor={dolares(suma('comisionUsd'))} />
+                                <Dato titulo="Ya pagada al vendedor" valor={dolares(abonos.filter((p) => p.estatusComision === 'PAGADA').reduce((t, p) => t + (Number(p.comisionUsd) || 0), 0))} color="teal.8" />
+                                <Dato titulo="Por pagar al vendedor" valor={dolares(abonos.filter((p) => porPagar(p)).reduce((t, p) => t + (Number(p.comisionUsd) || 0), 0))} color="orange.9" />
                             </SimpleGrid>
                         )}
                         {abonos.length > 0 && (
