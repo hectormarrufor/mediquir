@@ -17,6 +17,13 @@ export const opcionesPct = (actual) => {
     if (actual !== null && actual !== undefined && actual !== '' && Number.isFinite(Number(actual)) && !lista.includes(Number(actual))) lista.push(Number(actual)); // una comisión vieja fuera de la lista se muestra igual
     return lista.sort((a, b) => a - b).map((n) => ({ value: String(n), label: `${n}%` }));
 };
+// Por qué el «sin IVA» de un abono no es el monto ÷ 1.16: la retención de IVA (el cliente no paga ese IVA en dinero) y los renglones exentos (sin IVA)
+export function explicarSinIva(pa) {
+    if (!pa || !(Number(pa.montoUsd) > 0) || pa.baseUsd === null || pa.baseUsd === undefined) return null;
+    const monto = Number(pa.montoUsd), base = Number(pa.baseUsd), retenido = Number(pa.retenidoUsd) || 0, exento = Number(pa.exentoUsd) || 0;
+    const aCobrar = monto - retenido;
+    return { monto, base, iva: r2(monto - base), retenido: r2(retenido), exento: r2(exento), aCobrar: r2(aCobrar), razon: aCobrar > 0.01 ? Math.min(1, base / aCobrar) : 1 };
+}
 export const CONCEPTOS = [{ value: 'FACTURA', label: 'Factura' }, { value: 'ABONO', label: 'Abono / pago' }, { value: 'NOTA', label: 'Nota de crédito' }];
 
 // Clientes: por el nombre escrito en la hoja (normalizado: «FCIA» = «FARMACIA», sin acentos), que es como los agrupa la administradora;
@@ -143,10 +150,15 @@ export function prepararLineas(todasSinClave, porcentajeVendedor) {
         const pa = d.padre;
         if (pa && d.pagos.length) conPagos.add(pa.id);
         if (pa && d.pagos.some((x) => x.concepto !== 'NOTA')) conAbonos.add(pa.id);
-        const razon = pa && Number(pa.montoUsd) > 0 && pa.baseUsd !== null ? Math.min(1, Number(pa.baseUsd) / Number(pa.montoUsd)) : 1;
+        // razón = sin IVA ÷ lo que el cliente paga en dinero (el monto menos el IVA que retuvo)
+        const aCobrar = pa ? Number(pa.montoUsd) - (Number(pa.retenidoUsd) || 0) : 0;
+        const razon = pa && aCobrar > 0.01 && pa.baseUsd !== null ? Math.min(1, Number(pa.baseUsd) / aCobrar) : 1;
+        // Tope: entre todos los abonos (los ya guardados primero) el sin IVA nunca supera el sin IVA de la factura
+        let restante = pa && pa.baseUsd !== null ? Number(pa.baseUsd) - d.pagos.filter((x) => x.concepto === 'ABONO' && x.baseUsd !== null).reduce((t, x) => t + Math.abs(Number(x.baseUsd) || 0), 0) : Infinity;
         for (const x of d.pagos) {
             if (x.concepto !== 'ABONO' || x.comisionUsd !== null) continue;
-            const base = x.baseUsd !== null ? Number(x.baseUsd) : r2(Math.abs(Number(x.montoUsd) || 0) * razon);
+            let base = x.baseUsd !== null ? Number(x.baseUsd) : r2(Math.abs(Number(x.montoUsd) || 0) * razon);
+            if (x.baseUsd === null) { base = Math.min(base, Math.max(0, r2(restante))); restante -= base; }
             const pct = pa && pa.porcentaje !== null && pa.porcentaje !== undefined ? Number(pa.porcentaje) : Number(porcentajeVendedor) || 0; // el % es el de la factura
             calculada.set(x.id, { baseUsd: base, comisionUsd: r2((base * pct) / 100), calculada: true });
         }

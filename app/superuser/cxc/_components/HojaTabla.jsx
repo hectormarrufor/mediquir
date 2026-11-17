@@ -13,6 +13,7 @@ import { esPago, estadoLinea, opcionesPct } from './comisiones';
 import { DESPLAZAMIENTO_CABECERA, fmtFecha, useAnchoGrande, useAnchoMuyGrande, usd } from './utilidades';
 import classes from './cxc.module.css';
 import NumeroFactura from './NumeroFactura';
+import NotaProrrateo, { MarcasFactura } from './ExplicacionSinIva';
 
 const pctTexto = (v) => (v === null || v === undefined || v === '' ? '' : `${Number(v)}%`);
 
@@ -49,6 +50,7 @@ function FilaLinea({ l, hijo, d, hoja, acc, tasa, cols }) {
                         </Box>
                         {!l.ventaId && <Tooltip label="No está enlazada con una factura del sistema: el cobro se lleva a mano"><IconLinkOff size={14} color="#b35900" aria-label="Sin enlazar" style={{ flexShrink: 0 }} /></Tooltip>}
                         <CobroFactura l={l} />
+                        <MarcasFactura l={l} />
                     </Group>
                 )}
             </Table.Td>
@@ -82,8 +84,11 @@ function ResumenAbonos({ d, cols, tasa }) {
     const abonado = suma('montoUsd');
     const baseAbonada = suma('baseUsd');
     const comision = suma('comisionUsd');
+    const explicable = Number(d.padre.retenidoUsd) > 0.005 || Number(d.padre.exentoUsd) > 0.005 || d.padre.baseUsd !== null;
     const saldo = d.padre.saldoCxc !== null && d.padre.saldoCxc !== undefined ? Number(d.padre.saldoCxc) : Math.max(0, Number(d.padre.montoUsd) - abonado);
+    const nCols = 11 + (cols.vence ? 1 : 0) + (cols.bs ? 1 : 0) + (cols.estatus ? 1 : 0) + (cols.obs ? 1 : 0);
     return (
+        <>
         <Table.Tr className={classes.resumenAbonos}>
             <Table.Td colSpan={2} />
             <Table.Td colSpan={2 + (cols.vence ? 1 : 0)}><Text fz={11.5} fw={700} pl={10} c="#1c4f8f" truncate="end">Abonado a la factura {d.padre.documentoTexto} ({abonos.length})</Text></Table.Td>
@@ -95,6 +100,13 @@ function ResumenAbonos({ d, cols, tasa }) {
             {cols.bs && <Table.Td ta="right"><Text fz={12} fw={700} pr={6}>{usd(comision * tasa)}</Text></Table.Td>}
             <Table.Td colSpan={2 + (cols.estatus ? 1 : 0) + (cols.obs ? 1 : 0)} />
         </Table.Tr>
+        {explicable && (
+            <Table.Tr className={classes.resumenAbonos}>
+                <Table.Td colSpan={2} />
+                <Table.Td colSpan={nCols - 2} py={3}><Box pl={10} pr={6}><NotaProrrateo pa={d.padre} fz={11} /></Box></Table.Td>
+            </Table.Tr>
+        )}
+        </>
     );
 }
 

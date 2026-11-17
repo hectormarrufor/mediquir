@@ -12,6 +12,7 @@ import { esPago, estadoLinea } from './comisiones';
 import { bolivares, dolares, fmtFecha } from './utilidades';
 import classes from './cxc.module.css';
 import NumeroFactura from './NumeroFactura';
+import NotaProrrateo, { MarcasFactura } from './ExplicacionSinIva';
 
 const marcaTarjeta = (e) => (e === 'porpagar' ? 'porpagar' : e === 'pagada' ? 'pagada' : undefined);
 
@@ -106,6 +107,7 @@ function TarjetaFactura({ d, hoja, acc, tasa }) {
             {(pa.ventaId || pa.estatusCliente) && (
                 <Group gap={8} mt={6} wrap="wrap">
                     {pa.ventaId && <Text fz={12.5}>Cliente: <CobroFactura l={pa} fz={12.5} /></Text>}
+                    <MarcasFactura l={pa} size="sm" />
                     {pa.estatusCliente && <Badge size="sm" variant="outline" color="gray" style={{ textTransform: 'none' }}>{pa.estatusCliente}</Badge>}
                 </Group>
             )}
@@ -138,6 +140,9 @@ function TarjetaFactura({ d, hoja, acc, tasa }) {
                                 <Dato titulo="Sin IVA abonado" valor={dolares(suma('baseUsd'))} color="#1971c2" />
                                 <Dato titulo="Comisión generada" valor={dolares(suma('comisionUsd'))} />
                             </SimpleGrid>
+                        )}
+                        {abonos.length > 0 && (
+                            <Box px={6} pb={4}><NotaProrrateo pa={pa} fz={11.5} /></Box>
                         )}
                     </Box>
                 </>

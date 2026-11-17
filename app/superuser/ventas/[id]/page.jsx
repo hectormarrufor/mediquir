@@ -10,6 +10,7 @@ import { useVolver } from '@/app/helpers/useVolver';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from '@mantine/form';
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
+import { desgloseFactura } from '@/app/helpers/desgloseFactura';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import {
     IconArrowLeft, IconPackage, IconTruck, IconCheck,
@@ -451,12 +452,31 @@ export default function DetallePedidoMayorPage() {
                                         );
                                     })()}
                                     {pedido.tipoDocumento !== 'NOTA_ENTREGA' && (<>
-                                    <Group justify="space-between"><Text size="sm" c="dimmed">Subtotal</Text><PrecioVisual valor={pedido.subtotal} simbolo={pedido.moneda} size="sm" fw={600} /></Group>
-                                    {Number(pedido.montoIva) > 0 && <Group justify="space-between"><Text size="sm" c="dimmed">IVA</Text><PrecioVisual valor={pedido.montoIva} simbolo={pedido.moneda} size="sm" fw={600} /></Group>}
-                                    {Number(pedido.costoFlete) > 0 && <Group justify="space-between"><Text size="sm" c="dimmed">{pedido.tipoVenta === 'ONLINE' ? 'Delivery' : 'Flete'}</Text><PrecioVisual valor={pedido.costoFlete} simbolo={pedido.moneda} size="sm" fw={600} /></Group>}
-                                    <Divider />
-                                    <Group justify="space-between"><Text fw={800}>Total</Text><PrecioVisual valor={pedido.totalFinal} simbolo={pedido.moneda} size="lg" fw={900} c="blue.9" /></Group>
-                                    <Text size="xs" c="dimmed" ta="right">≈ {equivalente(pedido.totalFinal)} · tasa {tasaDoc} Bs/$</Text>
+                                    {(() => {
+                                        const g = desgloseFactura(pedido);
+                                        // cada línea con su monto en la moneda del documento y, debajo, su equivalente a la tasa del documento (dólares y bolívares)
+                                        const fila = (rotulo, valor, o = {}) => (
+                                            <Group justify="space-between" align="flex-start" wrap="nowrap" key={rotulo}>
+                                                <Text size={o.fuerte ? 'md' : 'sm'} fw={o.fuerte ? 800 : 400} c={o.c || (o.fuerte ? undefined : 'dimmed')} pt={o.fuerte ? 2 : 0}>{rotulo}</Text>
+                                                <Box ta="right">
+                                                    <PrecioVisual valor={valor} simbolo={pedido.moneda} size={o.fuerte ? 'lg' : 'sm'} fw={o.fuerte ? 900 : 600} c={o.fuerte ? 'blue.9' : undefined} />
+                                                    <Text size="xs" c="dimmed" lh={1.1}>≈ {equivalente(valor)}</Text>
+                                                </Box>
+                                            </Group>
+                                        );
+                                        return (
+                                            <>
+                                                {fila('Subtotal (suma de los renglones)', g.subtotal)}
+                                                {g.exento > 0.004 && fila('Monto exento (sin IVA)', g.exento, { c: 'yellow.9' })}
+                                                {g.exento > 0.004 && fila('Base gravable', g.gravable)}
+                                                {g.conIva && fila('IVA 16 %', g.iva)}
+                                                {g.flete > 0.004 && fila(pedido.tipoVenta === 'ONLINE' ? 'Delivery' : 'Flete', g.flete)}
+                                                <Divider />
+                                                {fila('Total', g.total, { fuerte: true })}
+                                                <Text size="xs" c="dimmed" ta="right">Tasa aplicada ese día: {tasaDoc} Bs/$ · documento en {pedido.moneda === 'BS' ? 'bolívares' : 'dólares'}</Text>
+                                            </>
+                                        );
+                                    })()}
                                     </>)}
                                 </Stack>
                             </Paper>

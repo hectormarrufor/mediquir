@@ -77,8 +77,10 @@ export async function generarComisionPorPago({ abono, transaction: t }) {
         if (await ComisionVenta.count({ where: { vendedorId: p.vendedorId, ventaId: abono.ventaId, concepto: 'ABONO', observacion: { [db.Sequelize.Op.like]: `${marca}%` } }, transaction: t })) continue;
         const aCobrar = Number(p.montoUsd) - retenido; // lo que el cliente paga en dinero
         const razon = aCobrar > 0.01 && p.baseUsd !== null ? Math.min(1, Number(p.baseUsd) / aCobrar) : 1;
-        const base = r2(monto * razon);
         const pct = Number(p.porcentaje) || 0;
+        // Tope: el sin IVA de TODOS los abonos de la factura (los que vienen del Excel también) nunca supera el sin IVA de la factura
+        const baseYa = await ComisionVenta.sum('baseUsd', { where: { vendedorId: p.vendedorId, ventaId: abono.ventaId, concepto: 'ABONO' }, transaction: t });
+        const base = p.baseUsd !== null ? Math.min(r2(monto * razon), Math.max(0, r2(Number(p.baseUsd) - Number(baseYa || 0)))) : r2(monto * razon);
         // Tope: entre todos sus pagos, el vendedor nunca cobra más que la comisión de la factura (base sin IVA × %)
         const previas = await ComisionVenta.sum('comisionUsd', { where: { vendedorId: p.vendedorId, ventaId: abono.ventaId, concepto: 'ABONO' }, transaction: t });
         const disponible = Math.max(0, r2(Number(p.comisionUsd) - Number(previas || 0)));

@@ -30,7 +30,9 @@ export function numeroDeDocumento(texto) {
 export async function padreDe(vendedorId, documento) {
     if (!documento) return null;
     const [padre] = await sequelize.query(
-        `SELECT "montoUsd"::float AS monto, "baseUsd"::float AS base, porcentaje::float AS pct FROM "ComisionesVenta"
+        `SELECT "montoUsd"::float AS monto, "baseUsd"::float AS base, porcentaje::float AS pct,
+                (SELECT COALESCE(SUM("baseUsd"), 0)::float FROM "ComisionesVenta" x WHERE x."vendedorId" = :v AND x."documentoTexto" = :d AND x.concepto = 'ABONO') AS "baseAbonada"
+           FROM "ComisionesVenta"
           WHERE "vendedorId" = :v AND "documentoTexto" = :d AND concepto = 'FACTURA' AND "montoUsd" > 0 ORDER BY id LIMIT 1`,
         { replacements: { v: vendedorId, d: documento }, type: sequelize.QueryTypes.SELECT },
     );
@@ -42,7 +44,9 @@ export async function baseDePago(vendedorId, documento, montoPago) {
     if (!Number.isFinite(importe)) return null;
     const padre = await padreDe(vendedorId, documento);
     const razon = padre && padre.monto > 0 && padre.base !== null ? Math.min(1, padre.base / padre.monto) : 1;
-    return r2(importe * razon);
+    const base = r2(importe * razon);
+    // Tope: el sin IVA de todos los abonos juntos (los importados del Excel incluidos) nunca supera el sin IVA de la factura
+    return padre && padre.base !== null ? Math.min(base, Math.max(0, r2(padre.base - padre.baseAbonada))) : base;
 }
 
 // Hojas de los vendedores a comisión: sus líneas (facturas, abonos y notas de crédito) con la comisión de cada una y el resumen de lo pendiente y lo pagado
@@ -57,7 +61,11 @@ export async function GET() {
             `SELECT cv.*, v."numeroDocumento" AS "numeroVenta", v."statusPago"::text AS "pagoVenta",
                     v."clienteId" AS "clienteIdVenta", cl.nombre AS "clienteNombre",
                     (SELECT (CASE WHEN c.moneda::text = 'BS' THEN c."saldoPendiente" / NULLIF(c."tasaCambio", 0) ELSE c."saldoPendiente" END)::float
-                       FROM "CuentasPorCobrar" c WHERE c."ventaId" = cv."ventaId" ORDER BY c.id DESC LIMIT 1) AS "saldoCxc"
+                       FROM "CuentasPorCobrar" c WHERE c."ventaId" = cv."ventaId" ORDER BY c.id DESC LIMIT 1) AS "saldoCxc",
+                    -- IVA que el cliente retuvo (75 %): no lo paga en dinero. Y lo exento de la factura (renglones sin IVA), en USD: explican por qué el «sin IVA» prorrateado no es monto ÷ 1.16
+                    (SELECT COALESCE(SUM(a."montoUsd"), 0)::float FROM "Abonos" a WHERE a."ventaId" = cv."ventaId" AND a."metodoPago" = 'Retención IVA') AS "retenidoUsd",
+                    COALESCE((CASE WHEN v."montoIva" > 0 THEN (SELECT COALESCE(SUM(d.subtotal), 0) FROM "VentaDetalles" d WHERE d."ventaId" = v.id AND d."aplicaIva" = false) ELSE 0 END)
+                        / (CASE WHEN v.moneda::text = 'BS' THEN NULLIF(v."tasaCambio", 0) ELSE 1 END), 0)::float AS "exentoUsd"
                FROM "ComisionesVenta" cv LEFT JOIN "Ventas" v ON v.id = cv."ventaId" LEFT JOIN "Clientes" cl ON cl.id = v."clienteId"
               ORDER BY cv."vendedorId", cv.fecha NULLS LAST, cv.id`,
             { type: sequelize.QueryTypes.SELECT },

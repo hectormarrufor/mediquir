@@ -8,6 +8,7 @@ import { Badge, Group, Loader, Stack, Table, Text, UnstyledButton } from '@manti
 import { IconExternalLink } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
+import { desgloseFactura } from '@/app/helpers/desgloseFactura';
 import { Dialogo } from './Piezas';
 import { bolivares, dolares, fmtFecha } from './utilidades';
 
@@ -76,10 +77,27 @@ function Detalle({ ventaId, onCerrar }) {
                             </Table.Tbody>
                         </Table>
                     </Table.ScrollContainer>
-                    <Stack gap={2} ta="right">
-                        <Group justify="flex-end" gap="sm" align="flex-start"><Text fz={12.5} pt={2}>IVA</Text><Monto usd={aUsd(v.montoIva)} bs={aBs(v.montoIva)} /></Group>
-                        <Group justify="flex-end" gap="sm" align="flex-start"><Text fw={800} pt={2}>Total</Text><Monto usd={aUsd(v.totalFinal)} bs={aBs(v.totalFinal)} fuerte /></Group>
-                        <Text fz={11} c="#5c6675">Tasa de la factura: {bolivares(tasa)} por $1 · documento en {esBs ? 'bolívares' : 'dólares'}</Text>
+                    <Stack gap={3}>
+                        {(() => {
+                            const g = desgloseFactura(v);
+                            const fila = (rotulo, valor, extra = {}) => (
+                                <Group justify="space-between" align="flex-start" wrap="nowrap" key={rotulo}>
+                                    <Text fz={extra.fuerte ? 14 : 12.5} fw={extra.fuerte ? 800 : 500} pt={2} c={extra.c}>{rotulo}</Text>
+                                    <Monto usd={aUsd(valor)} bs={aBs(valor)} fuerte={extra.fuerte} />
+                                </Group>
+                            );
+                            return (
+                                <>
+                                    {fila('Subtotal (suma de los renglones)', g.subtotal)}
+                                    {g.exento > 0.004 && fila('Monto exento (sin IVA)', g.exento, { c: '#a16207' })}
+                                    {g.exento > 0.004 && fila('Base gravable', g.gravable)}
+                                    {g.conIva && fila('IVA 16 %', g.iva)}
+                                    {g.flete > 0.004 && fila('Flete / delivery', g.flete)}
+                                    {fila('Total', g.total, { fuerte: true })}
+                                </>
+                            );
+                        })()}
+                        <Text fz={11} c="#5c6675" ta="right">Tasa aplicada ese día: {bolivares(tasa)} por $1 · documento en {esBs ? 'bolívares' : 'dólares'}</Text>
                     </Stack>
                     {(v.abonos || []).length > 0 && (
                         <div>
