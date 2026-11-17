@@ -7,6 +7,7 @@ import { ActionIcon, Badge, Box, Button, Group, Table, Text, Tooltip } from '@ma
 import { IconChevronDown, IconChevronRight, IconCoin, IconReceipt, IconTrash } from '@tabler/icons-react';
 import CeldaEditable from './CeldaEditable';
 import { EstadoDocumento, MenuDocumento } from './PiezasLibro';
+import NumeroFactura from './NumeroFactura';
 import { DESPLAZAMIENTO_CABECERA, fmtFecha, useAnchoGrande, usd } from './utilidades';
 import classes from './cxc.module.css';
 
@@ -123,7 +124,7 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
                                     <Table.Td>
                                         <Group gap={6} wrap="nowrap" px={4} style={{ overflow: 'hidden' }}>
                                             {f.manual && <Badge size="xs" color="grape" variant="light" style={{ flexShrink: 0 }}>Manual</Badge>}
-                                            <Text size="sm" fw={700} truncate="end">{f.documento}</Text>
+                                            <NumeroFactura ventaId={f.manual ? null : f.ventaId} size="sm" fw={700} truncate="end">{f.documento}</NumeroFactura>
                                             {f.abonos.length > 0 && <Text fz={10.5} c="#5c6675" style={{ whiteSpace: 'nowrap' }}>{f.abonos.length} ab.</Text>}
                                             <EstadoDocumento f={f} corto />
                                         </Group>

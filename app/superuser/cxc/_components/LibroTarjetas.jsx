@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { Badge, Box, Button, Collapse, Group, Stack, Text, UnstyledButton } from '@mantine/core';
 import { IconAlertTriangle, IconChevronDown, IconCoin, IconPencil, IconReceipt } from '@tabler/icons-react';
 import { MenuDocumento } from './PiezasLibro';
+import NumeroFactura from './NumeroFactura';
 import { bolivares, dolares, fmtFecha, usd, vencimientoEnPalabras } from './utilidades';
 import classes from './cxc.module.css';
 
@@ -20,7 +21,7 @@ function TarjetaDocumento({ f, g, acc }) {
                 <Box style={{ minWidth: 0 }}>
                     <Group gap={6} wrap="nowrap">
                         {f.manual && <Badge size="xs" color="grape" variant="light" style={{ flexShrink: 0 }}>Manual</Badge>}
-                        <Text fw={800} fz={15} truncate="end">{f.documento}</Text>
+                        <NumeroFactura ventaId={f.manual ? null : f.ventaId} fw={800} fz={15} truncate="end">{f.documento}</NumeroFactura>
                     </Group>
                     <Group gap={4} wrap="nowrap" mt={2}>
                         {venc.tono === 'vencida' && <IconAlertTriangle size={14} color="var(--mantine-color-red-8)" style={{ flexShrink: 0 }} />}
