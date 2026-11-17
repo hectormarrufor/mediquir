@@ -7,10 +7,22 @@ import Link from 'next/link';
 import { Badge, Group, Loader, Stack, Table, Text, UnstyledButton } from '@mantine/core';
 import { IconExternalLink } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
+import { aBolivares, aDolares } from '@/app/constants/facturacion';
 import { Dialogo } from './Piezas';
-import { dolares, fmtFecha } from './utilidades';
+import { bolivares, dolares, fmtFecha } from './utilidades';
 
 const num = (v) => Number(v) || 0;
+
+// Los montos de una factura pueden estar guardados en bolívares (moneda BS) o en dólares: se muestran SIEMPRE los dos, cada uno en su moneda
+// (convertido con la tasa de la factura), para no confundir $ con Bs.
+function Monto({ usd, bs, fuerte = false, derecha = true }) {
+    return (
+        <div style={{ textAlign: derecha ? 'right' : 'left', whiteSpace: 'nowrap' }}>
+            <Text fz={fuerte ? 14 : 12.5} fw={fuerte ? 800 : 600} lh={1.15}>{dolares(usd)}</Text>
+            <Text fz={fuerte ? 12 : 11} c="#5c6675" lh={1.15}>{bolivares(bs)}</Text>
+        </div>
+    );
+}
 
 function Detalle({ ventaId, onCerrar }) {
     const { data: v, isLoading, error } = useQuery({
@@ -21,6 +33,14 @@ function Detalle({ ventaId, onCerrar }) {
             return res.json();
         },
     });
+    // conversiones: el documento está en Bs o en USD según su moneda; la otra se calcula con su tasa
+    const tasa = num(v?.tasaCambio) || 1;
+    const esBs = v?.moneda === 'BS';
+    const aBs = (x) => (esBs ? Number(num(x).toFixed(2)) : aBolivares(num(x), tasa));
+    const aUsd = (x) => (esBs ? aDolares(num(x), tasa) : Number(num(x).toFixed(2)));
+    const cxc = v?.cuentaPorCobrar;
+    const saldoUsd = cxc ? (cxc.moneda === 'BS' ? aDolares(num(cxc.saldoPendiente), num(cxc.tasaCambio) || tasa) : num(cxc.saldoPendiente)) : 0;
+    const saldoBs = cxc ? (cxc.moneda === 'BS' ? num(cxc.saldoPendiente) : aBolivares(num(cxc.saldoPendiente), num(cxc.tasaCambio) || tasa)) : 0;
     const titulo = (
         <Link href={`/superuser/ventas/${ventaId}`} onClick={onCerrar} style={{ color: 'inherit', textDecoration: 'underline' }} title="Ver el detalle completo en Ventas">
             <Group gap={6} wrap="nowrap" component="span">Factura {v?.numeroDocumento || ''}<IconExternalLink size={16} /></Group>
@@ -37,9 +57,9 @@ function Detalle({ ventaId, onCerrar }) {
                             <Text fw={800}>{v.cliente?.nombre}</Text>
                             <Text fz={12} c="#5c6675">{v.cliente?.identificacion} · Emisión {fmtFecha(v.fechaEmision || v.createdAt)}</Text>
                         </div>
-                        <Badge variant="light" color={v.cuentaPorCobrar && num(v.cuentaPorCobrar.saldoPendiente) > 0.005 ? 'orange' : 'teal'}>
-                            {v.cuentaPorCobrar && num(v.cuentaPorCobrar.saldoPendiente) > 0.005 ? `Debe ${dolares(v.cuentaPorCobrar.saldoPendiente)}` : 'Cobrada'}
-                        </Badge>
+                        {cxc && num(cxc.saldoPendiente) > 0.005
+                            ? <div><Badge variant="light" color="orange">Debe</Badge><Monto usd={saldoUsd} bs={saldoBs} fuerte /></div>
+                            : <Badge variant="light" color="teal">Cobrada</Badge>}
                     </Group>
                     <Table.ScrollContainer minWidth={380}>
                         <Table fz={12.5} verticalSpacing={4}>
@@ -49,21 +69,22 @@ function Detalle({ ventaId, onCerrar }) {
                                     <Table.Tr key={d.id}>
                                         <Table.Td>{d.isFicticio ? d.nombreFicticio : d.producto?.nombre || d.nombreFicticio}</Table.Td>
                                         <Table.Td ta="right">{num(d.cantidad)}</Table.Td>
-                                        <Table.Td ta="right">{dolares(d.precioUnitario)}</Table.Td>
-                                        <Table.Td ta="right">{dolares(d.subtotal)}</Table.Td>
+                                        <Table.Td><Monto usd={aUsd(d.precioUnitario)} bs={aBs(d.precioUnitario)} /></Table.Td>
+                                        <Table.Td><Monto usd={aUsd(d.subtotal)} bs={aBs(d.subtotal)} /></Table.Td>
                                     </Table.Tr>
                                 ))}
                             </Table.Tbody>
                         </Table>
                     </Table.ScrollContainer>
                     <Stack gap={2} ta="right">
-                        <Text fz={12.5}>IVA <b>{dolares(v.montoIva)}</b></Text>
-                        <Text fw={800}>Total {dolares(v.totalFinal)}</Text>
+                        <Group justify="flex-end" gap="sm" align="flex-start"><Text fz={12.5} pt={2}>IVA</Text><Monto usd={aUsd(v.montoIva)} bs={aBs(v.montoIva)} /></Group>
+                        <Group justify="flex-end" gap="sm" align="flex-start"><Text fw={800} pt={2}>Total</Text><Monto usd={aUsd(v.totalFinal)} bs={aBs(v.totalFinal)} fuerte /></Group>
+                        <Text fz={11} c="#5c6675">Tasa de la factura: {bolivares(tasa)} por $1 · documento en {esBs ? 'bolívares' : 'dólares'}</Text>
                     </Stack>
                     {(v.abonos || []).length > 0 && (
                         <div>
                             <Text fw={700} fz={12.5} mb={2}>Abonos</Text>
-                            {v.abonos.map((a) => <Text key={a.id} fz={12.5} c="#1971c2">{fmtFecha(a.fechaPago)} · {dolares(a.montoUsd)}{a.metodoPago ? ` · ${a.metodoPago}` : ''}</Text>)}
+                            {v.abonos.map((a) => <Text key={a.id} fz={12.5} c="#1971c2">{fmtFecha(a.fechaPago)} · {dolares(a.montoUsd)} · {bolivares(num(a.montoBs) > 0 ? a.montoBs : aBolivares(num(a.montoUsd), num(a.tasaCambio) || tasa))}{a.metodoPago ? ` · ${a.metodoPago}` : ''}</Text>)}
                         </div>
                     )}
                 </Stack>
