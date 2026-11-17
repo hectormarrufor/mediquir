@@ -171,7 +171,18 @@ export async function siguienteControl(t) {
  */
 export async function controlAlNacer(texto, t) {
     const dado = String(texto ?? '').trim().slice(0, 30);
-    return dado || siguienteControl(t);
+    if (!dado) return siguienteControl(t);
+    try {
+        return await reservarControl(dado, t);
+    } catch (e) {
+        // Lo más común: la pantalla tenía una sugerencia vieja y otro documento ya tomó ese control. Se dice cuál es el siguiente libre.
+        if (e instanceof ErrorNumeracion && e.status === 409) {
+            const c = await Correlativo.findOne({ where: { prefijo: 'CONTROL' }, transaction: t });
+            const libre = c ? textoControl(await primerControlLibre(c.siguienteNumero, t), c.cerosRelleno) : null;
+            throw new ErrorNumeracion(`${e.message}. Otro documento lo tomó.${libre ? ` El siguiente libre es ${libre}: ` : ' '}vuelve a abrir el POS (o borra el campo del control) para que se asigne el correcto.`, 409);
+        }
+        throw e;
+    }
 }
 
 /**
