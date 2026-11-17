@@ -1297,6 +1297,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                             {filaCobroEscritorio}
                         </Stack>
 
+                        <Group justify="space-between" mb={4}>
+                            <Text size="sm" fw={800} c="blue.9">{carrito.length} {carrito.length === 1 ? "renglón agregado" : "renglones agregados"} · {unidadesCarrito} und</Text>
+                        </Group>
                         <ScrollArea style={{ flex: `1 0 ${ALTO_CARRITO}px` }} offsetScrollbars type="auto" mb="xs">
                             {carrito.length ? tablaCarrito : <Text c="dimmed" ta="center" size="sm" py="xl">Haz clic en un producto de la lista para agregarlo.</Text>}
                         </ScrollArea>
