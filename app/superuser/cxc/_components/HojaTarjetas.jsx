@@ -34,7 +34,10 @@ function TarjetaPago({ l, hijo, hoja, acc, tasa }) {
                 <Group gap={8} wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
                     <Checkbox size="md" mt={2} checked={hoja.sel.has(l.id)} onChange={(ev) => hoja.alternarSel(l.id, ev.currentTarget.checked)} aria-label={`Seleccionar el ${nota ? 'pago' : 'abono'} del ${fmtFecha(l.fecha)}`} />
                     <Box style={{ minWidth: 0 }}>
-                        <Text fz={12.5} fw={700}>{hijo ? '└ ' : ''}{nota ? 'Nota de crédito' : 'Abono'} · {fmtFecha(l.fecha) || 'sin fecha'}</Text>
+                        <Group gap={6} wrap="nowrap">
+                            {hijo && <Badge size="xs" variant="filled" color={nota ? 'orange' : 'blue'}>{nota ? 'N/C' : 'ABONO'}</Badge>}
+                            <Text fz={12.5} fw={700}>{hijo ? '' : (nota ? 'Nota de crédito · ' : 'Abono · ')}{fmtFecha(l.fecha) || 'sin fecha'}</Text>
+                        </Group>
                         {!hijo && <NumeroFactura ventaId={l.ventaId} fz={11.5} c="#5c6675" truncate="end">de {l.documentoTexto || 'sin número'}</NumeroFactura>}
                         <Text fz={15} fw={800} c={nota ? 'orange.9' : '#1971c2'}>{dolares(Math.abs(Number(l.montoUsd) || 0))}</Text>
                         {!nota && l.porcentaje !== null && l.porcentaje !== undefined && <Text fz={11.5} c="#5c6675" fw={600}>Comisión {Number(l.porcentaje)} %</Text>}
@@ -64,6 +67,11 @@ function TarjetaFactura({ d, hoja, acc, tasa }) {
     const plegada = hoja.plegadas.has(d.k);
     const pctTxt = pa.porcentaje === null || pa.porcentaje === undefined ? '—' : `${Number(pa.porcentaje)} %`;
     const porPagarAbonos = d.pagos.filter((p) => estadoLinea(p) === 'porpagar').reduce((t, p) => t + (Number(p.comisionUsd) || 0), 0);
+    // lo abonado va DENTRO de la factura: cuánto de su monto y de su sin IVA ya se abonó, la comisión que generó y cuánto falta
+    const abonos = d.pagos.filter((p) => p.concepto !== 'NOTA' && esPago(p));
+    const suma = (campo) => abonos.reduce((t, p) => t + Math.abs(Number(p[campo]) || 0), 0);
+    const abonado = suma('montoUsd');
+    const saldo = pa.saldoCxc !== null && pa.saldoCxc !== undefined ? Number(pa.saldoCxc) : Math.max(0, Number(pa.montoUsd) - abonado);
     return (
         <Box className={classes.tarjeta} data-estado={marcaTarjeta(e)}>
             <Group justify="space-between" wrap="nowrap" align="flex-start" gap={8}>
@@ -117,11 +125,21 @@ function TarjetaFactura({ d, hoja, acc, tasa }) {
                             <IconChevronDown size={16} style={{ transform: plegada ? undefined : 'rotate(180deg)', transition: 'transform .15s' }} />
                         </Group>
                     </UnstyledButton>
-                    <Collapse in={!plegada}>
-                        <Stack gap={6} mt={6} pl={8}>
-                            {d.pagos.map((p) => <TarjetaPago key={p.id} l={p} hijo hoja={hoja} acc={acc} tasa={tasa} />)}
-                        </Stack>
-                    </Collapse>
+                    <Box mt={6} ml={10} p={6} className={classes.abonosDentro}>
+                        <Collapse in={!plegada}>
+                            <Stack gap={6} mb={6}>
+                                {d.pagos.map((p) => <TarjetaPago key={p.id} l={p} hijo hoja={hoja} acc={acc} tasa={tasa} />)}
+                            </Stack>
+                        </Collapse>
+                        {abonos.length > 0 && (
+                            <SimpleGrid cols={2} spacing={6} px={4} py={2}>
+                                <Dato titulo="Abonado a la factura" valor={dolares(abonado)} color="#1971c2" />
+                                <Dato titulo={saldo > 0.005 ? 'Falta por cobrar' : 'Estado'} valor={saldo > 0.005 ? dolares(saldo) : 'Cobrada'} color={saldo > 0.005 ? 'orange.9' : 'teal.8'} />
+                                <Dato titulo="Sin IVA abonado" valor={dolares(suma('baseUsd'))} color="#1971c2" />
+                                <Dato titulo="Comisión generada" valor={dolares(suma('comisionUsd'))} />
+                            </SimpleGrid>
+                        )}
+                    </Box>
                 </>
             )}
         </Box>

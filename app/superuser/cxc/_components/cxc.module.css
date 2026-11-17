@@ -437,6 +437,18 @@ button.estado:hover {
   border-radius: 10px;
 }
 
+.tarjeta[data-hijo]:not([data-estado]) {
+  background: #f5f9ff;
+  --marca: #1971c2;
+}
+
+/* Cuerpo de abonos de una factura: azul, con franja, para que se vea que están DENTRO de ella */
+.abonosDentro {
+  background: #e6f0fc;
+  border-left: 4px solid #1971c2;
+  border-radius: 10px;
+}
+
 /* Barra inferior fija del teléfono (selección de comisiones) */
 .barraInferior {
   background: #fff;
