@@ -66,7 +66,8 @@ export async function DELETE(request, { params }) {
         if (!UUID.test(id)) throw new ErrorCorreccion('Factura no encontrada', 404);
         const venta = await Venta.findByPk(id, { transaction: t, lock: t.LOCK.UPDATE });
         if (!venta) throw new ErrorCorreccion('Factura no encontrada', 404);
-        const r = await eliminarFacturaSinImprimir({ venta, transaction: t });
+        const cuerpo = await request.json().catch(() => ({}));
+        const r = await eliminarFacturaSinImprimir({ venta, formaUsada: typeof cuerpo.formaUsada === 'boolean' ? cuerpo.formaUsada : undefined, transaction: t });
         await t.commit();
         try {
             const conFotos = Boolean(venta.fotoCajaAbiertaUrl || venta.fotoCajaSelladaUrl);
@@ -74,7 +75,7 @@ export async function DELETE(request, { params }) {
         } catch (e) { console.error('No se pudieron borrar los archivos del Blob de la factura eliminada:', e.message); }
         return NextResponse.json({
             success: true,
-            message: `La factura ${venta.numeroDocumento} fue eliminada con todo su rastro.${r.control ? (r.controlLiberado ? ` El control ${r.control} quedó libre para la próxima factura.` : ` El control ${r.control} no era el último: ajústalo en Numeración fiscal si esa forma no se va a usar.`) : ''}`,
+            message: `La factura ${venta.numeroDocumento} fue eliminada con todo su rastro.${r.control ? (r.controlLiberado ? ` El control ${r.control} se recuperó: la próxima factura lo toma.` : ` La forma ${r.control} quedó anotada como anulada.`) : ''}`,
         });
     } catch (e) {
         if (!t.finished) await t.rollback();

@@ -236,17 +236,27 @@ export async function modificarFactura({ venta, condicionPago, diasCredito, meto
 }
 
 /** Elimina la factura sin imprimir con todo su rastro. Devuelve lo que `eliminarVenta` y los archivos del Blob por borrar. */
-export async function eliminarFacturaSinImprimir({ venta, transaction: t }) {
+export async function eliminarFacturaSinImprimir({ venta, formaUsada, transaction: t }) {
     const bloqueo = await bloqueoCorreccion(venta, t);
     if (bloqueo) throw new ErrorCorreccion(bloqueo, 409);
     const control = /^00-(\d+)$/.exec(String(venta.numeroControl || ''));
+    // Con control asignado hay que saber qué pasó con la hoja física: si se usó (o se dañó) queda anotada como anulada; si no se usó, el control se recupera
+    if (control && typeof formaUsada !== 'boolean') throw new ErrorCorreccion(`Indica si la forma física ${venta.numeroControl} se usó o no antes de eliminar la factura`, 400);
     const resultado = await eliminarVenta({ venta, transaction: t });
-    // La forma libre no se gastó: si su control era el último tomado, el correlativo retrocede para reutilizarlo
-    let controlLiberado = false;
+    let controlLiberado = false, formaAnulada = false;
     if (control) {
         const n = Number(control[1]);
-        const c = await Correlativo.findOne({ where: { prefijo: 'CONTROL' }, transaction: t, lock: t.LOCK.UPDATE });
-        if (c && Number(c.siguienteNumero) === n + 1) { c.siguienteNumero = n; await c.save({ transaction: t }); controlLiberado = true; }
+        if (formaUsada) {
+            // La hoja física se gastó: queda registrada como anulada (explica el hueco en la secuencia) y no se vuelve a asignar
+            await db.FormaAnulada.findOrCreate({ where: { numero: n }, defaults: { motivo: `Forma usada o dañada: se eliminó la factura ${venta.numeroDocumento}` }, transaction: t });
+            formaAnulada = true;
+        } else {
+            // La hoja no se usó: el control se recupera, aunque otras facturas ya hayan tomado números más altos. El correlativo vuelve hasta él y,
+            // como los usados se saltan, la próxima factura toma este y luego sigue donde iba.
+            const c = await db.Correlativo.findOne({ where: { prefijo: 'CONTROL' }, transaction: t, lock: t.LOCK.UPDATE });
+            if (c && n < Number(c.siguienteNumero)) { c.siguienteNumero = n; await c.save({ transaction: t }); }
+            controlLiberado = true;
+        }
     }
-    return { ...resultado, controlLiberado, control: venta.numeroControl };
+    return { ...resultado, controlLiberado, formaAnulada, control: venta.numeroControl };
 }

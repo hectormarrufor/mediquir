@@ -86,12 +86,14 @@ export default function CorregirFacturaModal({ opened, onClose, pedido, onListo,
         } finally { setEnviando(false); }
     };
 
-    const eliminar = async () => {
-        if (!window.confirm(`¿Eliminar la factura ${pedido.numeroDocumento} con todo su rastro (renglones, inventario, ingresos o cuenta por cobrar)? No se puede deshacer.`)) return;
+    const [borrando, setBorrando] = useState(false); // pregunta de la hoja física antes de eliminar
+    const eliminar = async (formaUsada) => {
+        if (typeof formaUsada !== 'boolean' && !pedido.numeroControl && !window.confirm(`¿Eliminar la factura ${pedido.numeroDocumento} con todo su rastro (renglones, inventario, ingresos o cuenta por cobrar)? No se puede deshacer.`)) return;
         setEnviando(true);
         try {
-            const r = await pedir(`/api/ventas/${pedido.id}/corregir`, { method: 'DELETE' });
+            const r = await pedir(`/api/ventas/${pedido.id}/corregir`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ formaUsada }) });
             notifications.show({ title: 'Factura eliminada', message: r.message, color: 'green', autoClose: 10000 });
+            setBorrando(false);
             onEliminada?.();
             onClose();
         } catch (e) {
@@ -151,8 +153,19 @@ export default function CorregirFacturaModal({ opened, onClose, pedido, onListo,
                         )}
                     </div>
 
+                    {borrando && (
+                        <Alert color="red" variant="light" mt="sm" icon={<IconAlertTriangle size={18} />} title={`Eliminar la factura ${pedido.numeroDocumento}`}>
+                            <Text size="sm">Se elimina con todo su rastro (renglones, inventario, ingresos o cuenta por cobrar); no se puede deshacer.</Text>
+                            <Text size="sm" fw={700} mt="xs">¿La forma física con el control {pedido.numeroControl} se usó (o se dañó)?</Text>
+                            <Group mt="xs" gap="xs">
+                                <Button size="xs" color="teal" loading={enviando} onClick={() => eliminar(false)}>No se usó: recuperar el control</Button>
+                                <Button size="xs" color="orange" loading={enviando} onClick={() => eliminar(true)}>Sí se usó: anotarla como anulada</Button>
+                                <Button size="xs" variant="default" onClick={() => setBorrando(false)}>Cancelar</Button>
+                            </Group>
+                        </Alert>
+                    )}
                     <Group justify="space-between" mt="sm">
-                        <Button color="red" variant="outline" leftSection={<IconTrash size={16} />} loading={enviando} onClick={eliminar}>Eliminar factura</Button>
+                        <Button color="red" variant="outline" leftSection={<IconTrash size={16} />} loading={enviando} onClick={() => (pedido.numeroControl ? setBorrando(true) : eliminar())}>Eliminar factura</Button>
                         <Group>
                             <Button variant="default" onClick={onClose}>Cancelar</Button>
                             <Button loading={enviando} disabled={!completos || (condicion === 'Credito' && dias === '')} onClick={guardar}>Guardar cambios</Button>
