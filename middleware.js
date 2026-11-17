@@ -55,6 +55,8 @@ const VENDEDOR_API = [
     ['POST', /^\/api\/ventas\/[^/]+\/notas$/],         // nota de crédito o débito de un vendedor: queda por aprobar
     ['GET', /^\/api\/ventas\/[^/]+\/empaque$/],        // wizard de empaque: solo el empacador asignado (lo valida la ruta)
     ['POST', /^\/api\/ventas\/[^/]+\/empaque(\/foto)?$/],
+    ['POST', /^\/api\/control$/],                 // número de control al imprimir: solo de SUS facturas ya aprobadas (lo valida la ruta)
+    ['POST', /^\/api\/ventas\/[^/]+\/impresa$/],   // marca de impresa: igual, solo SUS facturas aprobadas
     // Los vendedores NO registran compras: solo ventas (y esas las aprueba jolexi antes de imprimirse)
     ['GET', /^\/api\/vendedor\/[^/]+$/],
     ['GET', /^\/api\/inventario\/lista-precios$/],
