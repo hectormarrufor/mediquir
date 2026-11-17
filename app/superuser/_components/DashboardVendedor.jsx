@@ -9,7 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
     IconAlertTriangle, IconArchive, IconBuildingStore, IconCash, IconChevronDown, IconCircleCheck, IconClock,
-    IconFileText, IconPackage, IconShoppingCart, IconTag, IconTruckDelivery,
+    IconFileText, IconPackage, IconPrinter, IconShoppingCart, IconTag, IconTruckDelivery,
 } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
 import TareasPanel from '@/app/components/tareas/TareasPanel';
@@ -148,6 +148,12 @@ export default function DashboardVendedor() {
     const [porEntregar, setPorEntregar] = useState(null); // tarea que se va a entregar al chofer
     const [entregando, setEntregando] = useState(false);
 
+    const porImprimir = useQuery({
+        queryKey: ['por-imprimir-conteo'], refetchInterval: 60000, refetchOnWindowFocus: true, retry: false,
+        queryFn: () => pedirJson('/api/ventas/por-imprimir'),
+    });
+    const nImprimir = porImprimir.data?.total ?? 0;
+
     const { data, isLoading, error } = useQuery({
         queryKey: ['vendedor', 'resumen'],
         queryFn: () => pedirJson('/api/vendedor/resumen'),
@@ -217,7 +223,8 @@ export default function DashboardVendedor() {
                     <Acceso icono={IconTruckDelivery} color="grape.6" titulo="Mis ventas y pedidos" descripcion="Historial y seguimiento" onClick={() => router.push('/superuser/ventas')} />
                 </SimpleGrid>
 
-                <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+                <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }} spacing="md">
+                    <Indicador icono={IconPrinter} color={nImprimir ? 'orange' : 'gray'} titulo="Facturas por imprimir" cargando={porImprimir.isLoading} valor={nImprimir} detalle={nImprimir ? 'Ya aprobadas: toca para imprimirlas' : 'Ninguna aprobada pendiente'} onClick={() => router.push('/superuser/ventas/por-imprimir')} />
                     <Indicador icono={IconPackage} color="blue" titulo="Por empacar" cargando={isLoading} valor={nEmpacar} detalle={nEmpacar ? 'Pedidos que te asignaron' : 'Nada pendiente'} />
                     <Indicador icono={IconTag} color="violet" titulo="Por etiquetar" cargando={isLoading} valor={nEtiquetar} detalle={nEtiquetar ? 'Pedidos que te asignaron' : 'Nada pendiente'} />
                     <Indicador icono={IconTruckDelivery} color="grape" titulo="Por entregar" cargando={isLoading} valor={nEntregar} detalle={nEntregar ? 'Listos para el chofer o la agencia' : 'Nada pendiente'} />
