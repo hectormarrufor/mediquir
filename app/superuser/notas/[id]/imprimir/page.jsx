@@ -67,7 +67,7 @@ export default function ImprimirNota() {
             textoSuperior={textoSuperiorNota({ tipo: nota.tipo, cliente: nota.cliente?.nombre, fecha: nota.fecha, creadaEn: nota.createdAt, facturas, motivo: nota.motivo, estacion: CONFIG_FISCAL.estacion })}
             lineasExtra={lineasTasaBcv(nota)}
             etiquetaCondicion="Motivo"
-            condicionTexto={String(nota.motivo || '').slice(0, 38)}
+            condicionTexto={String(nota.motivo || '').slice(0, 90)}
             sinVence
             onReasignarControl={reasignar}
         />

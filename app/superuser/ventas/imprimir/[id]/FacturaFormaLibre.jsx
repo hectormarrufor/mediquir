@@ -204,7 +204,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                 .fl-fechas { display: flex; justify-content: space-between; font-size: 8.5px; margin-top: 1px; }
                 .fl-cond { display: flex; justify-content: space-between; margin-top: 1px; }
                 .fl-cond-t { font-weight: 800; font-size: 7px; }
-                .fl-cond-v { font-weight: 800; font-size: 9px; }
+                .fl-cond-v { font-weight: 800; font-size: 9px; white-space: normal; overflow-wrap: anywhere; line-height: 1.1; }
                 .fl-control { text-align: right; line-height: 1; margin-top: 1px; }
                 .fl-ctl-num { color: #d32f2f !important; font-weight: 800; font-size: 11px; letter-spacing: .4px; }
 
