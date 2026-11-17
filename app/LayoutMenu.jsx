@@ -64,14 +64,14 @@ const LayoutMenu = ({ router }) => {
                                 radius="xl"
                                 size={32}
                                 color="blue"
-                                style={{ border: '2px solid rgba(108,192,255,0.6)' }}
+                                style={{ border: '2px solid rgba(25,113,194,0.45)' }}
                             >
                                 {nombre?.charAt(0)}
                             </Avatar>
-                            <Text size="sm" fw={600} c="white" lh={1}>
+                            <Text size="sm" fw={600} c="navy.9" lh={1}>
                                 {nombre?.split(' ')[0]}
                             </Text>
-                            <IconChevronDown size={14} stroke={2} color="white" />
+                            <IconChevronDown size={14} stroke={2} color="var(--mantine-color-navy-9)" />
                         </UnstyledButton>
                     </Menu.Target>
 

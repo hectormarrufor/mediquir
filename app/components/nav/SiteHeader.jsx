@@ -66,7 +66,7 @@ export default function SiteHeader({ opened, toggle }) {
                         onClick={toggle}
                         hiddenFrom="sm"
                         size="sm"
-                        color="white"
+                        color="navy.9"
                         aria-label={opened ? 'Cerrar menú' : 'Abrir menú'}
                     />
                 </Group>

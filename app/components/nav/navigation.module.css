@@ -1,4 +1,4 @@
-/* Navegación 2026: header de vidrio oscuro + menú lateral móvil + botones "pill".
+/* Navegación 2026: header de vidrio CLARO (para que el logo original, azul marino, contraste) + menú lateral móvil oscuro + botones "pill".
    Paleta: navy var(--mantine-color-navy-9), azul var(--mantine-color-brand-6), cian var(--mantine-color-sky-3), acento naranja var(--mantine-color-accent-6). */
 
 /* ---------- HEADER ---------- */
@@ -18,12 +18,12 @@
     margin: 8px 10px 0;
     border-radius: 18px;
     background:
-        radial-gradient(60% 140% at 0% 0%, alpha(var(--mantine-color-brand-5), 0.3), transparent 62%),
-        linear-gradient(180deg, rgba(6, 16, 38, 0.8) 0%, rgba(10, 26, 58, 0.66) 100%);
+        radial-gradient(60% 140% at 0% 0%, alpha(var(--mantine-color-sky-3), 0.28), transparent 62%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(234, 242, 252, 0.95) 100%);
     -webkit-backdrop-filter: blur(18px) saturate(170%);
     backdrop-filter: blur(18px) saturate(170%);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 14px 34px -14px rgba(2, 8, 23, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 14px 34px -14px rgba(2, 8, 23, 0.55);
     transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 
@@ -50,9 +50,9 @@
 /* Al hacer scroll: más opaco y con sombra para separar del contenido */
 .barra[data-scrolled] {
     background:
-        radial-gradient(60% 140% at 0% 0%, alpha(var(--mantine-color-brand-5), 0.24), transparent 62%),
-        linear-gradient(180deg, rgba(5, 13, 31, 0.94) 0%, rgba(8, 21, 48, 0.9) 100%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 40px -14px rgba(2, 8, 23, 0.7);
+        radial-gradient(60% 140% at 0% 0%, alpha(var(--mantine-color-sky-3), 0.2), transparent 62%),
+        linear-gradient(180deg, #ffffff 0%, rgba(238, 244, 252, 0.98) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 18px 40px -14px rgba(2, 8, 23, 0.65);
 }
 
 .barra[data-scrolled]::after {
@@ -69,8 +69,8 @@
     gap: 4px;
     padding: 4px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(10, 26, 58, 0.05);
+    border: 1px solid rgba(10, 26, 58, 0.1);
 }
 
 .navLink {
@@ -81,7 +81,7 @@
     border: 0;
     border-radius: 999px;
     background: transparent;
-    color: rgba(255, 255, 255, 0.76);
+    color: rgba(10, 26, 58, 0.78);
     font-size: 14px;
     font-weight: 600;
     white-space: nowrap;
@@ -90,14 +90,14 @@
 }
 
 .navLink:hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.1);
+    color: var(--mantine-color-navy-9);
+    background: rgba(10, 26, 58, 0.08);
 }
 
 .navLink[data-active] {
     color: #fff;
-    background: linear-gradient(135deg, alpha(var(--mantine-color-brand-5), 0.55), alpha(var(--mantine-color-brand-6), 0.35));
-    box-shadow: inset 0 0 0 1px alpha(var(--mantine-color-sky-3), 0.35), 0 4px 16px alpha(var(--mantine-color-brand-6), 0.35);
+    background: linear-gradient(135deg, var(--mantine-color-brand-6), var(--mantine-color-brand-7));
+    box-shadow: 0 4px 16px alpha(var(--mantine-color-brand-6), 0.35);
 }
 
 /* ---------- BOTONES PILL ---------- */
@@ -107,9 +107,9 @@
     gap: 8px;
     padding: 6px 14px;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
+    border: 1px solid rgba(10, 26, 58, 0.18);
+    background: rgba(10, 26, 58, 0.05);
+    color: var(--mantine-color-navy-9);
     font-size: 14px;
     font-weight: 600;
     -webkit-backdrop-filter: blur(8px);
@@ -118,8 +118,8 @@
 }
 
 .pill:hover {
-    background: rgba(255, 255, 255, 0.16);
-    border-color: rgba(255, 255, 255, 0.32);
+    background: rgba(10, 26, 58, 0.1);
+    border-color: rgba(10, 26, 58, 0.3);
 }
 
 .pillUser {
@@ -166,14 +166,14 @@
 }
 
 .iconBtn {
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(10, 26, 58, 0.85);
     border-radius: 999px;
     transition: background 0.2s ease, color 0.2s ease;
 }
 
 .iconBtn:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: #fff;
+    background: rgba(10, 26, 58, 0.08);
+    color: var(--mantine-color-navy-9);
 }
 
 /* ---------- MENÚ DE CUENTA (dropdown) ---------- */
