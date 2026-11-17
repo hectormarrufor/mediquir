@@ -153,7 +153,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             clienteId: null,
             tipoPrecio: 'precio7', 
             conIva: true,
-            condicionPago: 'Contado',
+            condicionPago: '', // sin opción predeterminada: el operario TIENE que elegir Contado o Crédito antes de asentar
             diasCredito: 15, // solo a crédito: arranca con los días del cliente
             metodoPago: 'Efectivo ($)', 
             referencia: '',
@@ -287,7 +287,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         // Al abrir no se toca nada: así no se borra el cliente de un borrador recuperado
         if (!tipoMontado.current) { tipoMontado.current = true; return; }
         if (tipoVenta === 'DETAL') {
-            formVenta.setFieldValue('condicionPago', 'Contado');
+            formVenta.setFieldValue('condicionPago', '');
             formVenta.setFieldValue('clienteId', null);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -295,6 +295,13 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     // ---- Días de crédito: arrancan con los del cliente; solo administración los cambia (de esta factura o también de las futuras del cliente)
     const esCredito = formVenta.values.condicionPago === 'Credito';
+    // La forma de cobro se ELIGE (sin opción predeterminada) cuando hay selector: ventas al mayor y administración. Donde no lo hay (detal de un vendedor) es siempre de contado.
+    const cobroEsEleccion = !esPresupuesto && (tipoVenta === 'MAYOR' || puedeEditarPrecio);
+    const faltaCobro = cobroEsEleccion && !formVenta.values.condicionPago;
+    useEffect(() => {
+        if (!esPresupuesto && !cobroEsEleccion && !formVenta.values.condicionPago) formVenta.setFieldValue('condicionPago', 'Contado');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cobroEsEleccion, formVenta.values.condicionPago, esPresupuesto]);
     useEffect(() => {
         const c = clientes?.find((x) => x.id.toString() === formVenta.values.clienteId?.toString());
         setDatosCli({ direccion: c?.direccion || '', telefono: c?.telefono || '', email: c?.email || '' });
@@ -308,15 +315,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         setAlcanceDias(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formVenta.values.clienteId, formVenta.values.condicionPago, clienteDelCredito?.diasCredito]);
-    // Cliente con crédito habilitado (días y pedidos a crédito mayores a 0): la venta al mayor arranca A CRÉDITO; si no, de contado.
-    // Se decide al elegir el cliente y se puede cambiar en el selector «Forma de cobro».
-    useEffect(() => {
-        if (esPresupuesto || tipoVenta !== 'MAYOR' || !formVenta.values.clienteId) return;
-        const c = clientes?.find((x) => x.id.toString() === formVenta.values.clienteId.toString());
-        if (!c) return;
-        formVenta.setFieldValue('condicionPago', Number(c.diasCredito) > 0 && Number(c.maxPedidosCredito) > 0 ? 'Credito' : 'Contado');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [formVenta.values.clienteId]);
+    // La forma de cobro NO se adivina al elegir el cliente: el operario la elige (Contado o Crédito) y sin eso no se puede asentar.
+    const clienteTieneCredito = Number(clienteDelCredito?.diasCredito) > 0 && Number(clienteDelCredito?.maxPedidosCredito) > 0;
     const confirmarDias = () => {
         const v = Math.floor(Number(formVenta.values.diasCredito));
         if (!(v >= 0)) { formVenta.setFieldValue('diasCredito', diasDelCliente); setAlcanceDias(null); return; }
@@ -481,6 +481,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         if (carrito.length === 0) { setVista('productos'); return notifications.show({ message: 'El carrito está vacío', color: 'orange' }); }
         if (tipoVenta === 'MAYOR' && !formVenta.values.clienteId) { setVista('datos'); return notifications.show({ message: 'Debe seleccionar un cliente mayorista', color: 'red' }); }
         if (!formVenta.values.numeroDocumento) { setVista('datos'); return notifications.show({ message: 'El número de documento es obligatorio', color: 'red' }); }
+        if (faltaCobro) { setVista('datos'); return notifications.show({ title: 'Falta la forma de cobro', message: 'Elige si la venta es de CONTADO o a CRÉDITO antes de revisarla', color: 'red' }); }
         // Factura: el cliente debe tener dirección (obligatoria); teléfono y correo son opcionales. Lo escrito aquí se guarda de una vez en el cliente.
         if (tipoDocumentoActual === 'FACTURA' && formVenta.values.clienteId) {
             const c = clientes?.find((x) => x.id.toString() === formVenta.values.clienteId.toString());
@@ -564,6 +565,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     // imprimir=true: «Asentar e imprimir». La ventana se abre YA (con el toque del botón) porque el navegador bloquea las que se abren después de esperar al servidor
     const handleProcesarVenta = async (imprimir = false) => {
+        if (!esPresupuesto && !formVenta.values.condicionPago) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta la forma de cobro', message: 'Elige si la venta es de CONTADO o a CRÉDITO antes de asentarla', color: 'red' }); }
         setIsSubmitting(true);
         const ventana = imprimir ? window.open('', '_blank') : null;
         try {
@@ -958,12 +960,13 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // «Forma de cobro»: grande y a la vista, porque de ella depende que la factura registre el pago (contado) o quede una cuenta por cobrar (crédito)
     const selectorCobro = !esPresupuesto && (tipoVenta === 'MAYOR' || puedeEditarPrecio) && (
         <Box mb="xs">
-            <Text size="sm" fw={700} mb={2}>Forma de cobro</Text>
+            <Text size="sm" fw={700} mb={2}>Forma de cobro <Text span c="red.7" fw={800}>*</Text></Text>
             <SegmentedControl fullWidth size={isMobile ? 'md' : 'sm'} value={formVenta.values.condicionPago} onChange={(v) => formVenta.setFieldValue('condicionPago', v)}
+                style={faltaCobro ? { outline: '2px solid #e03131', outlineOffset: 1 } : undefined}
                 color={formVenta.values.condicionPago === 'Credito' ? 'orange.7' : 'green.7'}
                 data={[{ value: 'Contado', label: 'Contado (cobra ahora)' }, { value: 'Credito', label: 'Crédito (queda por cobrar)' }]} />
-            <Text size="xs" mt={4} fw={600} c={formVenta.values.condicionPago === 'Credito' ? 'orange.8' : 'green.8'}>
-                {formVenta.values.condicionPago === 'Credito'
+            <Text size="xs" mt={4} fw={600} c={faltaCobro ? 'red.8' : (formVenta.values.condicionPago === 'Credito' ? 'orange.8' : 'green.8')}>
+                {faltaCobro ? `Elige CONTADO o CRÉDITO: es obligatorio antes de asentar.${clienteTieneCredito ? ' Este cliente tiene crédito habilitado.' : ''}` : formVenta.values.condicionPago === 'Credito'
                     ? `Esta venta saldrá A CRÉDITO${formVenta.values.clienteId ? ` a ${Number(formVenta.values.diasCredito) || diasDelCliente} días` : ' (elige el cliente)'}: no se registra pago, queda en Cuentas por cobrar.`
                     : 'Esta venta saldrá DE CONTADO: se registra el pago ahora.'}
             </Text>
@@ -1187,15 +1190,18 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     );
 
     // Forma de cobro, días de crédito o método de pago, y el aviso de lo que va a pasar, todo en una fila
-    const mensajeCobro = formVenta.values.condicionPago === 'Credito'
+    const mensajeCobro = faltaCobro
+        ? `Elige CONTADO o CRÉDITO: es obligatorio antes de asentar.${clienteTieneCredito ? ' Este cliente tiene crédito habilitado.' : ''}`
+        : formVenta.values.condicionPago === 'Credito'
         ? `Saldrá A CRÉDITO${formVenta.values.clienteId ? ` a ${Number(formVenta.values.diasCredito) || diasDelCliente} días` : ' (elige el cliente)'}: no se registra pago, queda en Cuentas por cobrar.`
         : 'Saldrá DE CONTADO: se registra el pago ahora.';
     const filaCobroEscritorio = !esPresupuesto && (
         <Group gap="sm" align="flex-end" wrap="wrap">
             {(tipoVenta === 'MAYOR' || puedeEditarPrecio) && (
                 <Box>
-                    <Text size="xs" fw={700} mb={2}>Forma de cobro</Text>
+                    <Text size="xs" fw={700} mb={2}>Forma de cobro <Text span c="red.7" fw={800}>*</Text></Text>
                     <SegmentedControl size="xs" w={320} value={formVenta.values.condicionPago} onChange={(v) => formVenta.setFieldValue('condicionPago', v)}
+                        style={faltaCobro ? { outline: '2px solid #e03131', outlineOffset: 1 } : undefined}
                         color={formVenta.values.condicionPago === 'Credito' ? 'orange.7' : 'green.7'}
                         data={[{ value: 'Contado', label: 'Contado (cobra ahora)' }, { value: 'Credito', label: 'Crédito (por cobrar)' }]} />
                 </Box>
@@ -1211,7 +1217,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     {!esEfectivo && <TextInput label="Referencia" placeholder="Últimos 6 dígitos" size="xs" w={150} autoComplete="off" {...formVenta.getInputProps('referencia')} />}
                 </>
             )}
-            <Text size="xs" fw={600} pb={6} style={{ flex: 1, minWidth: 220 }} c={formVenta.values.condicionPago === 'Credito' ? 'orange.8' : 'green.8'}>
+            <Text size="xs" fw={600} pb={6} style={{ flex: 1, minWidth: 220 }} c={faltaCobro ? 'red.8' : (formVenta.values.condicionPago === 'Credito' ? 'orange.8' : 'green.8')}>
                 {mensajeCobro}{esCredito && alcanceDias ? (alcanceDias.alcance === 'cliente' ? ` Se guardará también como los días de crédito de ${clienteDelCredito?.nombre || 'este cliente'}.` : ' Solo para esta factura.') : ''}
             </Text>
         </Group>
@@ -1396,7 +1402,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                 {filaIvaCondicion}
                                 {filaPago}
                                 {filaCredito}
-                                {formVenta.values.condicionPago !== 'Contado' && <Text size="xs" c="dimmed">A crédito: el cliente queda debiendo y los abonos se registran después en Cuentas por cobrar.</Text>}
+                                {formVenta.values.condicionPago === 'Credito' && <Text size="xs" c="dimmed">A crédito: el cliente queda debiendo y los abonos se registran después en Cuentas por cobrar.</Text>}
                             </Paper>
                         )}
                         {filaMayor && (
