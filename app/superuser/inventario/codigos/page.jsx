@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { IconAlertTriangle, IconArrowLeft, IconBarcode, IconCheck, IconPencil, IconPhotoOff, IconScan, IconSearch } from '@tabler/icons-react';
 import EscanerCodigo, { escanerDisponible } from '../../ventas/_components/EscanerCodigo';
+import { useVolver } from '@/app/helpers/useVolver';
 
 const POR_PAGINA = 30;
 
@@ -32,6 +33,7 @@ function Foto({ src }) {
 // Después el empaque de pedidos usa ese código para comprobar que se tomó el producto correcto.
 export default function CodigosDeBarrasPage() {
     const router = useRouter();
+    const volver = useVolver('/superuser/inventario/productos');
     const queryClient = useQueryClient();
     const [filtro, setFiltro] = useState('sin');
     const [busqueda, setBusqueda] = useState('');
@@ -80,7 +82,7 @@ export default function CodigosDeBarrasPage() {
         <Container size="sm" px="xs" py="md">
             <Stack gap="sm">
                 <Group justify="space-between" wrap="nowrap">
-                    <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={() => router.push('/superuser/inventario/productos')} px={6}>Inventario</Button>
+                    <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={volver} px={6}>Inventario</Button>
                 </Group>
                 <Box>
                     <Title order={2} c="white" fz={24}><IconBarcode size={26} style={{ verticalAlign: 'middle' }} /> Códigos de barras</Title>

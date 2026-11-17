@@ -11,6 +11,7 @@ import { notifications } from '@mantine/notifications';
 import { IconAlertCircle, IconArrowLeft, IconCategory, IconEdit, IconLink, IconPlus, IconSearch, IconTags, IconTrash, IconX } from '@tabler/icons-react';
 import ModalBorrar from './_components/ModalBorrar';
 import ModalFormulario from './_components/ModalFormulario';
+import { useVolver } from '@/app/helpers/useVolver';
 
 // Marcas, categorías y grupos de equivalencia en un solo lugar (antes marcas y grupos tenían cada uno su pantalla suelta,
 // sin enlace en ningún menú, y las categorías no tenían ninguna). Se llega desde Inventario y desde la hoja de productos.
@@ -43,6 +44,7 @@ async function pedir(url, opciones) {
 
 function Clasificacion() {
     const router = useRouter();
+    const volver = useVolver('/superuser/inventario');
     const sp = useSearchParams();
     const qc = useQueryClient();
     const isMobile = useMediaQuery('(max-width: 48em)');
@@ -142,7 +144,7 @@ function Clasificacion() {
     return (
         <Box p="md" maw={1100} mx="auto">
             <Group mb="xs" gap="sm" wrap="nowrap">
-                <Button variant="subtle" color="gray.3" px={6} leftSection={<IconArrowLeft size={16} />} onClick={() => router.push('/superuser/inventario')} tt="none">Inventario</Button>
+                <Button variant="subtle" color="gray.3" px={6} leftSection={<IconArrowLeft size={16} />} onClick={volver} tt="none">Inventario</Button>
                 <Title order={2} c="white" fz={isMobile ? 20 : 26}>Marcas, categorías y grupos</Title>
             </Group>
             <Text size="sm" c="gray.4" mb="md">

@@ -5,6 +5,7 @@ import { Box, Button, Card, Group, SimpleGrid, Stack, Text, ThemeIcon, Title } f
 import { useRouter } from 'next/navigation';
 import { IconArrowLeft, IconArrowUpRight, IconBarcode, IconCategory, IconChartBar, IconLink, IconPhotoCheck, IconReceipt2, IconSearch, IconTable } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useVolver } from '@/app/helpers/useVolver';
 
 // Módulo de inventario: accesos a cada pantalla. Las entradas de inventario son las compras (cada compra registrada suma stock),
 // por eso ese botón lleva a Compras (antes llevaba a una página que no existía).
@@ -24,12 +25,13 @@ const OPCIONES = [
 
 export default function InventarioDashboardPage() {
     const router = useRouter();
+    const volver = useVolver('/superuser');
     const { isAdmin } = useAuth();
 
     return (
         <Box maw={960} mx="auto" px="md" py="md">
             <Group mb="md" gap="sm">
-                <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={() => router.push('/superuser')}>Panel</Button>
+                <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={volver}>Panel</Button>
                 <Title order={2} c="white">Inventario</Title>
             </Group>
             <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">

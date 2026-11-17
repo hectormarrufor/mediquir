@@ -8,6 +8,7 @@ import { IconArrowLeft, IconPencil, IconPlus, IconPrinter, IconRestore, IconTras
 import { notifications } from '@mantine/notifications';
 import { fechaCaracas } from '@/app/constants/hora';
 import { abrirCierrePdf } from './_lib/cierreCajaPdf';
+import { useVolver } from '@/app/helpers/useVolver';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 const fechaLarga = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}` : '');
@@ -33,6 +34,7 @@ function Cifra({ titulo, valor, color }) {
 
 export default function CierreCajaPage() {
     const router = useRouter();
+    const volver = useVolver('/superuser/ventas');
     const [fecha, setFecha] = useState(fechaCaracas());
     const { data, isLoading, error } = useQuery({
         queryKey: ['ventas-cierre', fecha],
@@ -74,7 +76,7 @@ export default function CierreCajaPage() {
         <Box p={{ base: 'sm', sm: 'lg' }} maw={1200} mx="auto">
             <Group justify="space-between" mb="md" wrap="wrap">
                 <Group gap="sm">
-                    <Button variant="subtle" color="gray.2" leftSection={<IconArrowLeft size={18} />} onClick={() => router.push('/superuser/ventas')}>Ventas</Button>
+                    <Button variant="subtle" color="gray.2" leftSection={<IconArrowLeft size={18} />} onClick={volver}>Ventas</Button>
                     <Title order={2} c="white">Cierre de caja</Title>
                 </Group>
                 <Group gap="sm" align="flex-end">

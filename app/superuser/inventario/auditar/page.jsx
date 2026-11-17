@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { IconAlertTriangle, IconBrandGoogle, IconCamera, IconCheck, IconChevronLeft, IconCopy, IconDeviceFloppy, IconPhotoEdit, IconPlayerSkipForward, IconTrash } from '@tabler/icons-react';
 import { PRESENTACIONES, parseNumero } from '@/app/constants/inventarioCampos';
 import EditorFoto from './_components/EditorFoto';
+import { useVolver } from '@/app/helpers/useVolver';
 
 const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
 const TEXTOS = {
@@ -59,6 +60,7 @@ function FotoMiniatura({ url, nombre, etiqueta, onCambiar, onQuitar }) {
 // Asistente único: una ficha por producto con su FOTO (producto → grupo → marca) y sus DATOS (costo, precios, presentación, caja, bulto).
 export default function AuditarPage() {
     const router = useRouter();
+    const volver = useVolver('/superuser/inventario/productos');
     const isMobile = useMediaQuery('(max-width: 48em)');
     const [filtro, setFiltro] = useState('pendiente');
     const [cola, setCola] = useState([]);
@@ -192,7 +194,7 @@ export default function AuditarPage() {
 
     return (
         <Box px={isMobile ? 'xs' : 'md'} py="sm" maw={980} mx="auto">
-            <Button variant="subtle" color="gray.3" size="compact-sm" leftSection={<IconChevronLeft size={16} />} onClick={() => router.push('/superuser/inventario/productos')}>Inventario</Button>
+            <Button variant="subtle" color="gray.3" size="compact-sm" leftSection={<IconChevronLeft size={16} />} onClick={volver}>Inventario</Button>
             <Title order={2} c="white" fz={isMobile ? 22 : 28} tt="none" pb={0}>Auditar fotos y precios</Title>
             <Text size="sm" c="gray.4" mb="sm">Una ficha por producto: revisa su foto, el costo, los precios 6 y 7 y el empaque. Lo que cambies vale para todas sus marcas.</Text>
 

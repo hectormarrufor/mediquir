@@ -6,6 +6,7 @@ import {
     Textarea, Alert, Center, Loader, ActionIcon, Radio, SimpleGrid, ThemeIcon,
 } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
+import { useVolver } from '@/app/helpers/useVolver';
 import { useQuery } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import {
@@ -40,6 +41,7 @@ function Aviso({ titulo, texto, volver }) {
 export default function EmpacarPage() {
     const { id } = useParams();
     const router = useRouter();
+    const volver = useVolver(`/superuser/ventas/${id}`);
     const inputFoto = useRef(null);
 
     const [comenzado, setComenzado] = useState(false);
@@ -64,7 +66,7 @@ export default function EmpacarPage() {
         },
     });
 
-    const volver = () => router.push(`/superuser/ventas/${id}`);
+
     if (isLoading) return <Center h="60vh"><Loader /></Center>;
     if (!data) return <Aviso titulo="No se pudo cargar" texto="Revisa tu conexión e intenta de nuevo." volver={volver} />;
 

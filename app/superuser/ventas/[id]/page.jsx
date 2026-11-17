@@ -6,6 +6,7 @@ import {
     Table, Stepper, Button, Select, TextInput, NumberInput, Modal, Tabs, Switch, ActionIcon, SimpleGrid
 } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
+import { useVolver } from '@/app/helpers/useVolver';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from '@mantine/form';
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
@@ -35,6 +36,7 @@ import { useAuth } from '@/hooks/useAuth';
 export default function DetallePedidoMayorPage() {
     const params = useParams();
     const router = useRouter();
+    const volver = useVolver('/superuser/ventas');
     const { userId, esVendedor, rolUsuario } = useAuth();
 
     const [galeriaModal, setGaleriaModal] = useState({ imagenes: [], indice: 0 });
@@ -192,7 +194,7 @@ export default function DetallePedidoMayorPage() {
         } catch (e) { notifications.show({ title: 'Error', message: e.message, color: 'red' }); } finally { setAprobando(false); }
     };
     const tituloDoc = `${pedido.tipoDocumento === 'FACTURA' ? 'Factura' : pedido.tipoDocumento === 'NOTA_ENTREGA' ? 'Nota de entrega' : 'Recibo'} ${pedido.numeroDocumento}`;
-    const volver = () => router.push('/superuser/ventas');
+
     const tamAccion = isMobile ? 'sm' : 'xs';
     // Acciones sobre el documento (en el teléfono van a todo el ancho, debajo del título)
     const accionesDoc = [

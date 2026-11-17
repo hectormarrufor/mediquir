@@ -12,12 +12,14 @@ import { getMainImage, PLACEHOLDER_IMG } from '@/app/components/landing/productU
 import { BadgesPedido } from '../../_components/Estados';
 import PagarConPagoMovil from '../../_components/PagarConPagoMovil';
 import { fmtBs, fmtFecha, fmtFechaHora, fmtPrecio, fmtUsd, pedirJson } from '../../_lib/formato';
+import { useVolver } from '@/app/helpers/useVolver';
 
 const ICONOS = { recibido: IconClock, empacado: IconPackage, entregado: IconTruckDelivery, cancelado: IconX };
 
 export default function B2BPedidoDetalle() {
     const { id } = useParams();
     const router = useRouter();
+    const volver = useVolver('/b2b/pedidos');
     const queryClient = useQueryClient();
     const [cancelando, setCancelando] = useState(false);
     const [modalCancelar, { open: abrirCancelar, close: cerrarCancelar }] = useDisclosure(false);
@@ -42,7 +44,7 @@ export default function B2BPedidoDetalle() {
     if (error) {
         return (
             <Stack gap="md">
-                <Button variant="subtle" leftSection={<IconArrowLeft size={16} />} onClick={() => router.push('/b2b/pedidos')} w="fit-content">Mis pedidos</Button>
+                <Button variant="subtle" leftSection={<IconArrowLeft size={16} />} onClick={volver} w="fit-content">Mis pedidos</Button>
                 <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>
             </Stack>
         );
@@ -53,7 +55,7 @@ export default function B2BPedidoDetalle() {
 
     return (
         <Stack gap="md">
-            <Button variant="subtle" leftSection={<IconArrowLeft size={16} />} onClick={() => router.push('/b2b/pedidos')} w="fit-content">Mis pedidos</Button>
+            <Button variant="subtle" leftSection={<IconArrowLeft size={16} />} onClick={volver} w="fit-content">Mis pedidos</Button>
 
             <Group justify="space-between" align="flex-start" wrap="wrap">
                 <Box>

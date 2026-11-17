@@ -9,6 +9,7 @@ import { IconArrowLeft, IconBan, IconCheck, IconFileTypePdf, IconPlus, IconTrash
 import { fechaCaracas } from '@/app/constants/hora';
 import { TIPOS_PAGO, FORMAS_PAGO, ESTADOS_PAGO, totalesPago, fechaCorta, textoPeriodo } from '@/app/constants/pagosEmpleados';
 import { abrirReciboPdf, montoEnLetras } from './_lib/reciboPdf';
+import { useVolver } from '@/app/helpers/useVolver';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 
@@ -121,6 +122,7 @@ function FormularioRecibo({ opened, onClose, empleados, historial }) {
 
 export default function PagosEmpleadosPage() {
     const router = useRouter();
+    const volver = useVolver('/superuser/rrhh');
     const queryClient = useQueryClient();
     const [tipo, setTipo] = useState('TODOS');
     const [empleadoId, setEmpleadoId] = useState(null);
@@ -166,7 +168,7 @@ export default function PagosEmpleadosPage() {
         <Box p={{ base: 'sm', sm: 'lg' }} maw={1200} mx="auto">
             <Group justify="space-between" mb="md" wrap="wrap">
                 <Group gap="sm">
-                    <Button variant="subtle" color="gray.2" leftSection={<IconArrowLeft size={18} />} onClick={() => router.push('/superuser/rrhh')}>Personal</Button>
+                    <Button variant="subtle" color="gray.2" leftSection={<IconArrowLeft size={18} />} onClick={volver}>Personal</Button>
                     <Title order={2} c="white">Pagos a empleados</Title>
                 </Group>
                 <Button leftSection={<IconPlus size={18} />} onClick={() => setNuevo(true)}>Nuevo recibo</Button>

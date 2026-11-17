@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { PANTALLA_COMPLETA_MOVIL, useEsTelefono } from '@/app/components/ui/modalMovil';
 import AnularFacturaModal from '../_components/AnularFacturaModal';
+import { useVolver } from '@/app/helpers/useVolver';
 
 const PosModal = dynamic(() => import('../../../components/admin/PosModal'), { ssr: false });
 
@@ -67,6 +68,7 @@ function MenuFaltante({ fila, onAccion }) {
 // se rompe (un número sin documento ni forma anulada) se marca en rojo para registrar lo que falta.
 export default function NumerosDeControlPage() {
     const router = useRouter();
+    const volver = useVolver('/superuser/ventas');
     const queryClient = useQueryClient();
     const telefono = useEsTelefono();
     const { isAdmin } = useAuth();
@@ -165,7 +167,7 @@ export default function NumerosDeControlPage() {
             <Stack gap="md">
                 <Group justify="space-between" align="flex-end" wrap="wrap">
                     <Group gap="xs" wrap="nowrap">
-                        <ActionIcon size="lg" variant="light" onClick={() => router.push('/superuser/ventas')} aria-label="Volver a ventas"><IconArrowLeft size={18} /></ActionIcon>
+                        <ActionIcon size="lg" variant="light" onClick={volver} aria-label="Volver a ventas"><IconArrowLeft size={18} /></ActionIcon>
                         <Box>
                             <Title order={telefono ? 3 : 2} c="white">Números de control</Title>
                             <Text size="sm" c="gray.4">Cada hoja de la forma libre lleva un número: debe tener su factura o nota, o quedar anotada como dañada.{data?.siguiente ? ` Siguiente: ${data.siguiente}.` : ''}</Text>

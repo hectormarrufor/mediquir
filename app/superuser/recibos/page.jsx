@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Badge, Box, Button, Group, Loader, Paper, Table, Text, Title } from '@mantine/core';
 import { IconChevronLeft, IconPlus } from '@tabler/icons-react';
+import { useVolver } from '@/app/helpers/useVolver';
 
 const fetchJson = async (url) => { const r = await fetch(url); const c = await r.json().catch(() => ({})); if (!r.ok) throw new Error(c.error || 'No se pudo cargar'); return c; };
 const monto = (r) => `${r.moneda === 'USD' ? '$' : 'Bs'} ${Number(r.monto).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -14,10 +15,11 @@ const FORMAS = { EFECTIVO: 'Efectivo', CHEQUE: 'Cheque', TRANSFERENCIA: 'Transfe
 
 export default function RecibosPage() {
     const router = useRouter();
+    const volver = useVolver('/superuser');
     const { data, isLoading, error } = useQuery({ queryKey: ['recibos'], queryFn: () => fetchJson('/api/recibos') });
     return (
         <Box px={{ base: 'xs', sm: 'md' }} py="sm" maw={1000} mx="auto">
-            <Button variant="subtle" color="gray.3" size="compact-sm" leftSection={<IconChevronLeft size={16} />} onClick={() => router.push('/superuser')}>Panel</Button>
+            <Button variant="subtle" color="gray.3" size="compact-sm" leftSection={<IconChevronLeft size={16} />} onClick={volver}>Panel</Button>
             <Group justify="space-between" mb="sm" wrap="wrap">
                 <Title order={2} c="white">Recibos</Title>
                 <Button component={Link} href="/superuser/recibos/nuevo" leftSection={<IconPlus size={16} />}>Nuevo recibo{data?.siguiente ? ` (N.º ${data.siguiente})` : ''}</Button>

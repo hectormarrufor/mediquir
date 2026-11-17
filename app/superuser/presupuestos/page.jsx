@@ -9,6 +9,7 @@ import { IconChevronLeft, IconPlus } from '@tabler/icons-react';
 import { formatearFecha } from '@/app/constants/hora';
 import { ETIQUETA_TARIFA } from '@/app/api/presupuestos/_lib';
 import { useEsTelefono } from '@/app/components/ui/modalMovil';
+import { useVolver } from '@/app/helpers/useVolver';
 
 const fetchJson = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error('No se pudo cargar'); return r.json(); };
 // Total en la moneda del presupuesto: P7/P6 en $, P4/P5 en Bs
@@ -17,13 +18,14 @@ const sinCliente = <Text span size="sm" c="dimmed" fs="italic">Sin cliente</Text
 
 export default function PresupuestosPage() {
     const router = useRouter();
+    const volver = useVolver('/superuser');
     const telefono = useEsTelefono();
     const { data: presupuestos, isLoading } = useQuery({ queryKey: ['presupuestos'], queryFn: () => fetchJson('/api/presupuestos') });
     const abrir = (p) => router.push(`/superuser/presupuestos/${p.id}`);
 
     return (
         <Box px={{ base: 'xs', sm: 'md' }} py="sm" maw={900} mx="auto">
-            <Button variant="subtle" color="gray.3" size="compact-sm" leftSection={<IconChevronLeft size={16} />} onClick={() => router.push('/superuser')}>Panel</Button>
+            <Button variant="subtle" color="gray.3" size="compact-sm" leftSection={<IconChevronLeft size={16} />} onClick={volver}>Panel</Button>
             <Group justify="space-between" mb="sm" wrap="wrap">
                 <Title order={telefono ? 3 : 2} c="white">Presupuestos</Title>
                 <Button component={Link} href="/superuser/presupuestos/nuevo" leftSection={<IconPlus size={16} />} fullWidth={telefono}>Nuevo presupuesto</Button>

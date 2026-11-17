@@ -8,9 +8,11 @@ import { IconChevronLeft } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import ReciboForm from '../../_components/ReciboForm';
 
+import { useVolver } from '@/app/helpers/useVolver';
 export default function EditarRecibo() {
     const { id } = useParams();
     const router = useRouter();
+    const volver = useVolver(`/superuser/recibos/${id}`);
     const queryClient = useQueryClient();
     const [recibo, setRecibo] = useState(null);
     const [error, setError] = useState('');
@@ -43,7 +45,7 @@ export default function EditarRecibo() {
     if (!recibo) return <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Cargando recibo…</div>;
     return (
         <Box px={{ base: 'xs', sm: 'md' }} py="sm" maw={760} mx="auto">
-            <Button variant="subtle" color="gray.3" size="compact-sm" leftSection={<IconChevronLeft size={16} />} onClick={() => router.push(`/superuser/recibos/${id}`)}>Volver al recibo</Button>
+            <Button variant="subtle" color="gray.3" size="compact-sm" leftSection={<IconChevronLeft size={16} />} onClick={volver}>Volver al recibo</Button>
             <Title order={2} c="white" mb="sm">Modificar recibo N.º {recibo.numero}</Title>
             <ReciboForm inicial={recibo} onGuardar={guardar} guardando={guardando} textoGuardar="Guardar cambios" onCancelar={() => router.push(`/superuser/recibos/${id}`)} />
         </Box>

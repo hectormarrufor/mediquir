@@ -7,9 +7,11 @@ import { Box, Button, Title } from '@mantine/core';
 import { IconChevronLeft } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import ReciboForm from '../_components/ReciboForm';
+import { useVolver } from '@/app/helpers/useVolver';
 
 export default function NuevoRecibo() {
     const router = useRouter();
+    const volver = useVolver('/superuser/recibos');
     const queryClient = useQueryClient();
     const [guardando, setGuardando] = useState(false);
     const { data } = useQuery({ queryKey: ['recibos'], queryFn: async () => (await fetch('/api/recibos?limite=1')).json() });
@@ -26,7 +28,7 @@ export default function NuevoRecibo() {
     };
     return (
         <Box px={{ base: 'xs', sm: 'md' }} py="sm" maw={760} mx="auto">
-            <Button variant="subtle" color="gray.3" size="compact-sm" leftSection={<IconChevronLeft size={16} />} onClick={() => router.push('/superuser/recibos')}>Recibos</Button>
+            <Button variant="subtle" color="gray.3" size="compact-sm" leftSection={<IconChevronLeft size={16} />} onClick={volver}>Recibos</Button>
             <Title order={2} c="white" mb="sm">Nuevo recibo</Title>
             <ReciboForm numeroSugerido={data?.siguiente} onGuardar={guardar} guardando={guardando} onCancelar={() => router.push('/superuser/recibos')} />
         </Box>

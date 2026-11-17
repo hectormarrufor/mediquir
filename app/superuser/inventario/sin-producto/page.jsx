@@ -11,6 +11,7 @@ import { notifications } from '@mantine/notifications';
 import { IconArrowLeft, IconLink, IconSearch } from '@tabler/icons-react';
 import { PANTALLA_COMPLETA_MOVIL, useEsTelefono } from '@/app/components/ui/modalMovil';
 import { buscarProductos, normalizar } from '@/app/helpers/busquedaProductos';
+import { useVolver } from '@/app/helpers/useVolver';
 
 const nf = (v, d = 2) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: d, maximumFractionDigits: d }).format(Number(v) || 0);
 const fecha = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}` : '');
@@ -92,6 +93,7 @@ function EnlazarModal({ fila, productos, marcas, onClose, onListo }) {
 // en el total vendido de ese producto
 export default function VentasSinProductoPage() {
     const router = useRouter();
+    const volver = useVolver('/superuser/inventario');
     const queryClient = useQueryClient();
     const telefono = useEsTelefono();
     const [vista, setVista] = useState('pendientes');
@@ -129,7 +131,7 @@ export default function VentasSinProductoPage() {
         <Box maw={1300} mx="auto" px={{ base: 'xs', sm: 'md' }} py="md">
             <Stack gap="md">
                 <Group gap="sm">
-                    <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={() => router.push('/superuser/inventario')}>Inventario</Button>
+                    <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={volver}>Inventario</Button>
                     <Box>
                         <Title order={telefono ? 3 : 2} c="white">Ventas sin producto</Title>
                         <Text size="sm" c="gray.4">Renglones escritos a mano en facturas y notas. Enlázalos a su producto para que cuenten en lo vendido; la factura se sigue imprimiendo igual.</Text>

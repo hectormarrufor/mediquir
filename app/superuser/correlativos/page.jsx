@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Badge, Box, Button, Group, Loader, Modal, Paper, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconAlertTriangle, IconChevronLeft, IconPencil } from '@tabler/icons-react';
+import { useVolver } from '@/app/helpers/useVolver';
 
 const pedir = async (url, opciones) => {
     const res = await fetch(url, opciones);
@@ -17,6 +18,7 @@ const pedir = async (url, opciones) => {
 // Numeración: el número que sigue en cada serie de documentos (facturas, notas, control, recibos...) y su cambio. Solo administradores y el usuario 1.
 export default function CorrelativosPage() {
     const router = useRouter();
+    const volver = useVolver('/superuser');
     const queryClient = useQueryClient();
     const { data, isLoading, error } = useQuery({ queryKey: ['correlativos-panel'], queryFn: () => pedir('/api/correlativos/panel'), retry: false });
     const [editando, setEditando] = useState(null);
@@ -38,7 +40,7 @@ export default function CorrelativosPage() {
 
     return (
         <Box px={{ base: 'xs', sm: 'md' }} py="sm" maw={1000} mx="auto">
-            <Button variant="subtle" color="gray.3" size="compact-sm" leftSection={<IconChevronLeft size={16} />} onClick={() => router.push('/superuser')}>Panel</Button>
+            <Button variant="subtle" color="gray.3" size="compact-sm" leftSection={<IconChevronLeft size={16} />} onClick={volver}>Panel</Button>
             <Title order={2} c="white" mb={4}>Numeración</Title>
             <Text size="sm" c="gray.4" mb="sm">El número con el que sale el próximo documento de cada serie. Cámbialo solo si vas a usar otro talonario o forma libre: no puede quedar por debajo de uno ya usado.</Text>
             <Paper withBorder radius="md" bg="white" p="xs">

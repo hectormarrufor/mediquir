@@ -8,6 +8,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { IconArrowLeft, IconDownload, IconSearch } from '@tabler/icons-react';
 import { useEsTelefono } from '@/app/components/ui/modalMovil';
 import { normalizar } from '@/app/helpers/busquedaProductos';
+import { useVolver } from '@/app/helpers/useVolver';
 
 const nf = (v, d = 2) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: d, maximumFractionDigits: d }).format(Number(v) || 0);
 const iso = (f) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas' }).format(f);
@@ -36,6 +37,7 @@ const PERIODOS = [
 // Lo vendido de cada producto en el periodo (facturas, notas de entrega y ventas rápidas no anuladas), en unidades y en dólares sin IVA
 export default function VentasPorProductoPage() {
     const router = useRouter();
+    const volver = useVolver('/superuser/inventario');
     const telefono = useEsTelefono();
     const [periodo, setPeriodo] = useState('ano');
     const [fechas, setFechas] = useState(rango('ano'));
@@ -81,7 +83,7 @@ export default function VentasPorProductoPage() {
         <Box maw={1300} mx="auto" px={{ base: 'xs', sm: 'md' }} py="md">
             <Stack gap="md">
                 <Group gap="sm">
-                    <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={() => router.push('/superuser/inventario')}>Inventario</Button>
+                    <Button variant="subtle" color="gray.3" leftSection={<IconArrowLeft size={16} />} onClick={volver}>Inventario</Button>
                     <Box>
                         <Title order={telefono ? 3 : 2} c="white">Ventas por producto</Title>
                         <Text size="sm" c="gray.4">Unidades y dólares (sin IVA) vendidos de cada producto, menos lo devuelto con notas de crédito.</Text>

@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconArrowLeft, IconCheck, IconExternalLink, IconPrinter } from '@tabler/icons-react';
 import { useEsTelefono } from '@/app/components/ui/modalMovil';
 import { formatearFechaHora } from '@/app/constants/hora';
+import { useVolver } from '@/app/helpers/useVolver';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 const TIPOS = { FACTURA: ['Factura', 'blue'], NOTA_CREDITO: ['Nota de crédito', 'red'], NOTA_DEBITO: ['Nota de débito', 'grape'] };
@@ -17,6 +18,7 @@ const urlImprimir = (d) => (esNota(d) ? `/superuser/notas/${d.id}/imprimir` : `/
 // Facturas y notas de crédito/débito que asentaron los vendedores: se listan por número de control; se abren para corregirlas y se aprueban para imprimirlas
 export default function PorAprobarPage() {
     const router = useRouter();
+    const volver = useVolver('/superuser/ventas');
     const queryClient = useQueryClient();
     const telefono = useEsTelefono();
     const [aprobando, setAprobando] = useState(null);
@@ -64,7 +66,7 @@ export default function PorAprobarPage() {
         <Box maw={1200} mx="auto" px={{ base: 'xs', sm: 'md' }} py="md">
             <Stack gap="md">
                 <Box>
-                    <Button variant="subtle" color="gray.4" size="compact-sm" leftSection={<IconArrowLeft size={16} />} onClick={() => router.push('/superuser/ventas')} mb={4}>Ventas</Button>
+                    <Button variant="subtle" color="gray.4" size="compact-sm" leftSection={<IconArrowLeft size={16} />} onClick={volver} mb={4}>Ventas</Button>
                     <Title order={telefono ? 3 : 2} c="white">Facturas por aprobar</Title>
                     <Text size="sm" c="gray.4">Lo que asentaron los vendedores, en orden de número de control. Ábrelo para corregirlo y apruébalo para poder imprimirlo.</Text>
                 </Box>
