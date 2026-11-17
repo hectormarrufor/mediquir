@@ -63,6 +63,10 @@ function PrecioEditable({ valor, simbolo, editado, onCommit, onRestablecer, size
 // Un presupuesto siempre cuenta el IVA de cada producto y el cliente es opcional.
 // controlInicial: número de control con el que se abre (registrar la factura de un número que faltaba en la secuencia de la forma libre)
 // presupuestoEditar: presupuesto ya guardado (con modo="presupuesto"): se carga para modificarlo y al guardar se actualiza el mismo número
+// Altos del POS en la computadora: los paneles ocupan casi toda la pantalla y el carrito siempre deja lugar a 11 renglones (11 x ~34 px + encabezado)
+const ALTO_PANELES = 'calc(100dvh - 128px)';
+const ALTO_CARRITO = 11 * 34 + 40;
+
 export const BORRADOR_PRESUPUESTO = 'mediquir:borrador-presupuesto';
 // Borrador de la venta que se está llenando: sobrevive a refrescar la página o cerrar el POS (se borra al asentar la venta o con «Empezar de cero»).
 // Si viene de un presupuesto con más líneas de las que caben en una factura, trae `cola` (las facturas que faltan) y `origen` (de qué presupuesto).
@@ -824,7 +828,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             </Group>
         </Paper>
     ) : (
-        <Paper p="sm" mb="sm" bg={esFactura ? 'red.0' : 'gray.1'} radius="md" withBorder>
+        <Paper p="xs" mb="xs" bg={esFactura ? 'red.0' : 'gray.1'} radius="md" withBorder>
             <Group justify="space-between" align="center" wrap="nowrap" gap="xs">
                 <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
                     <ThemeIcon size={isMobile ? 'md' : 'lg'} variant="light" color={esFactura ? 'red' : 'blue'}>
@@ -931,8 +935,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     // «Forma de cobro»: grande y a la vista, porque de ella depende que la factura registre el pago (contado) o quede una cuenta por cobrar (crédito)
     const selectorCobro = !esPresupuesto && (tipoVenta === 'MAYOR' || puedeEditarPrecio) && (
-        <Box mb="sm">
-            <Text size="sm" fw={700} mb={4}>Forma de cobro</Text>
+        <Box mb="xs">
+            <Text size="sm" fw={700} mb={2}>Forma de cobro</Text>
             <SegmentedControl fullWidth size={isMobile ? 'md' : 'sm'} value={formVenta.values.condicionPago} onChange={(v) => formVenta.setFieldValue('condicionPago', v)}
                 color={formVenta.values.condicionPago === 'Credito' ? 'orange.7' : 'green.7'}
                 data={[{ value: 'Contado', label: 'Contado (cobra ahora)' }, { value: 'Credito', label: 'Crédito (queda por cobrar)' }]} />
@@ -946,7 +950,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     const filaIvaCondicion = !esPresupuesto && (
         <>
-            <Group mb="sm" justify="space-between" align="center" wrap="nowrap" gap="sm">
+            <Group mb="xs" justify="space-between" align="center" wrap="nowrap" gap="sm">
                 <Checkbox size={isMobile ? 'md' : 'sm'} label={<Text fw={600} size="sm">IVA (16%)</Text>} {...formVenta.getInputProps('conIva', { type: 'checkbox' })} />
             </Group>
             {selectorCobro}
@@ -1032,62 +1036,53 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         </Stack>
     );
 
+    // Renglones compactos (una sola línea, ~34 px): el carrito tiene que mostrar al menos 11 sin desplazarse
     const tablaCarrito = (
-        <Table striped highlightOnHover verticalSpacing="xs">
-            <Table.Thead>
+        <Table striped highlightOnHover verticalSpacing={3} horizontalSpacing={6} stickyHeader fz="sm" style={{ tableLayout: 'fixed' }}>
+            <Table.Thead style={{ background: '#fff', zIndex: 2 }}>
                 <Table.Tr>
-                    <Table.Th style={{ width: '36%' }}>Producto</Table.Th>
-                    <Table.Th style={{ width: '28%', textAlign: 'center' }}>Cantidad</Table.Th>
-                    <Table.Th style={{ width: puedeEditarPrecio ? '18%' : '12%', textAlign: 'right' }}>Unit.</Table.Th>
-                    <Table.Th style={{ width: '13%', textAlign: 'right' }}>Total</Table.Th>
-                    <Table.Th style={{ width: '5%' }}></Table.Th>
+                    <Table.Th>Producto</Table.Th>
+                    <Table.Th style={{ width: 150, textAlign: 'center' }}>Cantidad</Table.Th>
+                    <Table.Th style={{ width: puedeEditarPrecio ? 150 : 110, textAlign: 'right' }}>Unit.</Table.Th>
+                    <Table.Th style={{ width: 110, textAlign: 'right' }}>Total</Table.Th>
+                    {!esPresupuesto && <Table.Th style={{ width: 40, textAlign: 'center' }} title="Afectar inventario">Inv.</Table.Th>}
+                    <Table.Th style={{ width: 34 }}></Table.Th>
                 </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
                 {carrito.map((item, idxItem) => (
                     <Table.Tr key={item.clave}>
                         <Table.Td>
-                            <Group gap="xs" wrap="nowrap">
+                            <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
                                 {item.isFicticio ? (
-                                    <Avatar color="grape" size="sm" radius="sm"><IconEdit size={14} /></Avatar>
+                                    <Avatar color="grape" size={24} radius="sm"><IconEdit size={13} /></Avatar>
                                 ) : (
-                                    <Avatar src={item.imagen || item.marcaImagen} size="sm" radius="sm"><IconPackage size={14} /></Avatar>
+                                    <Avatar src={item.imagen || item.marcaImagen} size={24} radius="sm"><IconPackage size={13} /></Avatar>
                                 )}
-                                <Box>
-                                    <Group gap={4}>
-                                        <Text fw={600} size="sm" lineClamp={2}>{item.nombre}</Text>
-                                        {etiquetasRenglon(item)}
-                                    </Group>
-                                    {!item.isFicticio && item.marcaNombre && <Text size="xs" c="dimmed">{item.marcaNombre}</Text>}
-                                    {!item.isFicticio && item.presentacion !== 'UNIDAD' && (
-                                        <Badge size="sm" color="grape" variant="filled" tt="none" mt={2}>{item.presentacionEtiqueta} · {item.cantidad} unidades</Badge>
-                                    )}
-                                    {item.isFicticio && <Text size="xs" c="dimmed">Código: 1010</Text>}
-
-                                    {!item.isFicticio && !esPresupuesto && (
-                                        <Checkbox
-                                            size="xs" mt={4} color="teal" label="Afectar inventario"
-                                            checked={item.afectaInventario}
-                                            onChange={(e) => toggleAfectaInventario(item.clave, e.currentTarget.checked)}
-                                        />
-                                    )}
-                                </Box>
+                                <Text fw={600} size="sm" lineClamp={1} title={item.nombre} style={{ minWidth: 0, flex: '0 1 auto' }}>{item.nombre}</Text>
+                                {etiquetasRenglon(item)}
+                                {!item.isFicticio && item.presentacion !== 'UNIDAD' && (
+                                    <Badge size="xs" color="grape" variant="filled" tt="none" style={{ flexShrink: 0 }}>{item.presentacionEtiqueta} · {item.cantidad} und</Badge>
+                                )}
+                                {item.isFicticio
+                                    ? <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>1010</Text>
+                                    : item.marcaNombre && <Text size="xs" c="dimmed" lineClamp={1} style={{ flexShrink: 1, minWidth: 0 }}>{item.marcaNombre}</Text>}
                             </Group>
                         </Table.Td>
 
                         <Table.Td>
-                            <Group gap="xs" wrap="nowrap" justify="center">
-                                <ActionIcon size="md" color="gray" variant="light" onClick={() => cambiarCantidad(item.clave, -1)} aria-label="Uno menos">
-                                    <IconMinus size={16} />
+                            <Group gap={4} wrap="nowrap" justify="center">
+                                <ActionIcon size="sm" color="gray" variant="light" onClick={() => cambiarCantidad(item.clave, -1)} aria-label="Uno menos">
+                                    <IconMinus size={14} />
                                 </ActionIcon>
                                 <NumberInput
                                     value={item.cantidadPres}
                                     onChange={(val) => setCantidadAbsoluta(item.clave, val)}
-                                    min={1} allowDecimal={false} allowNegative={false} size="sm" w={75} hideControls aria-label="Cantidad"
-                                    styles={{ input: { textAlign: 'center', fontWeight: 900, fontSize: '1rem', color: '#1971c2', backgroundColor: '#f8f9fa' } }}
+                                    min={1} allowDecimal={false} allowNegative={false} size="xs" w={60} hideControls aria-label="Cantidad"
+                                    styles={{ input: { textAlign: 'center', fontWeight: 900, fontSize: '0.95rem', color: '#1971c2', backgroundColor: '#f8f9fa', height: 26, minHeight: 26 } }}
                                 />
-                                <ActionIcon size="md" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)} aria-label="Uno más">
-                                    <IconPlus size={16} />
+                                <ActionIcon size="sm" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)} aria-label="Uno más">
+                                    <IconPlus size={14} />
                                 </ActionIcon>
                             </Group>
                         </Table.Td>
@@ -1105,9 +1100,21 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                         <Table.Td style={{ textAlign: 'right' }}>
                             <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="sm" fw={800} />
                         </Table.Td>
+                        {!esPresupuesto && (
+                            <Table.Td style={{ textAlign: 'center' }}>
+                                {!item.isFicticio && (
+                                    <Checkbox
+                                        size="xs" color="teal" aria-label={`Afectar inventario: ${item.nombre}`} title="Afectar inventario"
+                                        checked={item.afectaInventario}
+                                        onChange={(e) => toggleAfectaInventario(item.clave, e.currentTarget.checked)}
+                                        styles={{ root: { display: 'flex', justifyContent: 'center' } }}
+                                    />
+                                )}
+                            </Table.Td>
+                        )}
                         <Table.Td style={{ textAlign: 'right' }}>
-                            <ActionIcon color="red" variant="subtle" onClick={() => eliminarItem(item.clave)} aria-label="Quitar del carrito">
-                                <IconTrash size={18} />
+                            <ActionIcon size="sm" color="red" variant="subtle" onClick={() => eliminarItem(item.clave)} aria-label="Quitar del carrito">
+                                <IconTrash size={16} />
                             </ActionIcon>
                         </Table.Td>
                     </Table.Tr>
@@ -1119,21 +1126,21 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // ---------------- Computadora: productos a la izquierda, documento y carrito a la derecha ----------------
     const contenidoEscritorio = (
         <>
-            <Paper p="xs" mb="sm" bg="blue.0" radius="md">
+            <Paper px="xs" py={4} mb={6} bg="blue.0" radius="md">
                 <Group gap="xs" justify="space-between">
                     <Group gap="xs">
                         <IconExchange size={20} color="#1971C2" />
                         <Text fw={600} c="blue.9">Tasa BCV:</Text>
-                        <Badge size="lg" color="blue" variant="filled">{tasaBcv} Bs/$</Badge>
+                        <Badge size="md" color="blue" variant="filled">{tasaBcv} Bs/$</Badge>
                         {origen && <Badge size="lg" color="teal" variant="light">Presupuesto {origen.numero}{origen.de > 1 ? ` · factura ${origen.parte} de ${origen.de}` : ''}</Badge>}
                     </Group>
                     {botonCero}
                 </Group>
             </Paper>
 
-            <Grid gutter="md" m={0}>
-                <Grid.Col span={5} p={0} pr="md">
-                    <Paper withBorder p="md" radius="md" h="75vh" style={{ display: 'flex', flexDirection: 'column' }}>
+            <Grid gutter="sm" m={0}>
+                <Grid.Col span={{ base: 5, xl: 4 }} p={0} pr="sm">
+                    <Paper withBorder p="sm" radius="md" h={ALTO_PANELES} style={{ display: 'flex', flexDirection: 'column' }}>
                         {selectorTipoVenta}
                         {buscador}
                         <ScrollArea style={{ flex: 1 }} type="auto">
@@ -1145,19 +1152,24 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     </Paper>
                 </Grid.Col>
 
-                <Grid.Col span={7} p={0}>
-                    {/* Si la pantalla es baja, el panel se desplaza entero en vez de dejar el carrito sin espacio */}
-                    <Paper withBorder p="md" radius="md" h="75vh" style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-                        {bloqueDocumento}
-                        <Group grow mb="sm" align="flex-end">
-                            {campoCliente}
-                            {campoTarifa}
-                        </Group>
-                        {filaIvaCondicion}
-                        {filaPago}
-                        {filaCredito}
+                <Grid.Col span={{ base: 7, xl: 8 }} p={0}>
+                    {/* Si la pantalla es baja, el panel se desplaza entero en vez de achicar el carrito (que siempre deja lugar para 11 renglones) */}
+                    <Paper withBorder p="sm" radius="md" h={ALTO_PANELES} style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+                        {/* Los datos del documento van en franja de columnas (no apilados), para que el carrito gane altura */}
+                        <SimpleGrid cols={{ base: 1, md: 2, xl: 3 }} spacing="xs" mb="xs" style={{ alignItems: 'start' }}>
+                            <Box>{bloqueDocumento}</Box>
+                            <Stack gap="xs">
+                                {campoCliente}
+                                {campoTarifa}
+                            </Stack>
+                            <Box>
+                                {filaIvaCondicion}
+                                {filaPago}
+                                {filaCredito}
+                            </Box>
+                        </SimpleGrid>
 
-                        <ScrollArea style={{ flex: '1 0 200px' }} offsetScrollbars type="auto" mb="sm">
+                        <ScrollArea style={{ flex: `1 0 ${ALTO_CARRITO}px` }} offsetScrollbars type="auto" mb="xs">
                             {carrito.length ? tablaCarrito : <Text c="dimmed" ta="center" size="sm" py="xl">Haz clic en un producto de la lista para agregarlo.</Text>}
                         </ScrollArea>
 
@@ -1350,9 +1362,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 </Modal>
             ) : (
                 <Modal
-                    opened={opened} onClose={onClose} size="95%" centered
-                    title={<Title order={3} c="blue.9" component="div">{esPresupuesto ? (editando ? `Modificar ${editando.numero}` : 'Nuevo presupuesto') : 'Terminal POS - Nueva Venta'}</Title>}
-                    styles={{ inner: { padding: '16px' }, content: { borderRadius: '8px' }, body: { padding: '20px' }, header: { padding: '20px' } }}
+                    opened={opened} onClose={onClose} size="98%" centered
+                    title={<Title order={4} c="blue.9" component="div">{esPresupuesto ? (editando ? `Modificar ${editando.numero}` : 'Nuevo presupuesto') : 'Terminal POS - Nueva Venta'}</Title>}
+                    styles={{ inner: { padding: '8px' }, content: { borderRadius: '8px' }, body: { padding: '10px 14px 12px' }, header: { padding: '8px 14px' } }}
                 >
                     {contenidoEscritorio}
                 </Modal>
