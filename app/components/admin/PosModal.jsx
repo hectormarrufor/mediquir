@@ -152,7 +152,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         initialValues: {
             clienteId: null,
             tipoPrecio: 'precio7', 
-            conIva: true,
+            conIva: true, // lo define el documento elegido: Factura = con IVA, Nota de entrega = sin IVA
+            tipoDocumento: '', // 'FACTURA' | 'NOTA' — sin opción predeterminada: el operario TIENE que elegir
             condicionPago: '', // sin opción predeterminada: el operario TIENE que elegir Contado o Crédito antes de asentar
             diasCredito: 15, // solo a crédito: arranca con los días del cliente
             metodoPago: 'Efectivo ($)', 
@@ -224,6 +225,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     useEffect(() => {
         if (!opened || !controlInicial) return;
         formVenta.setFieldValue('conIva', true);
+        formVenta.setFieldValue('tipoDocumento', 'FACTURA');
         formVenta.setFieldValue('numeroControl', controlInicial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [opened, controlInicial]);
@@ -245,11 +247,21 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [opened, editando?.id]);
 
-    const tipoDocumentoActual = tipoVenta === 'DETAL'
-        ? (formVenta.values.conIva ? 'FACTURA' : 'VENTA RAPIDA')
-        : (formVenta.values.conIva ? 'FACTURA' : 'NOTA DE ENTREGA');
+    // El documento se ELIGE (Factura o Nota de entrega; al detal, Factura o Venta rápida) y el IVA lo sigue: factura = con IVA, nota = sin IVA.
+    const docElegido = formVenta.values.tipoDocumento;
+    const faltaDocumento = !esPresupuesto && !docElegido;
+    const tipoDocumentoActual = esPresupuesto
+        ? 'FACTURA'
+        : (docElegido === 'FACTURA' ? 'FACTURA' : (docElegido === 'NOTA' ? (tipoVenta === 'DETAL' ? 'VENTA RAPIDA' : 'NOTA DE ENTREGA') : 'SIN ELEGIR'));
+    useEffect(() => {
+        if (docElegido === 'FACTURA') formVenta.setFieldValue('conIva', true);
+        else if (docElegido === 'NOTA') formVenta.setFieldValue('conIva', false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [docElegido]);
 
     useEffect(() => {
+        // Sin documento elegido no hay correlativo que mostrar
+        if (faltaDocumento) { formVenta.setFieldValue('numeroDocumento', ''); return; }
         let prefijo = 'V';
         if (tipoDocumentoActual === 'FACTURA') prefijo = 'F';
         if (tipoDocumentoActual === 'NOTA DE ENTREGA') prefijo = 'NE';
@@ -265,7 +277,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             formVenta.setFieldValue('numeroDocumento', `${prefijo}-00001`);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [tipoDocumentoActual, correlativos, formVenta.values.facturaTalonario]);
+    }, [tipoDocumentoActual, correlativos, formVenta.values.facturaTalonario, faltaDocumento]);
 
     const esMonedaBs = ['precio1', 'precio4', 'precio5'].includes(formVenta.values.tipoPrecio);
     const opcionesMetodoPago = esMonedaBs 
@@ -480,6 +492,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         // En el teléfono, si falta algo se abre la parte de la pantalla donde se arregla
         if (carrito.length === 0) { setVista('productos'); return notifications.show({ message: 'El carrito está vacío', color: 'orange' }); }
         if (tipoVenta === 'MAYOR' && !formVenta.values.clienteId) { setVista('datos'); return notifications.show({ message: 'Debe seleccionar un cliente mayorista', color: 'red' }); }
+        if (faltaDocumento) { setVista('datos'); return notifications.show({ title: 'Falta el documento', message: 'Elige si vas a emitir FACTURA o NOTA DE ENTREGA antes de revisar la venta', color: 'red' }); }
         if (!formVenta.values.numeroDocumento) { setVista('datos'); return notifications.show({ message: 'El número de documento es obligatorio', color: 'red' }); }
         if (faltaCobro) { setVista('datos'); return notifications.show({ title: 'Falta la forma de cobro', message: 'Elige si la venta es de CONTADO o a CRÉDITO antes de revisarla', color: 'red' }); }
         // Factura: el cliente debe tener dirección (obligatoria); teléfono y correo son opcionales. Lo escrito aquí se guarda de una vez en el cliente.
@@ -565,6 +578,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     // imprimir=true: «Asentar e imprimir». La ventana se abre YA (con el toque del botón) porque el navegador bloquea las que se abren después de esperar al servidor
     const handleProcesarVenta = async (imprimir = false) => {
+        if (faltaDocumento) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta el documento', message: 'Elige si vas a emitir FACTURA o NOTA DE ENTREGA antes de asentar', color: 'red' }); }
         if (!esPresupuesto && !formVenta.values.condicionPago) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta la forma de cobro', message: 'Elige si la venta es de CONTADO o a CRÉDITO antes de asentarla', color: 'red' }); }
         setIsSubmitting(true);
         const ventana = imprimir ? window.open('', '_blank') : null;
@@ -637,10 +651,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             setPreviewAbierto(false);
             if (cola.length > 0) {
                 // Quedan facturas del mismo presupuesto: se sigue con la siguiente, con el mismo cliente y condiciones
-                const { clienteId, tipoPrecio, conIva, condicionPago, diasCredito } = formVenta.values;
+                const { clienteId, tipoPrecio, conIva, tipoDocumento, condicionPago, diasCredito } = formVenta.values;
                 const [siguiente, ...resto] = cola;
                 formVenta.reset();
-                formVenta.setValues({ ...formVenta.values, clienteId, tipoPrecio, conIva, condicionPago, diasCredito });
+                formVenta.setValues({ ...formVenta.values, clienteId, tipoPrecio, conIva, tipoDocumento, condicionPago, diasCredito });
                 setCarrito(siguiente);
                 setCola(resto);
                 setOrigen((o) => (o ? { ...o, parte: o.parte + 1 } : o));
@@ -816,6 +830,22 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         <Text c="dimmed" ta="center" size="sm" py="lg">{busquedaProducto.trim() ? `No hay productos que coincidan con «${busquedaProducto.trim()}».` : 'No hay productos.'}</Text>
     );
 
+    const selectorDocumento = !esPresupuesto && (
+        <Box>
+            <Text size={isMobile ? 'sm' : 'xs'} fw={700} mb={2}>Documento a emitir <Text span c="red.7" fw={800}>*</Text></Text>
+            <SegmentedControl
+                size={isMobile ? 'md' : 'xs'} fullWidth={isMobile} w={isMobile ? undefined : 360}
+                value={formVenta.values.tipoDocumento} onChange={(v) => formVenta.setFieldValue('tipoDocumento', v)}
+                style={faltaDocumento ? { outline: '2px solid #e03131', outlineOffset: 1 } : undefined}
+                color={docElegido === 'FACTURA' ? 'red.7' : 'blue.7'}
+                data={[
+                    { value: 'FACTURA', label: 'Factura (con IVA 16%)' },
+                    { value: 'NOTA', label: tipoVenta === 'DETAL' ? 'Venta rápida (sin IVA)' : 'Nota de entrega (sin IVA)' },
+                ]}
+            />
+        </Box>
+    );
+
     const bloqueDocumento = esPresupuesto ? (
         <Paper p="sm" mb="sm" bg="teal.0" radius="md" withBorder>
             <Group justify="space-between" align="center" wrap="nowrap" gap="xs">
@@ -831,6 +861,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         </Paper>
     ) : (
         <Paper p="xs" mb="xs" bg={esFactura ? 'red.0' : 'gray.1'} radius="md" withBorder>
+            <Box mb="xs">{selectorDocumento}</Box>
+            {faltaDocumento && <Text size="xs" fw={600} c="red.8" mb="xs">Elige FACTURA o NOTA DE ENTREGA: es obligatorio antes de asentar.</Text>}
             <Group justify="space-between" align="center" wrap="nowrap" gap="xs">
                 <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
                     <ThemeIcon size={isMobile ? 'md' : 'lg'} variant="light" color={esFactura ? 'red' : 'blue'}>
@@ -975,9 +1007,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     const filaIvaCondicion = !esPresupuesto && (
         <>
-            <Group mb="xs" justify="space-between" align="center" wrap="nowrap" gap="sm">
-                <Checkbox size={isMobile ? 'md' : 'sm'} label={<Text fw={600} size="sm">IVA (16%)</Text>} {...formVenta.getInputProps('conIva', { type: 'checkbox' })} />
-            </Group>
+            <Text size="xs" fw={700} mb="xs" c={conIva ? 'red.8' : 'dimmed'}>{faltaDocumento ? 'IVA: lo define el documento que elijas' : (conIva ? 'Con IVA (16%): es una factura' : 'Sin IVA: es una nota de entrega / venta rápida')}</Text>
             {selectorCobro}
         </>
     );
@@ -1149,21 +1179,16 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     );
 
     // ---------------- Computadora: filas compactas (el carrito es lo que importa, así que lo de arriba ocupa lo mínimo) ----------------
-    const ayudaDocEscritorio = [
+    const ayudaDocEscritorio = faltaDocumento ? 'Elige FACTURA o NOTA DE ENTREGA: es obligatorio antes de asentar. Factura = con IVA y número de control; nota de entrega = sin IVA.' : [
         talonario ? `Control del talonario (distinto al de la forma libre).${guiaTalonario?.ultima ? ` Última cargada: ${guiaTalonario.ultima.numero}, control ${guiaTalonario.ultima.control}.` : ''}` : (esFactura && siguienteControl ? `Control vacío = toma el siguiente (${siguienteControl}).` : ''),
         puedeEditarPrecio ? 'Fecha vacía = hoy; si copias una factura de otro día, elige esa fecha (toma la tasa BCV de ese día).' : '',
     ].filter(Boolean).join(' ');
+    const colorAyudaDoc = faltaDocumento ? 'red.8' : 'dimmed';
     const docEscritorio = esPresupuesto ? bloqueDocumento : (
         <Paper p={6} bg={esFactura ? 'red.0' : 'gray.1'} radius="md" withBorder>
             <Group gap="sm" align="flex-end" wrap="wrap">
-                <Group gap={6} wrap="nowrap" pb={2}>
-                    <ThemeIcon size="md" variant="light" color={esFactura ? 'red' : 'blue'}><IconReceiptTax size={16} /></ThemeIcon>
-                    <Box>
-                        <Text size="xs" c="dimmed" tt="uppercase" fw={700} lh={1}>Emitir</Text>
-                        <Text size="md" fw={800} lh={1.15} c={esFactura ? 'red.9' : 'blue.9'}>{tipoDocumentoActual}</Text>
-                    </Box>
-                </Group>
-                <TextInput label={talonario ? 'N° de factura (talonario)' : 'Correlativo'} placeholder={talonario ? '0123' : undefined} size="xs" w={talonario ? 150 : 120} autoComplete="off" {...formVenta.getInputProps('numeroDocumento')} />
+                {selectorDocumento}
+                {!faltaDocumento && <TextInput label={talonario ? 'N° de factura (talonario)' : (esFactura ? 'Correlativo de factura' : 'Correlativo de nota de entrega')} placeholder={talonario ? '0123' : undefined} size="xs" w={talonario ? 160 : 170} autoComplete="off" {...formVenta.getInputProps('numeroDocumento')} />}
                 {esFactura && (
                     <TextInput label={talonario ? 'N° de control del talonario' : 'N° de control'} withAsterisk={talonario} placeholder={talonario ? (guiaTalonario?.controlSugerido || '00-0000000') : (siguienteControl || '00-000000')} size="xs" w={170} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
                 )}
@@ -1174,7 +1199,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     <Switch color="grape" size="xs" pb={6} label="Factura de talonario (hecha a mano)" checked={Boolean(formVenta.values.facturaTalonario)} onChange={(e) => formVenta.setFieldValue('facturaTalonario', e.currentTarget.checked)} />
                 )}
             </Group>
-            {ayudaDocEscritorio && <Text size="xs" c="dimmed" mt={4} lh={1.25}>{ayudaDocEscritorio}</Text>}
+            {ayudaDocEscritorio && <Text size="xs" c={colorAyudaDoc} fw={faltaDocumento ? 600 : undefined} mt={4} lh={1.25}>{ayudaDocEscritorio}</Text>}
         </Paper>
     );
 
@@ -1183,8 +1208,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         <Group gap="xs" align="flex-end" wrap="nowrap">
             <Box style={{ flex: 1, minWidth: 0 }}>{selectClienteFila}</Box>
             <Box w={210} style={{ flexShrink: 0 }}>{campoTarifa}</Box>
-            {!esPresupuesto && (
-                <Checkbox size="sm" pb={8} style={{ flexShrink: 0 }} label={<Text fw={600} size="sm">IVA (16%)</Text>} {...formVenta.getInputProps('conIva', { type: 'checkbox' })} />
+            {!esPresupuesto && !faltaDocumento && (
+                <Badge size="lg" mb={4} variant="light" color={conIva ? 'red' : 'gray'} style={{ flexShrink: 0 }}>{conIva ? 'Con IVA 16%' : 'Sin IVA'}</Badge>
             )}
         </Group>
     );
