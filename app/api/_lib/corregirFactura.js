@@ -75,7 +75,8 @@ export async function modificarFactura({ venta, condicionPago, diasCredito, meto
     const bloqueo = await bloqueoCorreccion(venta, t);
     if (bloqueo) throw new ErrorCorreccion(bloqueo, 409);
 
-    const actuales = await VentaDetalle.findAll({ where: { ventaId: venta.id }, order: [['createdAt', 'ASC'], ['id', 'ASC']], transaction: t });
+    // VentaDetalle no tiene createdAt (timestamps: false): ordenar por esa columna rompía la corrección con «Error interno». Abajo se compara sin depender del orden.
+    const actuales = await VentaDetalle.findAll({ where: { ventaId: venta.id }, transaction: t });
     const condAntes = venta.condicionPago;
     const condNueva = condicionPago || condAntes;
     if (!['Contado', 'Credito'].includes(condNueva)) throw new ErrorCorreccion('Condición de pago inválida');
@@ -104,7 +105,7 @@ export async function modificarFactura({ venta, condicionPago, diasCredito, meto
             return { precioUnitario: d.precioUnitario, cantidad: d.cantidad, aplicaIva: Boolean(d.aplicaIva) && alicuota > 0, porcentajeIva: alicuota };
         });
         try { factura = calcularFactura({ renglones: entrada, costoFlete: Number(venta.costoFlete) || 0 }); } catch (e) { throw new ErrorCorreccion(e.message); }
-        const firma = (l) => l.map((x) => [x.isFicticio ? `F:${x.nombreFicticio}` : Number(x.productoId), Number(x.cantidad), Number(Number(x.precioUnitario).toFixed(4)), Boolean(x.aplicaIva)]);
+        const firma = (l) => l.map((x) => JSON.stringify([x.isFicticio ? `F:${x.nombreFicticio}` : Number(x.productoId), Number(x.cantidad), Number(Number(x.precioUnitario).toFixed(4)), Boolean(x.aplicaIva)])).sort();
         const nuevasFirma = detalles.map((d, i) => ({ ...d, precioUnitario: factura.renglones[i].precioUnitario, cantidad: factura.renglones[i].cantidad, aplicaIva: factura.renglones[i].aplicaIva }));
         cambiaronRenglones = !mismaLista(firma(actuales.map((a) => a.toJSON())), firma(nuevasFirma));
         nuevos = { detalles, productos, factura };
