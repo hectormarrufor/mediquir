@@ -4,6 +4,7 @@
 // cómo va el cobro del cliente y si la comisión ya se pagó. En la computadora se edita en la celda (HojaTabla); en el teléfono,
 // con tarjetas y hojas desde abajo (HojaTarjetas). Datos, filtros y acciones viven en useHojaVendedor; las reglas, en comisiones.js.
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ActionIcon, Affix, Alert, Box, Button, CloseButton, Group, Menu, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Tooltip, Transition } from '@mantine/core';
 import {
     IconAlertTriangle, IconArrowBackUp, IconBuildingBank, IconChecks, IconCircleCheck, IconCoin, IconDotsVertical, IconFold, IconHourglass,
@@ -15,6 +16,7 @@ import { DialogoAgregarLinea, DialogoEditarLinea, DialogoNuevoVendedor, LeyendaC
 import { EstadoVacio, Esqueleto, Kpi, useConfirmar } from './Piezas';
 import { DialogoPagarComision, DialogoPrestamo } from './PrestamosPagos';
 import DialogoClientesVendedor from './ClientesVendedor';
+import CambioDeudaModal from './CambioDeudaModal';
 import { DialogoReciboDeFactura } from './ReciboCobro';
 import { FILTROS, agruparFacturas, claveDoc, opcionesPct, porPagar } from './comisiones';
 import { useHojaVendedor } from './useHojaVendedor';
@@ -31,6 +33,7 @@ export default function HojasVendedores() {
     const [dialogo, setDialogo] = useState(null); // { tipo: 'editar' | 'agregar' | 'vendedor', linea?, inicial? }
     const { confirmar, dialogo: confirmacion } = useConfirmar();
     const cerrar = () => setDialogo(null);
+    const queryClient = useQueryClient();
     const { actual, tasa } = hoja;
 
     const acc = {
@@ -38,6 +41,15 @@ export default function HojasVendedores() {
         recibo: (l) => setDialogo({ tipo: 'recibo', linea: l }),
         // el abono se arma con los datos de su factura (número, cliente y su %): solo falta escribir el monto
         agregarAbono: (factura) => {
+            // Factura del sistema con deuda: es el MISMO formulario del libro de cobranzas (registra el cobro de verdad: baja la deuda, entra a caja y la comisión sale sola)
+            if (factura.ventaId && factura.cxcId && Number(factura.saldoCxc) > 0.005) {
+                const ivaUsd = Number(factura.ivaUsd) || 0;
+                return setDialogo({ tipo: 'cobro', cuenta: {
+                    id: factura.cxcId, ventaId: factura.ventaId, manual: false, documento: factura.numeroVenta || factura.documentoTexto, cliente: factura.clienteNombre || factura.clienteTexto || '',
+                    saldo: Number(factura.saldoCxc), tipoDoc: factura.tipoDoc, retEstado: factura.retEstado || null,
+                    retEsperada: factura.tipoDoc === 'FACTURA' && ivaUsd > 0 ? r2(ivaUsd * 0.75) : 0,
+                } });
+            }
             const inicial = { concepto: 'ABONO', documento: factura.documentoTexto || '', cliente: factura.clienteTexto || factura.clienteNombre || '' };
             if (factura.porcentaje !== null && factura.porcentaje !== undefined) inicial.porcentaje = String(Number(factura.porcentaje));
             setDialogo({ tipo: 'agregar', inicial });
@@ -282,6 +294,7 @@ export default function HojasVendedores() {
                     onCerrar={cerrar} onGuardar={hoja.editar} onBorrar={acc.borrarLinea}
                 />
             )}
+            {dialogo?.tipo === 'cobro' && <CambioDeudaModal cuenta={dialogo.cuenta} onCerrar={(guardado) => { cerrar(); if (guardado) queryClient.invalidateQueries({ queryKey: ['comisiones'] }); }} />}
             <DialogoAgregarLinea abierto={dialogo?.tipo === 'agregar'} inicial={dialogo?.inicial} vendedor={actual} facturas={hoja.facturas} clientes={hoja.clientes} onCerrar={cerrar} onAgregar={hoja.agregar} />
             <DialogoNuevoVendedor abierto={dialogo?.tipo === 'vendedor'} onCerrar={cerrar} onCrear={hoja.crearVendedor} />
             <DialogoPrestamo abierto={dialogo?.tipo === 'prestamo'} vendedor={actual} tasa={tasa} acumulado={acumulado} onCerrar={cerrar} onPrestar={hoja.prestar} onBorrar={hoja.borrarPrestamo} onRevertirPago={hoja.revertirPago} onAbonarSuelto={hoja.abonarPrestamo}

@@ -62,6 +62,10 @@ export async function GET() {
                     v."clienteId" AS "clienteIdVenta", cl.nombre AS "clienteNombre",
                     (SELECT (CASE WHEN c.moneda::text = 'BS' THEN c."saldoPendiente" / NULLIF(c."tasaCambio", 0) ELSE c."saldoPendiente" END)::float
                        FROM "CuentasPorCobrar" c WHERE c."ventaId" = cv."ventaId" ORDER BY c.id DESC LIMIT 1) AS "saldoCxc",
+                    (SELECT c.id FROM "CuentasPorCobrar" c WHERE c."ventaId" = cv."ventaId" ORDER BY c.id DESC LIMIT 1) AS "cxcId",
+                    v."tipoDocumento"::text AS "tipoDoc",
+                    (SELECT r.estado FROM "RetencionesIva" r WHERE r."ventaId" = cv."ventaId" LIMIT 1) AS "retEstado",
+                    (v."montoIva" / (CASE WHEN v.moneda::text = 'BS' THEN NULLIF(v."tasaCambio", 0) ELSE 1 END))::float AS "ivaUsd",
                     -- IVA que el cliente retuvo (75 %): no lo paga en dinero. Y lo exento de la factura (renglones sin IVA), en USD: explican por qué el «sin IVA» prorrateado no es monto ÷ 1.16
                     (SELECT COALESCE(SUM(a."montoUsd"), 0)::float FROM "Abonos" a WHERE a."ventaId" = cv."ventaId" AND a."metodoPago" = 'Retención IVA') AS "retenidoUsd",
                     COALESCE((CASE WHEN v."montoIva" > 0 THEN (SELECT COALESCE(SUM(d.subtotal), 0) FROM "VentaDetalles" d WHERE d."ventaId" = v.id AND d."aplicaIva" = false) ELSE 0 END)
