@@ -35,8 +35,8 @@ function FilaLinea({ l, hijo, d, hoja, acc, tasa, cols }) {
             <Table.Td ta="center" p={0}><Checkbox size="xs" checked={seleccionada} onChange={(e) => hoja.alternarSel(l.id, e.currentTarget.checked)} aria-label={`Seleccionar ${etiqueta}`} /></Table.Td>
             <Table.Td>
                 {hijo ? (
-                    <Group gap={5} wrap="nowrap" pl={10} style={{ overflow: 'hidden' }}>
-                        <Badge size="xs" variant="light" color={l.concepto === 'NOTA' ? 'orange' : 'blue'} style={{ flexShrink: 0 }}>{l.concepto === 'NOTA' ? 'N/C' : 'Abono'}</Badge>
+                    <Group gap={5} wrap="nowrap" pl={22} style={{ overflow: 'hidden' }}>
+                        <Text span c="#1971c2" fw={800} fz={14} aria-hidden="true">↳</Text><Badge size="xs" variant="filled" color={l.concepto === 'NOTA' ? 'orange' : 'blue'} style={{ flexShrink: 0 }}>{l.concepto === 'NOTA' ? 'N/C' : 'ABONO'}</Badge>
                         <NumeroFactura ventaId={l.ventaId} fz={11} c="#5c6675" truncate="end">de {l.documentoTexto}</NumeroFactura>
                     </Group>
                 ) : (
@@ -70,6 +70,30 @@ function FilaLinea({ l, hijo, d, hoja, acc, tasa, cols }) {
             {cols.estatus && <Table.Td>{!hijo && <CeldaEditable valor={l.estatusCliente} placeholder="Estatus del cliente" etiqueta={`Estatus del cliente de ${etiqueta}`} onGuardar={(v) => hoja.editar(l, { estatusCliente: v })} />}</Table.Td>}
             {cols.obs && <Table.Td><CeldaEditable valor={l.observacion} placeholder={hijo ? '' : 'Observación'} etiqueta={`Observación de ${etiqueta}`} onGuardar={(v) => hoja.editar(l, { observacion: v })} /></Table.Td>}
             <Table.Td ta="center" p={0}><MenuLinea l={l} acc={acc} /></Table.Td>
+        </Table.Tr>
+    );
+}
+
+// Cierre del bloque de una factura con abonos: los abonos van DENTRO del monto de la factura; aquí se ve cuánto de la factura (y de su sin IVA) ya se abonó y cuánto falta
+function ResumenAbonos({ d, cols, tasa }) {
+    const abonos = d.pagos.filter((x) => x.concepto !== 'NOTA' && esPago(x));
+    if (!d.padre || !abonos.length) return null;
+    const suma = (campo) => abonos.reduce((t, x) => t + Math.abs(Number(x[campo]) || 0), 0);
+    const abonado = suma('montoUsd');
+    const baseAbonada = suma('baseUsd');
+    const comision = suma('comisionUsd');
+    const saldo = d.padre.saldoCxc !== null && d.padre.saldoCxc !== undefined ? Number(d.padre.saldoCxc) : Math.max(0, Number(d.padre.montoUsd) - abonado);
+    return (
+        <Table.Tr className={classes.resumenAbonos}>
+            <Table.Td colSpan={2} />
+            <Table.Td colSpan={2 + (cols.vence ? 1 : 0)}><Text fz={11.5} fw={700} pl={10} c="#1c4f8f" truncate="end">Abonado a la factura {d.padre.documentoTexto} ({abonos.length})</Text></Table.Td>
+            <Table.Td ta="right"><Text fz={11.5} fw={700} pr={6} c={saldo > 0.005 ? 'orange.9' : 'teal.8'} title="Lo que el cliente todavía debe de esta factura">{saldo > 0.005 ? `Falta ${usd(saldo)}` : 'Cobrada'}</Text></Table.Td>
+            <Table.Td ta="right"><Text fz={12} fw={800} pr={6} c="#1971c2">{usd(abonado)}</Text></Table.Td>
+            <Table.Td ta="right"><Text fz={12} fw={800} pr={6} c="#1971c2" title={`Sin IVA de lo abonado (de ${usd(d.padre.baseUsd)} de la factura)`}>{usd(baseAbonada)}</Text></Table.Td>
+            <Table.Td />
+            <Table.Td ta="right"><Text fz={12} fw={800} pr={6} title="Comisión que ya generaron sus abonos">{usd(comision)}</Text></Table.Td>
+            {cols.bs && <Table.Td ta="right"><Text fz={12} fw={700} pr={6}>{usd(comision * tasa)}</Text></Table.Td>}
+            <Table.Td colSpan={2 + (cols.estatus ? 1 : 0) + (cols.obs ? 1 : 0)} />
         </Table.Tr>
     );
 }
@@ -109,6 +133,7 @@ function TablaCliente({ g, hoja, acc, tasa, cols, grande }) {
                     <React.Fragment key={d.k}>
                         {d.padre && <FilaLinea l={d.padre} hijo={false} d={d} hoja={hoja} acc={acc} tasa={tasa} cols={cols} />}
                         {(!d.padre || !hoja.plegadas.has(d.k)) && d.pagos.map((pg) => <FilaLinea key={pg.id} l={pg} hijo={Boolean(d.padre)} d={d} hoja={hoja} acc={acc} tasa={tasa} cols={cols} />)}
+                        <ResumenAbonos d={d} cols={cols} tasa={tasa} />
                     </React.Fragment>
                 ))}
             </Table.Tbody>
@@ -117,7 +142,10 @@ function TablaCliente({ g, hoja, acc, tasa, cols, grande }) {
                     <Table.Td colSpan={cols.vence ? 5 : 4}><Text fw={800} fz={12} pl={6} truncate="end">Total de {g.nombre}</Text></Table.Td>
                     <Table.Td ta="right"><Text fw={800} fz={12} pr={6}>{usd(g.t.facturas)}</Text></Table.Td>
                     <Table.Td ta="right"><Text fw={800} fz={12} pr={6} c="#1971c2">{usd(g.t.abonos)}</Text></Table.Td>
-                    <Table.Td ta="right"><Text fw={800} fz={12} pr={6}>{usd(g.t.base)}</Text></Table.Td>
+                    <Table.Td ta="right">
+                        <Text fw={800} fz={12} pr={6}>{usd(g.t.base)}</Text>
+                        {g.t.baseAbonada > 0 && <Text fw={700} fz={10.5} pr={6} c="#1971c2" title="Sin IVA de lo abonado: va dentro del sin IVA de las facturas">abonado {usd(g.t.baseAbonada)}</Text>}
+                    </Table.Td>
                     <Table.Td />
                     <Table.Td ta="right"><Text fw={800} fz={12} pr={6}>{usd(g.t.comision)}</Text></Table.Td>
                     {cols.bs && <Table.Td ta="right"><Text fw={800} fz={12} pr={6}>{usd(g.t.comision * tasa)}</Text></Table.Td>}

@@ -122,6 +122,7 @@ export function totales(filas) {
         monto: sumar(filas, 'montoUsd'), // la columna tal cual (las facturas suman, los abonos y notas de crédito restan)
         abonos: r2(filas.filter((x) => esPago(x) && x.concepto !== 'NOTA').reduce((t, x) => t + Math.abs(Number(x.montoUsd) || 0), 0)), // lo abonado, en positivo
         facturas: sumar(filas.filter((x) => x.concepto === 'FACTURA' && !esPago(x)), 'montoUsd'), // total de las facturas, con IVA, tal como se facturaron
+        baseAbonada: sumar(filas.filter((x) => esPago(x) && x.concepto !== 'NOTA'), 'baseUsd'), // SIN IVA de lo abonado (ya prorrateado): va DENTRO del sin IVA de las facturas
         base: r2(base), // SIN IVA: sobre esto se calcula la comisión (una vez por factura)
         comision: r2(comision),
         pendiente: r2(pendiente),

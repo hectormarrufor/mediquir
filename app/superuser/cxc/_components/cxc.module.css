@@ -164,7 +164,8 @@
 }
 
 .linea:not([data-hijo]) > td {
-  border-top: 2px solid #ced4da;
+  border-top: 3px solid #1c3d6e;
+  font-weight: 600;
 }
 
 .linea > td:first-child {
@@ -183,10 +184,12 @@
 .linea[data-hijo] > td {
   font-size: 12px;
   height: 26px;
+  background-color: #eef5ff;
+  border-top: 1px dashed #9db8dc;
 }
 
 .linea[data-hijo] > td:first-child {
-  box-shadow: inset 4px 0 0 #adb5bd;
+  box-shadow: inset 10px 0 0 #1971c2;
 }
 
 .linea[data-hijo][data-estado='porpagar'] > td {
@@ -194,11 +197,22 @@
 }
 
 .linea[data-hijo][data-estado='porpagar'] > td:first-child {
-  box-shadow: inset 4px 0 0 #e0b400;
+  box-shadow: inset 10px 0 0 #e0b400;
 }
 
 .linea[data-hijo][data-estado='pagada'] > td {
   background-color: #f3f4f6;
+}
+
+.resumenAbonos > td {
+  background-color: #eaf2fc;
+  border-top: 1px solid #b9d0ee;
+  border-bottom: 2px solid #ced4da;
+  height: 26px;
+}
+
+.resumenAbonos > td:first-child {
+  box-shadow: inset 4px 0 0 #1971c2;
 }
 
 .linea[data-sel] > td {
