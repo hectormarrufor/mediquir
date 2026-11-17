@@ -171,7 +171,7 @@ export async function siguienteControl(t) {
  */
 export async function controlAlNacer(texto, t) {
     const dado = String(texto ?? '').trim().slice(0, 30);
-    if (!dado) return siguienteControl(t);
+    if (!dado) return null; // el número de control se asigna AL IMPRIMIR (asignarControl), no al asentar el documento
     try {
         return await reservarControl(dado, t);
     } catch (e) {

@@ -68,7 +68,7 @@ export default function PorAprobarPage() {
                 <Box>
                     <Button variant="subtle" color="gray.4" size="compact-sm" leftSection={<IconArrowLeft size={16} />} onClick={volver} mb={4}>Ventas</Button>
                     <Title order={telefono ? 3 : 2} c="white">Facturas por aprobar</Title>
-                    <Text size="sm" c="gray.4">Lo que asentaron los vendedores, en orden de número de control. Ábrelo para corregirlo y apruébalo para poder imprimirlo.</Text>
+                    <Text size="sm" c="gray.4">Lo que asentaron los vendedores, en orden de llegada (el número de control se asigna al imprimir). Ábrelo para corregirlo y apruébalo para poder imprimirlo.</Text>
                 </Box>
 
                 {data?.sinMigrar && <Alert color="yellow" title="Falta preparar la base de datos">Hay que correr la migración aprobacion-documentos para que las facturas de los vendedores pasen por aprobación.</Alert>}

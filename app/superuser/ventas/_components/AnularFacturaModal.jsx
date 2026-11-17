@@ -54,9 +54,9 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
     // las facturas hermanas de una nota de entrega, los que siguen. Con un control indicado, la primera nota de esta factura lo toma.
     useEffect(() => {
         if (!plan) return;
-        const pool = [...plan.controlesSugeridos];
-        setControles(Array.from({ length: cuantas }, (_, k) => ({ numero: '', control: k === 0 && controlInicial ? controlInicial : (pool.shift() || '') })));
-        setDocumentos(Object.fromEntries(plan.facturas.filter((f) => f.id !== plan.factura.id).map((f) => [f.id, { numero: '', control: pool.shift() || '' }])));
+        // El control NO se sugiere: se asigna al imprimir la nota (solo se escribe si se copia de una forma ya impresa, o desde «Números de control»)
+        setControles(Array.from({ length: cuantas }, (_, k) => ({ numero: '', control: k === 0 && controlInicial ? controlInicial : '' })));
+        setDocumentos(Object.fromEntries(plan.facturas.filter((f) => f.id !== plan.factura.id).map((f) => [f.id, { numero: '', control: '' }])));
     }, [plan, controlInicial, cuantas]);
     useEffect(() => { setRepartos((r) => Array.from({ length: cuantas }, (_, k) => r[k] || {})); }, [cuantas]);
 
@@ -88,8 +88,7 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
     // Nota PARCIAL sobre una factura ya pagada: no toca cuentas por cobrar, ingresos, inventario ni saldo a favor (se pide confirmación al emitirla)
     const parcialPagada = Boolean(plan?.factura.pagada) && (varias ? !completaVarias : tipo === 'PARCIAL');
     const faltaAfecta = !deNotas && !parcialPagada && !afecta;
-    const faltaControl = facturasNc.some((f) => !String(documentos[f.id]?.control || '').trim())
-        || controles.slice(0, cuantas).some((c) => !String(c?.control || '').trim());
+    const faltaControl = false; // el control se asigna al imprimir
     const sinRenglones = varias ? Array.from({ length: cuantas }, (_, k) => k).some((k) => !(montoNota(k) > 0)) : tipo === 'PARCIAL' && !(montoParcial > 0);
     const bloqueado = !plan || faltaAfecta || faltaControl || sinRenglones || motivoFinal.length < 5 || (deNotas && plan.bloqueosNotas.length > 0);
 
@@ -142,7 +141,7 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                                         <Text size="sm">{plan.renglones.filter((r) => Number(repartos[k]?.[r.id]) > 0).length} renglones · <b>{simbolo} {nf(montoNota(k))}</b></Text>
                                     </Group>
                                     <Group grow align="flex-start" mb={6}>
-                                        <TextInput size="xs" label="Número de control" withAsterisk placeholder="00-0122676" value={controles[k]?.control || ''}
+                                        <TextInput size="xs" label="N° de control (opcional: se asigna al imprimir)" placeholder="déjalo vacío" value={controles[k]?.control || ''}
                                             onChange={(e) => setControles((c) => c.map((x, i) => (i === k ? { ...x, control: e.currentTarget.value } : x)))} />
                                         <TextInput size="xs" label="Número de NC (si ya la emitiste en el sistema anterior)" placeholder={sumarNumero(plan.siguienteNc, k)} value={controles[k]?.numero || ''}
                                             onChange={(e) => setControles((c) => c.map((x, i) => (i === k ? { ...x, numero: e.currentTarget.value } : x)))} />
@@ -227,7 +226,7 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                             <Card withBorder radius="md" p="xs">
                                 <Text size="sm" fw={700} mb={4}>Nota de crédito sobre {plan.factura.numero}</Text>
                                 <Group grow align="flex-start">
-                                    <TextInput size="xs" label="Número de control" withAsterisk placeholder="00-0122676" value={controles[0]?.control || ''}
+                                    <TextInput size="xs" label="N° de control (opcional: se asigna al imprimir)" placeholder="déjalo vacío" value={controles[0]?.control || ''}
                                         onChange={(e) => setControles((c) => c.map((x, i) => (i === 0 ? { ...x, control: e.currentTarget.value } : x)))} />
                                     <TextInput size="xs" label="Número de NC (si ya la emitiste en el sistema anterior)" placeholder={plan.siguienteNc || ''} value={controles[0]?.numero || ''}
                                         onChange={(e) => setControles((c) => c.map((x, i) => (i === 0 ? { ...x, numero: e.currentTarget.value } : x)))} />
@@ -238,7 +237,7 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                             <Card key={f.id} withBorder radius="md" p="xs">
                                 <Text size="sm" fw={700} mb={4}>Nota de crédito sobre {f.numero}{deNotas ? ` (${f.moneda === 'BS' ? 'Bs' : '$'} ${nf(f.acreditable)})` : ''}</Text>
                                 <Group grow align="flex-start">
-                                    <TextInput size="xs" label="Número de control" withAsterisk placeholder="00-0122676" value={documentos[f.id]?.control || ''}
+                                    <TextInput size="xs" label="N° de control (opcional: se asigna al imprimir)" placeholder="déjalo vacío" value={documentos[f.id]?.control || ''}
                                         onChange={(e) => setDocumentos((d) => ({ ...d, [f.id]: { ...d[f.id], control: e.currentTarget.value } }))} />
                                     <TextInput size="xs" label="Número de NC (si ya la emitiste en el sistema anterior)" placeholder={plan.siguienteNc || ''} value={documentos[f.id]?.numero || ''}
                                         onChange={(e) => setDocumentos((d) => ({ ...d, [f.id]: { ...d[f.id], numero: e.currentTarget.value } }))} />

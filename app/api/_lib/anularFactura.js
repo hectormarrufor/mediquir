@@ -182,7 +182,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
     const datosDe = (id) => documentos?.[id] || {};
     const control = async (id) => {
         const c = String(datosDe(id).control || '').trim();
-        if (!c) throw new ErrorAnulacion('Indica el número de control de cada nota de crédito');
+        if (!c) return null; // sin control escrito: se asigna al imprimir la nota
         try { return await reservarControl(c, t); } catch (e) { if (e instanceof ErrorNumeracion) throw new ErrorAnulacion(e.message, e.status); throw e; }
     };
     const emitir = async (factura, lineas, devuelve, afecta, texto) => emitirNotaVenta({
@@ -222,7 +222,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
         for (let i = 0; i < grupos.length; i++) {
             const g = grupos[i];
             let ctrl;
-            try { ctrl = await reservarControl(String(g.control || '').trim(), t); } catch (e) { if (e instanceof ErrorNumeracion) throw new ErrorAnulacion(`Nota ${i + 1}: ${e.message}`, e.status); throw e; }
+            try { ctrl = String(g.control || '').trim() ? await reservarControl(String(g.control).trim(), t) : null; } catch (e) { if (e instanceof ErrorNumeracion) throw new ErrorAnulacion(`Nota ${i + 1}: ${e.message}`, e.status); throw e; }
             const nota = await emitirNotaVenta({
                 venta, tipo: 'CREDITO', renglones: g.renglones, devuelveInventario: devuelve, afectaCxc: sinCxc ? false : afectaCxc, usuarioId, transaction: t,
                 motivo: `Anulación ${completa ? 'total' : 'parcial'} de la factura ${venta.numeroDocumento} en ${grupos.length} notas de crédito (${i + 1} de ${grupos.length}): ${motivoTxt}`,

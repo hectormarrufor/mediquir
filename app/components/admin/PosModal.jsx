@@ -602,7 +602,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 tipoVenta,
                 tipoDocumento: tipoDocumentoActual === 'VENTA RAPIDA' ? 'VENTA_RAPIDA' : (tipoDocumentoActual === 'NOTA DE ENTREGA' ? 'NOTA_ENTREGA' : 'FACTURA'),
                 numeroDocumentoManual: formVenta.values.numeroDocumento,
-                numeroControl: tipoDocumentoActual === 'FACTURA' ? formVenta.values.numeroControl : null,
+                // El control de la forma libre NO se asigna al asentar: sale al imprimir. Solo se manda el del talonario o el de un hueco que se registra.
+                numeroControl: tipoDocumentoActual === 'FACTURA' && (formVenta.values.facturaTalonario || controlInicial) ? formVenta.values.numeroControl : null,
                 facturaTalonario: tipoDocumentoActual === 'FACTURA' && puedeEditarPrecio && formVenta.values.facturaTalonario ? true : undefined,
                 fechaEmision: puedeEditarPrecio && formVenta.values.fechaEmision ? formVenta.values.fechaEmision : undefined,
                 clienteId: formVenta.values.clienteId ? Number(formVenta.values.clienteId) : null,
@@ -904,7 +905,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             {/* En la computadora van lado a lado (la explicación debajo del campo) para que el carrito tenga espacio */}
             {(esFactura || puedeEditarPrecio) && (
                 <SimpleGrid cols={!isMobile && esFactura && puedeEditarPrecio ? 2 : 1} spacing="xs" mt="xs">
-                    {esFactura && (
+                    {esFactura && (talonario || controlInicial) && (
                         <TextInput label={talonario ? 'N° de control del talonario' : 'N° de control'} withAsterisk={talonario} placeholder={talonario ? (guiaTalonario?.controlSugerido || '00-0000000') : (siguienteControl || '00-000000')} description={talonario ? `Escribe el control impreso en esta factura del talonario (distinto al de la forma libre).${guiaTalonario?.ultima ? ` La última cargada fue ${guiaTalonario.ultima.numero}, control ${guiaTalonario.ultima.control}.` : ''}` : (siguienteControl ? `Vacío = toma el siguiente: ${siguienteControl}. Si la forma que vas a imprimir trae otro, escríbelo.` : undefined)} size={tamCampo} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
                     )}
                     {puedeEditarPrecio && (
@@ -1201,7 +1202,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     );
 
     // ---------------- Computadora: filas compactas (el carrito es lo que importa, así que lo de arriba ocupa lo mínimo) ----------------
-    const ayudaDocEscritorio = faltaDocumento ? 'Elige FACTURA o NOTA DE ENTREGA: es obligatorio antes de asentar. Factura = con IVA y número de control; nota de entrega = sin IVA.' : [
+    const ayudaDocEscritorio = faltaDocumento ? 'Elige FACTURA o NOTA DE ENTREGA: es obligatorio antes de asentar. Factura = con IVA; nota de entrega = sin IVA. El número de control se asigna al imprimir.' : [
         talonario ? `Control del talonario (distinto al de la forma libre).${guiaTalonario?.ultima ? ` Última cargada: ${guiaTalonario.ultima.numero}, control ${guiaTalonario.ultima.control}.` : ''}` : (esFactura && siguienteControl ? `Control vacío = toma el siguiente (${siguienteControl}).` : ''),
         puedeEditarPrecio ? 'Fecha vacía = hoy; si copias una factura de otro día, elige esa fecha (toma la tasa BCV de ese día).' : '',
     ].filter(Boolean).join(' ');
@@ -1211,7 +1212,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             <Group gap="sm" align="flex-end" wrap="wrap">
                 {selectorDocumento}
                 {!faltaDocumento && <TextInput label={talonario ? 'N° de factura (talonario)' : (esFactura ? 'Correlativo de factura' : 'Correlativo de nota de entrega')} placeholder={talonario ? '0123' : undefined} size="xs" w={talonario ? 160 : 170} autoComplete="off" {...formVenta.getInputProps('numeroDocumento')} />}
-                {esFactura && (
+                {esFactura && (talonario || controlInicial) && (
                     <TextInput label={talonario ? 'N° de control del talonario' : 'N° de control'} withAsterisk={talonario} placeholder={talonario ? (guiaTalonario?.controlSugerido || '00-0000000') : (siguienteControl || '00-000000')} size="xs" w={170} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
                 )}
                 {puedeEditarPrecio && (
