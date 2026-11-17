@@ -57,7 +57,7 @@ function FilaLinea({ l, hijo, d, hoja, acc, tasa, cols }) {
             </Table.Td>
             <Table.Td><CeldaEditable tipo="numero" valor={l.baseUsd} align="right" formato={usd} etiqueta={`A comisionar sin IVA de ${etiqueta}`} onGuardar={(v) => hoja.editar(l, { baseUsd: v })} /></Table.Td>
             <Table.Td>
-                {!pago && <CeldaEditable tipo="opciones" opciones={opcionesPct(l.porcentaje)} valor={l.porcentaje === null || l.porcentaje === undefined ? '' : String(Number(l.porcentaje))} align="right" negrita formato={pctTexto} etiqueta={`Porcentaje de ${etiqueta}`} onGuardar={(v) => hoja.editar(l, { porcentaje: Number(v) })} />}
+                {l.concepto !== 'NOTA' && <CeldaEditable tipo="opciones" opciones={opcionesPct(l.porcentaje)} valor={l.porcentaje === null || l.porcentaje === undefined ? '' : String(Number(l.porcentaje))} align="right" negrita formato={pctTexto} etiqueta={`Porcentaje de ${etiqueta}`} onGuardar={(v) => hoja.editar(l, { porcentaje: Number(v) })} />}
             </Table.Td>
             <Table.Td title={estado === 'enabonos' ? 'Comisión posible: la real la generan sus abonos' : l.calculada ? 'Calculada sobre la parte sin IVA del abono' : undefined}>
                 <CeldaEditable tipo="numero" valor={l.comisionUsd} align="right" formato={usd} negrita={!hijo && estado !== 'enabonos'} color={estado === 'enabonos' ? '#868e96' : undefined} etiqueta={`Comisión de ${etiqueta}`} onGuardar={(v) => hoja.editar(l, { comisionUsd: v })} />

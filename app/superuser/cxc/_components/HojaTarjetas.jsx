@@ -36,6 +36,7 @@ function TarjetaPago({ l, hijo, hoja, acc, tasa }) {
                         <Text fz={12.5} fw={700}>{hijo ? '└ ' : ''}{nota ? 'Nota de crédito' : 'Abono'} · {fmtFecha(l.fecha) || 'sin fecha'}</Text>
                         {!hijo && <Text fz={11.5} c="#5c6675" truncate="end">de {l.documentoTexto || 'sin número'}</Text>}
                         <Text fz={15} fw={800} c={nota ? 'orange.9' : '#1971c2'}>{dolares(Math.abs(Number(l.montoUsd) || 0))}</Text>
+                        {!nota && l.porcentaje !== null && l.porcentaje !== undefined && <Text fz={11.5} c="#5c6675" fw={600}>Comisión {Number(l.porcentaje)} %</Text>}
                     </Box>
                 </Group>
                 <Box ta="right" style={{ flexShrink: 0 }}>

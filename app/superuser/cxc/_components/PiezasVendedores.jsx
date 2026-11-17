@@ -117,7 +117,7 @@ export function DialogoEditarLinea({ linea: l, tasa, hijos = 0, onCerrar, onGuar
     const poner = (k) => (v) => { const valor = v?.currentTarget ? v.currentTarget.value : v; setD((x) => ({ ...x, [k]: valor })); };
 
     // si cambia la base o el % (y no se escribió la comisión a mano), la comisión nueva se ve antes de guardar; el servidor la recalcula igual
-    const recalcula = !pago && !tocoComision && (num(d.baseUsd) !== inicial.baseUsd || d.porcentaje !== inicial.porcentaje) && d.baseUsd !== '' && d.porcentaje !== '';
+    const recalcula = (!pago || l.concepto === 'ABONO') && !tocoComision && (num(d.baseUsd) !== inicial.baseUsd || d.porcentaje !== inicial.porcentaje) && d.baseUsd !== '' && d.porcentaje !== '';
     const comisionVista = recalcula ? r2((Number(d.baseUsd) * Number(d.porcentaje)) / 100) : d.comisionUsd;
 
     const cambios = {};
@@ -125,7 +125,7 @@ export function DialogoEditarLinea({ linea: l, tasa, hijos = 0, onCerrar, onGuar
     for (const k of ['documentoTexto', 'clienteTexto', 'fecha', 'vencimiento', 'estatusCliente', 'observacion', 'fechaPagoComision']) if (String(d[k] ?? '') !== String(inicial[k] ?? '')) cambios[k] = d[k];
     if (num(d.monto) !== inicial.monto) cambios.montoUsd = d.monto === '' ? null : (pago ? -Math.abs(Number(d.monto)) : Number(d.monto));
     if (num(d.baseUsd) !== inicial.baseUsd) cambios.baseUsd = d.baseUsd === '' ? null : Number(d.baseUsd);
-    if (!pago && d.porcentaje !== inicial.porcentaje && d.porcentaje !== '') cambios.porcentaje = Number(d.porcentaje);
+    if (l.concepto !== 'NOTA' && d.porcentaje !== inicial.porcentaje && d.porcentaje !== '') cambios.porcentaje = Number(d.porcentaje);
     if (tocoComision && num(d.comisionUsd) !== inicial.comisionUsd) cambios.comisionUsd = d.comisionUsd === '' ? null : Number(d.comisionUsd);
     if (d.estatusComision !== inicial.estatusComision) cambios.estatusComision = d.estatusComision;
     const hay = Object.keys(cambios).length > 0;
@@ -150,7 +150,7 @@ export function DialogoEditarLinea({ linea: l, tasa, hijos = 0, onCerrar, onGuar
                         description={pago ? 'Al cambiarlo se recalculan solas la parte sin IVA y la comisión' : undefined}
                     />
                     <NumberInput label="A comisionar sin IVA" decimalScale={2} min={0} value={d.baseUsd} onChange={poner('baseUsd')} inputMode="decimal" />
-                    {!pago && <Select label="% de comisión" data={opcionesPct(d.porcentaje)} value={d.porcentaje || null} onChange={(v) => v && setD({ ...d, porcentaje: v })} allowDeselect={false} description="Se aplica también a sus abonos por pagar" comboboxProps={{ withinPortal: true }} />}
+                    {l.concepto !== 'NOTA' && <Select label="% de comisión" data={opcionesPct(d.porcentaje)} value={d.porcentaje || null} onChange={(v) => v && setD({ ...d, porcentaje: v })} allowDeselect={false} description={pago ? 'Solo de este abono' : 'Se aplica también a sus abonos por pagar que tengan el mismo %'} comboboxProps={{ withinPortal: true }} />}
                     <NumberInput
                         label="Comisión USD" decimalScale={2} min={0} value={comisionVista} inputMode="decimal"
                         onChange={(v) => { setTocoComision(true); setD((x) => ({ ...x, comisionUsd: v })); }}

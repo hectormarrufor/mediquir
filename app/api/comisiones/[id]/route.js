@@ -57,15 +57,16 @@ export async function PATCH(request, { params }) {
             const pct = c.porcentaje !== undefined ? c.porcentaje : (linea.porcentaje === null ? null : Number(linea.porcentaje));
             if (c.baseUsd !== null && pct !== null) c.comisionUsd = r2((c.baseUsd * pct) / 100);
         }
+        const pctAnterior = linea.porcentaje === null ? null : Number(linea.porcentaje);
         await linea.update(c);
-        // el porcentaje se fija en la FACTURA: al cambiarlo, los abonos que aún no se han pagado (los amarillos) toman el nuevo y recalculan su comisión
-        // (los ya pagados no se tocan)
+        // cada abono tiene su propio porcentaje. Al cambiar el de la FACTURA, los abonos por pagar que seguían con el anterior (o sin porcentaje) toman el nuevo y
+        // recalculan su comisión; los que tienen otro puesto a mano y los ya pagados no se tocan
         let hijosActualizados = 0;
         if (tiene('porcentaje') && c.porcentaje !== null && c.porcentaje !== undefined && linea.concepto === 'FACTURA' && Number(linea.montoUsd) > 0 && linea.documentoTexto) {
             const [, meta] = await sequelize.query(
                 `UPDATE "ComisionesVenta" SET porcentaje = :p, "comisionUsd" = CASE WHEN "baseUsd" IS NOT NULL THEN round("baseUsd" * :p / 100, 2) ELSE "comisionUsd" END, "updatedAt" = now()
-                  WHERE "vendedorId" = :v AND "documentoTexto" = :d AND id <> :id AND "estatusComision" <> 'PAGADA' AND (concepto = 'ABONO' OR ("montoUsd" < 0 AND concepto <> 'NOTA'))`,
-                { replacements: { p: c.porcentaje, v: linea.vendedorId, d: linea.documentoTexto, id: linea.id } },
+                  WHERE "vendedorId" = :v AND "documentoTexto" = :d AND id <> :id AND "estatusComision" <> 'PAGADA' AND (porcentaje IS NULL OR porcentaje = :ant) AND (concepto = 'ABONO' OR ("montoUsd" < 0 AND concepto <> 'NOTA'))`,
+                { replacements: { p: c.porcentaje, ant: pctAnterior, v: linea.vendedorId, d: linea.documentoTexto, id: linea.id } },
             );
             hijosActualizados = meta?.rowCount ?? 0;
         }
