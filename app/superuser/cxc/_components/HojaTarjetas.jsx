@@ -11,6 +11,7 @@ import { CobroFactura, EstadoComision, MenuLinea, cifrasDe } from './PiezasVende
 import { esPago, estadoLinea } from './comisiones';
 import { bolivares, dolares, fmtFecha } from './utilidades';
 import classes from './cxc.module.css';
+import NumeroFactura from './NumeroFactura';
 
 const marcaTarjeta = (e) => (e === 'porpagar' ? 'porpagar' : e === 'pagada' ? 'pagada' : undefined);
 
@@ -34,7 +35,7 @@ function TarjetaPago({ l, hijo, hoja, acc, tasa }) {
                     <Checkbox size="md" mt={2} checked={hoja.sel.has(l.id)} onChange={(ev) => hoja.alternarSel(l.id, ev.currentTarget.checked)} aria-label={`Seleccionar el ${nota ? 'pago' : 'abono'} del ${fmtFecha(l.fecha)}`} />
                     <Box style={{ minWidth: 0 }}>
                         <Text fz={12.5} fw={700}>{hijo ? '└ ' : ''}{nota ? 'Nota de crédito' : 'Abono'} · {fmtFecha(l.fecha) || 'sin fecha'}</Text>
-                        {!hijo && <Text fz={11.5} c="#5c6675" truncate="end">de {l.documentoTexto || 'sin número'}</Text>}
+                        {!hijo && <NumeroFactura ventaId={l.ventaId} fz={11.5} c="#5c6675" truncate="end">de {l.documentoTexto || 'sin número'}</NumeroFactura>}
                         <Text fz={15} fw={800} c={nota ? 'orange.9' : '#1971c2'}>{dolares(Math.abs(Number(l.montoUsd) || 0))}</Text>
                         {!nota && l.porcentaje !== null && l.porcentaje !== undefined && <Text fz={11.5} c="#5c6675" fw={600}>Comisión {Number(l.porcentaje)} %</Text>}
                     </Box>
@@ -70,7 +71,7 @@ function TarjetaFactura({ d, hoja, acc, tasa }) {
                     <Checkbox size="md" mt={2} checked={hoja.sel.has(pa.id)} onChange={(ev) => hoja.alternarSel(pa.id, ev.currentTarget.checked)} aria-label={`Seleccionar la factura ${pa.documentoTexto || ''}`} />
                     <Box style={{ minWidth: 0 }}>
                         <Group gap={6} wrap="nowrap">
-                            <Text fw={800} fz={15} truncate="end">{esPago(pa) ? '' : 'Factura '}{pa.documentoTexto || 'sin número'}</Text>
+                            <NumeroFactura ventaId={pa.ventaId} fw={800} fz={15} truncate="end">{esPago(pa) ? '' : 'Factura '}{pa.documentoTexto || 'sin número'}</NumeroFactura>
                             {!pa.ventaId && <IconLinkOff size={15} color="#b35900" aria-label="Sin enlazar con el sistema" style={{ flexShrink: 0 }} />}
                         </Group>
                         <Text fz={12} c="#5c6675">{fmtFecha(pa.fecha) || 'sin fecha'}{pa.vencimiento ? ` · vence ${fmtFecha(pa.vencimiento)}` : ''}</Text>

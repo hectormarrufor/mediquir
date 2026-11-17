@@ -12,6 +12,7 @@ import { CobroFactura, EstadoComision, MenuLinea, cifrasDe } from './PiezasVende
 import { esPago, estadoLinea, opcionesPct } from './comisiones';
 import { DESPLAZAMIENTO_CABECERA, fmtFecha, useAnchoGrande, useAnchoMuyGrande, usd } from './utilidades';
 import classes from './cxc.module.css';
+import NumeroFactura from './NumeroFactura';
 
 const pctTexto = (v) => (v === null || v === undefined || v === '' ? '' : `${Number(v)}%`);
 
@@ -36,13 +37,15 @@ function FilaLinea({ l, hijo, d, hoja, acc, tasa, cols }) {
                 {hijo ? (
                     <Group gap={5} wrap="nowrap" pl={10} style={{ overflow: 'hidden' }}>
                         <Badge size="xs" variant="light" color={l.concepto === 'NOTA' ? 'orange' : 'blue'} style={{ flexShrink: 0 }}>{l.concepto === 'NOTA' ? 'N/C' : 'Abono'}</Badge>
-                        <Text fz={11} c="#5c6675" truncate="end">de {l.documentoTexto}</Text>
+                        <NumeroFactura ventaId={l.ventaId} fz={11} c="#5c6675" truncate="end">de {l.documentoTexto}</NumeroFactura>
                     </Group>
                 ) : (
                     <Group gap={5} wrap="nowrap" style={{ overflow: 'hidden' }}>
                         {pago && <Badge size="xs" variant="light" color={l.concepto === 'NOTA' ? 'orange' : 'blue'} style={{ flexShrink: 0 }}>{l.concepto === 'NOTA' ? 'N/C' : 'Abono'}</Badge>}
                         <Box style={{ minWidth: 0, flex: '0 1 auto' }}>
-                            <CeldaEditable valor={l.documentoTexto} etiqueta={`Número de ${etiqueta}`} onGuardar={(v) => hoja.editar(l, { documentoTexto: v })} formato={(v) => <Text span fw={800} fz={13}>{v}</Text>} placeholder="Sin número" />
+                            {l.ventaId
+                                ? <NumeroFactura ventaId={l.ventaId} fw={800} fz={13} truncate="end">{l.documentoTexto}</NumeroFactura>
+                                : <CeldaEditable valor={l.documentoTexto} etiqueta={`Número de ${etiqueta}`} onGuardar={(v) => hoja.editar(l, { documentoTexto: v })} formato={(v) => <Text span fw={800} fz={13}>{v}</Text>} placeholder="Sin número" />}
                         </Box>
                         {!l.ventaId && <Tooltip label="No está enlazada con una factura del sistema: el cobro se lleva a mano"><IconLinkOff size={14} color="#b35900" aria-label="Sin enlazar" style={{ flexShrink: 0 }} /></Tooltip>}
                         <CobroFactura l={l} />
