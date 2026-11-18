@@ -746,8 +746,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [soloBs, formVenta.values.tipoPrecio]);
     const opcionesTarifa = soloBs ? [
-        { value: 'precio4', label: 'Detal (Bs)' },
-        { value: 'precio5', label: 'Mayor (Bs)' },
+        { value: 'precio4', label: 'P4 (Detal, P7 en Bs)' },
+        { value: 'precio5', label: 'P5 (Mayor, P6 en Bs)' },
     ] : [
         { value: 'precio7', label: 'P7 (Detal USD)' },
         { value: 'precio6', label: 'P6 (Mayor USD)' },
@@ -768,7 +768,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         return {
             valor: info.precio, simbolo: info.simbolo, editable: puedeFijarPrecio, etiqueta: etiquetaTarifa,
             opciones: mismas.map((t) => ({ etiqueta: CORTO_TARIFA[t], valor: calcularPrecioInfo(producto, t).precio })),
-            equivalente: tasaBcv > 0 && !soloBs ? (v) => (esMonedaBs ? `≈ $${formatoNumero(aDolares(v, tasaBcv))}` : `≈ Bs ${formatoNumero(aBolivares(v, tasaBcv))}`) : null,
+            // el vendedor cobra en Bs pero ve también el precio en $ (P7/P6)
+            equivalente: tasaBcv > 0 ? (v) => (esMonedaBs ? `≈ $${formatoNumero(aDolares(v, tasaBcv))}` : `≈ Bs ${formatoNumero(aBolivares(v, tasaBcv))}`) : null,
         };
     };
     const esEfectivo = ['Efectivo ($)', 'Efectivo (Bs)'].includes(formVenta.values.metodoPago);
