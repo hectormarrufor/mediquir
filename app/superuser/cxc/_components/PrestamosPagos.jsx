@@ -3,7 +3,9 @@
 // Préstamos a los vendedores a comisión y el pago de su comisión acumulada (completo o una parte, con abono al préstamo y formato de pago).
 import React, { useEffect, useState } from 'react';
 import { ActionIcon, Alert, Box, Button, Group, NumberInput, SegmentedControl, Stack, Table, Text, Textarea } from '@mantine/core';
-import { IconArrowBackUp, IconCash, IconCircleCheck, IconInfoCircle, IconPrinter, IconTrash } from '@tabler/icons-react';
+import { IconArrowBackUp, IconBrandWhatsapp, IconCash, IconCircleCheck, IconInfoCircle, IconPrinter, IconTrash } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
+import { compartirReciboComision, prepararReciboComision } from './reciboComisionPdf';
 import { Dialogo } from './Piezas';
 import { bolivares, dolares, fmtFecha, hoy } from './utilidades';
 import classes from './cxc.module.css';
@@ -12,6 +14,29 @@ const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const acotar = (v, min, max) => Math.min(Math.max(Number(v) || 0, min), max);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const SEG = { root: classes.segRaiz, label: classes.segEtiqueta };
+
+// Compartir el recibo del pago por WhatsApp justo al entregárselo al vendedor. El PDF se prepara de antemano (si `prepararYa`) para que el toque abra la hoja de compartir al instante.
+function avisarCompartido(r) {
+    if (r === 'descargado') notifications.show({ color: 'teal', title: 'Recibo descargado', message: 'Se abrió WhatsApp con el resumen: adjunta el PDF descargado con el clip.', autoClose: 9000 });
+}
+export function BotonWhatsAppRecibo({ pagoId, prepararYa = false, compacto = false, tamano = 'sm' }) {
+    const [estado, setEstado] = useState('inicial'); // inicial | preparando | listo | error
+    const [preparado, setPreparado] = useState(null);
+    const preparar = async () => {
+        setEstado('preparando');
+        try { const p = await prepararReciboComision(pagoId); setPreparado(p); setEstado('listo'); return p; } catch (e) { setEstado('error'); notifications.show({ color: 'red', title: 'No se pudo preparar el recibo', message: e.message }); return null; }
+    };
+    useEffect(() => { if (prepararYa) preparar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pagoId]);
+    const alTocar = async () => {
+        const p = preparado || (await preparar());
+        if (!p) return;
+        try { avisarCompartido(await compartirReciboComision(p)); } catch (e) { notifications.show({ color: 'red', title: 'No se pudo compartir', message: e.message }); }
+    };
+    if (compacto) {
+        return <ActionIcon variant="subtle" color="green" size="sm" aria-label="Compartir recibo por WhatsApp" title="Compartir recibo por WhatsApp" loading={estado === 'preparando'} onClick={alTocar}><IconBrandWhatsapp size={15} /></ActionIcon>;
+    }
+    return <Button size={tamano} color="green" variant="filled" leftSection={<IconBrandWhatsapp size={18} />} loading={estado === 'preparando'} onClick={alTocar}>Compartir por WhatsApp</Button>;
+}
 
 // ---------- Préstamos: saldo, historial (se puede borrar un préstamo), alta de uno nuevo y abono con la comisión acumulada ----------
 export function DialogoPrestamo({ abierto, vendedor, tasa, acumulado = 0, onCerrar, onPrestar, onBorrar, onAbonar, onRevertirPago, onAbonarSuelto }) {
@@ -63,7 +88,8 @@ export function DialogoPrestamo({ abierto, vendedor, tasa, acumulado = 0, onCerr
                         {ultimoPago && (
                             <Alert mt="xs" color="teal" variant="light" p="xs" icon={<IconCircleCheck size={16} />}>
                                 Se descontaron {dolares(ultimoPago.monto)} del préstamo.{' '}
-                                <Text span td="underline" fw={700} style={{ cursor: 'pointer' }} onClick={() => imprimirFormatoPago(ultimoPago.id).catch((e) => alert(e.message))}>Imprimir formato de pago</Text>
+                                <Text span td="underline" fw={700} style={{ cursor: 'pointer' }} onClick={() => imprimirFormatoPago(ultimoPago.id).catch((e) => alert(e.message))}>Imprimir formato de pago</Text>{' · '}
+                                <Text span td="underline" fw={700} c="green.8" style={{ cursor: 'pointer' }} onClick={() => prepararReciboComision(ultimoPago.id).then((p) => compartirReciboComision(p)).then(avisarCompartido).catch((e) => alert(e.message))}>Compartir por WhatsApp</Text>
                             </Alert>
                         )}
                     </Box>
@@ -109,6 +135,7 @@ export function DialogoPrestamo({ abierto, vendedor, tasa, acumulado = 0, onCerr
                                             <Table.Td>
                                                 <Group gap={2} wrap="nowrap">
                                                     <ActionIcon variant="subtle" color="gray" size="sm" aria-label="Imprimir formato de pago" title="Imprimir formato de pago" onClick={() => imprimirFormatoPago(pg.id).catch((e) => alert(e.message))}><IconPrinter size={15} /></ActionIcon>
+                                                    <BotonWhatsAppRecibo pagoId={pg.id} compacto />
                                                     {i === 0 && onRevertirPago && (
                                                         <ActionIcon variant="subtle" color="red" size="sm" aria-label="Revertir este pago" title="Revertir este pago (me equivoqué)"
                                                             onClick={() => { if (window.confirm(`¿Revertir el pago #${pg.id} de ${dolares(pg.totalComisionUsd)}? Sus comisiones vuelven a «por pagar» y se quita lo que abonó al préstamo.`)) onRevertirPago(pg).catch(() => {}); }}>
@@ -236,7 +263,8 @@ export function DialogoPagarComision({ abierto, vendedor, total, tasa, onCerrar,
                     </Stack>
                     <Group justify="flex-end" gap="xs">
                         <Button variant="default" size="sm" onClick={onCerrar}>Cerrar</Button>
-                        <Button size="sm" leftSection={<IconPrinter size={16} />} onClick={() => imprimirFormatoPago(hecho.pagoId).catch((e) => alert(e.message))}>Imprimir formato de pago</Button>
+                        <Button size="sm" variant="light" leftSection={<IconPrinter size={16} />} onClick={() => imprimirFormatoPago(hecho.pagoId).catch((e) => alert(e.message))}>Imprimir formato de pago</Button>
+                        <BotonWhatsAppRecibo pagoId={hecho.pagoId} prepararYa />
                     </Group>
                 </Stack>
             </Dialogo>
