@@ -12,6 +12,7 @@ import { formatearFecha } from '@/app/constants/hora';
 import { normRif } from '@/app/constants/rif';
 import { esSinRif } from '@/app/constants/identificacion';
 import ProveedorDrawer from './_components/ProveedorDrawer';
+import ProveedoresTarjetas from './_components/ProveedoresTarjetas';
 
 const dos = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const TAMANO = 40;
@@ -35,6 +36,16 @@ function Indicador({ icono: Icono, color, titulo, valor, detalle, cargando }) {
                 </Box>
             </Group>
         </Card>
+    );
+}
+
+// Indicador compacto para el teléfono
+function Mini({ titulo, valor, color, cargando }) {
+    return (
+        <Paper withBorder radius="md" p="xs" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+            <Text fz={10} c="dimmed" fw={800} tt="uppercase" lh={1.2}>{titulo}</Text>
+            {cargando ? <Skeleton h={22} w={60} mt={2} /> : <Text fz={19} fw={800} lh={1.25} c={color || 'navy.9'}>{valor}</Text>}
+        </Paper>
     );
 }
 
@@ -79,19 +90,20 @@ export default function ProveedoresPage() {
         return [p.nombre, p.telefono, p.email].some((x) => String(x || '').toLowerCase().includes(q)) || (rifQ && normRif(p.identificacion).includes(rifQ));
     }), [proveedores, q, filtro]);
 
-    const paginas = Math.max(1, Math.ceil(filtrados.length / TAMANO));
-    const visibles = filtrados.slice((pagina - 1) * TAMANO, pagina * TAMANO);
+    const tamano = isMobile ? 20 : TAMANO;
+    const paginas = Math.max(1, Math.ceil(filtrados.length / tamano));
+    const visibles = filtrados.slice((pagina - 1) * tamano, pagina * tamano);
     const deudaTotal = [kpi.usd > 0.005 ? `$${dos.format(kpi.usd)}` : null, kpi.bs > 0.005 ? `Bs ${dos.format(kpi.bs)}` : null].filter(Boolean).join(' · ') || '$0,00';
 
     return (
-        <Box maw={1400} mx="auto" px="md" py="md">
-            <Stack gap="lg">
-                <Group justify="space-between" align="flex-end" wrap="wrap">
-                    <Box>
-                        <Title order={2} c="white">Proveedores</Title>
-                        <Text size="sm" c="gray.4">Registra proveedores, revisa sus compras y lo que se les debe, y su porcentaje de retención de IVA.</Text>
+        <Box maw={1400} mx="auto" px={isMobile ? 'xs' : 'md'} py="md">
+            <Stack gap={isMobile ? 'sm' : 'lg'}>
+                <Group justify="space-between" align="center" wrap={isMobile ? 'nowrap' : 'wrap'}>
+                    <Box style={{ minWidth: 0 }}>
+                        <Title order={isMobile ? 3 : 2} c="white">Proveedores</Title>
+                        {!isMobile && <Text size="sm" c="gray.4">Registra proveedores, revisa sus compras y lo que se les debe, y su porcentaje de retención de IVA.</Text>}
                     </Box>
-                    <Button size="md" color="accent.6" leftSection={<IconPlus size={18} />} onClick={() => setDrawer({ proveedor: null })}>Registrar proveedor</Button>
+                    <Button size={isMobile ? 'sm' : 'md'} color="accent.6" leftSection={<IconPlus size={18} />} onClick={() => setDrawer({ proveedor: null })} style={{ flexShrink: 0 }}>{isMobile ? 'Nuevo' : 'Registrar proveedor'}</Button>
                 </Group>
 
                 {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}
@@ -111,21 +123,34 @@ export default function ProveedoresPage() {
                     </Alert>
                 )}
 
+                {isMobile ? (
+                    <SimpleGrid cols={2} spacing="xs">
+                        <Mini titulo="Proveedores activos" valor={kpi.activos} cargando={isLoading} />
+                        {permisos.verDeuda && <Mini titulo="Por pagar" valor={deudaTotal} color="red.7" cargando={isLoading} />}
+                        {permisos.verDeuda && <Mini titulo="Con saldo" valor={kpi.conDeuda} cargando={isLoading} />}
+                        <Mini titulo="Sin compras" valor={kpi.sinCompras} cargando={isLoading} />
+                    </SimpleGrid>
+                ) : (
                 <SimpleGrid cols={{ base: 1, xs: 2, lg: permisos.verDeuda ? 3 : 2 }} spacing="md">
                     <Indicador icono={IconBuildingWarehouse} color="blue" titulo="Proveedores activos" cargando={isLoading} valor={kpi.activos} detalle={kpi.inactivos ? `${kpi.inactivos} inactivo(s)` : null} />
                     {permisos.verDeuda && <Indicador icono={IconCash} color="red" titulo="Por pagar" cargando={isLoading} valor={deudaTotal} detalle={`${kpi.conDeuda} proveedor(es) con saldo`} />}
                     <Indicador icono={IconPackageOff} color="gray" titulo="Sin compras" cargando={isLoading} valor={kpi.sinCompras} detalle="Activos sin compras registradas" />
                 </SimpleGrid>
+                )}
 
-                <Paper withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
-                    <Group gap="sm" mb="md" wrap="wrap" align="flex-end">
-                        <SegmentedControl color="navy.9" value={filtro} onChange={setFiltro} fullWidth={isMobile}
-                            data={[{ value: 'activos', label: 'Activos' }, ...(permisos.verDeuda ? [{ value: 'deuda', label: 'Con saldo' }] : []), { value: 'inactivos', label: 'Inactivos' }, { value: 'todos', label: 'Todos' }]} />
-                        <TextInput flex="1 1 240px" placeholder="Buscar por nombre, RIF, teléfono o correo…" leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)} />
-                    </Group>
+                <Paper withBorder radius="lg" p={isMobile ? 'xs' : 'md'} style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+                    <Stack gap="xs" mb="sm">
+                        <TextInput size={isMobile ? 'md' : 'sm'} placeholder={isMobile ? 'Buscar proveedor, RIF o teléfono…' : 'Buscar por nombre, RIF, teléfono o correo…'} leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)} />
+                        <Box style={{ overflowX: 'auto' }}>
+                            <SegmentedControl color="navy.9" value={filtro} onChange={setFiltro} fullWidth={isMobile} size={isMobile ? 'xs' : 'sm'}
+                                data={[{ value: 'activos', label: 'Activos' }, ...(permisos.verDeuda ? [{ value: 'deuda', label: isMobile ? 'Con deuda' : 'Con saldo' }] : []), { value: 'inactivos', label: 'Inactivos' }, { value: 'todos', label: 'Todos' }]} />
+                        </Box>
+                    </Stack>
 
                     {isLoading ? <Stack gap="xs">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} h={48} />)}</Stack>
-                        : !visibles.length ? <Center py={50}><Text c="dimmed">No hay proveedores con esos filtros.</Text></Center> : (
+                        : !visibles.length ? <Center py={50}><Text c="dimmed">No hay proveedores con esos filtros.</Text></Center> : isMobile ? (
+                            <ProveedoresTarjetas filas={visibles} verDeuda={permisos.verDeuda} textoDeuda={textoDeuda} debe={debe} onAbrir={(p) => setDrawer({ proveedor: p })} />
+                        ) : (
                             <Table.ScrollContainer minWidth={permisos.verDeuda ? 980 : 820}>
                                 <Table striped highlightOnHover verticalSpacing="sm">
                                     <Table.Thead bg="gray.0">

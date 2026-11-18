@@ -15,6 +15,8 @@ import { useAuth } from '@/hooks/useAuth';
 import ClienteDrawer from './_components/ClienteDrawer';
 import AccesoModal from './_components/AccesoModal';
 import ClientesGrid from './_components/ClientesGrid';
+import ClientesTarjetas from './_components/ClientesTarjetas';
+import { useEsTelefono } from '@/app/components/ui/modalMovil';
 import { esSinRif } from '@/app/constants/identificacion';
 import { COLUMNAS, comparar } from './_components/columnasClientes';
 
@@ -44,8 +46,19 @@ function Indicador({ icono: Icono, color, titulo, valor, detalle, cargando }) {
     );
 }
 
+// Indicador compacto para el teléfono: cuatro caben en dos filas pequeñas
+function Mini({ titulo, valor, color, cargando }) {
+    return (
+        <Paper withBorder radius="md" p="xs" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+            <Text fz={10} c="dimmed" fw={800} tt="uppercase" lh={1.2}>{titulo}</Text>
+            {cargando ? <Skeleton h={22} w={60} mt={2} /> : <Text fz={19} fw={800} lh={1.25} c={color || 'navy.9'}>{valor}</Text>}
+        </Paper>
+    );
+}
+
 export default function ClientesDashboard() {
     const router = useRouter();
+    const telefono = useEsTelefono();
     const { esVendedor } = useAuth();
     const { data, isLoading, error } = useQuery({ queryKey: ['clientes', 'resumen'], queryFn: () => pedirJson('/api/clientes/resumen') });
 
@@ -99,18 +112,19 @@ export default function ClientesDashboard() {
         vendedorComisionId: [{ value: '', label: 'Sin vendedor' }, ...(data?.vendedores || []).filter((v) => v.activo).map((v) => ({ value: String(v.id), label: v.nombre }))],
     }), [data]);
 
-    const paginas = Math.max(1, Math.ceil(ordenados.length / TAMANO));
-    const visibles = ordenados.slice((pagina - 1) * TAMANO, pagina * TAMANO);
+    const tamano = telefono ? 20 : TAMANO;
+    const paginas = Math.max(1, Math.ceil(ordenados.length / tamano));
+    const visibles = ordenados.slice((pagina - 1) * tamano, pagina * tamano);
 
     return (
-        <Box maw={1500} mx="auto" px="md" py="md">
-            <Stack gap="lg">
-                <Group justify="space-between" align="flex-end" wrap="wrap">
-                    <Box>
-                        <Title order={2} c="white">Clientes</Title>
-                        <Text size="sm" c="gray.4">Registra clientes, dales acceso al portal B2B y sigue sus compras y saldos.</Text>
+        <Box maw={1500} mx="auto" px={telefono ? 'xs' : 'md'} py="md">
+            <Stack gap={telefono ? 'sm' : 'lg'}>
+                <Group justify="space-between" align="center" wrap={telefono ? 'nowrap' : 'wrap'}>
+                    <Box style={{ minWidth: 0 }}>
+                        <Title order={telefono ? 3 : 2} c="white">Clientes</Title>
+                        {!telefono && <Text size="sm" c="gray.4">Registra clientes, dales acceso al portal B2B y sigue sus compras y saldos.</Text>}
                     </Box>
-                    <Button size="md" color="accent.6" leftSection={<IconPlus size={18} />} onClick={() => setDrawer(true)}>Registrar cliente</Button>
+                    <Button size={telefono ? 'sm' : 'md'} color="accent.6" leftSection={<IconPlus size={18} />} onClick={() => setDrawer(true)} style={{ flexShrink: 0 }}>{telefono ? 'Nuevo' : 'Registrar cliente'}</Button>
                 </Group>
 
                 {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}
@@ -129,6 +143,14 @@ export default function ClientesDashboard() {
                     </Alert>
                 )}
 
+                {telefono ? (
+                    <SimpleGrid cols={2} spacing="xs">
+                        <Mini titulo="Clientes" valor={kpi.total} cargando={isLoading} />
+                        <Mini titulo="Con acceso B2B" valor={kpi.conAcceso} color="teal.7" cargando={isLoading} />
+                        {!esVendedor && <Mini titulo="Por cobrar" valor={fmtUsd(kpi.deuda)} color="orange.7" cargando={isLoading} />}
+                        {!esVendedor && <Mini titulo="Con saldo" valor={kpi.conSaldo} cargando={isLoading} />}
+                    </SimpleGrid>
+                ) : (
                 <SimpleGrid cols={{ base: 1, xs: 2, lg: esVendedor ? 3 : 4 }} spacing="md">
                     <Indicador icono={IconUsers} color="blue" titulo="Clientes" cargando={isLoading} valor={kpi.total} detalle={`${kpi.nuevos} nuevo(s) este mes`} />
                     <Indicador icono={IconUserCheck} color="teal" titulo="Con acceso B2B" cargando={isLoading} valor={kpi.conAcceso} detalle={`${kpi.total - kpi.conAcceso} sin acceso`} />
@@ -136,15 +158,18 @@ export default function ClientesDashboard() {
                     {!esVendedor && <Indicador icono={IconUserOff} color="gray" titulo="Sin compras" cargando={isLoading} valor={clientes.filter((c) => !c.pedidos).length} detalle="Aún no han comprado" />}
                     {esVendedor && <Indicador icono={IconUserOff} color="gray" titulo="Sin acceso B2B" cargando={isLoading} valor={kpi.total - kpi.conAcceso} />}
                 </SimpleGrid>
+                )}
 
-                <Paper withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
-                    <Group gap="sm" mb="md" wrap="wrap" align="flex-end">
-                        <SegmentedControl color="navy.9" value={filtro} onChange={setFiltro}
-                            data={[{ value: 'todos', label: 'Todos' }, { value: 'acceso', label: 'Con acceso B2B' }, { value: 'sin-acceso', label: 'Sin acceso' }, ...(esVendedor ? [] : [{ value: 'saldo', label: 'Con saldo' }])]} />
-                        <TextInput flex="1 1 240px" placeholder="Buscar por nombre, RIF, teléfono, correo o usuario…" leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)} />
-                    </Group>
+                <Paper withBorder radius="lg" p={telefono ? 'xs' : 'md'} style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+                    <Stack gap="xs" mb="sm">
+                        <TextInput size={telefono ? 'md' : 'sm'} placeholder={telefono ? 'Buscar cliente, RIF o teléfono…' : 'Buscar por nombre, RIF, teléfono, correo o usuario…'} leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)} />
+                        <Box style={{ overflowX: 'auto' }}>
+                            <SegmentedControl color="navy.9" value={filtro} onChange={setFiltro} fullWidth={telefono} size={telefono ? 'xs' : 'sm'}
+                                data={[{ value: 'todos', label: 'Todos' }, { value: 'acceso', label: telefono ? 'Con B2B' : 'Con acceso B2B' }, { value: 'sin-acceso', label: telefono ? 'Sin B2B' : 'Sin acceso' }, ...(esVendedor ? [] : [{ value: 'saldo', label: telefono ? 'Deben' : 'Con saldo' }])]} />
+                        </Box>
+                    </Stack>
 
-                    {permisos.editar && (
+                    {permisos.editar && !telefono && (
                         <Text size="xs" c="dimmed" mb="xs">
                             Haz clic en una celda y pulsa Enter (o escribe) para editarla: se guarda al instante. Tab / flechas para moverte, Esc cancela, Ctrl+Z deshace.
                             {!permisos.editarCredito && ' Los días y el cupo de crédito solo los cambia un administrador.'}
@@ -152,10 +177,15 @@ export default function ClientesDashboard() {
                     )}
                     {isLoading ? <Stack gap="xs">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} h={52} />)}</Stack>
                         : !visibles.length ? <Center py={50}><Text c="dimmed">No hay clientes con esos filtros.</Text></Center> : (
+                            telefono ? (
+                                <ClientesTarjetas filas={visibles} esVendedor={esVendedor} permisos={permisos}
+                                    onFicha={(id) => router.push(`/superuser/clientes/${id}`)} onAcceso={(cliente) => setAcceso({ cliente })} />
+                            ) : (
                             <ClientesGrid
                                 filas={visibles} columnas={columnas} permisos={permisos} orden={orden} onOrden={onOrden} opciones={opciones}
                                 onFicha={(id) => router.push(`/superuser/clientes/${id}`)} onAcceso={(cliente) => setAcceso({ cliente })}
                             />
+                            )
                         )}
 
                     <Group justify="space-between" mt="md" wrap="wrap">

@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Card, Center, Grid, Group, Paper, SegmentedControl, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title } from '@mantine/core';
+import Link from 'next/link';
+import { Alert, Box, Card, Center, Grid, Group, Paper, SegmentedControl, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, UnstyledButton } from '@mantine/core';
 import { LineChart, BarChart, DonutChart } from '@mantine/charts';
 import { DatePickerInput } from '@mantine/dates';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import { IconAlertTriangle, IconArrowDownRight, IconArrowUpRight, IconBuildingWarehouse, IconPercentage, IconReceiptTax, IconScale, IconUsers, IconWallet } from '@tabler/icons-react';
+import { IconAlertTriangle, IconArrowDownRight, IconArrowUpRight, IconBuildingWarehouse, IconChevronRight, IconPercentage, IconReceiptTax, IconScale, IconUsers, IconWallet } from '@tabler/icons-react';
 import { aBolivares } from '@/app/constants/facturacion';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 
@@ -30,19 +31,24 @@ async function pedirJson(url) {
     return cuerpo;
 }
 
-function Indicador({ icono: Icono, color, titulo, valor, detalle, colorValor, cargando }) {
-    return (
-        <Card withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+// Con `href`, tocar el indicador lleva al módulo donde está el detalle de ese número (flecha a la derecha)
+function Indicador({ icono: Icono, color, titulo, valor, detalle, colorValor, cargando, href, verEn }) {
+    const tarjeta = (
+        <Card withBorder radius="lg" p="md" h="100%" style={{ boxShadow: 'var(--mm-shadow-card)', transition: 'transform .15s ease' }}
+            onMouseEnter={href ? (e) => { e.currentTarget.style.transform = 'translateY(-2px)'; } : undefined} onMouseLeave={href ? (e) => { e.currentTarget.style.transform = 'none'; } : undefined}>
             <Group wrap="nowrap" align="flex-start">
                 <ThemeIcon size={44} radius="md" variant="light" color={color}><Icono size={24} /></ThemeIcon>
                 <Box style={{ minWidth: 0 }}>
                     <Text size="xs" c="dimmed" fw={700} tt="uppercase">{titulo}</Text>
                     {cargando ? <Skeleton h={28} w={110} mt={4} /> : <Text fz={24} fw={800} lh={1.2} c={colorValor || 'navy.9'}>{valor}</Text>}
                     {detalle && !cargando && <Text size="xs" c="dimmed">{detalle}</Text>}
+                    {href && verEn && <Text size="xs" c="blue.7" fw={700} mt={2}>Ver en {verEn}</Text>}
                 </Box>
+                {href && <IconChevronRight size={18} color="var(--mantine-color-gray-5)" style={{ marginLeft: 'auto', flexShrink: 0, alignSelf: 'center' }} />}
             </Group>
         </Card>
     );
+    return href ? <UnstyledButton component={Link} href={href} style={{ display: 'block', height: '100%' }}>{tarjeta}</UnstyledButton> : tarjeta;
 }
 
 function Tarjeta({ titulo, children, cargando, vacio }) {
@@ -128,17 +134,17 @@ export default function BalanceTab() {
             {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}
 
             <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
-                <Indicador icono={IconArrowUpRight} color="teal" titulo="Ingresos" cargando={isLoading} valor={fmtUsd(k?.ingresos)} detalle={tasa ? fmtBs(aBolivares(k?.ingresos || 0, tasa)) : 'Cobros del periodo, sin IVA'} />
-                <Indicador icono={IconArrowDownRight} color="red" titulo="Gastos" cargando={isLoading} valor={fmtUsd(k?.gastos)} detalle={tasa ? fmtBs(aBolivares(k?.gastos || 0, tasa)) : undefined} />
-                <Indicador icono={IconScale} color={positivo ? 'teal' : 'red'} titulo="Utilidad del periodo" cargando={isLoading} valor={fmtUsd(k?.utilidad)} colorValor={positivo ? 'teal.7' : 'red.7'} detalle="Ingresos - gastos" />
-                <Indicador icono={IconPercentage} color="grape" titulo="Margen" cargando={isLoading} valor={`${k?.margen ?? 0}%`} detalle={`${k?.movimientos ?? 0} movimientos`} />
+                <Indicador icono={IconArrowUpRight} color="teal" titulo="Ingresos" href="/superuser/finanzas?tab=movimientos" verEn="Movimientos de caja" cargando={isLoading} valor={fmtUsd(k?.ingresos)} detalle={tasa ? fmtBs(aBolivares(k?.ingresos || 0, tasa)) : 'Cobros del periodo, sin IVA'} />
+                <Indicador icono={IconArrowDownRight} color="red" titulo="Gastos" href="/superuser/finanzas?tab=movimientos" verEn="Movimientos de caja" cargando={isLoading} valor={fmtUsd(k?.gastos)} detalle={tasa ? fmtBs(aBolivares(k?.gastos || 0, tasa)) : undefined} />
+                <Indicador icono={IconScale} color={positivo ? 'teal' : 'red'} titulo="Utilidad del periodo" href="/superuser/finanzas?tab=movimientos" verEn="Movimientos de caja" cargando={isLoading} valor={fmtUsd(k?.utilidad)} colorValor={positivo ? 'teal.7' : 'red.7'} detalle="Ingresos - gastos" />
+                <Indicador icono={IconPercentage} color="grape" titulo="Margen" href="/superuser/finanzas?tab=movimientos" verEn="Movimientos de caja" cargando={isLoading} valor={`${k?.margen ?? 0}%`} detalle={`${k?.movimientos ?? 0} movimientos`} />
             </SimpleGrid>
 
             <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
-                <Indicador icono={IconBuildingWarehouse} color="blue" titulo="Inventario a costo" cargando={isLoading} valor={fmtUsd(p?.inventario)} detalle="Existencia x costo" />
-                <Indicador icono={IconUsers} color="orange" titulo="Por cobrar" cargando={isLoading} valor={fmtUsd(p?.porCobrar)} detalle="Lo que te deben hoy" />
-                <Indicador icono={IconWallet} color="red" titulo="Por pagar" cargando={isLoading} valor={fmtUsd(p?.porPagar)} detalle="Lo que debes hoy" />
-                <Indicador icono={IconReceiptTax} color="cyan" titulo="IVA del periodo" cargando={isLoading} valor={fmtUsd(Math.abs(iva?.aPagar || 0))} detalle={`${(iva?.aPagar || 0) >= 0 ? 'Por pagar' : 'A favor'} · débito ${fmtUsd(iva?.debito)} − crédito ${fmtUsd(iva?.credito)}${iva?.retenidoClientes > 0 ? ` − retenido ${fmtUsd(iva.retenidoClientes)}` : ''}`} />
+                <Indicador icono={IconBuildingWarehouse} color="blue" titulo="Inventario a costo" href="/superuser/inventario/productos" verEn="Inventario" cargando={isLoading} valor={fmtUsd(p?.inventario)} detalle="Existencia x costo" />
+                <Indicador icono={IconUsers} color="orange" titulo="Por cobrar" href="/superuser/cxc" verEn="Cuentas por cobrar" cargando={isLoading} valor={fmtUsd(p?.porCobrar)} detalle="Lo que te deben hoy" />
+                <Indicador icono={IconWallet} color="red" titulo="Por pagar" href="/superuser/compras?vista=por_pagar" verEn="Compras · Cuentas por pagar" cargando={isLoading} valor={fmtUsd(p?.porPagar)} detalle="Lo que debes hoy" />
+                <Indicador icono={IconReceiptTax} color="cyan" titulo="IVA del periodo" href="/superuser/finanzas?tab=cierre" verEn="Libros y retenciones" cargando={isLoading} valor={fmtUsd(Math.abs(iva?.aPagar || 0))} detalle={`${(iva?.aPagar || 0) >= 0 ? 'Por pagar' : 'A favor'} · débito ${fmtUsd(iva?.debito)} − crédito ${fmtUsd(iva?.credito)}${iva?.retenidoClientes > 0 ? ` − retenido ${fmtUsd(iva.retenidoClientes)}` : ''}`} />
             </SimpleGrid>
 
             <Grid gutter="lg">
