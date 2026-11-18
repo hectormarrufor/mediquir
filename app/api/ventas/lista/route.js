@@ -3,6 +3,7 @@ import sequelize from '@/sequelize';
 import { requerirStaff } from '../../inventario/_lib';
 import { USD, alcanceDe } from '../_lib';
 import { idsPorAprobar } from '../../_lib/aprobacion';
+import { pendientesDeControlOrdenados } from '../../_lib/numeracion';
 
 export const dynamic = 'force-dynamic';
 
@@ -95,7 +96,14 @@ export async function GET(request) {
             idsPorAprobar('VENTA', filas.filter((f) => f.tipoDocumento === 'FACTURA').map((f) => f.id)),
             idsPorAprobar('NOTA', filas.filter(esNotaFila).map((f) => f.id)),
         ]);
-        const ventas = filas.map((f) => ((esNotaFila(f) ? pn : pv).has(String(f.id)) ? { ...f, porAprobar: true } : f));
+        // Facturas y notas sin número de control (el control se asigna al imprimir): llevan la marca «por imprimir», y la de la lista les dice cuál toca primero
+        const sinControl = await pendientesDeControlOrdenados().catch(() => []);
+        const ordenControl = new Map(sinControl.map((d, i) => [d.id, i]));
+        const ventas = filas.map((f) => {
+            const porAprobar = (esNotaFila(f) ? pn : pv).has(String(f.id));
+            const porImprimir = ordenControl.has(String(f.id)) && f.estado !== 'Cancelado' && f.estado !== 'Anulada';
+            return { ...f, ...(porAprobar ? { porAprobar: true } : {}), ...(porImprimir ? { porImprimir: true } : {}) };
+        });
         return NextResponse.json({ ventas, total, pagina, paginas: Math.max(1, Math.ceil(total / TAMANO)) });
     } catch (error) {
         console.error('Lista de ventas:', error);

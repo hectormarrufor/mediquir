@@ -63,7 +63,7 @@ export async function GET() {
         });
         return NextResponse.json({ documentos: lista, total: lista.length });
     } catch (error) {
-        if (error?.original?.code === '42703' || /aprobacionEstado|impresaAt|aprobadaAt/.test(error?.message || '')) return NextResponse.json({ documentos: [], total: 0, sinMigrar: true });
+        if (error?.original?.code === '42703') return NextResponse.json({ documentos: [], total: 0, sinMigrar: true });
         console.error('Documentos por imprimir:', error);
         return NextResponse.json({ error: 'No se pudieron cargar los documentos por imprimir' }, { status: 500 });
     }
