@@ -139,6 +139,14 @@ export async function POST(request) {
         // Factura de talonario: la hecha a mano. Solo administración la carga, con SU número y SU control (sin tocar los correlativos del sistema ni el control de la forma libre)
         const esTalonario = facturaTalonario === true && tipoDocumento === 'FACTURA';
         const controlTalonario = String(numeroControl ?? '').trim().slice(0, 30);
+        // La factura necesita al cliente y se emite en bolívares con la tarifa P4 o P5 (en la computadora y en el servidor: el POS ya no deja otra cosa)
+        if (tipoDocumento === 'FACTURA') {
+            if (!clienteId) throw new ErrorNegocio('La factura necesita el cliente: elígelo o créalo antes de asentar', 409);
+            if (!esTalonario) {
+                if (moneda !== 'BS') throw new ErrorNegocio('Las facturas se emiten en bolívares: usa la tarifa P4 o P5', 409);
+                if (!['precio4', 'precio5'].includes(body.tipoPrecio)) throw new ErrorNegocio('Elige la tarifa P4 o P5 para facturar', 409);
+            }
+        }
         if (esTalonario) {
             if (esVend) throw new ErrorNegocio('Solo administración carga facturas de talonario', 403);
             if (!(parseInt(String(numeroDocumentoManual || '').replace(/\D/g, ''), 10) > 0)) throw new ErrorNegocio('Escribe el número de la factura del talonario');

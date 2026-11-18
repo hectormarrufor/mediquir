@@ -32,6 +32,7 @@ import { presentacionesDe, presentacionDe } from '@/app/constants/presentaciones
 import { fechaCaracas, formatearFecha } from '@/app/constants/hora';
 import { CONTENIDO_SIN_RELLENO } from '@/app/components/ui/modalMovil';
 import CantidadProductoModal from '@/app/components/ui/CantidadProductoModal';
+import { esSinRif, formatearIdentificacion } from '@/app/constants/identificacion';
 
 // Precio unitario editable de un renglón (solo administración). Se confirma al salir del campo o con Enter; no cambia el precio del producto,
 // solo el de esta venta. Resaltado en naranja cuando difiere del precio del sistema.
@@ -152,12 +153,12 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const formVenta = useForm({
         initialValues: {
             clienteId: null,
-            tipoPrecio: 'precio7', 
+            tipoPrecio: '', // sin tarifa predeterminada: el usuario TIENE que elegirla antes de agregar productos 
             conIva: true, // lo define el documento elegido: Factura = con IVA, Nota de entrega = sin IVA
             tipoDocumento: '', // 'FACTURA' | 'NOTA' — sin opción predeterminada: el operario TIENE que elegir
             condicionPago: '', // sin opción predeterminada: el operario TIENE que elegir Contado o Crédito antes de asentar
             diasCredito: 15, // solo a crédito: arranca con los días del cliente
-            metodoPago: 'Efectivo ($)', 
+            metodoPago: '', // sin método predeterminado: el usuario TIENE que elegirlo (cuando la venta es de contado) 
             referencia: '',
             quienRetira: '',
             costoFlete: '',
@@ -176,7 +177,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const guardaBorrador = !editando && !controlInicial;
     const [borradorListo, setBorradorListo] = useState(false);
     // Datos de contacto del cliente elegido, editables en el mismo formulario al hacer una factura (se guardan en el cliente al revisar la venta)
-    const [datosCli, setDatosCli] = useState({ direccion: '', telefono: '', email: '' });
+    const [datosCli, setDatosCli] = useState({ direccion: '', telefono: '', email: '', identificacion: '' });
+    // Cliente sin vendedor externo: hay que decidir (elegir uno de los 5 vendedores a comisión o «No tiene vendedor externo»). 'NINGUNO' = ya se decidió que no tiene.
+    const [vendExtDecision, setVendExtDecision] = useState(null);
     useEffect(() => {
         if (!guardaBorrador || !opened) return;
         try {
@@ -253,12 +256,39 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const faltaDocumento = !esPresupuesto && !docElegido;
     const tipoDocumentoActual = esPresupuesto
         ? 'FACTURA'
-        : (docElegido === 'FACTURA' ? 'FACTURA' : (docElegido === 'NOTA' ? (tipoVenta === 'DETAL' ? 'VENTA RAPIDA' : 'NOTA DE ENTREGA') : 'SIN ELEGIR'));
+        : (docElegido === 'FACTURA' ? 'FACTURA' : (docElegido === 'NOTA' ? 'NOTA DE ENTREGA' : 'SIN ELEGIR'));
     useEffect(() => {
         if (docElegido === 'FACTURA') formVenta.setFieldValue('conIva', true);
         else if (docElegido === 'NOTA') formVenta.setFieldValue('conIva', false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [docElegido]);
+
+    // ---- Tarifa: el precio sobre el que se basa la venta. Se ELIGE (sin opción predeterminada) antes de agregar productos y no se cambia con el carrito lleno,
+    //      para que un precio escrito a mano nunca se altere por cambiar de tarifa. Factura: solo P4/P5 (bolívares). Presupuesto y nota de entrega: P7/P6 (dólares) o P4/P5.
+    const TARIFAS_FACTURA = ['precio4', 'precio5'];
+    const esFacturaDoc = !esPresupuesto && tipoDocumentoActual === 'FACTURA';
+    const tarifasPermitidas = esFacturaDoc ? TARIFAS_FACTURA : ['precio7', 'precio6', 'precio4', 'precio5', ...(puedeEditarPrecio && !esPresupuesto ? ['precio1'] : [])];
+    const tarifaActual = formVenta.values.tipoPrecio;
+    const faltaTarifa = !tarifaActual || !tarifasPermitidas.includes(tarifaActual);
+    const motivoSinAgregar = (!esPresupuesto && faltaDocumento)
+        ? 'Elige primero el documento (factura o nota de entrega) y luego la tarifa'
+        : (faltaTarifa ? 'Elige primero la tarifa: el precio sobre el que se basa la venta' : null);
+    const tarifaBloqueada = carrito.length > 0 && !faltaTarifa;
+    // Si la tarifa elegida no vale para el documento (p. ej. P7 en una factura) y el carrito está vacío, se borra para que se vuelva a elegir
+    useEffect(() => {
+        if (tarifaActual && !tarifasPermitidas.includes(tarifaActual) && carrito.length === 0) formVenta.setFieldValue('tipoPrecio', '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tarifaActual, esFacturaDoc, carrito.length]);
+    // Cambiar de documento: si pasa a ser FACTURA y el carrito ya tiene productos con una tarifa en dólares, no se deja (hay que vaciar el carrito)
+    const cambiarDocumento = (v) => {
+        if (v === 'FACTURA' && tarifaActual && !TARIFAS_FACTURA.includes(tarifaActual)) {
+            if (carrito.length > 0) {
+                return notifications.show({ color: 'red', title: 'No se puede cambiar a Factura', message: 'La factura solo usa P4 o P5 (bolívares) y el carrito ya tiene productos con otra tarifa. Vacía el carrito primero.', autoClose: 8000 });
+            }
+            formVenta.setFieldValue('tipoPrecio', '');
+        }
+        formVenta.setFieldValue('tipoDocumento', v);
+    };
 
     useEffect(() => {
         // Sin documento elegido no hay correlativo que mostrar
@@ -287,11 +317,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     useEffect(() => {
         const metodoActual = formVenta.values.metodoPago;
-        if (esMonedaBs && !opcionesMetodoPago.includes(metodoActual)) {
-            formVenta.setFieldValue('metodoPago', 'Efectivo (Bs)');
-        } else if (!esMonedaBs && !opcionesMetodoPago.includes(metodoActual)) {
-            formVenta.setFieldValue('metodoPago', 'Efectivo ($)');
-        }
+        // El método de pago NO se escoge solo: si el que había ya no sirve para la moneda de la tarifa, se borra y hay que elegir otro
+        if (metodoActual && !opcionesMetodoPago.includes(metodoActual)) formVenta.setFieldValue('metodoPago', '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formVenta.values.tipoPrecio]);
 
@@ -317,7 +344,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     }, [cobroEsEleccion, formVenta.values.condicionPago, esPresupuesto]);
     useEffect(() => {
         const c = clientes?.find((x) => x.id.toString() === formVenta.values.clienteId?.toString());
-        setDatosCli({ direccion: c?.direccion || '', telefono: c?.telefono || '', email: c?.email || '' });
+        setDatosCli({ direccion: c?.direccion || '', telefono: c?.telefono || '', email: c?.email || '', identificacion: esSinRif(c?.identificacion) ? '' : (c?.identificacion || '') });
+        setVendExtDecision(null);
     }, [formVenta.values.clienteId, clientes]); // eslint-disable-line react-hooks/exhaustive-deps
     const clienteDelCredito = clientes?.find((c) => c.id.toString() === formVenta.values.clienteId?.toString());
     const diasDelCliente = Number(clienteDelCredito?.diasCredito) > 0 ? Number(clienteDelCredito.diasCredito) : 15;
@@ -351,7 +379,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     };
 
     useEffect(() => {
-        if (!productos || carrito.length === 0) return;
+        if (!productos || carrito.length === 0 || !formVenta.values.tipoPrecio) return;
         setCarrito(prevCarrito => prevCarrito.map(item => {
             if (item.isFicticio) return { ...item, simbolo: esMonedaBs ? 'Bs' : '$' };
 
@@ -383,6 +411,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // administración también recibe la pregunta con la caja del precio. Un vendedor cobra siempre la tarifa: a él se le agrega al instante.
     const [preguntar, setPreguntar] = useState(null); // { producto, clave }
     const pedirProducto = (producto, presentacion = 'UNIDAD') => {
+        if (motivoSinAgregar) return notifications.show({ color: 'red', title: 'Antes de agregar productos', message: motivoSinAgregar });
         if (esPresupuesto || (isMobile && puedeFijarPrecio)) setPreguntar({ producto, clave: presentacion });
         else agregarAlCarrito(producto, presentacion);
     };
@@ -422,6 +451,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     };
 
     const handleAgregarFicticio = (values) => {
+        if (motivoSinAgregar) return notifications.show({ color: 'red', title: 'Antes de agregar productos', message: motivoSinAgregar });
         if (!values.precio || Number(values.precio) <= 0) {
             return notifications.show({ message: 'Indica un precio válido', color: 'red' });
         }
@@ -492,21 +522,26 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const handleRevisarVenta = async () => {
         // En el teléfono, si falta algo se abre la parte de la pantalla donde se arregla
         if (carrito.length === 0) { setVista('productos'); return notifications.show({ message: 'El carrito está vacío', color: 'orange' }); }
-        if (tipoVenta === 'MAYOR' && !formVenta.values.clienteId) { setVista('datos'); return notifications.show({ message: 'Debe seleccionar un cliente mayorista', color: 'red' }); }
         if (faltaDocumento) { setVista('datos'); return notifications.show({ title: 'Falta el documento', message: 'Elige si vas a emitir FACTURA o NOTA DE ENTREGA antes de revisar la venta', color: 'red' }); }
-        if (esVendedor && !esPresupuesto && tipoDocumentoActual === 'FACTURA' && ['precio7', 'precio6', 'precio1'].includes(formVenta.values.tipoPrecio)) { setVista('datos'); return notifications.show({ color: 'red', title: 'No se factura en dólares', message: 'Los vendedores no pueden facturar en dólares: selecciona un precio en bolívares, P4 (detal) o P5 (mayor).' }); }
+        if (faltaTarifa) { setVista('datos'); return notifications.show({ title: 'Falta la tarifa', message: 'Elige la tarifa (el precio sobre el que se basa la venta) antes de revisarla', color: 'red' }); }
+        if (faltaCliente) { setVista('datos'); return notifications.show({ title: 'Falta el cliente', message: tipoDocumentoActual === 'FACTURA' ? 'La factura necesita el cliente: elígelo o créalo' : 'Debe seleccionar un cliente mayorista', color: 'red' }); }
+
         if (!formVenta.values.numeroDocumento) { setVista('datos'); return notifications.show({ message: 'El número de documento es obligatorio', color: 'red' }); }
         if (faltaCobro) { setVista('datos'); return notifications.show({ title: 'Falta la forma de cobro', message: 'Elige si la venta es de CONTADO o a CRÉDITO antes de revisarla', color: 'red' }); }
+        if (faltaMetodo) { setVista('datos'); return notifications.show({ title: 'Falta el método de pago', message: 'Elige cómo se paga (efectivo, transferencia, pago móvil…) antes de revisarla', color: 'red' }); }
         // Factura: el cliente debe tener dirección (obligatoria); teléfono y correo son opcionales. Lo escrito aquí se guarda de una vez en el cliente.
-        if (tipoDocumentoActual === 'FACTURA' && formVenta.values.clienteId) {
+        if (!esPresupuesto && formVenta.values.clienteId) {
             const c = clientes?.find((x) => x.id.toString() === formVenta.values.clienteId.toString());
             const direccion = datosCli.direccion.trim(), telefono = datosCli.telefono.trim(), email = datosCli.email.trim();
-            if (!direccion) { setVista('datos'); return notifications.show({ message: 'La factura necesita la dirección del cliente: escríbela en «Datos del cliente»', color: 'red' }); }
+            const idFormateada = formatearIdentificacion(datosCli.identificacion).valor;
+            if (exigeDatosFiscales && idProvisional && !idFormateada) { setVista('datos'); return notifications.show({ message: 'La factura necesita el RIF o la cédula del cliente: escríbelo en «Datos del cliente»', color: 'red' }); }
+            if (exigeDatosFiscales && !direccion) { setVista('datos'); return notifications.show({ message: 'La factura necesita la dirección del cliente: escríbela en «Datos del cliente»', color: 'red' }); }
             if (email && !/^\S+@\S+\.\S+$/.test(email)) { setVista('datos'); return notifications.show({ message: 'El correo del cliente no es válido', color: 'red' }); }
             const cambios = {};
             if (direccion !== (c?.direccion || '')) cambios.direccion = direccion;
             if (telefono !== (c?.telefono || '')) cambios.telefono = telefono;
             if (email !== (c?.email || '')) cambios.email = email;
+            if (idProvisional && idFormateada && idFormateada !== (c?.identificacion || '')) cambios.identificacion = idFormateada;
             if (Object.keys(cambios).length) {
                 try {
                     const res = await fetch(`/api/clientes/${formVenta.values.clienteId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cambios) });
@@ -517,6 +552,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 } catch (e) { setVista('datos'); return notifications.show({ title: 'No se guardaron los datos del cliente', message: e.message, color: 'red' }); }
             }
         }
+        if (faltaVendedorExt) { setVista('datos'); return notifications.show({ title: 'Falta el vendedor externo', message: 'Este cliente no tiene vendedor externo: elige uno o marca «No tiene vendedor externo» antes de revisar la venta', color: 'red' }); }
         const textoRenglon = (i) => (i.isFicticio ? i.nombre : nombreConMarca(i.nombre, i.marcaNombre));
         const lineasFactura = carrito.reduce((a, i) => a + lineasDeRenglon(textoRenglon(i)), 0);
         if (tipoDocumentoActual === 'FACTURA' && lineasFactura > CONFIG_FISCAL.maxRenglonesFactura) {
@@ -549,6 +585,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // Se guarda en la moneda de la tarifa, tal cual se ve en el carrito: P7/P6 en $, P4/P5 (y P1) en Bs a la tasa del día.
     const guardarPresupuesto = async () => {
         if (carrito.length === 0) return notifications.show({ message: 'El carrito está vacío', color: 'orange' });
+        if (faltaTarifa) return notifications.show({ title: 'Falta la tarifa', message: 'Elige la tarifa del presupuesto (P7, P6, P5 o P4)', color: 'red' });
         // El presupuesto muestra también los montos en la otra moneda a la tasa: sin tasa no se puede guardar
         if (!(tasaBcv > 0)) return notifications.show({ message: 'Todavía no hay tasa BCV: espera un momento e intenta de nuevo', color: 'red' });
         const renglones = carrito.map((item) => ({
@@ -594,6 +631,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // imprimir=true: «Asentar e imprimir». La ventana se abre YA (con el toque del botón) porque el navegador bloquea las que se abren después de esperar al servidor
     const handleProcesarVenta = async (imprimir = false) => {
         if (faltaDocumento) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta el documento', message: 'Elige si vas a emitir FACTURA o NOTA DE ENTREGA antes de asentar', color: 'red' }); }
+        if (faltaTarifa) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta la tarifa', message: 'Elige la tarifa antes de asentar', color: 'red' }); }
+        if (faltaCliente) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta el cliente', message: 'Elige el cliente antes de asentar', color: 'red' }); }
+        if (faltaMetodo) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta el método de pago', message: 'Elige el método de pago antes de asentar', color: 'red' }); }
         if (!esPresupuesto && !formVenta.values.condicionPago) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta la forma de cobro', message: 'Elige si la venta es de CONTADO o a CRÉDITO antes de asentarla', color: 'red' }); }
         setIsSubmitting(true);
         const ventana = imprimir ? window.open('', '_blank') : null;
@@ -602,13 +642,13 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 vendedorId: userId,
                 tipoPrecio: formVenta.values.tipoPrecio, // el servidor recalcula el precio de un vendedor con esta tarifa
                 tipoVenta,
-                tipoDocumento: tipoDocumentoActual === 'VENTA RAPIDA' ? 'VENTA_RAPIDA' : (tipoDocumentoActual === 'NOTA DE ENTREGA' ? 'NOTA_ENTREGA' : 'FACTURA'),
+                tipoDocumento: tipoDocumentoActual === 'NOTA DE ENTREGA' ? 'NOTA_ENTREGA' : 'FACTURA',
                 numeroDocumentoManual: formVenta.values.numeroDocumento,
                 // El control de la forma libre NO se asigna al asentar: sale al imprimir. Solo se manda el del talonario o el de un hueco que se registra.
                 numeroControl: tipoDocumentoActual === 'FACTURA' && (formVenta.values.facturaTalonario || controlInicial) ? formVenta.values.numeroControl : null,
                 huecoControl: controlInicial ? true : undefined, // solo al registrar un hueco desde «Números de control»
                 facturaTalonario: tipoDocumentoActual === 'FACTURA' && puedeEditarPrecio && formVenta.values.facturaTalonario ? true : undefined,
-                fechaEmision: puedeEditarPrecio && formVenta.values.fechaEmision ? formVenta.values.fechaEmision : undefined,
+                fechaEmision: talonario && puedeEditarPrecio && formVenta.values.fechaEmision ? formVenta.values.fechaEmision : undefined, // la emisión es siempre hoy; solo una factura de talonario trae su fecha
                 clienteId: formVenta.values.clienteId ? Number(formVenta.values.clienteId) : null,
                 moneda: simboloMoneda === 'Bs' ? 'BS' : 'USD',
                 tasaCambio: tasaBcv,
@@ -731,6 +771,18 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const prevBaseUsd = aUsd(facturaPrev.baseImponible);
     
     const clienteSeleccionado = clientes?.find(c => c.id.toString() === formVenta.values.clienteId?.toString());
+    // ---- Lo que hay que completar antes de asentar (cada uno se marca con borde rojo) ----
+    // Cliente: opcional solo en una nota de entrega al detal; en la factura y en toda venta al mayor es obligatorio
+    const requiereCliente = !esPresupuesto && (tipoVenta === 'MAYOR' || tipoDocumentoActual === 'FACTURA');
+    const faltaCliente = requiereCliente && !formVenta.values.clienteId;
+    const idClienteBD = clienteSeleccionado?.identificacion || '';
+    const idProvisional = Boolean(clienteSeleccionado) && (!idClienteBD || esSinRif(idClienteBD)); // sin RIF/cédula real en la base: hay que escribirla
+    const exigeDatosFiscales = !esPresupuesto && tipoDocumentoActual === 'FACTURA'; // la factura exige dirección y RIF/cédula del cliente
+    const faltaDireccionCli = exigeDatosFiscales && Boolean(clienteSeleccionado) && !datosCli.direccion.trim();
+    const faltaIdCli = exigeDatosFiscales && idProvisional && !formatearIdentificacion(datosCli.identificacion).valor;
+    // Un cliente sin vendedor externo obliga a decidir (administración): elegir uno de los vendedores a comisión o «No tiene vendedor externo»
+    const faltaVendedorExt = !esPresupuesto && !esVendedor && Boolean(clienteSeleccionado) && !clienteSeleccionado.vendedorComisionId && !vendExtDecision;
+    const faltaMetodo = !esPresupuesto && formVenta.values.condicionPago === 'Contado' && !formVenta.values.metodoPago;
     const formatoNumero = (num) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
     const fechaEmision = formatearFecha(formVenta.values.fechaEmision ? new Date(`${formVenta.values.fechaEmision}T12:00:00-04:00`) : new Date());
 
@@ -745,19 +797,16 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // Los vendedores, al VENDER, solo trabajan y ven bolívares (tarifas P4/P5); los dólares son solo de los presupuestos y de administración.
     // (la nota de entrega y la venta rápida sí pueden ir en dólares; la restricción es de la factura y, por derivar de ella, de sus notas de crédito y débito)
     const soloBs = esVendedor && !esPresupuesto && esFactura;
-    // Ven todos los precios, pero una factura de un vendedor solo se emite en bolívares (P4/P5)
-    const vendedorFacturaEnDolares = soloBs && esFactura && ['precio7', 'precio6', 'precio1'].includes(formVenta.values.tipoPrecio);
-    useEffect(() => {
-        if (vendedorFacturaEnDolares) notifications.show({ color: 'red', title: 'No se factura en dólares', message: 'Los vendedores no pueden facturar en dólares: selecciona un precio en bolívares, P4 (detal) o P5 (mayor).' });
-    }, [vendedorFacturaEnDolares]);
-    const opcionesTarifa = [
+    // Todas las tarifas; abajo se dejan solo las que vale el documento (factura: P4/P5)
+    const TODAS_LAS_TARIFAS = [
         { value: 'precio7', label: 'P7 (Detal USD)' },
         { value: 'precio6', label: 'P6 (Mayor USD)' },
         // P4/P5: P7/P6 en Bs a la tasa del día (el presupuesto en Bs se guarda en Bs y muestra el equivalente en $)
         { value: 'precio4', label: 'P4 (P7 en Bs)' },
         { value: 'precio5', label: 'P5 (P6 en Bs)' },
-        ...(esVendedor || esPresupuesto ? [] : [{ value: 'precio1', label: 'P1 (35% en Bs)' }]), // deriva del costo: solo administración y solo en ventas
+        { value: 'precio1', label: 'P1 (35% en Bs)' }, // deriva del costo: solo administración y solo en notas de entrega (ver tarifasPermitidas)
     ];
+    const opcionesTarifa = TODAS_LAS_TARIFAS.filter((o) => tarifasPermitidas.includes(o.value));
     const etiquetaTarifa = opcionesTarifa.find((o) => o.value === formVenta.values.tipoPrecio)?.label || '';
 
     // Precio que se propone al preguntar la cantidad: el de la tarifa, con botones para los otros precios del producto en la misma moneda
@@ -791,20 +840,26 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     ));
 
     const buscador = (
-        <Group wrap="nowrap" gap="xs" mb={isMobile ? 0 : 'sm'}>
-            <TextInput
-                style={{ flex: 1, minWidth: 0 }} size={tamCampo} placeholder="Buscar producto…" inputMode="search" enterKeyHint="search" autoComplete="off"
-                leftSection={<IconSearch size={16} />} value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.currentTarget.value)}
-                rightSectionPointerEvents="all"
-                rightSection={busquedaProducto ? <CloseButton size="sm" onClick={() => setBusquedaProducto('')} aria-label="Borrar la búsqueda" /> : null}
-                // En el teléfono no se enfoca solo: el teclado taparía media pantalla apenas se abre la venta
-                data-autofocus={isMobile ? undefined : true}
-            />
-            {/* El producto genérico (precio escrito a mano): también lo agrega un vendedor; Jolexi lo revisa al aprobar la factura */}
-            <Button color="grape" variant="light" size={tamCampo} px="sm" onClick={() => setModalFicticio(true)} title="Agregar ítem ficticio (1010)" style={{ flexShrink: 0 }}>
-                + Ficticio
-            </Button>
-        </Group>
+        <>
+            <Group wrap="nowrap" gap="xs" mb={isMobile ? 0 : 'sm'}>
+                <TextInput
+                    style={{ flex: 1, minWidth: 0 }} size={tamCampo} placeholder="Buscar producto…" inputMode="search" enterKeyHint="search" autoComplete="off"
+                    leftSection={<IconSearch size={16} />} value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.currentTarget.value)}
+                    rightSectionPointerEvents="all"
+                    rightSection={busquedaProducto ? <CloseButton size="sm" onClick={() => setBusquedaProducto('')} aria-label="Borrar la búsqueda" /> : null}
+                    // En el teléfono no se enfoca solo: el teclado taparía media pantalla apenas se abre la venta
+                    data-autofocus={isMobile ? undefined : true}
+                />
+                {/* El producto genérico (precio escrito a mano): también lo agrega un vendedor; Jolexi lo revisa al aprobar la factura */}
+                <Button color="grape" variant="light" size={tamCampo} px="sm" onClick={() => setModalFicticio(true)} title="Agregar ítem ficticio (1010)" style={{ flexShrink: 0 }}>
+                    + Ficticio
+                </Button>
+            </Group>
+            {/* No se agrega nada hasta elegir el documento y la tarifa */}
+            {motivoSinAgregar && (
+                <Alert color="red" variant="light" p="xs" mb={isMobile ? 0 : 'sm'} mt={isMobile ? 6 : 0}><Text size="xs" fw={700}>{motivoSinAgregar}.</Text></Alert>
+            )}
+        </>
     );
 
     const filaProducto = (prod) => {
@@ -820,7 +875,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             <Paper
                 key={prod.id} p={isMobile ? 8 : 'sm'} withBorder radius="md" role="button" tabIndex={0}
                 onClick={() => pedirProducto(prod)} onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) pedirProducto(prod); }}
-                style={{ cursor: 'pointer', ...(enCarrito ? { borderColor: 'var(--mantine-color-blue-4)', background: 'var(--mantine-color-blue-0)' } : {}) }}
+                style={{ cursor: motivoSinAgregar ? 'not-allowed' : 'pointer', opacity: motivoSinAgregar ? 0.6 : 1, ...(enCarrito ? { borderColor: 'var(--mantine-color-blue-4)', background: 'var(--mantine-color-blue-0)' } : {}) }}
             >
                 <Group wrap="nowrap" justify="space-between" gap="sm" align="flex-start">
                     <Group wrap="nowrap" gap="sm" style={{ minWidth: 0, flex: 1 }}>
@@ -840,9 +895,13 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     </Group>
 
                     <Stack gap={4} align="flex-end" style={{ flexShrink: 0 }}>
-                        <Badge color={info.simbolo === 'Bs' ? 'teal' : 'blue'} variant="light" size="lg" px={isMobile ? 6 : 8}>
-                            <PrecioVisual valor={info.precio} simbolo={info.simbolo} size="sm" fw={700} />
-                        </Badge>
+                        {faltaTarifa ? (
+                            <Badge color="gray" variant="light" size="lg" px={isMobile ? 6 : 8} tt="none">Elige tarifa</Badge>
+                        ) : (
+                            <Badge color={info.simbolo === 'Bs' ? 'teal' : 'blue'} variant="light" size="lg" px={isMobile ? 6 : 8}>
+                                <PrecioVisual valor={info.precio} simbolo={info.simbolo} size="sm" fw={700} />
+                            </Badge>
+                        )}
                         {!isMobile && botonesPresentacion}
                     </Stack>
                 </Group>
@@ -861,12 +920,12 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             <Text size={isMobile ? 'sm' : 'xs'} fw={700} mb={2}>Documento a emitir <Text span c="red.7" fw={800}>*</Text></Text>
             <SegmentedControl
                 size={isMobile ? 'md' : 'xs'} fullWidth={isMobile} w={isMobile ? undefined : 360}
-                value={formVenta.values.tipoDocumento} onChange={(v) => formVenta.setFieldValue('tipoDocumento', v)}
+                value={formVenta.values.tipoDocumento} onChange={cambiarDocumento}
                 style={faltaDocumento ? { outline: '2px solid #e03131', outlineOffset: 1 } : undefined}
                 color={docElegido === 'FACTURA' ? 'red.7' : 'blue.7'}
                 data={[
                     { value: 'FACTURA', label: 'Factura (con IVA 16%)' },
-                    { value: 'NOTA', label: tipoVenta === 'DETAL' ? 'Venta rápida (sin IVA)' : 'Nota de entrega (sin IVA)' },
+                    { value: 'NOTA', label: 'Nota de entrega (sin IVA)' },
                 ]}
             />
         </Box>
@@ -899,7 +958,15 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                         <Text size={isMobile ? 'md' : 'lg'} fw={800} lh={1.2} c={esFactura ? 'red.9' : 'blue.9'}>{tipoDocumentoActual}</Text>
                     </Box>
                 </Group>
-                <TextInput label={talonario ? 'N° de factura (talonario)' : 'Correlativo'} placeholder={talonario ? '0123' : undefined} size={tamCampo} w={isMobile ? 128 : 150} fw={700} autoComplete="off" style={{ flexShrink: 0 }} {...formVenta.getInputProps('numeroDocumento')} />
+                {talonario ? (
+                    <TextInput label="N° de factura (talonario)" placeholder="0123" size={tamCampo} w={isMobile ? 128 : 150} fw={700} autoComplete="off" style={{ flexShrink: 0 }} {...formVenta.getInputProps('numeroDocumento')} />
+                ) : (!faltaDocumento && (
+                    <Box ta="right" style={{ flexShrink: 0 }}>
+                        <Text fz={10} c="dimmed" fw={700} tt="uppercase" lh={1.2}>Se registrará como</Text>
+                        <Text fw={900} fz={isMobile ? 20 : 24} lh={1.1} c={esFactura ? 'red.9' : 'blue.9'}>{formVenta.values.numeroDocumento}</Text>
+                        {esVendedor && <Text fz={10} c="dimmed" lh={1.2}>El sistema confirma el número al asentar</Text>}
+                    </Box>
+                ))}
             </Group>
             {esFactura && puedeEditarPrecio && (
                 <Switch mt="xs" color="grape" size="sm" label="Factura de talonario (hecha a mano)" description="Se carga con el número y el control que trae el talonario (serie FM-). No usa el correlativo ni el control de la forma libre."
@@ -911,7 +978,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     {esFactura && (talonario || controlInicial) && (
                         <TextInput label={talonario ? 'N° de control del talonario' : 'N° de control'} withAsterisk={talonario} placeholder={talonario ? (guiaTalonario?.controlSugerido || '00-0000000') : (siguienteControl || '00-000000')} description={talonario ? `Escribe el control impreso en esta factura del talonario (distinto al de la forma libre).${guiaTalonario?.ultima ? ` La última cargada fue ${guiaTalonario.ultima.numero}, control ${guiaTalonario.ultima.control}.` : ''}` : (siguienteControl ? `Vacío = toma el siguiente: ${siguienteControl}. Si la forma que vas a imprimir trae otro, escríbelo.` : undefined)} size={tamCampo} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
                     )}
-                    {puedeEditarPrecio && (
+                    {puedeEditarPrecio && talonario && (
                         <TextInput type="date" label="Fecha de emisión" description="Vacía = hoy. Si copias una factura de otro día, elige esa fecha (toma la tasa BCV de ese día)"
                             inputWrapperOrder={isMobile ? undefined : ['label', 'input', 'description', 'error']}
                             size={tamCampo} max={fechaCaracas()} {...formVenta.getInputProps('fechaEmision')} />
@@ -926,13 +993,14 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         <Group wrap="nowrap" gap="xs" align="flex-end">
             <Select
                 style={{ flex: 1, minWidth: 0 }} size={tamCampo}
-                label={esPresupuesto ? 'Cliente (opcional)' : (tipoVenta === 'MAYOR' ? 'Cliente mayorista' : 'Cliente (opcional)')}
-                placeholder={tipoVenta === 'MAYOR' && !esPresupuesto ? 'Seleccione…' : 'Sin cliente'}
-                withAsterisk={tipoVenta === 'MAYOR' && !esPresupuesto}
+                label={esPresupuesto ? 'Cliente (opcional)' : (tipoVenta === 'MAYOR' ? 'Cliente mayorista' : (requiereCliente ? 'Cliente' : 'Cliente (opcional, solo nota de entrega)'))}
+                placeholder={requiereCliente ? 'Seleccione…' : 'Sin cliente'}
+                withAsterisk={requiereCliente}
                 searchable
-                clearable={tipoVenta !== 'MAYOR' || esPresupuesto}
+                clearable={!requiereCliente}
                 nothingFoundMessage="No hay coincidencias: crea uno con el botón +"
                 data={opcionesClientes}
+                styles={faltaCliente ? { input: { border: '2px solid #e03131' } } : undefined}
                 {...formVenta.getInputProps('clienteId')}
             />
             <ActionIcon size={isMobile ? 42 : 36} radius="md" variant="light" color="grape" onClick={() => setModalCrearCliente(true)} title="Crear cliente nuevo" aria-label="Crear cliente nuevo">
@@ -941,9 +1009,52 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         </Group>
     );
 
+    // Elegir vendedor externo para un cliente que no tiene (solo administración): asigna al cliente (y a la venta le genera comisión) o deja constancia de que no tiene
+    const elegirVendedorExterno = async (v) => {
+        if (!v) return;
+        if (v === 'NINGUNO') { setVendExtDecision('NINGUNO'); return; }
+        const vend = vendedoresExternos.find((x) => String(x.id) === v);
+        if (!window.confirm(`¿Asignar a ${clienteSeleccionado?.nombre} como cliente de ${vend?.nombre}? Esta venta y sus cuentas por cobrar pendientes le generarán comisión a ${vend?.nombre}.`)) return;
+        setAsignandoVend(true);
+        try {
+            const r = await fetch(`/api/clientes/${clienteSeleccionado.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vendedorComisionId: Number(v) }) });
+            const c = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(c.error || 'No se pudo asignar');
+            const a = c.comisionesAsociadas;
+            notifications.show({ color: 'teal', message: `${clienteSeleccionado.nombre} ahora es cliente de ${vend?.nombre}${a?.facturas ? `. Se asociaron ${a.facturas} cuenta(s) por cobrar pendientes (comisión $${Number(a.comisionUsd).toFixed(2)})` : ''}`, autoClose: 9000 });
+            await queryClient.invalidateQueries({ queryKey: ['clientes-pos'] });
+        } catch (e) { notifications.show({ color: 'red', title: 'No se asignó', message: e.message }); } finally { setAsignandoVend(false); }
+    };
+
     const extrasCliente = (
         <>
-        {clienteSeleccionado && !esPresupuesto && ['FACTURA', 'NOTA DE ENTREGA'].includes(tipoDocumentoActual) && (() => {
+        {/* Datos del cliente elegido: documento, dirección, teléfono y correo (se guardan en su ficha). En la factura, dirección y RIF/cédula son obligatorios. */}
+        {clienteSeleccionado && !esPresupuesto && (
+            <Paper withBorder p="xs" radius="md" style={(faltaDireccionCli || faltaIdCli) ? { border: '2px solid #e03131' } : undefined}>
+                <Text size="xs" fw={700} mb={4}>
+                    Datos del cliente {exigeDatosFiscales ? '(la dirección y el RIF o cédula son obligatorios en la factura)' : '(en la nota de entrega no son obligatorios, pero conviene tenerlos)'}
+                </Text>
+                <Stack gap={6}>
+                    <Group gap="xs" align="flex-start" wrap={isMobile ? 'wrap' : 'nowrap'} grow>
+                        {idProvisional ? (
+                            <TextInput size={isMobile ? 'md' : 'xs'} label="RIF o cédula" withAsterisk={exigeDatosFiscales} placeholder="J-12345678-9 o V-12345678" value={datosCli.identificacion}
+                                onChange={(e) => setDatosCli((d) => ({ ...d, identificacion: e.currentTarget.value }))} error={faltaIdCli ? 'Falta el RIF o la cédula (este cliente no lo tiene registrado)' : null} />
+                        ) : (
+                            <Box>
+                                <Text fz={isMobile ? 'sm' : 'xs'} fw={500}>RIF o cédula</Text>
+                                <Text fw={800} size="sm" lh={1.6}>{idClienteBD}</Text>
+                            </Box>
+                        )}
+                        <TextInput size={isMobile ? 'md' : 'xs'} type="tel" inputMode="tel" label="Teléfono" placeholder="(opcional)" value={datosCli.telefono} onChange={(e) => setDatosCli((d) => ({ ...d, telefono: e.currentTarget.value }))} />
+                        <TextInput size={isMobile ? 'md' : 'xs'} type="email" label="Correo" placeholder="(opcional)" value={datosCli.email} onChange={(e) => setDatosCli((d) => ({ ...d, email: e.currentTarget.value }))} />
+                    </Group>
+                    <TextInput size={isMobile ? 'md' : 'xs'} label="Dirección" withAsterisk={exigeDatosFiscales} placeholder={exigeDatosFiscales ? 'Obligatoria en la factura' : 'Recomendable'} value={datosCli.direccion}
+                        onChange={(e) => setDatosCli((d) => ({ ...d, direccion: e.currentTarget.value }))} error={faltaDireccionCli ? 'Falta la dirección' : null} />
+                </Stack>
+            </Paper>
+        )}
+        {/* Vendedor externo: si el cliente ya es de uno, se avisa; si no, administración tiene que decidir */}
+        {clienteSeleccionado && !esPresupuesto && (() => {
             const duenoExt = vendedoresExternos.find((v) => String(v.id) === String(clienteSeleccionado.vendedorComisionId));
             const documento = tipoDocumentoActual === 'FACTURA' ? 'factura' : 'nota de entrega';
             if (clienteSeleccionado.vendedorComisionId) {
@@ -954,53 +1065,25 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     </Alert>
                 );
             }
+            if (esVendedor) {
+                return (
+                    <Alert color="yellow" variant="light" p={isMobile ? 'xs' : 6}>
+                        <Text size="xs"><b>Cliente sin vendedor externo.</b> Esta {documento} no generará comisión. Si es de un vendedor, pídele a administración que se lo asigne.</Text>
+                    </Alert>
+                );
+            }
             return (
-                <Alert color="yellow" variant="light" p={isMobile ? 'xs' : 6} title={isMobile ? 'Este cliente no es de ningún vendedor externo' : undefined}>
-                    <Text size="xs" mb={esVendedor || !isMobile ? 0 : 6}>{!isMobile && <b>Cliente sin vendedor externo. </b>}Esta {documento} no generará comisión.{esVendedor ? ' Si es de un vendedor, pídele a administración que se lo asigne.' : ' Si es de uno de ellos, asígnalo aquí:'}</Text>
-                    {!esVendedor && vendedoresExternos.length > 0 && (
-                        <Group gap="xs" wrap="nowrap" align="flex-end" mt={isMobile ? 0 : 4}>
-                            <Select size="xs" style={{ flex: 1 }} placeholder="Elige el vendedor" data={vendedoresExternos.map((v) => ({ value: String(v.id), label: `${v.nombre} (${Number(v.porcentaje)} %)` }))} value={vendAsignar} onChange={setVendAsignar} clearable />
-                            <Button size="xs" color="grape" disabled={!vendAsignar} loading={asignandoVend} onClick={async () => {
-                                setAsignandoVend(true);
-                                try {
-                                    const r = await fetch(`/api/clientes/${clienteSeleccionado.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vendedorComisionId: Number(vendAsignar) }) });
-                                    const c = await r.json().catch(() => ({}));
-                                    if (!r.ok) throw new Error(c.error || 'No se pudo asignar');
-                                    notifications.show({ color: 'teal', message: `${clienteSeleccionado.nombre} ahora es cliente de ${vendedoresExternos.find((v) => String(v.id) === vendAsignar)?.nombre}` });
-                                    setVendAsignar(null);
-                                    await queryClient.invalidateQueries({ queryKey: ['clientes-pos'] });
-                                } catch (e) { notifications.show({ color: 'red', title: 'No se asignó', message: e.message }); } finally { setAsignandoVend(false); }
-                            }}>Asignar</Button>
-                        </Group>
-                    )}
-                </Alert>
+                <Paper withBorder p="xs" radius="md" style={faltaVendedorExt ? { border: '2px solid #e03131' } : undefined}>
+                    <Select
+                        size={isMobile ? 'md' : 'xs'} label="Vendedor externo (comisión)" withAsterisk allowDeselect={false} placeholder="Elige una opción"
+                        description="Este cliente no tiene vendedor externo. Elige uno (queda como su vendedor y esta venta le genera comisión) o «No tiene vendedor externo»."
+                        error={faltaVendedorExt ? 'Elige una opción antes de asentar' : null}
+                        data={[{ value: 'NINGUNO', label: 'No tiene vendedor externo' }, ...vendedoresExternos.map((v) => ({ value: String(v.id), label: `${v.nombre} (${Number(v.porcentaje)} %)` }))]}
+                        value={vendExtDecision} onChange={elegirVendedorExterno} disabled={asignandoVend}
+                    />
+                </Paper>
             );
         })()}
-        {esFactura && clienteSeleccionado && (
-            <Paper withBorder p="xs" radius="md" style={{ borderColor: datosCli.direccion.trim() ? undefined : '#e03131' }}>
-                {isMobile ? (
-                    <>
-                        <Text size="xs" fw={700} mb={4}>Datos del cliente (se guardan en su ficha)</Text>
-                        <Stack gap={6}>
-                            <TextInput size={tamCampo} label="Dirección fiscal" withAsterisk placeholder="Obligatoria en la factura" value={datosCli.direccion} onChange={(e) => setDatosCli((d) => ({ ...d, direccion: e.currentTarget.value }))}
-                                error={datosCli.direccion.trim() ? null : 'Falta la dirección'} />
-                            <Group gap="xs" grow align="flex-start">
-                                <TextInput size={tamCampo} type="tel" inputMode="tel" label="Teléfono" placeholder="(opcional)" value={datosCli.telefono} onChange={(e) => setDatosCli((d) => ({ ...d, telefono: e.currentTarget.value }))} />
-                                <TextInput size={tamCampo} type="email" label="Correo" placeholder="(opcional)" value={datosCli.email} onChange={(e) => setDatosCli((d) => ({ ...d, email: e.currentTarget.value }))} />
-                            </Group>
-                        </Stack>
-                    </>
-                ) : (
-                    /* Computadora: los tres datos en una sola fila */
-                    <Group gap="xs" align="flex-start" wrap="nowrap">
-                        <TextInput size="xs" style={{ flex: 2, minWidth: 0 }} label="Dirección fiscal (se guarda en su ficha)" withAsterisk placeholder="Obligatoria en la factura" value={datosCli.direccion} onChange={(e) => setDatosCli((d) => ({ ...d, direccion: e.currentTarget.value }))}
-                            error={datosCli.direccion.trim() ? null : 'Falta la dirección'} />
-                        <TextInput size="xs" style={{ flex: 1, minWidth: 0 }} type="tel" inputMode="tel" label="Teléfono" placeholder="(opcional)" value={datosCli.telefono} onChange={(e) => setDatosCli((d) => ({ ...d, telefono: e.currentTarget.value }))} />
-                        <TextInput size="xs" style={{ flex: 1, minWidth: 0 }} type="email" label="Correo" placeholder="(opcional)" value={datosCli.email} onChange={(e) => setDatosCli((d) => ({ ...d, email: e.currentTarget.value }))} />
-                    </Group>
-                )}
-            </Paper>
-        )}
         </>
     );
 
@@ -1012,7 +1095,13 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     );
 
     const campoTarifa = (
-        <Select label="Tarifa" size={tamCampo} data={opcionesTarifa} allowDeselect={false} {...formVenta.getInputProps('tipoPrecio')} />
+        <Select
+            label="Tarifa (precio base de la venta)" size={tamCampo} data={opcionesTarifa} allowDeselect={false} withAsterisk
+            placeholder="Elige la tarifa" value={formVenta.values.tipoPrecio || null} onChange={(v) => formVenta.setFieldValue('tipoPrecio', v || '')}
+            disabled={tarifaBloqueada} styles={faltaTarifa ? { input: { border: '2px solid #e03131' } } : undefined}
+            description={tarifaBloqueada ? 'Para cambiar la tarifa vacía el carrito' : (esFacturaDoc ? 'Factura: solo P4 o P5 (bolívares)' : undefined)}
+            error={faltaTarifa && !(!esPresupuesto && faltaDocumento) ? 'Elige la tarifa antes de agregar productos' : null}
+        />
     );
 
     // «Forma de cobro»: grande y a la vista, porque de ella depende que la factura registre el pago (contado) o quede una cuenta por cobrar (crédito)
@@ -1033,7 +1122,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     const filaIvaCondicion = !esPresupuesto && (
         <>
-            <Text size="xs" fw={700} mb="xs" c={conIva ? 'red.8' : 'dimmed'}>{faltaDocumento ? 'IVA: lo define el documento que elijas' : (conIva ? 'Con IVA (16%): es una factura' : 'Sin IVA: es una nota de entrega / venta rápida')}</Text>
+            <Text size="xs" fw={700} mb="xs" c={conIva ? 'red.8' : 'dimmed'}>{faltaDocumento ? 'IVA: lo define el documento que elijas' : (conIva ? 'Con IVA (16%): es una factura' : 'Sin IVA: es una nota de entrega')}</Text>
             {selectorCobro}
         </>
     );
@@ -1050,8 +1139,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     const filaPago = !esPresupuesto && formVenta.values.condicionPago === 'Contado' && (
         <SimpleGrid cols={isMobile && esEfectivo ? 1 : 2} spacing="sm" mb="sm">
-            <Select label="Método de pago" size={tamCampo} data={opcionesMetodoPago} allowDeselect={false} {...formVenta.getInputProps('metodoPago')} />
-            {!esEfectivo ? (
+            <Select label="Método de pago" size={tamCampo} data={opcionesMetodoPago} allowDeselect={false} withAsterisk placeholder={faltaTarifa ? 'Elige primero la tarifa' : 'Elige cómo se paga'}
+                value={formVenta.values.metodoPago || null} onChange={(v) => formVenta.setFieldValue('metodoPago', v || '')} disabled={faltaTarifa}
+                styles={faltaMetodo ? { input: { border: '2px solid #e03131' } } : undefined} error={faltaMetodo && !faltaTarifa ? 'Elige el método de pago' : null} />
+            {!esEfectivo && formVenta.values.metodoPago ? (
                 <TextInput label="Referencia" placeholder="Últimos 6 dígitos" size={tamCampo} autoComplete="off" {...formVenta.getInputProps('referencia')} />
             ) : (!isMobile && <Box />)}
         </SimpleGrid>
@@ -1207,18 +1298,26 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // ---------------- Computadora: filas compactas (el carrito es lo que importa, así que lo de arriba ocupa lo mínimo) ----------------
     const ayudaDocEscritorio = faltaDocumento ? 'Elige FACTURA o NOTA DE ENTREGA: es obligatorio antes de asentar. Factura = con IVA; nota de entrega = sin IVA. El número de control se asigna al imprimir.' : [
         talonario ? `Control del talonario (distinto al de la forma libre).${guiaTalonario?.ultima ? ` Última cargada: ${guiaTalonario.ultima.numero}, control ${guiaTalonario.ultima.control}.` : ''}` : (esFactura && siguienteControl ? `Control vacío = toma el siguiente (${siguienteControl}).` : ''),
-        puedeEditarPrecio ? 'Fecha vacía = hoy; si copias una factura de otro día, elige esa fecha (toma la tasa BCV de ese día).' : '',
+        talonario && puedeEditarPrecio ? 'Fecha vacía = hoy; si copias una factura de otro día, elige esa fecha (toma la tasa BCV de ese día).' : '',
     ].filter(Boolean).join(' ');
     const colorAyudaDoc = faltaDocumento ? 'red.8' : 'dimmed';
     const docEscritorio = esPresupuesto ? bloqueDocumento : (
         <Paper p={6} bg={esFactura ? 'red.0' : 'gray.1'} radius="md" withBorder>
             <Group gap="sm" align="flex-end" wrap="wrap">
                 {selectorDocumento}
-                {!faltaDocumento && <TextInput label={talonario ? 'N° de factura (talonario)' : (esFactura ? 'Correlativo de factura' : 'Correlativo de nota de entrega')} placeholder={talonario ? '0123' : undefined} size="xs" w={talonario ? 160 : 170} autoComplete="off" {...formVenta.getInputProps('numeroDocumento')} />}
+                {!faltaDocumento && (talonario
+                    ? <TextInput label="N° de factura (talonario)" placeholder="0123" size="xs" w={160} autoComplete="off" {...formVenta.getInputProps('numeroDocumento')} />
+                    : (
+                        <Box>
+                            <Text fz={10} c="dimmed" fw={700} tt="uppercase" lh={1.2}>{esFactura ? 'Se registrará como factura' : 'Se registrará como nota de entrega'}</Text>
+                            <Text fw={900} fz={22} lh={1.15} c={esFactura ? 'red.9' : 'blue.9'}>{formVenta.values.numeroDocumento}</Text>
+                            {esVendedor && <Text fz={10} c="dimmed" lh={1.2}>El sistema confirma el número al asentar</Text>}
+                        </Box>
+                    ))}
                 {esFactura && (talonario || controlInicial) && (
                     <TextInput label={talonario ? 'N° de control del talonario' : 'N° de control'} withAsterisk={talonario} placeholder={talonario ? (guiaTalonario?.controlSugerido || '00-0000000') : (siguienteControl || '00-000000')} size="xs" w={170} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
                 )}
-                {puedeEditarPrecio && (
+                {puedeEditarPrecio && talonario && (
                     <TextInput type="date" label="Fecha de emisión" size="xs" w={150} max={fechaCaracas()} {...formVenta.getInputProps('fechaEmision')} />
                 )}
                 {esFactura && puedeEditarPrecio && (
@@ -1264,8 +1363,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             )}
             {formVenta.values.condicionPago === 'Contado' && (
                 <>
-                    <Select label="Método de pago" size="xs" w={190} data={opcionesMetodoPago} allowDeselect={false} {...formVenta.getInputProps('metodoPago')} />
-                    {!esEfectivo && <TextInput label="Referencia" placeholder="Últimos 6 dígitos" size="xs" w={150} autoComplete="off" {...formVenta.getInputProps('referencia')} />}
+                    <Select label="Método de pago" size="xs" w={190} data={opcionesMetodoPago} allowDeselect={false} withAsterisk placeholder={faltaTarifa ? 'Elige primero la tarifa' : 'Elige cómo se paga'}
+                        value={formVenta.values.metodoPago || null} onChange={(v) => formVenta.setFieldValue('metodoPago', v || '')} disabled={faltaTarifa}
+                        styles={faltaMetodo ? { input: { border: '2px solid #e03131' } } : undefined} error={faltaMetodo && !faltaTarifa ? 'Elige el método de pago' : null} />
+                    {!esEfectivo && formVenta.values.metodoPago && <TextInput label="Referencia" placeholder="Últimos 6 dígitos" size="xs" w={150} autoComplete="off" {...formVenta.getInputProps('referencia')} />}
                 </>
             )}
             <Text size="xs" fw={600} pb={6} style={{ flex: 1, minWidth: 220 }} c={faltaCobro ? 'red.8' : (formVenta.values.condicionPago === 'Credito' ? 'orange.8' : 'green.8')}>
@@ -1371,7 +1472,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     );
 
     // ---------------- Teléfono: pantalla completa en tres partes (productos, carrito, datos) y el total siempre abajo ----------------
-    const faltaCliente = !esPresupuesto && tipoVenta === 'MAYOR' && !formVenta.values.clienteId;
+
     const contenidoTelefono = (
         <Box style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: '#f1f3f7' }}>
             <Box style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', borderBottom: '1px solid #e3e7ee', padding: 'calc(8px + env(safe-area-inset-top, 0px)) 12px 8px', boxShadow: '0 4px 12px -8px rgba(0,0,0,0.25)' }}>
@@ -1403,7 +1504,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                             <Group justify="space-between" wrap="nowrap" gap="xs">
                                 <Box style={{ minWidth: 0 }}>
                                     <Text size="sm" fw={700} lh={1.3} truncate="end">
-                                        {esPresupuesto ? 'Presupuesto' : `${tipoDocumentoActual} ${formVenta.values.numeroDocumento}`} · {etiquetaTarifa}
+                                        {esPresupuesto ? 'Presupuesto' : `${tipoDocumentoActual} ${formVenta.values.numeroDocumento}`} · {etiquetaTarifa || 'Falta la tarifa'}
                                     </Text>
                                     <Text size="xs" lh={1.3} c={faltaCliente ? 'red.7' : 'dimmed'} fw={faltaCliente ? 700 : 400} truncate="end">
                                         {!esPresupuesto && `${tipoVenta === 'MAYOR' ? 'Al mayor' : 'Al detal'} · `}{clienteSeleccionado ? clienteSeleccionado.nombre : (faltaCliente ? 'Falta elegir el cliente' : 'Sin cliente')}
