@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { ActionIcon, Alert, Button, Group, Menu, Modal, NumberInput, Select, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconBan, IconCash, IconDotsVertical, IconHash, IconPrinter, IconArrowsSplit2 } from '@tabler/icons-react';
+import { IconBan, IconCash, IconDotsVertical, IconHash, IconPrinter, IconArrowsSplit2, IconTrash } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
 import CompensarNotaModal from './CompensarNotaModal';
 
@@ -27,6 +27,8 @@ export default function NotaAcciones({ nota, onCambio }) {
     const [error, setError] = useState(null);
 
     const vigente = nota.estado === 'EMITIDA';
+    // El control de una nota de la empresa se asigna al imprimirla por primera vez; mientras no lo tenga se puede eliminar, y con él ya no
+    const sinControl = nota.origen === 'VENTA' && !nota.numeroControl;
     // Saldo a favor que falta por devolver o compensar (lo ya compensado en otras facturas no se puede reintegrar)
     const porReintegrar = Math.max(0, Number(nota.saldoAFavorUsd || 0) - Number(nota.reintegradoUsd || 0) - Number(nota.compensadoUsd || 0));
     const puedeReintegrar = vigente && nota.tipo === 'CREDITO' && nota.origen === 'VENTA' && porReintegrar > 0.005;
@@ -59,7 +61,8 @@ export default function NotaAcciones({ nota, onCambio }) {
                     {nota.origen === 'VENTA' && vigente && (
                         <Menu.Item leftSection={<IconPrinter size={14} />} component="a" href={`/superuser/notas/${nota.id}/imprimir`} target="_blank">Imprimir</Menu.Item>
                     )}
-                    {vigente && <Menu.Item leftSection={<IconHash size={14} />} onClick={() => abrir('control')}>Número de control</Menu.Item>}
+                    {vigente && nota.origen !== 'VENTA' && <Menu.Item leftSection={<IconHash size={14} />} onClick={() => abrir('control')}>Número de control</Menu.Item>}
+                    {sinControl && rolUsuario !== 'vendedor' && <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => abrir('eliminar')}>Eliminar nota (aún sin control)</Menu.Item>}
                     {puedeReintegrar && <Menu.Item leftSection={<IconArrowsSplit2 size={14} />} onClick={() => abrir('compensar')}>Compensar con otras facturas del cliente</Menu.Item>}
                     {puedeReintegrar && <Menu.Item leftSection={<IconCash size={14} />} onClick={() => abrir('reintegro')}>Reintegrar dinero al cliente</Menu.Item>}
                     {vigente && rolUsuario === 'admin' && <Menu.Item color="red" leftSection={<IconBan size={14} />} onClick={() => abrir('anular')}>Anular nota</Menu.Item>}
@@ -67,6 +70,14 @@ export default function NotaAcciones({ nota, onCambio }) {
             </Menu>
 
             {modal === 'compensar' && <CompensarNotaModal nota={nota} onClose={() => setModal(null)} onCambio={onCambio} />}
+
+            <Modal opened={modal === 'eliminar'} onClose={() => setModal(null)} centered title={<Text fw={800}>Eliminar {nota.numeroDocumento}</Text>}>
+                <Stack>
+                    <Text size="sm">Esta nota todavía no tiene número de control (no se ha impreso). Se revierten sus efectos y desaparece; si fue un error al hacerla, emítela de nuevo. Una vez impresa ya no se puede eliminar.</Text>
+                    {error && <Alert color="red">{error}</Alert>}
+                    <Group justify="flex-end"><Button variant="default" onClick={() => setModal(null)}>Volver</Button><Button color="red" loading={enviando} onClick={() => enviar({ accion: 'ELIMINAR' }, 'Nota eliminada')}>Sí, eliminar</Button></Group>
+                </Stack>
+            </Modal>
 
             <Modal opened={modal === 'control'} onClose={() => setModal(null)} centered title={<Text fw={800}>Número de control · {nota.numeroDocumento}</Text>}>
                 <Stack>

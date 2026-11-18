@@ -6,6 +6,7 @@ import { estaPorAprobar, esNotaAprobadaDe } from '@/app/api/_lib/aprobacion';
 import { getSesion } from '@/app/api/notificaciones/_lib';
 import { rolDe } from '@/app/constants/roles';
 import { ErrorNota, anularNota, registrarReintegro, compensarSaldoAFavor } from '@/app/api/_lib/notasFiscales';
+import { puedeCorregirFacturas } from '@/app/api/_lib/corregirFactura';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +53,7 @@ export async function GET(request, { params }) {
 export async function PUT(request, { params }) {
     const t = await sequelize.transaction();
     let compensacion = null;
+    let eliminada = false;
     try {
         const { id } = await params;
         const body = await request.json();
@@ -66,6 +68,8 @@ export async function PUT(request, { params }) {
 
         if (accion === 'NUMERO_CONTROL') {
             if (nota.estado !== 'EMITIDA') throw new ErrorNota('La nota está anulada', 409);
+            // El control de una nota de la empresa lo asigna el sistema al imprimirla por primera vez: escribirlo a mano ya causó un control mal tecleado
+            if (nota.origen === 'VENTA') throw new ErrorNota('El número de control de una nota de crédito o débito se asigna solo, al imprimirla por primera vez', 409);
             nota.numeroControl = String(body.numeroControl || '').trim().slice(0, 30) || null;
             await nota.save({ transaction: t });
         } else if (accion === 'REINTEGRO') {
@@ -77,11 +81,19 @@ export async function PUT(request, { params }) {
             compensacion = await compensarSaldoAFavor({ nota, ventaIds: Array.isArray(body.ventaIds) ? body.ventaIds.filter((x) => UUID.test(String(x))) : null, tasa, transaction: t });
         } else if (accion === 'ANULAR') {
             await anularNota({ nota, transaction: t });
+        } else if (accion === 'ELIMINAR') {
+            // Una nota sin número de control (aún no se imprimió) se puede eliminar: se revierten sus efectos y desaparece; su número queda libre si era el último
+            if (!(await puedeCorregirFacturas(acceso.sesion))) throw new ErrorNota('Solo Jolexi o el usuario 1 pueden eliminar notas', 403);
+            if (nota.origen !== 'VENTA') throw new ErrorNota('Solo se eliminan las notas que emitió la empresa', 409);
+            if (nota.numeroControl) throw new ErrorNota(`Esta nota ya tiene número de control (${nota.numeroControl}): se asignó al imprimirla y ya no se puede eliminar`, 409);
+            if (nota.estado === 'EMITIDA') await anularNota({ nota, transaction: t }); // revierte inventario, abono y saldo a favor
+            await NotaFiscal.destroy({ where: { id: nota.id }, transaction: t }); // sus renglones se borran en cascada
+            eliminada = true;
         } else {
             throw new ErrorNota('Acción no válida');
         }
         await t.commit();
-        return NextResponse.json({ success: true, nota, compensacion });
+        return NextResponse.json({ success: true, nota, compensacion, eliminada });
     } catch (error) {
         if (!t.finished) await t.rollback();
         if (error instanceof ErrorNota) return NextResponse.json({ error: error.message }, { status: error.status });

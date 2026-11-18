@@ -1,4 +1,4 @@
-// Corregir o eliminar una factura de venta que TODAVÍA NO se imprimió en la forma libre (Ventas.impresaAt vacío).
+// Corregir o eliminar una factura de venta que TODAVÍA NO tiene número de control (el control se asigna al imprimirla por primera vez; también Ventas.impresaAt vacío).
 // Solo el usuario 1 y «jolexi». Una vez impresa, la factura solo se corrige con notas de crédito o débito.
 // Imports relativos con extensión (sin alias "@/") para poder probarlo con un script de Node.
 //
@@ -55,6 +55,8 @@ export async function marcarImpresa(ventaId) {
 export async function bloqueoCorreccion(venta, transaction) {
     if (venta.tipoDocumento !== 'FACTURA') return 'Solo se corrigen facturas';
     if (venta.statusDespacho === 'Cancelado') return 'La factura está anulada';
+    // Mientras no tenga número de control (se asigna en la primera impresión) se puede corregir o eliminar; con control ya no (la de talonario trae el suyo escrito a mano)
+    if (venta.numeroControl && !venta.facturaTalonario) return `Esta factura ya tiene número de control (${venta.numeroControl}): se asignó al imprimirla por primera vez. Para corregirla usa una nota de crédito o débito`;
     if (await estaImpresa(venta.id, transaction)) return 'Esta factura ya se imprimió en la forma libre: para corregirla usa una nota de crédito o débito';
     if (venta.numeroDocumentoAnterior) return `Esta factura salió de otro documento (${venta.numeroDocumentoAnterior}): para corregirla usa la anulación con nota de crédito`;
     const where = { ventaId: venta.id };

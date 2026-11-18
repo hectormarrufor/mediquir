@@ -57,8 +57,8 @@ export default function RetencionIvaCard({ pedido, onCambio }) {
             <Text fw={700} mb="xs" c="blue.9"><IconReceiptTax size={16} style={{ verticalAlign: 'middle' }} /> Datos fiscales</Text>
 
             <Group gap="xs" align="flex-end" wrap="nowrap" mb="sm">
-                <TextInput size="xs" label="N° de control" description="Se asigna solo al imprimir la factura" placeholder="00-000000" value={control} onChange={(e) => setControl(e.currentTarget.value)} style={{ flex: 1 }} />
-                <Button size="xs" variant="light" onClick={guardarControl} loading={guardando} disabled={control === (pedido.numeroControl || '')}>Guardar</Button>
+                <TextInput size="xs" label="N° de control" description={pedido.facturaTalonario ? 'Factura de talonario: el de la hoja' : 'Se asigna solo al imprimir la factura por primera vez'} placeholder="Sin asignar" value={control} readOnly={!pedido.facturaTalonario} onChange={(e) => setControl(e.currentTarget.value)} style={{ flex: 1 }} />
+                {pedido.facturaTalonario && <Button size="xs" variant="light" onClick={guardarControl} loading={guardando} disabled={control === (pedido.numeroControl || '')}>Guardar</Button>}
             </Group>
 
             <Text size="xs" c="dimmed">IVA de la factura: <b>Bs {bs(ivaBs)}</b></Text>

@@ -235,6 +235,8 @@ export async function PUT(request, { params }) {
         // Número de control de la factura (dato fiscal para el libro de ventas)
         if (accion === 'NUMERO_CONTROL') {
             if (venta.tipoDocumento !== 'FACTURA') throw new ErrorLogistica('Solo las facturas llevan número de control');
+            // El control de la forma libre lo asigna el sistema al imprimir por primera vez; solo la factura de talonario trae el suyo escrito a mano
+            if (!venta.facturaTalonario) throw new ErrorLogistica('El número de control se asigna solo, al imprimir la factura por primera vez', 409);
             venta.numeroControl = String(body.numeroControl || '').trim().slice(0, 30) || null;
             await venta.save({ transaction: t });
             await t.commit();
