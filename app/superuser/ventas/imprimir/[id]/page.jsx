@@ -8,7 +8,7 @@ import { numeroALetras } from '@/app/utils/numeroALetras';
 import FacturaFormaLibre from './FacturaFormaLibre';
 import ControlFiscalPaso from '../../_components/ControlFiscalPaso';
 import ConfirmarFormaControl, { useControlPrevisto } from '../../_components/ConfirmarFormaControl';
-import { useControlFiscal } from '../../_lib/useControlFiscal';
+import { useControlFiscal, usePausaListo } from '../../_lib/useControlFiscal';
 import { useAuth } from '@/hooks/useAuth';
 import { formatearFecha } from '@/app/constants/hora';
 import { useZoomHoja } from '@/app/components/ui/useZoomHoja';
@@ -27,6 +27,7 @@ export default function ImprimirRecibo() {
     const [confirmado, setConfirmado] = useState(null); // el control que se confirmó
     const previsto = useControlPrevisto(necesitaControl && !venta?.numeroControl);
     const ctl = useControlFiscal({ origen: 'VENTA', id: venta?.id, activo: necesitaControl && confirmado !== null });
+    const listoVisto = usePausaListo(necesitaControl && ctl.estado === 'listo' && ctl.control === confirmado); // «¡Listo! Número de control asignado»
     const controlAVerificar = ctl.estado === 'listo' ? ctl.control : (venta?.numeroControl || previsto);
     const hayQueConfirmar = necesitaControl && (confirmado === null || (ctl.estado === 'listo' && ctl.control !== confirmado));
 
@@ -48,14 +49,14 @@ export default function ImprimirRecibo() {
     // Con ?guia=1 solo se revisa cómo cae la factura sobre la forma preimpresa: no se asigna número de control ni se imprime sola
     useEffect(() => {
         if (!venta || cargando || guia || pendiente) return undefined;
-        if (necesitaControl && (confirmado === null || ctl.estado !== 'listo' || ctl.control !== confirmado)) return undefined; // primero se verifica la forma y se asigna el control
+        if (necesitaControl && (confirmado === null || ctl.estado !== 'listo' || ctl.control !== confirmado || !listoVisto)) return undefined; // primero se verifica la forma, se asigna el control y se muestra
         const temporizador = setTimeout(() => {
             // Desde que se manda a imprimir, la factura ya no se corrige ni se elimina (solo con notas de crédito o débito)
             if (venta.tipoDocumento === 'FACTURA' && venta.statusDespacho !== 'Cancelado') fetch(`/api/ventas/${venta.id}/impresa`, { method: 'POST' }).catch(() => {});
             window.print();
         }, 800);
         return () => clearTimeout(temporizador);
-    }, [venta, cargando, guia, pendiente, necesitaControl, ctl.estado, ctl.control, confirmado]);
+    }, [venta, cargando, guia, pendiente, necesitaControl, ctl.estado, ctl.control, confirmado, listoVisto]);
 
     if (cargando) return <div style={{ padding: '2rem', textAlign: 'center' }}>Cargando documento para imprimir...</div>;
     if (!venta || venta.error) return <div style={{ padding: '2rem', textAlign: 'center' }}>Venta no encontrada.</div>;
@@ -66,6 +67,7 @@ export default function ImprimirRecibo() {
     if (esFactura) {
         if (hayQueConfirmar) return <ConfirmarFormaControl tipo="Factura" documento={venta.numeroDocumento} control={controlAVerificar} nuevo={!venta.numeroControl} onConfirmar={setConfirmado} onCancelar={() => { if (window.history.length > 1) window.history.back(); else window.close(); }} />;
         if (necesitaControl && ctl.estado !== 'listo') return <ControlFiscalPaso estado={ctl.estado} mensaje={ctl.mensaje} onReintentar={() => ctl.asignar(false)} />;
+        if (necesitaControl && !listoVisto) return <ControlFiscalPaso estado="listo" control={ctl.control} nuevo={ctl.nuevo} />;
         const reasignar = rolUsuario === 'admin' && !guia
             ? () => { if (window.confirm('¿La forma libre se dañó? Se toma el siguiente número de control y el actual queda sin usar.')) ctl.asignar(true); }
             : null;

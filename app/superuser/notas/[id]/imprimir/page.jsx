@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import FacturaFormaLibre from '@/app/superuser/ventas/imprimir/[id]/FacturaFormaLibre';
 import ControlFiscalPaso from '@/app/superuser/ventas/_components/ControlFiscalPaso';
 import ConfirmarFormaControl, { useControlPrevisto } from '@/app/superuser/ventas/_components/ConfirmarFormaControl';
-import { useControlFiscal } from '@/app/superuser/ventas/_lib/useControlFiscal';
+import { useControlFiscal, usePausaListo } from '@/app/superuser/ventas/_lib/useControlFiscal';
 import { fechaCaracas } from '@/app/constants/hora';
 import { useAuth } from '@/hooks/useAuth';
 import { lineasTasaBcv, textoSuperiorNota } from '@/app/constants/notasTexto';
@@ -31,15 +31,16 @@ export default function ImprimirNota() {
     const [confirmado, setConfirmado] = useState(null);
     const previsto = useControlPrevisto(necesitaControl && !nota?.numeroControl);
     const ctl = useControlFiscal({ origen: 'NOTA', id, activo: necesitaControl && confirmado !== null });
+    const listoVisto = usePausaListo(necesitaControl && ctl.estado === 'listo' && ctl.control === confirmado); // «¡Listo! Número de control asignado»
     const controlAVerificar = ctl.estado === 'listo' ? ctl.control : (nota?.numeroControl || previsto);
     const hayQueConfirmar = necesitaControl && (confirmado === null || (ctl.estado === 'listo' && ctl.control !== confirmado));
 
     useEffect(() => {
         if (!nota || nota.error || cargando || guia || pendiente) return undefined;
-        if (necesitaControl && (confirmado === null || ctl.estado !== 'listo' || ctl.control !== confirmado)) return undefined; // primero se verifica la forma y se asigna el control
+        if (necesitaControl && (confirmado === null || ctl.estado !== 'listo' || ctl.control !== confirmado || !listoVisto)) return undefined; // primero se verifica la forma, se asigna el control y se muestra
         const temporizador = setTimeout(() => window.print(), 800);
         return () => clearTimeout(temporizador);
-    }, [nota, cargando, guia, pendiente, necesitaControl, ctl.estado, ctl.control, confirmado]);
+    }, [nota, cargando, guia, pendiente, necesitaControl, ctl.estado, ctl.control, confirmado, listoVisto]);
 
     if (cargando) return <div style={{ padding: '2rem', textAlign: 'center' }}>Cargando nota para imprimir...</div>;
     if (!nota || nota.error) return <div style={{ padding: '2rem', textAlign: 'center' }}>Nota no encontrada.</div>;
@@ -48,6 +49,7 @@ export default function ImprimirNota() {
     if (nota.estado !== 'EMITIDA') return <div style={{ padding: '2rem', textAlign: 'center' }}>Esta nota está anulada.</div>;
     if (hayQueConfirmar) return <ConfirmarFormaControl tipo={nota.tipo === 'CREDITO' ? 'Nota de crédito' : 'Nota de débito'} documento={nota.numeroDocumento} control={controlAVerificar} nuevo={!nota.numeroControl} onConfirmar={setConfirmado} onCancelar={() => { if (window.history.length > 1) window.history.back(); else window.close(); }} />;
     if (necesitaControl && ctl.estado !== 'listo') return <ControlFiscalPaso estado={ctl.estado} mensaje={ctl.mensaje} onReintentar={() => ctl.asignar(false)} />;
+    if (necesitaControl && !listoVisto) return <ControlFiscalPaso estado="listo" control={ctl.control} nuevo={ctl.nuevo} />;
 
     const esCredito = nota.tipo === 'CREDITO';
     const control = ctl.control || nota.numeroControl;
