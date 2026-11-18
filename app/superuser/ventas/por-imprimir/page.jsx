@@ -34,7 +34,7 @@ export default function PorImprimirPage() {
                 <ActionIcon variant="subtle" color="gray" size="lg" onClick={volver} aria-label="Volver"><IconArrowLeft size={22} /></ActionIcon>
                 <Box>
                     <Title order={3} c="navy.9">Documentos por imprimir</Title>
-                    <Text size="sm" c="dimmed">Facturas y notas de crédito o débito sin número de control: el control se asigna al imprimir por primera vez, y al imprimirlos salen de esta lista.</Text>
+                    <Text size="sm" c="dimmed">Facturas y notas de crédito o débito sin número de control: el control se asigna al imprimir por primera vez, y al imprimirlos salen de esta lista. Se imprimen en orden: si falta uno anterior (incluidas las facturas de vendedores por aprobar), el siguiente espera.</Text>
                 </Box>
             </Group>
             {isLoading && <Group justify="center" p="xl"><Loader /></Group>}
@@ -49,10 +49,12 @@ export default function PorImprimirPage() {
                                     <Text fw={800}>{d.numero} <Text span size="xs" c="dimmed">{TIPOS[d.tipo]}</Text></Text>
                                     <Text size="sm" lineClamp={1}>{d.cliente}</Text>
                                     <Text size="xs" c="dimmed">{formatearFechaHora(d.fecha)}</Text>
+                                    {d.aprobacion === 'PENDIENTE' && <Text size="xs" c="orange.8" fw={700}>Por aprobar (vendedor)</Text>}
+                                    {d.esperaPor && <Text size="xs" c="red.8" fw={700}>Primero hay que imprimir {d.esperaPor}</Text>}
                                 </Box>
                                 <Text fw={800} ta="right" style={{ whiteSpace: 'nowrap' }}>{monto(d)}</Text>
                             </Group>
-                            <Button fullWidth mt="xs" color={d.aprobacion === 'PENDIENTE' ? 'orange' : undefined} leftSection={<IconPrinter size={18} />} onClick={() => imprimir(d)}>{d.aprobacion === 'PENDIENTE' ? 'Por aprobar: revisar' : 'Imprimir'}</Button>
+                            <Button fullWidth mt="xs" color={d.aprobacion === 'PENDIENTE' ? 'orange' : undefined} disabled={Boolean(d.esperaPor) && d.aprobacion !== 'PENDIENTE'} leftSection={<IconPrinter size={18} />} onClick={() => imprimir(d)}>{d.aprobacion === 'PENDIENTE' ? 'Por aprobar: revisar' : 'Imprimir'}</Button>
                         </Card>
                     ))}
                 </Stack>
@@ -64,12 +66,12 @@ export default function PorImprimirPage() {
                         <Table.Tbody>
                             {docs.map((d) => (
                                 <Table.Tr key={d.id}>
-                                    <Table.Td fw={800}>{d.numero}</Table.Td>
+                                    <Table.Td fw={800}>{d.numero}{d.aprobacion === 'PENDIENTE' && <Text size="xs" c="orange.8" fw={700}>Por aprobar (vendedor)</Text>}{d.esperaPor && <Text size="xs" c="red.8" fw={700}>Primero hay que imprimir {d.esperaPor}</Text>}</Table.Td>
                                     <Table.Td>{TIPOS[d.tipo]}</Table.Td>
                                     <Table.Td>{d.cliente}</Table.Td>
                                     <Table.Td>{formatearFechaHora(d.fecha)}</Table.Td>
                                     <Table.Td ta="right" fw={700}>{monto(d)}</Table.Td>
-                                    <Table.Td ta="right"><Button size="compact-md" color={d.aprobacion === 'PENDIENTE' ? 'orange' : undefined} leftSection={<IconPrinter size={16} />} onClick={() => imprimir(d)}>{d.aprobacion === 'PENDIENTE' ? 'Por aprobar: revisar' : 'Imprimir'}</Button></Table.Td>
+                                    <Table.Td ta="right"><Button size="compact-md" color={d.aprobacion === 'PENDIENTE' ? 'orange' : undefined} disabled={Boolean(d.esperaPor) && d.aprobacion !== 'PENDIENTE'} leftSection={<IconPrinter size={16} />} onClick={() => imprimir(d)}>{d.aprobacion === 'PENDIENTE' ? 'Por aprobar: revisar' : 'Imprimir'}</Button></Table.Td>
                                 </Table.Tr>
                             ))}
                         </Table.Tbody>

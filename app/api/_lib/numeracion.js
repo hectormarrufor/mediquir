@@ -202,25 +202,10 @@ export async function asignarControl({ origen, id, reasignar = false, transactio
 
     if (doc.numeroControl && !reasignar) return { numeroControl: doc.numeroControl, nuevo: false };
 
-    // Las seguidillas se respetan: el control se da en el orden de los números de documento. Si hay un documento anterior de la misma serie
-    // (más abajo que éste y más arriba del último que ya tiene control) todavía sin control, éste espera: primero se imprime ese.
-    // Lo anterior al último con control (facturas viejas sin control, huecos de antes) no bloquea.
+    // Las seguidillas se respetan: con el correlativo bloqueado (dos impresiones a la vez no se cruzan), si hay un documento anterior de la serie sin control, éste espera.
     if (!reasignar) {
-        const serie = esNota ? `${String(doc.numeroDocumento).split('-')[0]}-%` : 'F-%';
-        const tabla = esNota ? '"NotasFiscales"' : '"Ventas"';
-        const filtro = esNota
-            ? `"origen" = 'VENTA' AND "estado" = 'EMITIDA'`
-            : `"tipoDocumento" = 'FACTURA' AND "facturaTalonario" = false AND "statusDespacho" <> 'Cancelado'`;
-        const num = (col) => `CAST(NULLIF(regexp_replace(${col}, '\\D', '', 'g'), '') AS bigint)`;
-        const miNumero = Number(String(doc.numeroDocumento).replace(/\D/g, ''));
-        const [previo] = await sequelize.query(
-            `SELECT "numeroDocumento" FROM ${tabla}
-             WHERE ${filtro} AND "numeroDocumento" LIKE :serie AND "numeroControl" IS NULL AND id <> :id
-               AND ${num('"numeroDocumento"')} < :mio
-               AND ${num('"numeroDocumento"')} > COALESCE((SELECT MAX(${num('"numeroDocumento"')}) FROM ${tabla} WHERE ${filtro} AND "numeroDocumento" LIKE :serie AND "numeroControl" IS NOT NULL AND id <> :id AND ${num('"numeroDocumento"')} < :mio), 0)
-             ORDER BY ${num('"numeroDocumento"')} ASC LIMIT 1`,
-            { replacements: { serie, id: doc.id, mio: miNumero }, type: sequelize.QueryTypes.SELECT, transaction: t },
-        );
+        await Correlativo.findOne({ where: { prefijo: 'CONTROL' }, transaction: t, lock: t.LOCK.UPDATE });
+        const previo = await documentoAnteriorSinControl({ origen, doc, transaction: t });
         if (previo) throw new ErrorNumeracion(`Primero hay que imprimir ${previo.numeroDocumento}: los números de control se dan en el orden de los documentos y ${doc.numeroDocumento} es posterior. Imprime ${previo.numeroDocumento} (o elimínala si no sale) y luego ésta.`, 409, 'ORDEN_CONTROL');
     }
 
@@ -239,4 +224,30 @@ export async function asignarControl({ origen, id, reasignar = false, transactio
     // La retención de IVA guarda una copia del control de la factura
     if (!esNota) await RetencionIva.update({ numeroControlFactura: numero }, { where: { ventaId: doc.id }, transaction: t });
     return { numeroControl: numero, nuevo: true };
+}// Solo cuentan los documentos hechos con el sistema (desde la importación del 15/11/2026): las facturas y notas importadas sin control no se imprimen ni bloquean.
+export const DESDE_CONTROL = '2026-11-15';
+
+/**
+ * Seguidillas: el control se da en el orden de los números de documento de cada serie (F, NC, ND). Devuelve el documento ANTERIOR de la misma serie
+ * que sigue sin control (facturas de vendedores por aprobar incluidas), o null si éste puede imprimirse ya.
+ * `doc` debe traer id, numeroDocumento y, para notas, el prefijo en el número. origen: 'VENTA' (factura) | 'NOTA'.
+ */
+export async function documentoAnteriorSinControl({ origen, doc, transaction }) {
+    const esNota = origen === 'NOTA';
+    const serie = esNota ? `${String(doc.numeroDocumento).split('-')[0]}-%` : 'F-%';
+    const tabla = esNota ? '"NotasFiscales"' : '"Ventas"';
+    const filtro = esNota
+        ? `"origen" = 'VENTA' AND "estado" = 'EMITIDA'`
+        : `"tipoDocumento" = 'FACTURA' AND "facturaTalonario" = false AND "statusDespacho" <> 'Cancelado'`;
+    const numero = `CAST(NULLIF(regexp_replace("numeroDocumento", '\D', '', 'g'), '') AS bigint)`;
+    const [previo] = await sequelize.query(
+        `SELECT id, "numeroDocumento" FROM ${tabla}
+         WHERE ${filtro} AND "numeroDocumento" LIKE :serie AND "numeroControl" IS NULL AND id <> :id AND "createdAt" >= :desde
+           AND ${numero} < :mio
+         ORDER BY ${numero} ASC LIMIT 1`,
+        { replacements: { serie, id: doc.id, desde: DESDE_CONTROL, mio: Number(String(doc.numeroDocumento).replace(/\D/g, '')) }, type: sequelize.QueryTypes.SELECT, transaction },
+    );
+    return previo || null;
 }
+
+

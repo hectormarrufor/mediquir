@@ -48,6 +48,12 @@ export default function ConfirmarFormaControl({ tipo, documento, control, nuevo,
         queryKey: ['por-imprimir-conteo'], staleTime: 0, retry: false,
         queryFn: async () => { const r = await fetch('/api/ventas/por-imprimir'); return r.ok ? r.json() : null; },
     });
+    // Seguidilla: si hay un documento anterior sin imprimir, éste no puede imprimirse todavía (el servidor también lo impide)
+    const { data: orden } = useQuery({
+        queryKey: ['control-orden', origen, idDocumento], enabled: Boolean(nuevo && origen && idDocumento), staleTime: 0, gcTime: 0, refetchOnMount: 'always', retry: false,
+        queryFn: async () => { const r = await fetch(`/api/control?origen=${origen}&id=${idDocumento}`); return r.ok ? r.json() : null; },
+    });
+    const esperaPor = orden?.esperaPor || null;
     const otros = Math.max(0, Number(pendientes?.total || 0) - (nuevo ? 1 : 0));
     const hayEscrito = numeroDe(escrito) !== null;
     const coincide = hayEscrito && numeroDe(escrito) === numeroDe(control);
@@ -57,7 +63,14 @@ export default function ConfirmarFormaControl({ tipo, documento, control, nuevo,
                 <Stack>
                     <Text fw={800} size="lg">Verifica la forma antes de imprimir</Text>
                     <Text size="sm" c="dimmed">{tipo} {documento}</Text>
-                    {control ? (
+                    {esperaPor ? (
+                        <Stack>
+                            <Alert color="red" variant="filled" icon={<IconAlertTriangle size={20} />} title="Falta una factura anterior por imprimir">
+                                Antes de imprimir {documento} hay que imprimir <b>{esperaPor}</b>: los números de control se dan en el orden de los documentos y {esperaPor} todavía no tiene su control. Revisa «Documentos por imprimir» (si está por aprobar, hay que aprobarla primero; si no va a salir, elimínala).
+                            </Alert>
+                            <Button component="a" href="/superuser/ventas/por-imprimir" size="lg">Ir a Documentos por imprimir</Button>
+                        </Stack>
+                    ) : control ? (
                         <>
                             <Paper bg="yellow.0" withBorder radius="md" p="md" ta="center">
                                 <Text size="xs" c="dimmed" fw={700} tt="uppercase">N° de control que saldrá impreso</Text>

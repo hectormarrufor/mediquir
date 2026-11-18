@@ -4,7 +4,8 @@ import { requerirNoVendedor } from '@/app/api/_lib/acceso';
 import { requerirStaff } from '@/app/api/inventario/_lib';
 import { esFacturaAprobadaDe, esNotaAprobadaDe } from '@/app/api/_lib/aprobacion';
 import { rolDe } from '@/app/constants/roles';
-import { ErrorNumeracion, asignarControl, controlesLibres } from '@/app/api/_lib/numeracion';
+import { ErrorNumeracion, asignarControl, controlesLibres, documentoAnteriorSinControl } from '@/app/api/_lib/numeracion';
+import { Venta, NotaFiscal } from '@/models';
 import { FormaAnulada } from '@/models';
 import { notificarAdmins } from '@/app/handlers/notificar';
 import { nombreDeUsuario } from '@/app/api/_lib/aprobacion';
@@ -12,6 +13,20 @@ import { nombreDeUsuario } from '@/app/api/_lib/aprobacion';
 export const dynamic = 'force-dynamic';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// Antes de imprimir: ¿hay un documento anterior de la serie sin imprimir? (la seguidilla del control se respeta; al asignar se vuelve a comprobar)
+export async function GET(request) {
+    const a = await requerirStaff();
+    if (a.error) return a.error;
+    const { searchParams } = new URL(request.url);
+    const origen = searchParams.get('origen');
+    const id = searchParams.get('id');
+    if (!UUID.test(String(id || '')) || !['VENTA', 'NOTA'].includes(origen)) return NextResponse.json({ error: 'Documento no válido' }, { status: 400 });
+    const doc = await (origen === 'NOTA' ? NotaFiscal : Venta).findByPk(id, { attributes: ['id', 'numeroDocumento', 'numeroControl'] });
+    if (!doc) return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
+    const previo = doc.numeroControl ? null : await documentoAnteriorSinControl({ origen, doc });
+    return NextResponse.json({ esperaPor: previo?.numeroDocumento || null });
+}
 
 // Asigna el número de control de la forma libre a una factura ('VENTA') o a una nota ('NOTA') al imprimirla.
 // Es un correlativo compartido y se da una sola vez por documento; `reasignar` (solo administrador) toma el siguiente si la forma se dañó.
