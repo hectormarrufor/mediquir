@@ -18,6 +18,7 @@ const db = {
     VentaDetalle: require('./VentaDetalle'),
     VentaEmpaqueItem: require('./VentaEmpaqueItem'),
     EmpaqueError: require('./EmpaqueError'),
+    CambioPrecio: require('./CambioPrecio'),
     Marca: require('./inventario/Marca'),
     GrupoEquivalencia: require('./inventario/GrupoEquivalencia'),
     CategoriaFinanciera: require('./finanzas/CategoriaFinanciera'),

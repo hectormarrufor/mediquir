@@ -4,6 +4,7 @@ import { Marca, Producto } from '@/models';
 import { preciosBase, precioUnitario } from '@/app/constants/facturacion';
 import { rolDe } from '@/app/constants/roles';
 import { requerirStaff } from '../../inventario/_lib';
+import { puedeCambiarPrecios, historialDisponible } from '../../_lib/preciosAcceso';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,10 +42,14 @@ export async function GET(request) {
                 precio7: real(j.precio7) ? precioUnitario(p7Final) : null, // con la oferta aplicada, como lo cobra el POS
                 precio7Lista: real(j.precio7) ? precioUnitario(b.p7) : null,
                 precio6: real(j.precio6) ? precioUnitario(b.p6) : null,
+                // precios tal como están guardados (para editarlos)
+                precio7Guardado: Number(j.precio7) || 0, precio6Guardado: Number(j.precio6) || 0,
                 ...(esVendedor ? {} : { precio1: Number(j.costoUsd) > 0 ? precioUnitario(Number(j.costoUsd) * 1.35) : null }),
             };
         });
-        return NextResponse.json({ productos, hayMas: productos.length >= LIMITE });
+        // Cambiar precios: solo las administradoras autorizadas, y solo si existe el historial (para poder revertir)
+        const puedeCambiar = (await puedeCambiarPrecios(acceso.sesion)) && (await historialDisponible());
+        return NextResponse.json({ productos, hayMas: productos.length >= LIMITE, puedeCambiarPrecios: puedeCambiar });
     } catch (error) {
         console.error('Consultor de precios:', error);
         return NextResponse.json({ error: 'No se pudo consultar los precios' }, { status: 500 });
