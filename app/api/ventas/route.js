@@ -5,7 +5,7 @@ import db from '@/models';
 const { Venta, VentaDetalle, Producto, Marca, Correlativo, CategoriaFinanciera, MovimientoFinanciero, Cliente, User, Empleado, SalidaInventario, CuentaPorCobrar } = db;
 import { requerirStaff } from '../inventario/_lib';
 import { tasaVigente, tasaDelDia } from '../_lib/tasaBcv';
-import { primerLibre } from '../_lib/correlativoLibre';
+import { primerLibre, desdeLibreFacturas } from '../_lib/correlativoLibre';
 import { asegurarComisionFactura } from '../_lib/comisionesPago';
 import { controlAlNacer, ErrorNumeracion } from '../_lib/numeracion';
 import { calcularFactura, aBolivares, aDolares, REGLAS, precioPorTarifa, TARIFAS_VENDEDOR } from '@/app/constants/facturacion';
@@ -198,6 +198,7 @@ export async function POST(request) {
 
         // --- 2. CORRELATIVO ---
         let numeroDocumento = '';
+        let avisoNumero = null; // se le dice a quien factura cuando el número no es el que tenía en pantalla
         if (esTalonario) {
             // Serie propia FM-: se escribe a mano; no mueve ningún correlativo y no se renumera en silencio
             numeroDocumento = `FM-${String(parseInt(String(numeroDocumentoManual).replace(/\D/g, ''), 10)).padStart(5, '0')}`;
@@ -217,19 +218,33 @@ export async function POST(request) {
             { replacements: { patron: `${prefijo}-%` }, type: sequelize.QueryTypes.SELECT, transaction: t }
         );
         // Facturas: el siguiente es el primero libre desde el correlativo (una factura copiada con número adelantado no lo mueve; al llegar a ella se salta)
-        const siguienteLibre = prefijo === 'F' ? await primerLibre({ prefijo, desde: corr.siguienteNumero, transaction: t }) : Math.max(corr.siguienteNumero, Number(maximo) + 1);
+        // Si una factura se eliminó, su número queda libre POR ENCIMA de la última factura con control: la siguiente factura lo reutiliza para no dejar un hueco
+        // (el correlativo no baja, pero el número libre más bajo sale primero). Lo anterior a la última con control nunca se reutiliza.
+        const desdeLibre = prefijo === 'F' ? await desdeLibreFacturas({ siguiente: corr.siguienteNumero, transaction: t }) : corr.siguienteNumero;
+        const siguienteLibre = prefijo === 'F' ? await primerLibre({ prefijo, desde: desdeLibre, transaction: t }) : Math.max(corr.siguienteNumero, Number(maximo) + 1);
 
         // El número escrito a mano siempre queda con el prefijo del documento ("123" -> "F-00123"): sin prefijo no lo
         // encontraban la numeración fiscal ni el correlativo, y una factura podía quedar con el prefijo de otro documento
-        const numeroExtraido = parseInt(String(numeroDocumentoManual || '').replace(/\D/g, ''), 10);
+        // Un vendedor nunca escribe el número: lo asigna el servidor (la pantalla puede traer uno viejo de un borrador o de una factura eliminada).
+        // Solo administración puede copiar una factura con su número (facturas del sistema anterior).
+        const manualNum = esVend ? '' : numeroDocumentoManual;
+        const numeroExtraido = parseInt(String(manualNum || '').replace(/\D/g, ''), 10);
         let numeroBase = (!isNaN(numeroExtraido) && numeroExtraido > 0) ? numeroExtraido : siguienteLibre;
-        numeroDocumento = numeroDocumentoManual ? `${prefijo}-${String(numeroBase).padStart(corr.cerosRelleno || 5, '0')}` : '';
+        numeroDocumento = manualNum ? `${prefijo}-${String(numeroBase).padStart(corr.cerosRelleno || 5, '0')}` : '';
         const yaExiste = numeroDocumento ? await Venta.findOne({ where: { numeroDocumento }, attributes: ['id'], transaction: t }) : null;
         // Una FACTURA con número escrito a mano es la copia de una que ya existe en el sistema anterior: si ese número ya está tomado NO se cambia en silencio por otro (saldría con un número que no es el de la factura)
-        if (yaExiste && tipoDocumento === 'FACTURA' && numeroDocumentoManual) throw new ErrorNegocio(`Ya existe el documento ${numeroDocumento}: revisa el número de la factura`, 409);
+        if (yaExiste && tipoDocumento === 'FACTURA' && manualNum) throw new ErrorNegocio(`Ya existe el documento ${numeroDocumento}: revisa el número de la factura`, 409);
         if (!numeroDocumento || yaExiste) {
             numeroBase = siguienteLibre;
             numeroDocumento = `${prefijo}-${String(numeroBase).padStart(corr.cerosRelleno || 5, '0')}`;
+        }
+        // Avisos: el número que salió no es el que se veía en pantalla, se reutilizó un hueco, o administración escribió uno por debajo del correlativo
+        if (numeroDocumentoManual && String(numeroDocumentoManual).replace(/\D/g, '') !== String(numeroBase)) {
+            avisoNumero = `El número que veías (${numeroDocumentoManual}) ya no estaba disponible: el documento salió con ${numeroDocumento}.`;
+        } else if (!manualNum && prefijo === 'F' && numeroBase < corr.siguienteNumero) {
+            avisoNumero = `Se reutilizó el número libre ${numeroDocumento} (de una factura eliminada) para no dejar un hueco en la numeración.`;
+        } else if (manualNum && prefijo === 'F' && numeroBase < corr.siguienteNumero) {
+            avisoNumero = `Escribiste un número (${numeroDocumento}) menor que el siguiente del correlativo (F-${String(corr.siguienteNumero).padStart(corr.cerosRelleno || 5, '0')}): se usó tal cual. Verifica que sea el correcto.`;
         }
         if (prefijo === 'F') corr.siguienteNumero = await primerLibre({ prefijo, desde: Math.max(corr.siguienteNumero, numeroBase < corr.siguienteNumero ? corr.siguienteNumero : 0), ocupados: [numeroBase], transaction: t });
         else corr.siguienteNumero = Math.max(corr.siguienteNumero, numeroBase + 1);
@@ -405,7 +420,7 @@ export async function POST(request) {
             }
         }
 
-        return NextResponse.json({ success: true, message: 'Venta registrada', numeroDocumento, ventaId: nuevaVenta.id, porAprobar }, { status: 201 });
+        return NextResponse.json({ success: true, message: 'Venta registrada', numeroDocumento, ventaId: nuevaVenta.id, porAprobar, avisoNumero }, { status: 201 });
 
     } catch (error) {
         if (!t.finished) await t.rollback();

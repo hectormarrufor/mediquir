@@ -20,3 +20,17 @@ export async function primerLibre({ prefijo, desde, ocupados = [], transaction }
     while (usados.has(n)) n += 1;
     return n;
 }
+
+/**
+ * Desde dónde buscar el siguiente número de FACTURA: si una factura se eliminó, su número queda libre por encima de la última factura con control y
+ * la próxima lo reutiliza (no deja un hueco). Lo anterior a la última factura con control nunca se reutiliza. El correlativo guardado no baja.
+ */
+export async function desdeLibreFacturas({ siguiente, transaction }) {
+    const [fila] = await sequelize.query(
+        `SELECT MAX(CAST(NULLIF(regexp_replace("numeroDocumento", '[^0-9]', '', 'g'), '') AS bigint)) AS n
+           FROM "Ventas" WHERE "numeroDocumento" ~ '^F-[0-9]+$' AND "tipoDocumento" = 'FACTURA' AND "facturaTalonario" = false AND "numeroControl" IS NOT NULL`,
+        { type: sequelize.QueryTypes.SELECT, transaction },
+    );
+    const base = Number(siguiente) || 1;
+    return fila?.n ? Math.min(base, Number(fila.n) + 1) : base;
+}

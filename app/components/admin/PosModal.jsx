@@ -657,6 +657,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     </Group>
                 ),
             });
+            // El número que salió no es el que se veía (o se reutilizó un hueco): se avisa siempre
+            if (data.avisoNumero) notifications.show({ color: 'orange', title: 'Aviso sobre el número', message: data.avisoNumero, autoClose: 20000, withCloseButton: true });
             // El próximo número de documento y el stock cambiaron: la siguiente venta debe verlos al día
             queryClient.invalidateQueries({ queryKey: ['correlativos-pos'] });
             queryClient.invalidateQueries({ queryKey: ['numeracion-pos'] });

@@ -9,7 +9,7 @@
 //                  Al imprimir solo se muestra el que ya tiene; si la forma se daña se puede pedir el siguiente.
 import db from '../../../models/index.js';
 import { fechaCaracas } from '../../constants/hora.js';
-import { primerLibre } from './correlativoLibre.js';
+import { primerLibre, desdeLibreFacturas } from './correlativoLibre.js';
 
 const { sequelize, Correlativo, Venta, NotaFiscal, RetencionIva, FormaAnulada } = db;
 
@@ -109,7 +109,7 @@ export async function estadoNumeracion(transaction) {
         const ceros = c?.cerosRelleno || meta.ceros;
         const ultimo = await ultimoUsado(clave, transaction);
         // El siguiente nunca baja del mayor ya usado (aunque la fila del correlativo esté atrasada)
-        const siguiente = clave === 'CONTROL' ? await primerControlLibre(c?.siguienteNumero || 1, transaction) : clave === 'F' ? await primerLibre({ prefijo: 'F', desde: c?.siguienteNumero || 1, transaction }) : Math.max(c?.siguienteNumero || 1, (ultimo || 0) + 1);
+        const siguiente = clave === 'CONTROL' ? await primerControlLibre(c?.siguienteNumero || 1, transaction) : clave === 'F' ? await primerLibre({ prefijo: 'F', desde: await desdeLibreFacturas({ siguiente: c?.siguienteNumero || 1, transaction }), transaction }) : Math.max(c?.siguienteNumero || 1, (ultimo || 0) + 1);
         resultado.push({
             clave, etiqueta: meta.etiqueta, pregunta: meta.pregunta, ejemplo: meta.ejemplo, prefijo: meta.prefijo,
             configurado: c ? Boolean(c.configurado) : false, siguienteNumero: siguiente, ceros,
