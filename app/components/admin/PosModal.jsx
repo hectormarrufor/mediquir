@@ -741,7 +741,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const talonario = esFactura && puedeEditarPrecio && Boolean(formVenta.values.facturaTalonario);
     const tamCampo = isMobile ? 'md' : 'sm'; // en el teléfono, campos más altos (se tocan con el dedo y la letra no obliga a acercar)
     // Los vendedores, al VENDER, solo trabajan y ven bolívares (tarifas P4/P5); los dólares son solo de los presupuestos y de administración.
-    const soloBs = esVendedor && !esPresupuesto;
+    // (la nota de entrega y la venta rápida sí pueden ir en dólares; la restricción es de la factura y, por derivar de ella, de sus notas de crédito y débito)
+    const soloBs = esVendedor && !esPresupuesto && esFactura;
     // Ven todos los precios, pero una factura de un vendedor solo se emite en bolívares (P4/P5)
     const vendedorFacturaEnDolares = soloBs && esFactura && ['precio7', 'precio6', 'precio1'].includes(formVenta.values.tipoPrecio);
     useEffect(() => {

@@ -135,6 +135,7 @@ export async function POST(request) {
         if (esVend) {
             if (detalles.some((d) => d.isFicticio)) throw new ErrorNegocio('Solo administración puede vender productos genéricos con precio libre', 403);
             if (!TARIFAS_VENDEDOR.includes(body.tipoPrecio)) throw new ErrorNegocio('Tarifa de precio no permitida', 403);
+            if (tipoDocumento === 'FACTURA' && ['precio7', 'precio6'].includes(body.tipoPrecio)) throw new ErrorNegocio('Un vendedor no puede facturar en dólares: usa un precio en bolívares (P4 o P5)', 403);
         }
         // Factura de talonario: la hecha a mano. Solo administración la carga, con SU número y SU control (sin tocar los correlativos del sistema ni el control de la forma libre)
         const esTalonario = facturaTalonario === true && tipoDocumento === 'FACTURA';
