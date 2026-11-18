@@ -21,6 +21,7 @@ import { notifications } from '@mantine/notifications';
 import PrecioVisual from '@/app/components/ui/PrecioVisual';
 import RetencionIvaCard from '../_components/RetencionIvaCard';
 import CambioDeudaModal from '@/app/superuser/cxc/_components/CambioDeudaModal';
+import OfertaReciboAbono from '@/app/superuser/cxc/_components/OfertaReciboAbono';
 import EvidenciaEmpaque from '../_components/EvidenciaEmpaque';
 import RevisionExistencias from '../_components/RevisionExistencias';
 import EnvioCard from '../_components/EnvioCard';
@@ -44,6 +45,7 @@ export default function DetallePedidoMayorPage() {
     const [modalEmpacar, setModalEmpacar] = useState(false);
     const [modalDespacho, setModalDespacho] = useState(false);
     const [modalAbono, setModalAbono] = useState(false);
+    const [ofertaRecibo, setOfertaRecibo] = useState(null); // abono recién asentado: se ofrece imprimir su recibo
     const [modalAbonoCxc, setModalAbonoCxc] = useState(false); // el mismo registro de abonos que usa Cuentas por cobrar
     const [modalCobroTienda, setModalCobroTienda] = useState(false);
     const [cobroTienda, setCobroTienda] = useState({ metodoPago: 'Efectivo ($)', referencia: '' });
@@ -128,6 +130,7 @@ export default function DetallePedidoMayorPage() {
             if (data.avisoNumero) notifications.show({ color: 'orange', title: 'Aviso sobre el número', message: data.avisoNumero, autoClose: 20000, withCloseButton: true });
             if (modalSetter) modalSetter(false);
             refetch();
+            return data;
         } catch (error) {
             notifications.show({ title: 'Error', message: error.message, color: 'red' });
         } finally {
@@ -146,7 +149,7 @@ export default function DetallePedidoMayorPage() {
         if (!(Number(values.montoAbono) > 0)) return notifications.show({ message: 'El monto debe ser mayor a 0', color: 'red' });
         if (values.monedaAbono !== monedaCuenta && !(precioBCV > 0)) return notifications.show({ message: 'Todavía no hay tasa BCV para convertir el pago: espera un momento e intenta de nuevo', color: 'red' });
 
-        handleAction('ABONAR', {
+        return handleAction('ABONAR', {
             montoAbono: values.montoAbono,
             metodoPago: values.metodoPago,
             referencia: values.referencia,
@@ -154,7 +157,10 @@ export default function DetallePedidoMayorPage() {
             tasaCambioAbono: precioBCV,
             retencion: values.retuvo && puedeRetener,
             cierraFactura: values.cierra
-        }, setModalAbono, 'Abono registrado y saldo actualizado.');
+        }, setModalAbono, 'Abono registrado y saldo actualizado.').then((d) => {
+            // un abono de verdad ofrece su recibo de una vez (la retención y la nota de crédito no son dinero recibido)
+            if (d?.abonoId && !/retenci|nota de cr/i.test(String(values.metodoPago || ''))) setOfertaRecibo({ abonoId: d.abonoId, resumen: `Abono registrado en ${pedido.numeroDocumento}.` });
+        });
     };
 
     const abrirAbono = () => {
@@ -869,6 +875,7 @@ export default function DetallePedidoMayorPage() {
                     </Stack>
                 </form>
             </Modal>
+            {ofertaRecibo && <OfertaReciboAbono abonoId={ofertaRecibo.abonoId} documento={pedido.numeroDocumento} resumen={ofertaRecibo.resumen} onCerrar={() => setOfertaRecibo(null)} />}
             {modalAbonoCxc && cuentaPorCobrar && (
                 <CambioDeudaModal
                     cuenta={{

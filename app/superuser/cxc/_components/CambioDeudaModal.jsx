@@ -8,6 +8,7 @@ import { IconInfoCircle } from '@tabler/icons-react';
 import { fechaCaracas } from '@/app/constants/hora';
 import { Dialogo } from './Piezas';
 import { dolares } from './utilidades';
+import OfertaReciboAbono from './OfertaReciboAbono';
 import classes from './cxc.module.css';
 
 const METODOS_ABONO = ['Zelle', 'Efectivo ($)', 'Transferencia', 'Pago Móvil', 'Retención IVA', 'Nota de crédito', 'Otro'];
@@ -26,6 +27,7 @@ export default function CambioDeudaModal({ cuenta, nuevoSaldo = null, tipoInicia
     const [notas, setNotas] = useState('');
     const [retuvo, setRetuvo] = useState(false);   // el cliente retuvo el 75 % del IVA de esta factura
     const [cierra, setCierra] = useState(false);   // el cliente dice que con este pago cierra la factura
+    const [oferta, setOferta] = useState(null);    // abono recién asentado: se ofrece imprimir su recibo antes de cerrar
 
     useEffect(() => {
         if (!cuenta) return;
@@ -52,12 +54,18 @@ export default function CambioDeudaModal({ cuenta, nuevoSaldo = null, tipoInicia
             if (r.quedaDebiendo) notifications.show({ color: 'orange', autoClose: 9000, title: 'Ojo: dice que pagó completo y aún debe', message: `${cuenta.documento} queda debiendo ${dolares(saldo)}. Pasó a la lista «Dicen que pagaron completo».` });
             else notifications.show({ color: 'teal', title: tipo === 'AJUSTE' ? 'Ajuste registrado' : 'Abono registrado', message: saldo <= 0.005 ? `${cuenta.documento} quedó cobrada por completo` : `${cuenta.documento}: ahora debe ${dolares(saldo)}` });
             queryClient.invalidateQueries({ queryKey: ['cxc-libro'] }); queryClient.invalidateQueries({ queryKey: ['cuentas'] });
+            // Un abono de verdad (no un ajuste, ni una cuenta manual, ni la retención o la nota de crédito, que no son dinero recibido) ofrece su recibo
+            if (tipo === 'ABONO' && !cuenta.manual && r.abono?.id && Number(monto) > 0 && !/retenci|nota de cr/i.test(metodo)) {
+                setOferta({ abonoId: r.abono.id, resumen: `Abono de ${dolares(Number(monto))} a ${cuenta.documento}. ${saldo <= 0.005 ? 'La factura quedó cobrada por completo.' : `Queda debiendo ${dolares(saldo)}.`}` });
+                return;
+            }
             onCerrar(true);
         },
         onError: (e) => notifications.show({ color: 'red', title: 'No se guardó', message: e.message }),
     });
 
     if (!cuenta) return null;
+    if (oferta) return <OfertaReciboAbono abonoId={oferta.abonoId} documento={cuenta.documento} resumen={oferta.resumen} onCerrar={() => onCerrar(true)} />;
     const esAjuste = tipo === 'AJUSTE';
     const importe = Number(monto || 0);
     // Retención de IVA: solo en facturas con IVA que todavía no tienen una declarada. El 75 % lo calcula el sistema a la tasa de la factura.

@@ -575,7 +575,7 @@ export async function PUT(request, { params }) {
             if (venta.tipoVenta === 'MAYOR') {
                 await avisarCliente(venta, 'PAGO_RECIBIDO', { abonoUsd: abonoRegistrado.abonoUsd, liquidada: abonoRegistrado.liquidada, saldoRestante: abonoRegistrado.saldoRestante, monedaCuenta: abonoRegistrado.monedaCuenta, tasa: Number(venta.tasaCambio) });
             }
-            return NextResponse.json({ success: true, message: 'Abono registrado y saldo actualizado exitosamente.' });
+            return NextResponse.json({ success: true, message: 'Abono registrado y saldo actualizado exitosamente.', abonoId: abonoRegistrado?.abono?.id ?? null, abonoUsd: abonoRegistrado?.abonoUsd ?? null });
         }
 
         await t.rollback();
