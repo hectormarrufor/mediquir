@@ -186,6 +186,10 @@ export default function VentasDashboard() {
     const { tasa } = useTasaBcv();
     const telefono = useEsTelefono();
     // Cuántos documentos de vendedores esperan aprobación (solo responde para quien los aprueba: jolexi y el usuario 1)
+    const porImprimir = useQuery({
+        queryKey: ['por-imprimir-conteo'], retry: false, refetchInterval: 60000,
+        queryFn: async () => { const r = await fetch('/api/ventas/por-imprimir'); return r.ok ? r.json() : null; },
+    });
     const porAprobar = useQuery({
         queryKey: ['por-aprobar-conteo'], enabled: !esVendedor, retry: false, refetchInterval: 60000,
         queryFn: async () => { const r = await fetch('/api/ventas/por-aprobar'); return r.ok ? r.json() : null; },
@@ -282,6 +286,7 @@ export default function VentasDashboard() {
                     </Box>
                     {/* En el teléfono la venta nueva va primero y a todo el ancho */}
                     <Group gap="xs" w={telefono ? '100%' : undefined} wrap={telefono ? 'nowrap' : 'wrap'}>
+                        {porImprimir.data && <Button size="lg" variant="filled" color={porImprimir.data.total ? "blue.8" : "teal"} fw={800} leftSection={<IconPrinter size={18} />} onClick={() => router.push('/superuser/ventas/por-imprimir')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 0, flexShrink: 0 } : undefined}>{telefono ? 'Por imprimir' : 'Documentos por imprimir'}{porImprimir.data.total ? ` (${porImprimir.data.total})` : ''}</Button>}
                         {porAprobar.data && <Button size="md" variant="filled" color={porAprobar.data.total ? 'orange' : 'gray'} leftSection={<IconFileInvoice size={18} />} onClick={() => router.push('/superuser/ventas/por-aprobar')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 1, flexShrink: 0 } : undefined}>{telefono ? 'Por aprobar' : 'Facturas por aprobar'}{porAprobar.data.total ? ` (${porAprobar.data.total})` : ''}</Button>}
                         {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconCashRegister size={18} />} onClick={() => router.push('/superuser/ventas/cierre')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 3, flexShrink: 0 } : undefined}>{telefono ? 'Cierre' : 'Cierre de caja'}</Button>}
                         {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconListNumbers size={18} />} onClick={() => router.push('/superuser/ventas/controles')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 3, flexShrink: 0 } : undefined}>{telefono ? 'Controles' : 'Números de control'}</Button>}

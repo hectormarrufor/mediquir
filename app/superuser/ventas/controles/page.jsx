@@ -174,7 +174,6 @@ export default function NumerosDeControlPage() {
                         </Box>
                     </Group>
                     <Group gap="xs">
-                        <Button variant="white" color="dark" onClick={() => router.push('/superuser/ventas/por-imprimir')}>Documentos por imprimir</Button>
                         <Select w={160} data={CANTIDADES} value={cantidad} onChange={(v) => v && setCantidad(v)} allowDeselect={false} aria-label="Cuántos números mostrar" />
                         <Checkbox label="Solo los que faltan" checked={soloFaltan} onChange={(e) => setSoloFaltan(e.currentTarget.checked)} styles={{ label: { color: 'white' } }} />
                     </Group>
