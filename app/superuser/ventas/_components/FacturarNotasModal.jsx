@@ -175,7 +175,6 @@ export default function FacturarNotasModal({ opened, onClose, pedido, onListo })
                                     </Table>
                                     <Group grow mt={6} align="flex-start">
                                         <TextInput size="xs" label="Número (si ya la emitiste en el sistema anterior)" placeholder="146883" value={copias[i]?.numero || ''} onChange={(e) => ponerCopia(i, 'numero', e.currentTarget.value)} />
-                                        <TextInput size="xs" label="Número de control" placeholder="00-0122676" value={copias[i]?.control || ''} onChange={(e) => ponerCopia(i, 'control', e.currentTarget.value)} />
                                     </Group>
                                 </Card>
                             ))}
@@ -194,7 +193,7 @@ export default function FacturarNotasModal({ opened, onClose, pedido, onListo })
                         </Stack>
                     )}
                     <Divider />
-                    <Text size="xs" c="dimmed">Si el cliente te retiene el IVA, lo declaras después al registrar su abono. El número de control se asigna al imprimir si no lo escribes. Esta acción no se puede deshacer.</Text>
+                    <Text size="xs" c="dimmed">Si el cliente te retiene el IVA, lo declaras después al registrar su abono. El número de control se asigna al imprimir. Esta acción no se puede deshacer.</Text>
                     <Button loading={emitir.isPending} disabled={bloqueado} fullWidth color="indigo" onClick={() => emitir.mutate()}>
                         {plan && plan.facturas.length > 1 ? `Sí, emitir las ${plan.facturas.length} facturas` : 'Sí, emitir la factura'}
                     </Button>
