@@ -5,6 +5,9 @@ import { rolDe } from '@/app/constants/roles';
 
 export const dynamic = 'force-dynamic';
 
+// Solo figuran los documentos NUEVOS, hechos con el sistema después de la importación (15/11/2026); las facturas y notas importadas (sin control) no se imprimen.
+const DESDE_POR_IMPRIMIR = '2026-11-15';
+
 // Documentos por imprimir: los que todavía no tienen número de control (el control se asigna AL IMPRIMIR por primera vez).
 //  · Vendedor: sus facturas y notas de crédito/débito que ya aprobó jolexi y aún no se imprimen (sin control).
 //  · Administración: facturas, notas de crédito y notas de débito emitidas por la empresa sin control, ya aprobadas (las de vendedores por aprobar no salen).
@@ -38,13 +41,14 @@ export async function GET() {
                            COALESCE(c."nombre", 'Cliente al detal') AS cliente, v."createdAt" AS creado
                       FROM "Ventas" v LEFT JOIN "Clientes" c ON c."id" = v."clienteId"
                      WHERE v."tipoDocumento" = 'FACTURA' AND v."facturaTalonario" = false AND v."numeroControl" IS NULL AND v."statusDespacho" <> 'Cancelado'
-                       AND v."createdAt" > now() - interval '90 days' AND v."aprobacionEstado" IS DISTINCT FROM 'PENDIENTE'
+                       AND v."createdAt" >= :desde AND v."aprobacionEstado" IS DISTINCT FROM 'PENDIENTE'
                     UNION ALL
                     SELECT n."id", CASE WHEN n."tipo" = 'CREDITO' THEN 'NOTA_CREDITO' ELSE 'NOTA_DEBITO' END, n."numeroDocumento", n."fecha"::timestamptz, n."aprobadaAt", n."moneda"::text, n."totalFinal"::float,
                            COALESCE(c."nombre", 'Cliente al detal'), n."createdAt"
                       FROM "NotasFiscales" n LEFT JOIN "Clientes" c ON c."id" = n."clienteId"
-                     WHERE n."origen" = 'VENTA' AND n."estado" = 'EMITIDA' AND n."numeroControl" IS NULL AND n."aprobacionEstado" IS DISTINCT FROM 'PENDIENTE'
+                     WHERE n."origen" = 'VENTA' AND n."estado" = 'EMITIDA' AND n."numeroControl" IS NULL AND n."aprobacionEstado" IS DISTINCT FROM 'PENDIENTE' AND n."createdAt" >= :desde
                  ) d ORDER BY d."creado"`,
+                { desde: DESDE_POR_IMPRIMIR },
             );
         }
         const lista = documentos.map((d) => ({ ...d, url: d.tipo === 'FACTURA' ? `/superuser/ventas/imprimir/${d.id}` : `/superuser/notas/${d.id}/imprimir` }));
