@@ -31,7 +31,7 @@ function Pulso() {
 
 const fmtDia = (f) => (f ? String(f).slice(0, 10).split('-').reverse().join('/') : '');
 
-// Recibo de cobranza (cuentas por cobrar): una hoja completa por copia, con la tabla de facturas que cubre el pago, el total, la forma de pago y los datos del depósito.
+// Recibo de cobranza (cuentas por cobrar): una sola hoja (el original), con la tabla de facturas que cubre el pago, el total, la forma de pago y los datos del depósito.
 function CopiaCobranza({ recibo, etiqueta }) {
     const d = recibo.detalle;
     const lineas = d.lineas || [];
@@ -178,7 +178,7 @@ export default function ReciboImprimible({ recibo, accionesExtra = null }) {
             </Group>
 
             <div id="rc-print-section" className={fuenteTienda.className}>
-                {recibo.detalle?.lineas ? ['Original', 'Copia'].map((et) => (
+                {recibo.detalle?.lineas ? ['Original'].map((et) => ( // el recibo de cobro sale en UNA sola página (el original)
                     <div key={et} className="rc-hoja rc-hoja-cobro" style={{ '--rc-zoom': zoom }}>
                         <div className="rc-franja" />
                         <CopiaCobranza recibo={recibo} etiqueta={et} />
@@ -253,7 +253,7 @@ export default function ReciboImprimible({ recibo, accionesExtra = null }) {
                 .rc-dep-grid b { font-size: 10px; font-weight: 600; min-height: 13px; display: block; }
                 .rc-firmas-cobro { gap: 24px; margin-top: 34px; }
                 .rc-firmas-cobro > div b { color: var(--tinta); font-size: 9.5px; }
-                .rc-hoja-cobro { break-after: page; page-break-after: always; }
+                .rc-hoja-cobro { break-after: avoid; page-break-after: avoid; }
                 @media print {
                     @page { size: letter portrait; margin: 0; }
                     html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
