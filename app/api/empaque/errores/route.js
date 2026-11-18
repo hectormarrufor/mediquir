@@ -30,7 +30,9 @@ export async function GET(request) {
                FROM "VentaEmpaqueItems" ei JOIN "Ventas" v ON v.id = ei."ventaId"
                WHERE ei."verificadoAt" BETWEEN :d AND :h AND v."empacadorId" IS NOT NULL GROUP BY 1`),
             q(`SELECT "empacadorId" AS id, tipo, COUNT(*)::int AS n FROM "EmpaqueErrores" WHERE "createdAt" BETWEEN :d AND :h GROUP BY 1, 2`),
-            q(`SELECT e.id, e."createdAt", e."empacadorId", e.tipo, e."nivelPedido", e."nivelEscaneado", v."numeroDocumento" AS pedido, v.id AS "ventaId", pr.nombre AS producto
+            // "createdAt" de esta tabla guarda la hora de Caracas SIN zona horaria: leída tal cual, el servidor (UTC) la tomaba como hora UTC y la
+            // pantalla la mostraba 4 horas antes (errores a las 5 a. m.). Con AT TIME ZONE sale como instante exacto.
+            q(`SELECT e.id, e."createdAt" AT TIME ZONE 'America/Caracas' AS "createdAt", e."empacadorId", e.tipo, e."nivelPedido", e."nivelEscaneado", v."numeroDocumento" AS pedido, v.id AS "ventaId", pr.nombre AS producto
                FROM "EmpaqueErrores" e LEFT JOIN "Ventas" v ON v.id = e."ventaId" LEFT JOIN "Productos" pr ON pr.id = e."productoId"
                WHERE e."createdAt" BETWEEN :d AND :h ORDER BY e."createdAt" DESC LIMIT 60`),
         ]);
