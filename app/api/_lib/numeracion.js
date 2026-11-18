@@ -202,6 +202,28 @@ export async function asignarControl({ origen, id, reasignar = false, transactio
 
     if (doc.numeroControl && !reasignar) return { numeroControl: doc.numeroControl, nuevo: false };
 
+    // Las seguidillas se respetan: el control se da en el orden de los números de documento. Si hay un documento anterior de la misma serie
+    // (más abajo que éste y más arriba del último que ya tiene control) todavía sin control, éste espera: primero se imprime ese.
+    // Lo anterior al último con control (facturas viejas sin control, huecos de antes) no bloquea.
+    if (!reasignar) {
+        const serie = esNota ? `${String(doc.numeroDocumento).split('-')[0]}-%` : 'F-%';
+        const tabla = esNota ? '"NotasFiscales"' : '"Ventas"';
+        const filtro = esNota
+            ? `"origen" = 'VENTA' AND "estado" = 'EMITIDA'`
+            : `"tipoDocumento" = 'FACTURA' AND "facturaTalonario" = false AND "statusDespacho" <> 'Cancelado'`;
+        const num = (col) => `CAST(NULLIF(regexp_replace(${col}, '\\D', '', 'g'), '') AS bigint)`;
+        const miNumero = Number(String(doc.numeroDocumento).replace(/\D/g, ''));
+        const [previo] = await sequelize.query(
+            `SELECT "numeroDocumento" FROM ${tabla}
+             WHERE ${filtro} AND "numeroDocumento" LIKE :serie AND "numeroControl" IS NULL AND id <> :id
+               AND ${num('"numeroDocumento"')} < :mio
+               AND ${num('"numeroDocumento"')} > COALESCE((SELECT MAX(${num('"numeroDocumento"')}) FROM ${tabla} WHERE ${filtro} AND "numeroDocumento" LIKE :serie AND "numeroControl" IS NOT NULL AND id <> :id AND ${num('"numeroDocumento"')} < :mio), 0)
+             ORDER BY ${num('"numeroDocumento"')} ASC LIMIT 1`,
+            { replacements: { serie, id: doc.id, mio: miNumero }, type: sequelize.QueryTypes.SELECT, transaction: t },
+        );
+        if (previo) throw new ErrorNumeracion(`Primero hay que imprimir ${previo.numeroDocumento}: los números de control se dan en el orden de los documentos y ${doc.numeroDocumento} es posterior. Imprime ${previo.numeroDocumento} (o elimínala si no sale) y luego ésta.`, 409, 'ORDEN_CONTROL');
+    }
+
     // Se pide otro número porque la forma se dañó: la hoja anterior queda registrada como anulada (explica el hueco en la secuencia)
     const anterior = /^00-(\d+)$/.exec(String(doc.numeroControl || ''));
     if (reasignar && anterior) {
