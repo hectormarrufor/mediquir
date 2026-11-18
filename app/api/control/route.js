@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { sequelize } from '@/models';
 import { requerirNoVendedor } from '@/app/api/_lib/acceso';
 import { requerirStaff } from '@/app/api/inventario/_lib';
-import { esFacturaAprobadaDe } from '@/app/api/_lib/aprobacion';
+import { esFacturaAprobadaDe, esNotaAprobadaDe } from '@/app/api/_lib/aprobacion';
 import { rolDe } from '@/app/constants/roles';
 import { ErrorNumeracion, asignarControl } from '@/app/api/_lib/numeracion';
 
@@ -23,7 +23,10 @@ export async function POST(request) {
     const t = await sequelize.transaction();
     try {
         const { origen, id, reasignar } = await request.json();
-        if (esVend && (origen !== 'VENTA' || reasignar || !(await esFacturaAprobadaDe(id, sesion.sesion.id)))) throw new ErrorNumeracion('Solo puedes imprimir tus facturas ya aprobadas', 403);
+        if (esVend) {
+            const suyo = !reasignar && UUID.test(String(id || '')) && (origen === 'VENTA' ? await esFacturaAprobadaDe(id, sesion.sesion.id) : origen === 'NOTA' && await esNotaAprobadaDe(id, sesion.sesion.id));
+            if (!suyo) throw new ErrorNumeracion('Solo puedes imprimir tus facturas y notas ya aprobadas', 403);
+        }
         if (!UUID.test(String(id || ''))) throw new ErrorNumeracion('Documento no encontrado', 404);
         if (reasignar && rolDe(acceso.sesion) !== 'admin') throw new ErrorNumeracion('Solo un administrador puede reasignar el número de control', 403);
 

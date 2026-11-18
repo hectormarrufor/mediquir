@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { sequelize } from '@/models';
 import { getSesion } from '@/app/api/notificaciones/_lib';
 import { puedeAprobar, aprobar } from '@/app/api/_lib/aprobacion';
+import { aplicarEfectosVenta, avisarPedidoMayor, ErrorEfectos } from '@/app/api/_lib/efectosVenta';
+import { aplicarEfectosNota } from '@/app/api/_lib/notasFiscales';
+import { ErrorNota } from '@/app/api/_lib/notasFiscales';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,16 +52,23 @@ export async function GET() {
 }
 
 // Aprueba un documento: { tipo: 'VENTA' | 'NOTA', id }. Desde ahí se puede imprimir.
+// Al aprobarlo se aplican sus efectos (inventario, cuenta por cobrar, caja, comisión): todo en una transacción; si algo falla sigue por aprobar.
 export async function POST(request) {
     const a = await requerirAprobador();
     if (a.error) return a.error;
+    const t = await sequelize.transaction();
     try {
         const { tipo, id } = await request.json();
-        if (!['VENTA', 'NOTA'].includes(tipo) || !UUID.test(String(id))) return NextResponse.json({ error: 'Documento inválido' }, { status: 400 });
-        const ok = await aprobar(tipo, id, Number(a.sesion.id));
-        if (!ok) return NextResponse.json({ error: 'Ese documento ya no está por aprobar' }, { status: 409 });
+        if (!['VENTA', 'NOTA'].includes(tipo) || !UUID.test(String(id))) { await t.rollback(); return NextResponse.json({ error: 'Documento inválido' }, { status: 400 }); }
+        const ok = await aprobar(tipo, id, Number(a.sesion.id), t);
+        if (!ok) { await t.rollback(); return NextResponse.json({ error: 'Ese documento ya no está por aprobar' }, { status: 409 }); }
+        const efectos = tipo === 'VENTA' ? await aplicarEfectosVenta({ ventaId: id, transaction: t }) : await aplicarEfectosNota({ notaId: id, transaction: t });
+        await t.commit();
+        if (tipo === 'VENTA' && efectos.aplicado) await avisarPedidoMayor(efectos.venta);
         return NextResponse.json({ success: true });
     } catch (error) {
+        if (!t.finished) await t.rollback();
+        if (error instanceof ErrorEfectos || error instanceof ErrorNota) return NextResponse.json({ error: error.message }, { status: error.status || 409 });
         console.error('Aprobar documento:', error);
         return NextResponse.json({ error: 'No se pudo aprobar el documento' }, { status: 500 });
     }

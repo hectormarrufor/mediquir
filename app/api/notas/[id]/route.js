@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { Marca, Producto, Cliente, NotaFiscal, NotaFiscalDetalle, Proveedor, Venta, FacturaCompra, sequelize } from '@/models';
 import { requerirAdmin, requerirNoVendedor } from '@/app/api/_lib/acceso';
 import { tasaVigente } from '@/app/api/_lib/tasaBcv';
-import { estaPorAprobar } from '@/app/api/_lib/aprobacion';
+import { estaPorAprobar, esNotaAprobadaDe } from '@/app/api/_lib/aprobacion';
+import { getSesion } from '@/app/api/notificaciones/_lib';
+import { rolDe } from '@/app/constants/roles';
 import { ErrorNota, anularNota, registrarReintegro, compensarSaldoAFavor } from '@/app/api/_lib/notasFiscales';
 
 export const dynamic = 'force-dynamic';
@@ -11,11 +13,15 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 
 // Una nota con todo lo que hace falta para verla o imprimirla
 export async function GET(request, { params }) {
-    const acceso = await requerirNoVendedor();
+    // Un vendedor solo ve (para imprimirla) una nota SUYA ya aprobada
+    const sesionActual = await getSesion();
+    const esVend = Boolean(sesionActual) && !sesionActual.clienteId && rolDe(sesionActual) === 'vendedor';
+    const acceso = esVend ? { sesion: sesionActual } : await requerirNoVendedor();
     if (acceso.error) return acceso.error;
     try {
         const { id } = await params;
         if (!UUID.test(id)) return NextResponse.json({ error: 'Nota no encontrada' }, { status: 404 });
+        if (esVend && !(await esNotaAprobadaDe(id, sesionActual.id))) return NextResponse.json({ error: 'Solo puedes ver tus notas ya aprobadas' }, { status: 403 });
         const nota = await NotaFiscal.findByPk(id, {
             include: [
                 { model: NotaFiscalDetalle, as: 'detalles' },

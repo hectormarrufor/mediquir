@@ -11,7 +11,7 @@ import ErroresEmpaqueCard from './ErroresEmpaqueCard';
 import DeliveryDiferenciasCard from './DeliveryDiferenciasCard';
 import {
     IconAlertTriangle, IconArrowDownRight, IconArrowRight, IconArrowUpRight, IconBuildingStore, IconCash, IconCheck, IconClockExclamation, IconPackage,
-    IconReceipt, IconReceiptTax, IconSettings, IconShoppingCart, IconTruckDelivery, IconWallet,
+    IconPrinter, IconReceipt, IconReceiptTax, IconSettings, IconShoppingCart, IconTruckDelivery, IconWallet,
 } from '@tabler/icons-react';
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -59,7 +59,11 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
     // Facturas y notas de vendedores por aprobar (solo responde para quien las aprueba: jolexi y el usuario 1)
     const porAprobar = useQuery({ queryKey: ['por-aprobar-conteo'], retry: false, refetchInterval: 60000, queryFn: async () => { const r = await fetch('/api/ventas/por-aprobar'); return r.ok ? r.json() : null; } });
 
+    // Documentos (facturas, notas de crédito y de débito) que aún no recibieron su número de control: el control se asigna al imprimirlos por primera vez
+    const porImprimir = useQuery({ queryKey: ['por-imprimir-conteo'], retry: false, refetchInterval: 60000, queryFn: async () => { const r = await fetch('/api/ventas/por-imprimir'); return r.ok ? r.json() : null; } });
+
     const atencion = [];
+    if (porImprimir.data?.total > 0) atencion.push({ color: 'orange', icono: IconPrinter, texto: `${porImprimir.data.total} documento(s) por imprimir`, detalle: 'Aún sin número de control: se asigna al imprimirlos', href: '/superuser/ventas/por-imprimir' });
     if (porAprobar.data?.total > 0) atencion.push({ color: 'orange', icono: IconReceipt, texto: `${porAprobar.data.total} factura(s) o nota(s) de vendedores por aprobar`, detalle: 'Revísalas, corrígelas y apruébalas para imprimir', href: '/superuser/ventas/por-aprobar' });
     if (d?.porCobrar.vencidas > 0) atencion.push({ color: 'red', icono: IconClockExclamation, texto: `${d.porCobrar.vencidas} cuenta(s) por cobrar vencida(s)`, detalle: fmtUsd(d.porCobrar.montoVencido), href: '/superuser/cxc' });
     if (d?.porPagar.vencidas > 0) atencion.push({ color: 'red', icono: IconClockExclamation, texto: `${d.porPagar.vencidas} cuenta(s) por pagar vencida(s)`, detalle: 'Revisa tus proveedores', href: '/superuser/cxp' });

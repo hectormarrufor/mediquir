@@ -2,6 +2,7 @@
 // Imports relativos con extensión (sin alias "@/") para poder probarlo con un script de Node.
 import { list, del } from '@vercel/blob';
 import db from '../../../models/index.js';
+import { sinEfectosAplicados } from './_sinEfectos.js';
 
 const {
     Venta, VentaDetalle, VentaEmpaqueItem, EmpaqueError, Producto, SalidaInventario, MovimientoFinanciero, Abono, CuentaPorCobrar, RetencionIva,
@@ -41,7 +42,8 @@ export async function eliminarVenta({ venta, transaction: t }) {
     ]);
 
     // ---- Inventario: el detal y la tienda descuentan al vender; el mayor, al empacar
-    const salioMercancia = ['DETAL', 'ONLINE'].includes(venta.tipoVenta) || ['Empacado', 'Completado'].includes(venta.statusDespacho) || Boolean(venta.empacadoAt);
+    // (la factura de un vendedor por aprobar no movió nada: no hay mercancía que devolver)
+    const salioMercancia = !(await sinEfectosAplicados(venta.id, t)) && (['DETAL', 'ONLINE'].includes(venta.tipoVenta) || ['Empacado', 'Completado'].includes(venta.statusDespacho) || Boolean(venta.empacadoAt));
     const yaDevuelto = new Map();
     for (const n of notas.filter((x) => x.estado === 'EMITIDA' && x.tipo === 'CREDITO' && x.devuelveInventario)) {
         for (const d of n.detalles) if (d.productoId) yaDevuelto.set(d.productoId, (yaDevuelto.get(d.productoId) || 0) + Number(d.cantidad));

@@ -172,8 +172,10 @@ export async function planAnulacion({ venta, transaction }) {
  *   afectaCxc: obligatorio salvo en la anulación total de una factura que salió de notas de entrega (ahí la deuda vuelve a las notas)
  *   documentos: { [ventaId de la factura]: { numero?, control } } -> número de NC (si ya se emitió en el sistema anterior) y su control
  */
-export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = null, motivo, documentos = {}, notas = null, fecha = null, usuarioId = null, confirmarPagada = false, modificarPago = false, transaction: t }) {
+export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = null, motivo, documentos = {}, notas = null, fecha = null, usuarioId = null, confirmarPagada = false, modificarPago = false, diferir = false, transaction: t }) {
     const varias = Array.isArray(notas) && notas.length > 1;
+    // Un vendedor no devuelve deudas a notas de entrega ni rebaja pagos: eso lo hace administración (lo que él emite no mueve nada hasta aprobarse)
+    if (diferir && modificarPago) throw new ErrorAnulacion('Rebajar un pago ya registrado lo hace administración: pídele a Jolexi que emita la nota');
     if (!varias && !['TOTAL', 'PARCIAL'].includes(tipo)) throw new ErrorAnulacion('Elige si la anulación es total o parcial');
     const motivoTxt = String(motivo || '').trim();
     if (motivoTxt.length < 5) throw new ErrorAnulacion('Explica el motivo de la anulación (mínimo 5 caracteres)');
@@ -187,7 +189,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
     };
     const emitir = async (factura, lineas, devuelve, afecta, texto) => emitirNotaVenta({
         venta: factura, tipo: 'CREDITO', renglones: lineas, motivo: texto, devuelveInventario: devuelve, afectaCxc: afecta, usuarioId, transaction: t,
-        numeroManual: datosDe(factura.id).numero || null, numeroControl: await control(factura.id), fecha,
+        numeroManual: datosDe(factura.id).numero || null, numeroControl: await control(factura.id), fecha, diferir,
     });
     const todos = (r) => r.filter((x) => x.restante > 0).map((x) => ({ ventaDetalleId: x.id, cantidad: x.restante }));
 
@@ -210,6 +212,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
         }
         const completa = plan.renglones.every((r) => (usado.get(r.id) || 0) === r.restante);
         const sinCxc = completa && plan.deNotas; // la deuda vuelve a las notas de entrega, sin mover inventario
+        if (diferir && sinCxc) throw new ErrorAnulacion('Esta anulación devuelve la deuda a las notas de entrega: la hace administración (pídele a Jolexi que emita la nota)');
         if (modificarPago && (completa || !plan.factura.pagada)) throw new ErrorAnulacion(MENSAJE_SOLO_PAGADA);
         if (!completa && plan.factura.pagada) { // parcial sobre factura pagada: no toca nada, previa confirmación
             if (!confirmarPagada) throw new ErrorAnulacion(MENSAJE_PAGADA, 409, CONFIRMAR_PAGADA);
@@ -226,7 +229,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
             const nota = await emitirNotaVenta({
                 venta, tipo: 'CREDITO', renglones: g.renglones, devuelveInventario: devuelve, afectaCxc: sinCxc ? false : afectaCxc, usuarioId, transaction: t,
                 motivo: `Anulación ${completa ? 'total' : 'parcial'} de la factura ${venta.numeroDocumento} en ${grupos.length} notas de crédito (${i + 1} de ${grupos.length}): ${motivoTxt}`,
-                numeroManual: g.numero || null, numeroControl: ctrl, fecha,
+                numeroManual: g.numero || null, numeroControl: ctrl, fecha, diferir,
             });
             const pagoRebajado = modificarPago ? await rebajarPago({ venta, nota, transaction: t }) : false;
             emitidasAqui.push({ id: nota.id, numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda, pagoRebajado });
@@ -260,6 +263,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
     }
 
     // ---------- Total de factura(s) que salieron de notas de entrega: la deuda vuelve a las notas
+    if (diferir) throw new ErrorAnulacion('Esta anulación devuelve la deuda a las notas de entrega: la hace administración (pídele a Jolexi que emita la nota)');
     if (plan.bloqueosNotas.length) throw new ErrorAnulacion(plan.bloqueosNotas[0], 409);
     const grupo = await grupoDeNotas(venta, t);
     const facturas = grupo.facturas.filter((f) => plan.facturas.some((p) => p.id === f.id));

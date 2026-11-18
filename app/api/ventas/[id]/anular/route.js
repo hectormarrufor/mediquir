@@ -3,7 +3,7 @@ import sequelize from '@/sequelize';
 import { Venta } from '@/models';
 import { rolDe } from '@/app/api/_lib/acceso';
 import { requerirStaff } from '@/app/api/inventario/_lib';
-import { aprobacionDisponible, marcarPorAprobar, avisarPorAprobar, nombreDeUsuario } from '@/app/api/_lib/aprobacion';
+import { aprobacionDisponible, marcarPorAprobar, avisarPorAprobar, nombreDeUsuario, efectosDiferidosDisponible, leerEfectosPendientes } from '@/app/api/_lib/aprobacion';
 import { planAnulacion, anularFactura, ErrorAnulacion } from '@/app/api/_lib/anularFactura';
 import { ErrorNota } from '@/app/api/_lib/notasFiscales';
 
@@ -47,18 +47,23 @@ export async function POST(request, { params }) {
             if (Number(venta.vendedorId) !== Number(acceso.sesion.id)) throw new ErrorAnulacion('Factura no encontrada', 404);
             if (!(await aprobacionDisponible())) throw new ErrorAnulacion('Todavía no está activada la aprobación de documentos: pídele a administración que emita la nota', 409);
         }
+        // Una factura por aprobar todavía no movió nada: se corrige o se elimina, no se anula con una nota
+        if (await leerEfectosPendientes('VENTA', venta.id, t)) throw new ErrorAnulacion('Esta factura todavía está por aprobar: pide que se corrija o se elimine en lugar de anularla con una nota de crédito', 409);
+        // La nota de un vendedor no mueve inventario ni cuentas por cobrar hasta que jolexi la aprueba
+        const diferir = esVend && (await efectosDiferidosDisponible());
         const b = await request.json();
         const r = await anularFactura({
             venta, tipo: b.tipo, renglones: b.renglones, afectaCxc: typeof b.afectaCxc === 'boolean' ? b.afectaCxc : null, motivo: b.motivo,
-            documentos: b.documentos && typeof b.documentos === 'object' ? b.documentos : {}, notas: Array.isArray(b.notas) ? b.notas : null, fecha: b.fecha || null, confirmarPagada: b.confirmarPagada === true, modificarPago: b.modificarPago === true,usuarioId: Number(acceso.sesion.id) || null, transaction: t,
+            documentos: b.documentos && typeof b.documentos === 'object' ? b.documentos : {}, notas: Array.isArray(b.notas) ? b.notas : null, fecha: b.fecha || null, confirmarPagada: b.confirmarPagada === true, modificarPago: b.modificarPago === true,usuarioId: Number(acceso.sesion.id) || null, diferir, transaction: t,
         });
+        if (diferir) for (const n of r.notas || []) if (n.id) await marcarPorAprobar('NOTA', n.id, t); // por aprobar en la misma transacción: nunca queda una nota con efectos pendientes sin aprobación
         await t.commit();
         // Lo que emite un vendedor queda por aprobar (jolexi lo revisa y lo imprime)
         let porAprobar = false;
         if (esVend) {
             const vendedor = await nombreDeUsuario(acceso.sesion.id).catch(() => null);
             for (const n of r.notas || []) {
-                if (n.id && await marcarPorAprobar('NOTA', n.id)) { porAprobar = true; await avisarPorAprobar({ tipoDoc: 'la nota de crédito', numero: n.numero, vendedor }); }
+                if (n.id && (diferir || await marcarPorAprobar('NOTA', n.id))) { porAprobar = true; await avisarPorAprobar({ tipoDoc: 'la nota de crédito', numero: n.numero, vendedor }); }
             }
         }
         return NextResponse.json({ success: true, ...r, porAprobar });

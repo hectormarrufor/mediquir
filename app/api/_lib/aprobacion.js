@@ -14,9 +14,9 @@ const columnaFaltante = (e) => e?.original?.code === '42703' || /aprobacionEstad
 export const puedeAprobar = puedeCorregirFacturas;
 
 /** Marca un documento como por aprobar. Devuelve false (y lo deja anotado) si no se pudo, p. ej. por migración sin correr. */
-export async function marcarPorAprobar(tipo, id) {
+export async function marcarPorAprobar(tipo, id, transaction = undefined) {
     try {
-        await sequelize.query(`UPDATE "${TABLAS[tipo]}" SET "aprobacionEstado" = 'PENDIENTE', "aprobadaAt" = NULL, "aprobadaPorId" = NULL WHERE id = :id`, { replacements: { id } });
+        await sequelize.query(`UPDATE "${TABLAS[tipo]}" SET "aprobacionEstado" = 'PENDIENTE', "aprobadaAt" = NULL, "aprobadaPorId" = NULL WHERE id = :id`, { replacements: { id }, transaction });
         return true;
     } catch (e) {
         console.error(columnaFaltante(e) ? 'Falta correr la migración aprobacion-documentos' : 'No se pudo marcar por aprobar:', e.message);
@@ -62,10 +62,10 @@ export async function esFacturaAprobadaDe(ventaId, usuarioId) {
 }
 
 /** Aprueba un documento por aprobar. Devuelve true si estaba pendiente. */
-export async function aprobar(tipo, id, usuarioId) {
+export async function aprobar(tipo, id, usuarioId, transaction = undefined) {
     const [, meta] = await sequelize.query(
         `UPDATE "${TABLAS[tipo]}" SET "aprobacionEstado" = 'APROBADA', "aprobadaAt" = now(), "aprobadaPorId" = :u WHERE id = :id AND "aprobacionEstado" = 'PENDIENTE'`,
-        { replacements: { id, u: usuarioId || null } },
+        { replacements: { id, u: usuarioId || null }, transaction },
     );
     return (meta?.rowCount ?? 0) > 0;
 }
@@ -100,4 +100,67 @@ export async function aprobacionDisponible() {
         if (columnaFaltante(e)) return false;
         throw e;
     }
+}
+
+/** ¿Es una nota de este vendedor y ya está aprobada? Solo así un vendedor puede imprimirla (asignarle el número de control). */
+export async function esNotaAprobadaDe(notaId, usuarioId) {
+    try {
+        const [f] = await sequelize.query(
+            `SELECT 1 AS ok FROM "NotasFiscales" n LEFT JOIN "Ventas" v ON v."id" = COALESCE(n."ventaId", (n."facturasAfectadas"->0->>'ventaId')::uuid)
+              WHERE n."id" = :id AND n."origen" = 'VENTA' AND n."estado" = 'EMITIDA' AND n."aprobacionEstado" = 'APROBADA'
+                AND COALESCE(n."registradoPorId", v."vendedorId") = :u`,
+            { replacements: { id: notaId, u: Number(usuarioId) }, type: sequelize.QueryTypes.SELECT },
+        );
+        return Boolean(f);
+    } catch (e) {
+        if (columnaFaltante(e)) return false;
+        throw e;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// EFECTOS DIFERIDOS: la factura o nota de un vendedor no mueve inventario, cuentas por cobrar, caja ni comisiones hasta que jolexi la aprueba.
+// Lo que hay que aplicar al aprobar queda en la columna efectosPendientes (JSON). NULL = ya se aplicaron (o el documento no es de un vendedor).
+// Si la migración aprobacion-efectos no se corrió, nada se difiere (todo funciona como antes).
+// La consulta de disponibilidad va SIN transacción: un error de columna dentro de una transacción la dejaría abortada.
+// ---------------------------------------------------------------------------------------------------------------------------------------
+let efectosOk = null;
+let efectosRevisado = 0;
+
+/** ¿Existe la columna efectosPendientes en Ventas y NotasFiscales? (se recuerda un minuto cuando no existe) */
+export async function efectosDiferidosDisponible() {
+    if (efectosOk === true) return true;
+    if (efectosOk === false && Date.now() - efectosRevisado < 60000) return false;
+    try {
+        await sequelize.query('SELECT "efectosPendientes" FROM "Ventas" LIMIT 1');
+        await sequelize.query('SELECT "efectosPendientes" FROM "NotasFiscales" LIMIT 1');
+        efectosOk = true;
+    } catch (e) {
+        if (!columnaFaltante(e) && !/efectosPendientes/.test(e?.message || '')) throw e;
+        efectosOk = false;
+    }
+    efectosRevisado = Date.now();
+    return efectosOk;
+}
+
+/** Deja anotado lo que se aplicará al aprobar. Devuelve false si no se pudo (migración sin correr). */
+export async function guardarEfectosPendientes(tipo, id, datos, transaction) {
+    if (!(await efectosDiferidosDisponible())) return false;
+    await sequelize.query(`UPDATE "${TABLAS[tipo]}" SET "efectosPendientes" = CAST(:d AS jsonb) WHERE id = :id`, { replacements: { id, d: JSON.stringify(datos || {}) }, transaction });
+    return true;
+}
+
+/** Los efectos que esperan aprobación (objeto) o null si ya se aplicaron / no aplica. */
+export async function leerEfectosPendientes(tipo, id, transaction) {
+    if (!(await efectosDiferidosDisponible())) return null;
+    const [f] = await sequelize.query(`SELECT "efectosPendientes" AS e FROM "${TABLAS[tipo]}" WHERE id = :id`, { replacements: { id }, type: sequelize.QueryTypes.SELECT, transaction });
+    return f?.e ?? null;
+}
+
+/** Cambia los datos anotados (p. ej. jolexi corrige el método de pago antes de aprobar). */
+export const actualizarEfectosPendientes = guardarEfectosPendientes;
+
+export async function limpiarEfectosPendientes(tipo, id, transaction) {
+    if (!(await efectosDiferidosDisponible())) return;
+    await sequelize.query(`UPDATE "${TABLAS[tipo]}" SET "efectosPendientes" = NULL WHERE id = :id`, { replacements: { id }, transaction });
 }

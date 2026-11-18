@@ -3,6 +3,7 @@ import { requerirStaff } from '@/app/api/inventario/_lib';
 import { rolDe } from '@/app/constants/roles';
 import { notificarCabezas } from '@/app/handlers/notificar';
 import db from '@/models/index';
+import { leerEfectosPendientes } from '@/app/api/_lib/aprobacion';
 import { aplicarLote } from '@/app/api/inventario/productos/_lote';
 import { nivelMayor, textoEntrega } from '@/app/constants/presentaciones';
 import {
@@ -116,6 +117,7 @@ export async function POST(request, { params }) {
         const detalle = venta.detalles.find((d) => d.id === detalleId);
         if (!detalle) throw new ErrorEmpaque('Ese producto no pertenece a este pedido', 404);
         if (['Cancelado', 'Completado'].includes(venta.statusDespacho)) throw new ErrorEmpaque('Este pedido ya está cerrado', 409);
+        if (await leerEfectosPendientes('VENTA', venta.id, t)) throw new ErrorEmpaque('Este pedido está por aprobar: se podrá empacar cuando Jolexi apruebe la factura', 409);
         if (venta.empacadoAt) throw new ErrorEmpaque('El empaque ya fue firmado: la evidencia no se puede modificar', 409);
 
         // ---- Administración libera un renglón con novedad para que el empacador lo vuelva a verificar ----

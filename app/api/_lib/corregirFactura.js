@@ -13,6 +13,7 @@ import { CONFIG_FISCAL } from '../../constants/empresa.js';
 import { fechaCaracas } from '../../constants/hora.js';
 import { asegurarComisionFactura } from './comisionesPago.js';
 import { eliminarVenta } from '../ventas/_eliminar.js';
+import { sinEfectosAplicados, anotarPagoPendiente } from '../ventas/_sinEfectos.js';
 
 const {
     sequelize, User, Venta, VentaDetalle, Producto, SalidaInventario, MovimientoFinanciero, CategoriaFinanciera, CuentaPorCobrar, Abono, RetencionIva,
@@ -74,6 +75,8 @@ const mismaLista = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 export async function modificarFactura({ venta, condicionPago, diasCredito, metodoPago, referencia, detalles, transaction: t }) {
     const bloqueo = await bloqueoCorreccion(venta, t);
     if (bloqueo) throw new ErrorCorreccion(bloqueo, 409);
+    // La factura de un vendedor por aprobar todavía no movió inventario, caja ni cuentas por cobrar (se aplican al aprobarla): solo se corrige el documento
+    const diferida = await sinEfectosAplicados(venta.id, t);
 
     // VentaDetalle no tiene createdAt (timestamps: false): ordenar por esa columna rompía la corrección con «Error interno». Abajo se compara sin depender del orden.
     const actuales = await VentaDetalle.findAll({ where: { ventaId: venta.id }, transaction: t });
@@ -119,7 +122,7 @@ export async function modificarFactura({ venta, condicionPago, diasCredito, meto
             throw new ErrorCorreccion('El pedido ya se empacó o despachó: los renglones ya no se pueden cambiar (usa una nota de crédito o débito)', 409);
         }
         // Lo que el detal ya descontó se devuelve y se vuelve a descontar con los renglones nuevos
-        if (detal) {
+        if (detal && !diferida) {
             for (const a of actuales) {
                 if (a.isFicticio || a.afectaInventario === false || !a.productoId) continue;
                 const p = await Producto.findByPk(a.productoId, { transaction: t, lock: t.LOCK.UPDATE });
@@ -144,7 +147,7 @@ export async function modificarFactura({ venta, condicionPago, diasCredito, meto
                 presentacionPedida: pres?.presentacionPedida || null, cantidadPresentacion: pres?.cantidadPresentacion || null, unidadesPorPresentacion: pres?.unidadesPorPresentacion || null,
                 precioUnitario: r.precioUnitario, subtotal: r.monto,
             }, { transaction: t });
-            if (item.isFicticio || item.afectaInventario === false) continue;
+            if (item.isFicticio || item.afectaInventario === false || diferida) continue;
             const p = productos.get(Number(item.productoId));
             if (detal) {
                 const stock = Number(p.stockAlmacen) || 0;
@@ -182,7 +185,12 @@ export async function modificarFactura({ venta, condicionPago, diasCredito, meto
     const venceAntes = venta.fechaVencimiento ? fechaCaracas(venta.fechaVencimiento) : null;
     const venceNuevo = condNueva === 'Credito' ? fechaCaracas(new Date(new Date(base).getTime() + dias * 86400000)) : null;
     const cambiaPago = condNueva !== condAntes || cambiaronRenglones || venceNuevo !== venceAntes || (condNueva === 'Contado' && (metodoPago || referencia));
-    if (cambiaPago) {
+    if (cambiaPago && diferida) {
+        // Solo cambia el documento: al aprobarse se crean la cuenta por cobrar o los ingresos con estos datos
+        if (condNueva === 'Contado') { venta.condicionPago = 'Contado'; venta.statusPago = 'Pagado'; venta.fechaVencimiento = null; }
+        else { venta.condicionPago = 'Credito'; venta.statusPago = 'Pendiente'; venta.fechaVencimiento = new Date(new Date(base).getTime() + dias * 86400000); }
+        if (metodoPago || referencia) await anotarPagoPendiente(venta.id, { metodoPago, referencia }, t);
+    } else if (cambiaPago) {
         const previos = await MovimientoFinanciero.findAll({ where: { ventaId: venta.id, tipo: 'INGRESO' }, transaction: t });
         const metodo = metodoPago || previos[0]?.metodoPago || 'No especificado';
         const ref = referencia ?? previos[0]?.referencia ?? null;
@@ -223,7 +231,9 @@ export async function modificarFactura({ venta, condicionPago, diasCredito, meto
 
     // ---- 3. Comisión del vendedor externo: la línea de la factura sigue sus totales y su vencimiento (o nace si el cliente es de un vendedor)
     const lineas = await ComisionVenta.findAll({ where: { ventaId: venta.id, concepto: 'FACTURA' }, transaction: t });
-    if (!lineas.length) {
+    if (diferida) {
+        // la comisión nace al aprobar
+    } else if (!lineas.length) {
         await asegurarComisionFactura({ venta, transaction: t });
     } else if (cambiaPago) {
         const tasa = Number(venta.tasaCambio) || 1;

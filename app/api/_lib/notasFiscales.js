@@ -110,10 +110,12 @@ export async function otrasFacturasDelCliente(venta, transaction) {
  * @param {Array}  p.renglones    Crédito: [{ ventaDetalleId, cantidad }] (devolución de un renglón) y/o conceptos libres.
  *                                Concepto libre (crédito o débito): [{ descripcion, precioUnitario, cantidad?, aplicaIva }]
  * @param {string[]} p.otrasFacturasIds  Solo nota de débito: otras facturas del mismo cliente que también afecta (la deuda se suma a la factura principal, `venta`)
+ * @param {boolean} p.diferir     La nota de un vendedor: nace por aprobar y NO mueve inventario, cuentas por cobrar ni saldo a favor; lo que hace queda anotado
+ *                                en NotasFiscales.efectosPendientes y se aplica al aprobarla (aplicarEfectosNota). Quien la pida debe haber comprobado que la columna existe.
  * @param {boolean} p.afectaCxc   Solo nota de crédito: false = no baja lo que el cliente debe (ni deja saldo a favor); p. ej. una anulación parcial
  *                                que no toca la cuenta por cobrar, o la de una factura cuya deuda vuelve a su nota de entrega.
  */
-export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario = false, afectaCxc = true, otrasFacturasIds = [], usuarioId = null, transaction: t, numeroManual = null, numeroControl = null, fecha = null }) {
+export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario = false, afectaCxc = true, otrasFacturasIds = [], usuarioId = null, transaction: t, numeroManual = null, numeroControl = null, fecha = null, diferir = false }) {
     if (!PREFIJO[tipo]) throw new ErrorNota('Tipo de nota no válido');
     if (venta.tipoDocumento !== 'FACTURA') throw new ErrorNota('Las notas de crédito y de débito solo se emiten sobre facturas', 409);
     if (venta.statusDespacho === 'Cancelado') throw new ErrorNota('La factura está anulada', 409);
@@ -199,6 +201,23 @@ export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelve
         precioUnitario: l.precioUnitario, aplicaIva: l.aplicaIva, porcentajeIva: l.porcentajeIva, subtotal: factura.renglones[i].monto,
     })), { transaction: t });
 
+    if (diferir) {
+        await sequelize.query('UPDATE "NotasFiscales" SET "efectosPendientes" = CAST(:d AS jsonb) WHERE id = :id', { replacements: { id: nota.id, d: JSON.stringify({ afectaCxc: Boolean(afectaCxc) }) }, transaction: t });
+        return nota;
+    }
+    await efectosNota({ nota, venta, afectaCxc, transaction: t });
+    return nota;
+}
+
+/** Aplica lo que una nota de venta hace sobre inventario y cuentas por cobrar (al emitirla, o al aprobarla si es de un vendedor). Lee todo de la nota guardada. */
+async function efectosNota({ nota, venta, afectaCxc, transaction: t }) {
+    const tipo = nota.tipo;
+    const moneda = nota.moneda;
+    const tasa = Number(nota.tasaCambio) || 1;
+    const numero = nota.numeroDocumento;
+    const motivoTxt = nota.motivo;
+    const factura = { totalFinal: Number(nota.totalFinal) };
+    const lineas = (await NotaFiscalDetalle.findAll({ where: { notaId: nota.id }, transaction: t })).map((d) => ({ productoId: d.productoId, cantidad: Number(d.cantidad) }));
     const totalUsd = aUsdDoc(factura.totalFinal, moneda, tasa);
     const totalBs = aBsDoc(factura.totalFinal, moneda, tasa);
 
@@ -258,7 +277,19 @@ export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelve
         }
         if (venta.statusPago === 'Pagado') { venta.statusPago = 'Pendiente'; await venta.save({ transaction: t }); }
     }
-    return nota;
+}
+
+/** Aprobación de la nota de un vendedor: aplica sus efectos anotados. { aplicado:false } si no tenía efectos pendientes. */
+export async function aplicarEfectosNota({ notaId, transaction: t }) {
+    const [f] = await sequelize.query('SELECT "efectosPendientes" AS e FROM "NotasFiscales" WHERE id = :id', { replacements: { id: notaId }, type: sequelize.QueryTypes.SELECT, transaction: t }).catch((e) => { if (e?.original?.code === '42703') return []; throw e; });
+    if (!f?.e) return { aplicado: false };
+    const nota = await NotaFiscal.findByPk(notaId, { transaction: t, lock: t.LOCK.UPDATE });
+    const venta = await Venta.findByPk(nota.ventaId, { transaction: t, lock: t.LOCK.UPDATE });
+    if (!venta) throw new ErrorNota('La factura de la nota no existe', 404);
+    if (nota.estado !== 'EMITIDA') throw new ErrorNota('La nota está anulada: no se puede aprobar', 409);
+    await efectosNota({ nota, venta, afectaCxc: f.e.afectaCxc !== false, transaction: t });
+    await sequelize.query('UPDATE "NotasFiscales" SET "efectosPendientes" = NULL WHERE id = :id', { replacements: { id: notaId }, transaction: t });
+    return { aplicado: true };
 }
 
 // ------------------------------------------------------------------ registro de notas recibidas del proveedor (compras)
@@ -334,8 +365,15 @@ export async function anularNota({ nota, transaction: t }) {
     if (Number(nota.reintegradoUsd) > 0) throw new ErrorNota('Ya se le reintegró dinero al cliente por esta nota: no se puede anular', 409);
     if (nota.tipo === 'CREDITO' && nota.origen === 'VENTA' && (await compensadoDeNota(nota, t)) > 0) throw new ErrorNota('El saldo a favor de esta nota ya se compensó en otras facturas del cliente: no se puede anular', 409);
     const detalles = await NotaFiscalDetalle.findAll({ where: { notaId: nota.id }, transaction: t });
+    // La nota de un vendedor que aún no se aprobó no ha movido nada (inventario, cuentas por cobrar): solo se anula el documento
+    const [pendiente] = nota.origen === 'VENTA'
+        ? await sequelize.query('SELECT "efectosPendientes" AS e FROM "NotasFiscales" WHERE id = :id', { replacements: { id: nota.id }, type: sequelize.QueryTypes.SELECT, transaction: t }).catch((e) => { if (e?.original?.code === '42703') return []; throw e; })
+        : [];
+    const sinEfectos = Boolean(pendiente?.e);
 
-    if (nota.origen === 'VENTA') {
+    if (sinEfectos) {
+        // nada que revertir
+    } else if (nota.origen === 'VENTA') {
         const venta = await nota.getVenta({ transaction: t, lock: t.LOCK.UPDATE });
         const tasa = Number(nota.tasaCambio) || 1;
         const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: nota.ventaId }, transaction: t, lock: t.LOCK.UPDATE });
@@ -404,6 +442,7 @@ export async function anularNota({ nota, transaction: t }) {
     nota.anuladaAt = new Date();
     nota.saldoAFavorUsd = 0;
     await nota.save({ transaction: t });
+    if (sinEfectos) await sequelize.query('UPDATE "NotasFiscales" SET "efectosPendientes" = NULL WHERE id = :id', { replacements: { id: nota.id }, transaction: t });
     return nota;
 }
 

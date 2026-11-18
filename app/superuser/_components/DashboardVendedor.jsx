@@ -224,7 +224,7 @@ export default function DashboardVendedor() {
                 </SimpleGrid>
 
                 <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }} spacing="md">
-                    <Indicador icono={IconPrinter} color={nImprimir ? 'orange' : 'gray'} titulo="Facturas por imprimir" cargando={porImprimir.isLoading} valor={nImprimir} detalle={nImprimir ? 'Ya aprobadas: toca para imprimirlas' : 'Ninguna aprobada pendiente'} onClick={() => router.push('/superuser/ventas/por-imprimir')} />
+                    <Indicador icono={IconPrinter} color={nImprimir ? 'orange' : 'gray'} titulo="Documentos por imprimir" cargando={porImprimir.isLoading} valor={nImprimir} detalle={nImprimir ? 'Facturas y notas ya aprobadas: toca para imprimirlas' : 'Ninguno aprobado pendiente'} onClick={() => router.push('/superuser/ventas/por-imprimir')} />
                     <Indicador icono={IconPackage} color="blue" titulo="Por empacar" cargando={isLoading} valor={nEmpacar} detalle={nEmpacar ? 'Pedidos que te asignaron' : 'Nada pendiente'} />
                     <Indicador icono={IconTag} color="violet" titulo="Por etiquetar" cargando={isLoading} valor={nEtiquetar} detalle={nEtiquetar ? 'Pedidos que te asignaron' : 'Nada pendiente'} />
                     <Indicador icono={IconTruckDelivery} color="grape" titulo="Por entregar" cargando={isLoading} valor={nEntregar} detalle={nEntregar ? 'Listos para el chofer o la agencia' : 'Nada pendiente'} />

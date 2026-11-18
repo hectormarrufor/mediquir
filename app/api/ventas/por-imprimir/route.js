@@ -6,7 +6,7 @@ import { rolDe } from '@/app/constants/roles';
 export const dynamic = 'force-dynamic';
 
 // Documentos por imprimir: los que todavía no tienen número de control (el control se asigna AL IMPRIMIR por primera vez).
-//  · Vendedor: sus facturas que ya aprobó jolexi y aún no se imprimen.
+//  · Vendedor: sus facturas y notas de crédito/débito que ya aprobó jolexi y aún no se imprimen (sin control).
 //  · Administración: facturas, notas de crédito y notas de débito emitidas por la empresa sin control, ya aprobadas (las de vendedores por aprobar no salen).
 // tipo: FACTURA | NOTA_CREDITO | NOTA_DEBITO  ·  url: la pantalla que la imprime
 export async function GET() {
@@ -17,11 +17,18 @@ export async function GET() {
         let documentos;
         if (rolDe(a.sesion) === 'vendedor') {
             documentos = await consulta(
-                `SELECT v."id", 'FACTURA' AS tipo, v."numeroDocumento" AS numero, COALESCE(v."fechaEmision", v."createdAt") AS fecha, v."aprobadaAt", v."moneda"::text AS moneda, v."totalFinal"::float AS total,
-                        COALESCE(c."nombre", 'Cliente al detal') AS cliente
-                   FROM "Ventas" v LEFT JOIN "Clientes" c ON c."id" = v."clienteId"
-                  WHERE v."vendedorId" = :u AND v."tipoDocumento" = 'FACTURA' AND v."aprobacionEstado" = 'APROBADA' AND v."impresaAt" IS NULL AND v."statusDespacho" <> 'Cancelado'
-                  ORDER BY v."aprobadaAt" NULLS LAST, v."createdAt"`,
+                `SELECT * FROM (
+                    SELECT v."id", 'FACTURA' AS tipo, v."numeroDocumento" AS numero, COALESCE(v."fechaEmision", v."createdAt") AS fecha, v."aprobadaAt", v."moneda"::text AS moneda, v."totalFinal"::float AS total,
+                           COALESCE(c."nombre", 'Cliente al detal') AS cliente
+                      FROM "Ventas" v LEFT JOIN "Clientes" c ON c."id" = v."clienteId"
+                     WHERE v."vendedorId" = :u AND v."tipoDocumento" = 'FACTURA' AND v."aprobacionEstado" = 'APROBADA' AND v."impresaAt" IS NULL AND v."statusDespacho" <> 'Cancelado'
+                    UNION ALL
+                    SELECT n."id", CASE WHEN n."tipo" = 'CREDITO' THEN 'NOTA_CREDITO' ELSE 'NOTA_DEBITO' END, n."numeroDocumento", n."fecha"::timestamptz, n."aprobadaAt", n."moneda"::text, n."totalFinal"::float,
+                           COALESCE(c."nombre", 'Cliente al detal')
+                      FROM "NotasFiscales" n LEFT JOIN "Ventas" v ON v."id" = COALESCE(n."ventaId", (n."facturasAfectadas"->0->>'ventaId')::uuid) LEFT JOIN "Clientes" c ON c."id" = n."clienteId"
+                     WHERE n."origen" = 'VENTA' AND n."estado" = 'EMITIDA' AND n."aprobacionEstado" = 'APROBADA' AND n."numeroControl" IS NULL
+                       AND COALESCE(n."registradoPorId", v."vendedorId") = :u
+                 ) d ORDER BY d."aprobadaAt" NULLS LAST`,
                 { u: Number(a.sesion.id) },
             );
         } else {

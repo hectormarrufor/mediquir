@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { Venta, sequelize } from '@/models';
 import { rolDe } from '@/app/api/_lib/acceso';
 import { requerirStaff } from '@/app/api/inventario/_lib';
-import { aprobacionDisponible, marcarPorAprobar, avisarPorAprobar, nombreDeUsuario } from '@/app/api/_lib/aprobacion';
+import { aprobacionDisponible, marcarPorAprobar, avisarPorAprobar, nombreDeUsuario, efectosDiferidosDisponible, leerEfectosPendientes } from '@/app/api/_lib/aprobacion';
 import { ErrorNota, emitirNotaVenta, notasDeVenta, calcularDiferencial, emitirNotaDiferencial, otrasFacturasDelCliente } from '@/app/api/_lib/notasFiscales';
 import { tasaVigente } from '@/app/api/_lib/tasaBcv';
 import { avisarCliente } from '@/app/api/_lib/avisosCliente';
@@ -56,13 +56,18 @@ export async function POST(request, { params }) {
             if (!(await aprobacionDisponible())) throw new ErrorNota('Todavía no está activada la aprobación de documentos: pídele a administración que emita la nota', 409);
         }
 
+        // Una factura por aprobar todavía no movió nada: se corrige o se elimina, no se le emiten notas
+        if (await leerEfectosPendientes('VENTA', venta.id, t)) throw new ErrorNota('Esta factura todavía está por aprobar: apruébala antes de emitirle notas de crédito o débito', 409);
+        // La nota de un vendedor no mueve inventario ni cuentas por cobrar hasta que jolexi la aprueba
+        const diferir = esVend && tipo !== 'DIFERENCIAL' && (await efectosDiferidosDisponible());
         const nota = tipo === 'DIFERENCIAL'
             ? await emitirNotaDiferencial({ venta, tasaHoy: await tasaVigente({ transaction: t }), usdSolicitado: usdDiferencial, usuarioId: Number(acceso.sesion.id) || null, transaction: t })
-            : await emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario: Boolean(devuelveInventario), otrasFacturasIds, usuarioId: Number(acceso.sesion.id) || null, transaction: t, numeroManual: numeroNota || null, numeroControl: numeroControl || null, fecha: fecha || null });
+            : await emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario: Boolean(devuelveInventario), otrasFacturasIds, usuarioId: Number(acceso.sesion.id) || null, transaction: t, numeroManual: numeroNota || null, numeroControl: numeroControl || null, fecha: fecha || null, diferir });
+        if (diferir) await marcarPorAprobar('NOTA', nota.id, t); // por aprobar en la misma transacción
         await t.commit();
         let porAprobar = false;
         if (esVend) {
-            porAprobar = await marcarPorAprobar('NOTA', nota.id);
+            porAprobar = diferir ? true : await marcarPorAprobar('NOTA', nota.id);
             if (porAprobar) await avisarPorAprobar({ tipoDoc: `la nota de ${nota.tipo === 'CREDITO' ? 'crédito' : 'débito'}`, numero: nota.numeroDocumento, vendedor: await nombreDeUsuario(acceso.sesion.id).catch(() => null) });
         }
         if (venta.tipoVenta === 'MAYOR') await avisarCliente(venta, 'NOTA_EMITIDA', { tipo: nota.tipo, numero: nota.numeroDocumento });

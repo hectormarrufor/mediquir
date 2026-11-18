@@ -29,7 +29,7 @@ class ErrorNegocio extends Error {
     constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
 }
 import { notificarTodos } from '@/app/handlers/notificar';
-import { marcarPorAprobar, avisarPorAprobar, nombreDeUsuario } from '@/app/api/_lib/aprobacion';
+import { marcarPorAprobar, avisarPorAprobar, nombreDeUsuario, aprobacionDisponible, efectosDiferidosDisponible, guardarEfectosPendientes } from '@/app/api/_lib/aprobacion';
 
 export async function GET(request) {
     const acceso = await requerirStaff();
@@ -129,6 +129,9 @@ export async function POST(request) {
 
         // Un vendedor puede escribir el precio de cada renglón (jolexi lo revisa al aprobar), pero no vende productos genéricos de precio libre
         const esVend = rolDe(acceso.sesion) === 'vendedor';
+        // La factura de un vendedor no mueve inventario, cuentas por cobrar, caja ni comisión hasta que jolexi la aprueba (ver efectosVenta.js).
+        // Esto se consulta fuera de la transacción; sin las migraciones de aprobación todo se aplica al crearla, como antes.
+        const diferir = esVend && tipoDocumento === 'FACTURA' && (await aprobacionDisponible()) && (await efectosDiferidosDisponible());
         if (esVend) {
             if (detalles.some((d) => d.isFicticio)) throw new ErrorNegocio('Solo administración puede vender productos genéricos con precio libre', 403);
             if (!TARIFAS_VENDEDOR.includes(body.tipoPrecio)) throw new ErrorNegocio('Tarifa de precio no permitida', 403);
@@ -267,7 +270,7 @@ export async function POST(request) {
             ...(momentoDoc ? { createdAt: momentoDoc, fechaEmision: momentoDoc } : {}),
         }, { transaction: t });
 
-        if (condicionPago === 'Credito') {
+        if (condicionPago === 'Credito' && !diferir) {
             await CuentaPorCobrar.create({
                 clienteId,
                 ventaId: nuevaVenta.id,
@@ -299,7 +302,7 @@ export async function POST(request) {
                 subtotal: renglon.monto,
             }, { transaction: t });
 
-            if (!afectaInventario) continue;
+            if (!afectaInventario || diferir) continue;
             const productoDB = productos.get(Number(item.productoId));
             const stock = Number(productoDB.stockAlmacen) || 0;
 
@@ -329,7 +332,7 @@ export async function POST(request) {
         // La retención de IVA ya no se calcula sola: se declara por factura al registrar un abono (o desde la venta) cuando el cliente retiene
 
         // --- 5. FINANZAS CONTADO (se separa el ingreso propio del IVA que se le debe al SENIAT) ---
-        if (condicionPago === 'Contado') {
+        if (condicionPago === 'Contado' && !diferir) {
             const aUsd = (v) => (moneda === 'USD' ? v : aDolares(v, tasaCambio));
             const aBs = (v) => (moneda === 'BS' ? v : aBolivares(v, tasaCambio));
 
@@ -357,19 +360,25 @@ export async function POST(request) {
         }
 
         // --- 6. COMISIÓN: si el cliente es de un vendedor externo, la factura o nota lleva su línea de comisión desde ya
-        await asegurarComisionFactura({ venta: nuevaVenta, transaction: t });
+        if (!diferir) await asegurarComisionFactura({ venta: nuevaVenta, transaction: t });
+
+        // La factura de un vendedor nace por aprobar con sus efectos anotados (se aplican al aprobar); todo en la misma transacción
+        if (diferir) {
+            await guardarEfectosPendientes('VENTA', nuevaVenta.id, { metodoPago: metodoPago || null, referencia: referencia || null, solicitadoPorId: Number(acceso.sesion.id) }, t);
+            if (!(await marcarPorAprobar('VENTA', nuevaVenta.id, t))) throw new Error('No se pudo marcar la factura por aprobar');
+        }
 
         await t.commit();
 
         // La factura de un vendedor queda por aprobar: jolexi la revisa, la corrige si hace falta, la aprueba y la imprime (el vendedor no la imprime)
         let porAprobar = false;
         if (esVend && tipoDocumento === 'FACTURA') {
-            porAprobar = await marcarPorAprobar('VENTA', nuevaVenta.id);
+            porAprobar = diferir ? true : await marcarPorAprobar('VENTA', nuevaVenta.id);
             if (porAprobar) await avisarPorAprobar({ tipoDoc: 'la factura', numero: numeroDocumento, vendedor: await nombreDeUsuario(acceso.sesion.id).catch(() => null) });
         }
 
         // --- 7. NOTIFICACIÓN PUSH AL MAYOR ---
-        if (tipoVenta === 'MAYOR') {
+        if (tipoVenta === 'MAYOR' && !diferir) { // la de un vendedor avisa al aprobarse
             try {
                 const clienteDB = await Cliente.findByPk(clienteId);
                 const nombreCliente = clienteDB ? (clienteDB.nombre || clienteDB.identificacion) : 'Cliente Desconocido';
