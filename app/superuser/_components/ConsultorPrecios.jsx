@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ActionIcon, Alert, Badge, Box, Button, Card, Center, Group, Loader, Modal, NumberInput, SimpleGrid, Stack, Text, TextInput, Tooltip } from '@mantine/core';
+import { ActionIcon, Alert, Avatar, Badge, Box, Button, Card, Center, Group, Image, Loader, Modal, NumberInput, SimpleGrid, Stack, Text, TextInput, Tooltip, UnstyledButton } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
@@ -10,6 +10,7 @@ import { aBolivares } from '@/app/constants/facturacion';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { useAuth } from '@/hooks/useAuth';
 import { useEsTelefono } from '@/app/components/ui/modalMovil';
+import { getProductImages, PLACEHOLDER_IMG } from '@/app/components/landing/productUtils';
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
 const bs = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -46,6 +47,7 @@ export default function ConsultorPrecios({ opened, onClose }) {
     const [confirmando, setConfirmando] = useState(false);
     const [guardando, setGuardando] = useState(false);
     const [verHistorial, setVerHistorial] = useState(false);
+    const [foto, setFoto] = useState(null); // { nombre, imagenes } para ver la imagen grande
 
     const { data, isLoading, isFetching, error } = useQuery({
         queryKey: ['consultor-precios', q], enabled: opened, placeholderData: keepPreviousData, staleTime: 30_000,
@@ -164,10 +166,18 @@ export default function ConsultorPrecios({ opened, onClose }) {
                         {data.productos.map((p) => (
                             <Card key={p.id} withBorder radius="md" p="sm">
                                 <Group justify="space-between" wrap="nowrap" align="flex-start" mb={6}>
-                                    <Box style={{ minWidth: 0 }}>
-                                        <Text fw={700} size="sm" lineClamp={2}>{p.nombre}</Text>
-                                        <Text size="xs" c="dimmed">{[p.codigo, p.marca, p.presentacion].filter(Boolean).join(' · ')}</Text>
-                                    </Box>
+                                    <Group gap="sm" wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
+                                        {/* miniatura: al tocarla se ve la imagen grande */}
+                                        <UnstyledButton aria-label={`Ver imagen de ${p.nombre}`} onClick={() => setFoto({ nombre: p.nombre, imagenes: getProductImages({ imagen: p.imagen, grupoEquivalencia: p.grupoEquivalencia, marca: { imagen: p.marcaImagen } }) })} style={{ flexShrink: 0 }}>
+                                            <Avatar src={getProductImages({ imagen: p.imagen, grupoEquivalencia: p.grupoEquivalencia, marca: { imagen: p.marcaImagen } })[0].src} size={56} radius="md" bg="gray.0" imageProps={{ style: { objectFit: 'contain' }, loading: 'lazy' }}>
+                                                <img src={PLACEHOLDER_IMG} alt="" width={56} />
+                                            </Avatar>
+                                        </UnstyledButton>
+                                        <Box style={{ minWidth: 0 }}>
+                                            <Text fw={700} size="sm" lineClamp={2}>{p.nombre}</Text>
+                                            <Text size="xs" c="dimmed">{[p.codigo, p.marca, p.presentacion].filter(Boolean).join(' · ')}</Text>
+                                        </Box>
+                                    </Group>
                                     <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
                                         {p.stock <= 0 ? <Badge color="red" variant="light">Agotado</Badge> : <Badge color={p.bajo ? 'orange' : 'teal'} variant="light">{p.stock}{p.bajo ? ' · bajo' : ''}</Badge>}
                                         {puedeCambiar && (
@@ -191,6 +201,19 @@ export default function ConsultorPrecios({ opened, onClose }) {
                 )}
             </Stack>
 
+            {foto && (
+                <Modal opened onClose={() => setFoto(null)} zIndex={600} centered size="lg" fullScreen={telefono} title={<Text fw={700} size="sm" lineClamp={2}>{foto.nombre}</Text>}>
+                    <Stack gap="sm">
+                        {foto.imagenes.map((im) => (
+                            <Box key={im.src}>
+                                <Image src={im.src} alt={foto.nombre} fit="contain" mah={telefono ? '70vh' : 520} fallbackSrc={PLACEHOLDER_IMG} />
+                                {foto.imagenes.length > 1 && <Text size="xs" c="dimmed" ta="center" mt={4}>{im.label}</Text>}
+                            </Box>
+                        ))}
+                        {foto.imagenes[0]?.isPlaceholder && <Text size="sm" c="dimmed" ta="center">Este producto todavía no tiene foto.</Text>}
+                    </Stack>
+                </Modal>
+            )}
             {editando && (
                 <Modal opened onClose={() => { setEditando(null); setConfirmando(false); }} zIndex={400} centered size="md" fullScreen={telefono} title={<Text fw={800}>Cambiar precios</Text>}>
                     <Stack gap="sm">

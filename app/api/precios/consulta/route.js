@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
-import { Marca, Producto } from '@/models';
+import { GrupoEquivalencia, Marca, Producto } from '@/models';
 import { preciosBase, precioUnitario } from '@/app/constants/facturacion';
 import { rolDe } from '@/app/constants/roles';
 import { requerirStaff } from '../../inventario/_lib';
@@ -25,8 +25,11 @@ export async function GET(request) {
         }
         const filas = await Producto.findAll({
             where,
-            attributes: ['id', 'codigo', 'nombre', 'presentacion', 'unidadesPorCaja', 'stockAlmacen', 'stockMinimo', 'precio6', 'precio7', 'porcentajeDescuento', 'costoUsd'],
-            include: [{ model: Marca, as: 'marca', attributes: ['nombre'] }],
+            attributes: ['id', 'codigo', 'nombre', 'presentacion', 'unidadesPorCaja', 'stockAlmacen', 'stockMinimo', 'precio6', 'precio7', 'porcentajeDescuento', 'costoUsd', 'imagen'],
+            include: [
+                { model: Marca, as: 'marca', attributes: ['nombre', 'imagen'] },
+                { model: GrupoEquivalencia, as: 'grupoEquivalencia', attributes: ['imagen'] },
+            ],
             order: [['nombre', 'ASC']],
             limit: LIMITE,
         });
@@ -37,7 +40,9 @@ export async function GET(request) {
             const p7Final = b.descuento > 0 ? b.p7 - b.p7 * (b.descuento / 100) : b.p7;
             const stock = Math.floor(Number(j.stockAlmacen) || 0);
             return {
-                id: j.id, codigo: j.codigo, nombre: j.nombre, marca: j.marca?.nombre || null, presentacion: j.presentacion, unidadesPorCaja: j.unidadesPorCaja,
+                id: j.id, codigo: j.codigo, nombre: j.nombre, marca: j.marca?.nombre || null,
+                // la foto del producto, o la de su grupo de equivalencia, o la de la marca (la misma prioridad de la tienda)
+                imagen: j.imagen || null, grupoEquivalencia: j.grupoEquivalencia ? { imagen: j.grupoEquivalencia.imagen } : null, marcaImagen: j.marca?.imagen || null, presentacion: j.presentacion, unidadesPorCaja: j.unidadesPorCaja,
                 stock, bajo: stock > 0 && stock <= (Number(j.stockMinimo) || 0), descuento: b.descuento,
                 precio7: real(j.precio7) ? precioUnitario(p7Final) : null, // con la oferta aplicada, como lo cobra el POS
                 precio7Lista: real(j.precio7) ? precioUnitario(b.p7) : null,
