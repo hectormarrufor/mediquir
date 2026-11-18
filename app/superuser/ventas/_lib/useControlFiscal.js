@@ -16,7 +16,8 @@ export function usePausaListo(listo, ms = 2200) {
 // Al imprimir una factura ('VENTA') o una nota ('NOTA') le asigna el número de control de la forma libre (correlativo compartido).
 // Se asigna una sola vez por documento: si ya lo tiene, devuelve el que tiene. Estados:
 //   inactivo -> asignando -> listo | pendiente (falta decir con qué número de control se empieza) | error
-export function useControlFiscal({ origen, id, activo }) {
+// `decision`: lo que administración eligió ante un número de control hueco ({ hueco: 122650 } = imprimir en ese número, { ignorar: true } = seguir con el siguiente)
+export function useControlFiscal({ origen, id, activo, decision = null }) {
     const [estado, setEstado] = useState('inactivo');
     const [control, setControl] = useState(null);
     const [nuevo, setNuevo] = useState(false); // true = se le acaba de asignar (no lo tenía)
@@ -26,7 +27,7 @@ export function useControlFiscal({ origen, id, activo }) {
         setEstado('asignando');
         setMensaje('');
         try {
-            const res = await fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ origen, id, reasignar }) });
+            const res = await fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ origen, id, reasignar, hueco: decision?.hueco || undefined, ignorarHuecos: decision?.ignorar ? true : undefined }) });
             const cuerpo = await res.json().catch(() => null);
             if (!res.ok) {
                 if (cuerpo?.codigo === 'CONTROL_PENDIENTE') { setMensaje(cuerpo.error); setEstado('pendiente'); return null; }
@@ -41,7 +42,7 @@ export function useControlFiscal({ origen, id, activo }) {
             setEstado('error');
             return null;
         }
-    }, [origen, id]);
+    }, [origen, id, decision]);
 
     useEffect(() => { if (activo && estado === 'inactivo') asignar(false); }, [activo, estado, asignar]);
 

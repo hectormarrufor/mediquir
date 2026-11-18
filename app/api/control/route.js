@@ -4,7 +4,7 @@ import { requerirNoVendedor } from '@/app/api/_lib/acceso';
 import { requerirStaff } from '@/app/api/inventario/_lib';
 import { esFacturaAprobadaDe, esNotaAprobadaDe } from '@/app/api/_lib/aprobacion';
 import { rolDe } from '@/app/constants/roles';
-import { ErrorNumeracion, asignarControl, controlesLibres, documentoAnteriorSinControl } from '@/app/api/_lib/numeracion';
+import { ErrorNumeracion, asignarControl, controlesLibres, documentoAnteriorSinControl, huecosDeControl, anotarHuecoDanado } from '@/app/api/_lib/numeracion';
 import { Venta, NotaFiscal } from '@/models';
 import { FormaAnulada } from '@/models';
 import { notificarAdmins } from '@/app/handlers/notificar';
@@ -25,7 +25,9 @@ export async function GET(request) {
     const doc = await (origen === 'NOTA' ? NotaFiscal : Venta).findByPk(id, { attributes: ['id', 'numeroDocumento', 'numeroControl'] });
     if (!doc) return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
     const previo = doc.numeroControl ? null : await documentoAnteriorSinControl({ origen, doc });
-    return NextResponse.json({ esperaPor: previo?.numeroDocumento || null });
+    // Huecos en la secuencia de control (posibles formas dañadas sin anotar): nunca se asignan solos; administración decide
+    const huecos = doc.numeroControl ? [] : (await huecosDeControl()).map((n) => `00-${String(n).padStart(7, '0')}`);
+    return NextResponse.json({ esperaPor: previo?.numeroDocumento || null, huecos, puedeDecidir: rolDe(a.sesion) !== 'vendedor' });
 }
 
 // Asigna el número de control de la forma libre a una factura ('VENTA') o a una nota ('NOTA') al imprimirla.
@@ -40,7 +42,14 @@ export async function POST(request) {
 
     const t = await sequelize.transaction();
     try {
-        const { origen, id, reasignar, accion, control: controlVisto, documento } = await request.json();
+        const { origen, id, reasignar, accion, control: controlVisto, documento, hueco, ignorarHuecos, numero } = await request.json();
+        if (accion === 'DANAR_HUECO') {
+            // Administración da por dañado un número de control hueco: queda anotado como forma anulada
+            if (esVend) throw new ErrorNumeracion('Solo administración puede anotar una forma dañada', 403);
+            const texto = await anotarHuecoDanado({ numero, usuarioId: Number(sesion.sesion.id) || null, transaction: t });
+            await t.commit();
+            return NextResponse.json({ success: true, anotado: texto });
+        }
         if (esVend) {
             const suyo = !reasignar && UUID.test(String(id || '')) && (origen === 'VENTA' ? await esFacturaAprobadaDe(id, sesion.sesion.id) : origen === 'NOTA' && await esNotaAprobadaDe(id, sesion.sesion.id));
             if (!suyo) throw new ErrorNumeracion('Solo puedes imprimir tus facturas y notas ya aprobadas', 403);
@@ -64,7 +73,8 @@ export async function POST(request) {
             return NextResponse.json({ success: true, danada: libre, siguiente });
         }
 
-        const r = await asignarControl({ origen, id, reasignar: Boolean(reasignar), transaction: t });
+        // Decidir sobre un hueco de control es de administración: un vendedor nunca manda `hueco` ni `ignorarHuecos`
+        const r = await asignarControl({ origen, id, reasignar: Boolean(reasignar), hueco: esVend ? null : (hueco || null), ignorarHuecos: esVend ? false : Boolean(ignorarHuecos), transaction: t });
         await t.commit();
         return NextResponse.json({ success: true, ...r });
     } catch (error) {

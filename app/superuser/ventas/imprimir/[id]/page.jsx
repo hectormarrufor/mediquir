@@ -25,8 +25,9 @@ export default function ImprimirRecibo() {
     const necesitaControl = Boolean(venta && venta.tipoDocumento === 'FACTURA' && venta.statusDespacho !== 'Cancelado' && !guia && !pendiente);
     // El control se asigna AL IMPRIMIR y solo después de que quien imprime verifica que la forma en la impresora lleva ese mismo número
     const [confirmado, setConfirmado] = useState(null); // el control que se confirmó
+    const [decisionHueco, setDecisionHueco] = useState(null); // lo que se decidió ante un número de control hueco
     const previsto = useControlPrevisto(necesitaControl && !venta?.numeroControl);
-    const ctl = useControlFiscal({ origen: 'VENTA', id: venta?.id, activo: necesitaControl && confirmado !== null });
+    const ctl = useControlFiscal({ origen: 'VENTA', id: venta?.id, activo: necesitaControl && confirmado !== null, decision: decisionHueco });
     const listoVisto = usePausaListo(necesitaControl && ctl.estado === 'listo' && ctl.control === confirmado); // «¡Listo! Número de control asignado»
     const controlAVerificar = ctl.estado === 'listo' ? ctl.control : (venta?.numeroControl || previsto);
     const hayQueConfirmar = necesitaControl && (confirmado === null || (ctl.estado === 'listo' && ctl.control !== confirmado));
@@ -65,7 +66,7 @@ export default function ImprimirRecibo() {
     const esFactura = venta.tipoDocumento === 'FACTURA';
     // Las facturas se imprimen sobre la forma libre preimpresa (media carta): sin membrete, logo ni franja legal
     if (esFactura) {
-        if (hayQueConfirmar) return <ConfirmarFormaControl tipo="Factura" documento={venta.numeroDocumento} origen="VENTA" idDocumento={venta.id} control={controlAVerificar} nuevo={!venta.numeroControl} onConfirmar={setConfirmado} onCancelar={() => { if (window.history.length > 1) window.history.back(); else window.close(); }} />;
+        if (hayQueConfirmar) return <ConfirmarFormaControl tipo="Factura" documento={venta.numeroDocumento} origen="VENTA" idDocumento={venta.id} control={controlAVerificar} nuevo={!venta.numeroControl} onConfirmar={(c, d) => { setDecisionHueco(d || null); setConfirmado(c); }} onCancelar={() => { if (window.history.length > 1) window.history.back(); else window.close(); }} />;
         if (necesitaControl && ctl.estado !== 'listo') return <ControlFiscalPaso estado={ctl.estado} mensaje={ctl.mensaje} onReintentar={() => ctl.asignar(false)} />;
         if (necesitaControl && !listoVisto) return <ControlFiscalPaso estado="listo" control={ctl.control} nuevo={ctl.nuevo} />;
         const reasignar = rolUsuario === 'admin' && !guia

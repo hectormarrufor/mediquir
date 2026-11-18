@@ -29,8 +29,9 @@ export default function ImprimirNota() {
     const necesitaControl = Boolean(nota && !nota.error && nota.origen === 'VENTA' && nota.estado === 'EMITIDA' && !guia && !pendiente);
     // El control se asigna AL IMPRIMIR y solo después de que quien imprime verifica que la forma en la impresora lleva ese mismo número
     const [confirmado, setConfirmado] = useState(null);
+    const [decisionHueco, setDecisionHueco] = useState(null); // lo que se decidió ante un número de control hueco
     const previsto = useControlPrevisto(necesitaControl && !nota?.numeroControl);
-    const ctl = useControlFiscal({ origen: 'NOTA', id, activo: necesitaControl && confirmado !== null });
+    const ctl = useControlFiscal({ origen: 'NOTA', id, activo: necesitaControl && confirmado !== null, decision: decisionHueco });
     const listoVisto = usePausaListo(necesitaControl && ctl.estado === 'listo' && ctl.control === confirmado); // «¡Listo! Número de control asignado»
     const controlAVerificar = ctl.estado === 'listo' ? ctl.control : (nota?.numeroControl || previsto);
     const hayQueConfirmar = necesitaControl && (confirmado === null || (ctl.estado === 'listo' && ctl.control !== confirmado));
@@ -47,7 +48,7 @@ export default function ImprimirNota() {
     if (nota.origen !== 'VENTA') return <div style={{ padding: '2rem', textAlign: 'center' }}>Solo se imprimen las notas que emite la empresa (las de proveedores se registran, no se imprimen).</div>;
     if (pendiente) return <div style={{ padding: '2rem', textAlign: 'center' }}>Esta nota está por aprobar: se podrá imprimir cuando la apruebe Jolexi.</div>;
     if (nota.estado !== 'EMITIDA') return <div style={{ padding: '2rem', textAlign: 'center' }}>Esta nota está anulada.</div>;
-    if (hayQueConfirmar) return <ConfirmarFormaControl tipo={nota.tipo === 'CREDITO' ? 'Nota de crédito' : 'Nota de débito'} documento={nota.numeroDocumento} origen="NOTA" idDocumento={id} control={controlAVerificar} nuevo={!nota.numeroControl} onConfirmar={setConfirmado} onCancelar={() => { if (window.history.length > 1) window.history.back(); else window.close(); }} />;
+    if (hayQueConfirmar) return <ConfirmarFormaControl tipo={nota.tipo === 'CREDITO' ? 'Nota de crédito' : 'Nota de débito'} documento={nota.numeroDocumento} origen="NOTA" idDocumento={id} control={controlAVerificar} nuevo={!nota.numeroControl} onConfirmar={(c, d) => { setDecisionHueco(d || null); setConfirmado(c); }} onCancelar={() => { if (window.history.length > 1) window.history.back(); else window.close(); }} />;
     if (necesitaControl && ctl.estado !== 'listo') return <ControlFiscalPaso estado={ctl.estado} mensaje={ctl.mensaje} onReintentar={() => ctl.asignar(false)} />;
     if (necesitaControl && !listoVisto) return <ControlFiscalPaso estado="listo" control={ctl.control} nuevo={ctl.nuevo} />;
 

@@ -71,6 +71,34 @@ async function primerControlLibre(desde, transaction) {
 
 const textoControl = (n, ceros) => formatear('CONTROL', n, ceros || CLAVES.CONTROL.ceros);
 
+// Los controles anteriores a éste pertenecen al sistema viejo: sus huecos no cuentan. Desde aquí, todo número entre el primero y el último usado debe tener
+// documento o estar anotado como forma anulada; si no, es un HUECO (puede ser una forma dañada que nadie anotó).
+export const CONTROL_HUECOS_DESDE = 122598;
+
+/** Números de control sin documento ni forma anulada, por debajo del último usado (nunca se asignan solos: hay que preguntar). */
+export async function huecosDeControl(transaction) {
+    const filas = await sequelize.query(
+        `SELECT CAST(substring("numeroControl" from 4) AS bigint) AS n FROM "Ventas" WHERE "facturaTalonario" = false AND "numeroControl" ~ '^00-[0-9]+$'
+         UNION SELECT CAST(substring("numeroControl" from 4) AS bigint) FROM "NotasFiscales" WHERE "origen" = 'VENTA' AND "numeroControl" ~ '^00-[0-9]+$'
+         UNION SELECT numero FROM "FormasAnuladas"`,
+        { type: sequelize.QueryTypes.SELECT, transaction },
+    );
+    const usados = new Set(filas.map((f) => Number(f.n)).filter((n) => n >= CONTROL_HUECOS_DESDE));
+    if (!usados.size) return [];
+    const maximo = Math.max(...usados);
+    const huecos = [];
+    for (let n = CONTROL_HUECOS_DESDE; n < maximo && huecos.length < 50; n += 1) if (!usados.has(n)) huecos.push(n);
+    return huecos;
+}
+
+/** Un hueco que el administrador decidió dar por dañado (queda anotado como forma anulada). */
+export async function anotarHuecoDanado({ numero, usuarioId = null, transaction }) {
+    const n = Number(numero);
+    if (!(await huecosDeControl(transaction)).includes(n)) throw new ErrorNumeracion('Ese número ya no es un hueco', 409);
+    await FormaAnulada.findOrCreate({ where: { numero: n }, defaults: { motivo: 'Forma dañada: hueco en la secuencia, anotado por administración', usuarioId }, transaction });
+    return textoControl(n);
+}
+
 /** Los próximos `cantidad` números de control libres, seguidos (para sugerir el control de varias notas que se emiten juntas). */
 export async function controlesLibres(cantidad = 1, transaction) {
     const c = await Correlativo.findOne({ where: { prefijo: 'CONTROL' }, transaction });
@@ -191,7 +219,7 @@ export async function controlAlNacer(texto, t, permitirEscrito = false) {
  * Asigna el número de control a una factura (origen 'VENTA') o a una nota emitida (origen 'NOTA'), UNA sola vez.
  * Si ya lo tiene devuelve el que tiene; con reasignar=true toma uno nuevo (forma libre dañada).
  */
-export async function asignarControl({ origen, id, reasignar = false, transaction: t }) {
+export async function asignarControl({ origen, id, reasignar = false, hueco = null, ignorarHuecos = false, transaction: t }) {
     const esNota = origen === 'NOTA';
     if (!esNota && origen !== 'VENTA') throw new ErrorNumeracion('Documento no válido');
     const doc = await (esNota ? NotaFiscal : Venta).findByPk(id, { transaction: t, lock: t.LOCK.UPDATE });
@@ -218,7 +246,20 @@ export async function asignarControl({ origen, id, reasignar = false, transactio
             transaction: t,
         });
     }
-    const numero = await siguienteControl(t);
+    // Un número de control hueco (sin documento ni anotación: quizá una forma dañada) NUNCA se asigna solo: quien administra decide si este documento
+    // se imprime en ese hueco (`hueco`) o si se sigue con el siguiente dejando el hueco como está (`ignorarHuecos`).
+    const huecos = await huecosDeControl(t);
+    let numero;
+    if (hueco) {
+        const n = Number(hueco);
+        if (!huecos.includes(n)) throw new ErrorNumeracion(`El control ${textoControl(n)} ya no está libre: vuelve a verificar la forma`, 409);
+        const c = await Correlativo.findOne({ where: { prefijo: 'CONTROL' }, transaction: t });
+        numero = textoControl(n, c?.cerosRelleno);
+    } else if (huecos.length && !ignorarHuecos) {
+        throw new ErrorNumeracion(`Hay números de control sin documento ni anotación (${huecos.slice(0, 5).map((n) => textoControl(n)).join(', ')}${huecos.length > 5 ? '…' : ''}). Puede ser una forma dañada. Un administrador debe decidir si este documento se imprime en ese número o se sigue con el siguiente.`, 409, 'HUECO_CONTROL');
+    } else {
+        numero = await siguienteControl(t);
+    }
     doc.numeroControl = numero;
     await doc.save({ transaction: t });
     // La retención de IVA guarda una copia del control de la factura

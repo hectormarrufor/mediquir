@@ -54,16 +54,49 @@ export default function ConfirmarFormaControl({ tipo, documento, control, nuevo,
         queryFn: async () => { const r = await fetch(`/api/control?origen=${origen}&id=${idDocumento}`); return r.ok ? r.json() : null; },
     });
     const esperaPor = orden?.esperaPor || null;
+    // Huecos en la secuencia (posibles formas dañadas sin anotar): nunca se asignan solos; hay que decidir
+    const huecos = orden?.huecos || [];
+    const puedeDecidir = orden?.puedeDecidir !== false;
+    const [decision, setDecision] = useState(null); // { hueco: texto } | { ignorar: true }
+    const hayDecisionPendiente = nuevo && huecos.length > 0 && !decision && !esperaPor;
+    const controlFinal = decision?.hueco || control;
+    const marcarHuecoDanado = async (texto) => {
+        if (!window.confirm(`¿El número de control ${texto} se dañó? Quedará anotado como forma anulada.`)) return;
+        setDanando(true);
+        try {
+            const res = await fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'DANAR_HUECO', numero: numeroDe(texto) }) });
+            const cuerpo = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(cuerpo?.error || 'No se pudo anotar');
+            notifications.show({ color: 'orange', title: 'Forma anotada como dañada', message: `El control ${cuerpo.anotado} quedó como forma anulada.` });
+            await queryClient.invalidateQueries({ queryKey: ['control-orden'] });
+        } catch (e) { notifications.show({ color: 'red', title: 'No se pudo', message: e.message }); } finally { setDanando(false); }
+    };
     const otros = Math.max(0, Number(pendientes?.total || 0) - (nuevo ? 1 : 0));
     const hayEscrito = numeroDe(escrito) !== null;
-    const coincide = hayEscrito && numeroDe(escrito) === numeroDe(control);
+    const coincide = hayEscrito && numeroDe(escrito) === numeroDe(controlFinal);
     return (
         <Center mih="60vh" p="md">
             <Paper withBorder radius="md" p="lg" maw={560} w="100%">
                 <Stack>
                     <Text fw={800} size="lg">Verifica la forma antes de imprimir</Text>
                     <Text size="sm" c="dimmed">{tipo} {documento}</Text>
-                    {esperaPor ? (
+                    {hayDecisionPendiente ? (
+                        <Stack>
+                            <Alert color="orange" variant="filled" icon={<IconAlertTriangle size={20} />} title="Hay un número de control hueco">
+                                {huecos.length === 1 ? 'El número' : 'Los números'} <b>{huecos.slice(0, 5).join(', ')}{huecos.length > 5 ? '…' : ''}</b> no {huecos.length === 1 ? 'tiene' : 'tienen'} documento ni está{huecos.length === 1 ? '' : 'n'} anotado{huecos.length === 1 ? '' : 's'} como forma dañada. Puede que la forma se haya dañado. No se asigna solo.
+                            </Alert>
+                            {puedeDecidir ? (
+                                <>
+                                    <Text size="sm">¿Quieres imprimir {documento} en el número hueco <b>{huecos[0]}</b>? Solo di que sí si tienes en la impresora la forma que lleva ese número.</Text>
+                                    <Button size="lg" color="orange" onClick={() => setDecision({ hueco: huecos[0] })}>Sí, imprimir en {huecos[0]}</Button>
+                                    <Button variant="light" color="orange" loading={danando} onClick={() => marcarHuecoDanado(huecos[0])}>No: ese número se dañó (anotarlo como forma anulada)</Button>
+                                    <Button variant="light" onClick={() => setDecision({ ignorar: true })}>No: seguir con el siguiente ({control}) y dejar el hueco como está</Button>
+                                </>
+                            ) : (
+                                <Alert color="red" variant="light">Avisa a Jolexi: administración debe decidir sobre ese número antes de imprimir tus documentos.</Alert>
+                            )}
+                        </Stack>
+                    ) : esperaPor ? (
                         <Stack>
                             <Alert color="red" variant="filled" icon={<IconAlertTriangle size={20} />} title="Falta una factura anterior por imprimir">
                                 Antes de imprimir {documento} hay que imprimir <b>{esperaPor}</b>: los números de control se dan en el orden de los documentos y {esperaPor} todavía no tiene su control. Revisa «Documentos por imprimir» (si está por aprobar, hay que aprobarla primero; si no va a salir, elimínala).
@@ -74,11 +107,11 @@ export default function ConfirmarFormaControl({ tipo, documento, control, nuevo,
                         <>
                             <Paper bg="yellow.0" withBorder radius="md" p="md" ta="center">
                                 <Text size="xs" c="dimmed" fw={700} tt="uppercase">N° de control que saldrá impreso</Text>
-                                <Text fz={34} fw={900} lh={1.2} c="navy.9" style={{ letterSpacing: 1 }}>{control}</Text>
+                                <Text fz={34} fw={900} lh={1.2} c="navy.9" style={{ letterSpacing: 1 }}>{controlFinal}</Text>
                                 <Text size="xs" c="dimmed">{nuevo ? 'Es el siguiente libre: se le asigna al confirmar.' : 'Este documento ya lo tiene asignado.'}</Text>
                             </Paper>
                             <Alert color="orange" variant="light" icon={<IconAlertTriangle size={18} />}>
-                                Mira la forma preimpresa que está en la impresora y <b>escribe abajo el número de control que lleva</b>. Debe ser <b>exactamente {control}</b>.
+                                Mira la forma preimpresa que está en la impresora y <b>escribe abajo el número de control que lleva</b>. Debe ser <b>exactamente {controlFinal}</b>.
                             </Alert>
                             <TextInput
                                 size="lg" label="Número de control de la forma que tienes en la impresora" placeholder="Ejemplo: 0122741" inputMode="numeric" autoComplete="off"
@@ -86,13 +119,13 @@ export default function ConfirmarFormaControl({ tipo, documento, control, nuevo,
                             />
                             {hayEscrito && !coincide && (
                                 <Alert color="red" variant="filled" icon={<IconAlertTriangle size={20} />} title="NO imprimas todavía">
-                                    La forma que tienes lleva el <b>{escrito.trim()}</b> y el sistema va a imprimir el <b>{control}</b>. Antes de continuar, <b>cerciórate con Jolexi de que no tenga ningún documento pendiente por imprimir</b>: otro documento pudo haber tomado el número de la forma que tienes. No cambies ni fuerces el número.
+                                    La forma que tienes lleva el <b>{escrito.trim()}</b> y el sistema va a imprimir el <b>{controlFinal}</b>. Antes de continuar, <b>cerciórate con Jolexi de que no tenga ningún documento pendiente por imprimir</b>: otro documento pudo haber tomado el número de la forma que tienes. No cambies ni fuerces el número.
                                 </Alert>
                             )}
                             {coincide && otros > 0 && (
                                 <Alert color="blue" variant="light">Hay {otros} documento{otros === 1 ? '' : 's'} más esperando su número de control. Imprime en el orden en que están las formas.</Alert>
                             )}
-                            <Button size="lg" leftSection={<IconPrinter size={20} />} disabled={!coincide} onClick={() => onConfirmar(control)}>Coincide: imprimir</Button>
+                            <Button size="lg" leftSection={<IconPrinter size={20} />} disabled={!coincide} onClick={() => onConfirmar(controlFinal, decision)}>Coincide: imprimir</Button>
                             {nuevo && origen && idDocumento && (
                                 <Button variant="light" color="orange" loading={danando} onClick={danada}>Este número de control se dañó: usar el siguiente</Button>
                             )}
