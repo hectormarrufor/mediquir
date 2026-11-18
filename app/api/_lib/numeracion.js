@@ -206,7 +206,7 @@ export async function asignarControl({ origen, id, reasignar = false, transactio
     if (!reasignar) {
         await Correlativo.findOne({ where: { prefijo: 'CONTROL' }, transaction: t, lock: t.LOCK.UPDATE });
         const previo = await documentoAnteriorSinControl({ origen, doc, transaction: t });
-        if (previo) throw new ErrorNumeracion(`Primero hay que imprimir ${previo.numeroDocumento}: los números de control se dan en el orden de los documentos y ${doc.numeroDocumento} es posterior. Imprime ${previo.numeroDocumento} (o elimínala si no sale) y luego ésta.`, 409, 'ORDEN_CONTROL');
+        if (previo) throw new ErrorNumeracion(`No se puede asignar el control a ${doc.numeroDocumento}: hay un documento anterior que necesita imprimirse primero (${previo.numeroDocumento}). Facturas, notas de crédito y notas de débito comparten el mismo correlativo de control y salen en orden. Imprime ${previo.numeroDocumento} (si está por aprobar, apruébala; si no va a salir, elimínala) y luego este.`, 409, 'ORDEN_CONTROL');
     }
 
     // Se pide otro número porque la forma se dañó: la hoja anterior queda registrada como anulada (explica el hueco en la secuencia)
@@ -224,30 +224,48 @@ export async function asignarControl({ origen, id, reasignar = false, transactio
     // La retención de IVA guarda una copia del control de la factura
     if (!esNota) await RetencionIva.update({ numeroControlFactura: numero }, { where: { ventaId: doc.id }, transaction: t });
     return { numeroControl: numero, nuevo: true };
-}// Solo cuentan los documentos hechos con el sistema (desde la importación del 15/11/2026): las facturas y notas importadas sin control no se imprimen ni bloquean.
+}
+
+// Solo cuentan los documentos hechos con el sistema (desde la importación del 15/11/2026): las facturas y notas importadas sin control no se imprimen ni bloquean.
 export const DESDE_CONTROL = '2026-11-15';
 
 /**
- * Seguidillas: el control se da en el orden de los números de documento de cada serie (F, NC, ND). Devuelve el documento ANTERIOR de la misma serie
- * que sigue sin control (facturas de vendedores por aprobar incluidas), o null si éste puede imprimirse ya.
- * `doc` debe traer id, numeroDocumento y, para notas, el prefijo en el número. origen: 'VENTA' (factura) | 'NOTA'.
+ * Seguidilla del control: facturas, notas de crédito y notas de débito comparten UN correlativo, así que se imprimen en un solo orden:
+ *  · dentro de una serie (F, NC, ND) por número de documento;
+ *  · entre series por el momento en que se hicieron. Para que ambas reglas no se contradigan (p. ej. la F-41 hecha después de la F-42), el
+ *    «momento» de un documento es el más temprano entre los de su serie con número igual o mayor.
+ * Devuelve TODOS los documentos sin control (facturas de vendedores por aprobar incluidas) ya en ese orden: el primero es el que toca imprimir.
+ * Cada uno: { origen: 'VENTA'|'NOTA', id, numeroDocumento }.
  */
-export async function documentoAnteriorSinControl({ origen, doc, transaction }) {
-    const esNota = origen === 'NOTA';
-    const serie = esNota ? `${String(doc.numeroDocumento).split('-')[0]}-%` : 'F-%';
-    const tabla = esNota ? '"NotasFiscales"' : '"Ventas"';
-    const filtro = esNota
-        ? `"origen" = 'VENTA' AND "estado" = 'EMITIDA'`
-        : `"tipoDocumento" = 'FACTURA' AND "facturaTalonario" = false AND "statusDespacho" <> 'Cancelado'`;
-    const numero = `CAST(NULLIF(regexp_replace("numeroDocumento", '\D', '', 'g'), '') AS bigint)`;
-    const [previo] = await sequelize.query(
-        `SELECT id, "numeroDocumento" FROM ${tabla}
-         WHERE ${filtro} AND "numeroDocumento" LIKE :serie AND "numeroControl" IS NULL AND id <> :id AND "createdAt" >= :desde
-           AND ${numero} < :mio
-         ORDER BY ${numero} ASC LIMIT 1`,
-        { replacements: { serie, id: doc.id, desde: DESDE_CONTROL, mio: Number(String(doc.numeroDocumento).replace(/\D/g, '')) }, type: sequelize.QueryTypes.SELECT, transaction },
+export async function pendientesDeControlOrdenados(transaction) {
+    const filas = await sequelize.query(
+        `SELECT 'VENTA' AS origen, "id"::text AS id, "numeroDocumento", "createdAt", ("numeroControl" IS NULL) AS sin
+           FROM "Ventas" WHERE "tipoDocumento" = 'FACTURA' AND "facturaTalonario" = false AND "statusDespacho" <> 'Cancelado' AND "numeroDocumento" LIKE 'F-%' AND "createdAt" >= :desde
+         UNION ALL
+         SELECT 'NOTA', "id"::text, "numeroDocumento", "createdAt", ("numeroControl" IS NULL)
+           FROM "NotasFiscales" WHERE "origen" = 'VENTA' AND "estado" = 'EMITIDA' AND ("numeroDocumento" LIKE 'NC-%' OR "numeroDocumento" LIKE 'ND-%') AND "createdAt" >= :desde`,
+        { replacements: { desde: DESDE_CONTROL }, type: sequelize.QueryTypes.SELECT, transaction },
     );
-    return previo || null;
+    const docs = filas.map((f) => ({
+        origen: f.origen, id: f.id, numeroDocumento: f.numeroDocumento, sin: f.sin === true,
+        serie: String(f.numeroDocumento).split('-')[0], num: Number(String(f.numeroDocumento).replace(/\D/g, '')) || 0, t: new Date(f.createdAt).getTime(),
+    }));
+    // momento efectivo: el más temprano de su serie con número igual o mayor (recorriendo la serie de mayor a menor)
+    const porSerie = new Map();
+    for (const d of docs) { if (!porSerie.has(d.serie)) porSerie.set(d.serie, []); porSerie.get(d.serie).push(d); }
+    for (const lista of porSerie.values()) {
+        lista.sort((a, b) => b.num - a.num);
+        let minimo = Infinity;
+        for (const d of lista) { minimo = Math.min(minimo, d.t); d.efectivo = minimo; }
+    }
+    return docs.filter((d) => d.sin)
+        .sort((a, b) => a.efectivo - b.efectivo || (a.serie === b.serie ? a.num - b.num : a.serie.localeCompare(b.serie)))
+        .map(({ origen, id, numeroDocumento }) => ({ origen, id, numeroDocumento }));
 }
 
-
+/** El documento (factura, nota de crédito o de débito) que debe imprimirse antes que `doc`, o null si a `doc` le toca ya. */
+export async function documentoAnteriorSinControl({ doc, transaction }) {
+    const lista = await pendientesDeControlOrdenados(transaction);
+    if (!lista.some((d) => d.id === String(doc.id))) return null; // importado o sin seguidilla: no bloquea
+    return lista[0].id === String(doc.id) ? null : lista[0];
+}

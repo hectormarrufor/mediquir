@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { sequelize } from '@/models';
 import { requerirStaff } from '@/app/api/inventario/_lib';
 import { rolDe } from '@/app/constants/roles';
-import { DESDE_CONTROL as DESDE_POR_IMPRIMIR, documentoAnteriorSinControl } from '@/app/api/_lib/numeracion';
+import { DESDE_CONTROL as DESDE_POR_IMPRIMIR, pendientesDeControlOrdenados } from '@/app/api/_lib/numeracion';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,15 +51,16 @@ export async function GET() {
             );
         }
         // Un documento de vendedor que aún no aprueba jolexi no se imprime: desde la lista se va a su pantalla para aprobarlo
-        const numDe = (d) => Number(String(d.numero).replace(/\D/g, '')) || 0;
-        // Seguidillas: dentro de cada serie van en orden de número; si hay un documento anterior sin control (aunque sea de otro vendedor o esté por aprobar) se avisa cuál es
-        documentos.sort((x, y) => String(x.numero).split('-')[0].localeCompare(String(y.numero).split('-')[0]) || numDe(x) - numDe(y));
-        const lista = [];
-        for (const d of documentos) {
-            const previo = await documentoAnteriorSinControl({ origen: d.tipo === 'FACTURA' ? 'VENTA' : 'NOTA', doc: { id: d.id, numeroDocumento: d.numero } });
+        // Seguidilla: facturas, notas de crédito y de débito en UN solo orden (el del correlativo de control). Si hay uno anterior sin control (aunque sea de otro vendedor o esté por aprobar) se avisa cuál es.
+        const orden = await pendientesDeControlOrdenados();
+        const posicion = new Map(orden.map((o, i) => [o.id, i]));
+        const primero = orden[0] || null;
+        documentos.sort((x, y) => (posicion.has(x.id) ? posicion.get(x.id) : 1e9) - (posicion.has(y.id) ? posicion.get(y.id) : 1e9));
+        const lista = documentos.map((d) => {
             const pendiente = d.aprobacion === 'PENDIENTE' && d.tipo === 'FACTURA';
-            lista.push({ ...d, esperaPor: previo?.numeroDocumento || null, url: pendiente ? `/superuser/ventas/${d.id}` : (d.tipo === 'FACTURA' ? `/superuser/ventas/imprimir/${d.id}` : `/superuser/notas/${d.id}/imprimir`) });
-        }
+            const espera = primero && posicion.has(d.id) && primero.id !== d.id ? primero.numeroDocumento : null;
+            return { ...d, esperaPor: espera, url: pendiente ? `/superuser/ventas/${d.id}` : (d.tipo === 'FACTURA' ? `/superuser/ventas/imprimir/${d.id}` : `/superuser/notas/${d.id}/imprimir`) };
+        });
         return NextResponse.json({ documentos: lista, total: lista.length });
     } catch (error) {
         if (error?.original?.code === '42703' || /aprobacionEstado|impresaAt|aprobadaAt/.test(error?.message || '')) return NextResponse.json({ documentos: [], total: 0, sinMigrar: true });
