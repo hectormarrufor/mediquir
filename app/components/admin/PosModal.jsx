@@ -111,6 +111,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     const { userId, esVendedor, rolUsuario } = useAuth();
     const puedeEditarPrecio = rolUsuario === 'admin'; // el servidor ya obliga a un vendedor a cobrar por tarifa
+    const puedeFijarPrecio = rolUsuario === 'admin' || esVendedor; // el precio de cada renglón se escribe a mano; el de un vendedor lo revisa jolexi antes de aprobar la venta
     // Por debajo de 62em (donde ya no caben las dos columnas) se usa el diseño de teléfono, a pantalla completa.
     // Se lee en el primer render (este componente solo se pinta en el navegador) para que no abra con el diseño de escritorio y salte.
     const isMobile = useMediaQuery('(max-width: 61.99em)', false, { getInitialValueInEffect: false });
@@ -382,7 +383,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // administración también recibe la pregunta con la caja del precio. Un vendedor cobra siempre la tarifa: a él se le agrega al instante.
     const [preguntar, setPreguntar] = useState(null); // { producto, clave }
     const pedirProducto = (producto, presentacion = 'UNIDAD') => {
-        if (esPresupuesto || (isMobile && puedeEditarPrecio)) setPreguntar({ producto, clave: presentacion });
+        if (esPresupuesto || (isMobile && puedeFijarPrecio)) setPreguntar({ producto, clave: presentacion });
         else agregarAlCarrito(producto, presentacion);
     };
 
@@ -393,7 +394,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         const clave = `${producto.id}:${pres.clave}`;
         const imgProducto = getImageUrl(producto.imagen);
         const imgMarca = getImageUrl(producto.marca?.imagen);
-        const conPrecio = puedeEditarPrecio && Number(precioElegido) > 0;
+        const conPrecio = puedeFijarPrecio && Number(precioElegido) > 0;
         const manualElegido = conPrecio && Math.abs(Number(precioElegido) - Number(info.precio)) >= 0.0005;
 
         // Con la función de actualización: dos toques rápidos en el teléfono suman dos (el segundo no pisa al primero)
@@ -764,7 +765,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         const info = calcularPrecioInfo(producto, tarifa);
         const mismas = (esMonedaBs ? ['precio4', 'precio5', 'precio1'] : ['precio7', 'precio6']).filter((t) => opcionesTarifa.some((o) => o.value === t));
         return {
-            valor: info.precio, simbolo: info.simbolo, editable: puedeEditarPrecio, etiqueta: etiquetaTarifa,
+            valor: info.precio, simbolo: info.simbolo, editable: puedeFijarPrecio, etiqueta: etiquetaTarifa,
             opciones: mismas.map((t) => ({ etiqueta: CORTO_TARIFA[t], valor: calcularPrecioInfo(producto, t).precio })),
             equivalente: tasaBcv > 0 && !soloBs ? (v) => (esMonedaBs ? `≈ $${formatoNumero(aDolares(v, tasaBcv))}` : `≈ Bs ${formatoNumero(aBolivares(v, tasaBcv))}`) : null,
         };
@@ -1098,7 +1099,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                             <ActionIcon size={40} radius="md" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)} aria-label="Uno más"><IconPlus size={18} /></ActionIcon>
                         </Group>
                         <Box ta="right" style={{ minWidth: 0 }}>
-                            {puedeEditarPrecio ? (
+                            {puedeFijarPrecio ? (
                                 <PrecioEditable valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)} size="sm" onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)} />
                             ) : (
                                 <Text size="xs" c="dimmed">c/u <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="xs" fw={600} /></Text>
@@ -1121,7 +1122,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 <Table.Tr>
                     <Table.Th>Producto</Table.Th>
                     <Table.Th style={{ width: 150, textAlign: 'center' }}>Cantidad</Table.Th>
-                    <Table.Th style={{ width: puedeEditarPrecio ? 150 : 110, textAlign: 'right' }}>Unit.</Table.Th>
+                    <Table.Th style={{ width: puedeFijarPrecio ? 150 : 110, textAlign: 'right' }}>Unit.</Table.Th>
                     <Table.Th style={{ width: 110, textAlign: 'right' }}>Total</Table.Th>
                     {!esPresupuesto && <Table.Th style={{ width: 40, textAlign: 'center' }} title="Afectar inventario">Inv.</Table.Th>}
                     <Table.Th style={{ width: 34 }}></Table.Th>
@@ -1166,7 +1167,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                         </Table.Td>
 
                         <Table.Td style={{ textAlign: 'right' }}>
-                            {puedeEditarPrecio ? (
+                            {puedeFijarPrecio ? (
                                 <PrecioEditable
                                     valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)}
                                     onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)}

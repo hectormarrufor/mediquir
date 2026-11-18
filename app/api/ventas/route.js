@@ -127,7 +127,7 @@ export async function POST(request) {
             throw new ErrorNegocio(`Una factura admite hasta ${CONFIG_FISCAL.maxRenglonesFactura} renglones (la forma libre no da para más). Divide la venta en dos facturas.`);
         }
 
-        // Un vendedor no fija precios: cobra por tarifa, con el precio que calcula el servidor, y sin productos genéricos de precio libre
+        // Un vendedor puede escribir el precio de cada renglón (jolexi lo revisa al aprobar), pero no vende productos genéricos de precio libre
         const esVend = rolDe(acceso.sesion) === 'vendedor';
         if (esVend) {
             if (detalles.some((d) => d.isFicticio)) throw new ErrorNegocio('Solo administración puede vender productos genéricos con precio libre', 403);
@@ -175,9 +175,9 @@ export async function POST(request) {
             if (!(Number(item.precioUnitario) > 0)) throw new ErrorNegocio('Todos los renglones deben tener un precio mayor a 0');
             const producto = item.isFicticio ? null : productos.get(Number(item.productoId));
             if (esVend) {
+                // El vendedor puede escribir el precio de cada renglón (jolexi lo revisa antes de aprobar); solo se valida que la moneda sea la de la tarifa
                 const tarifa = precioPorTarifa(producto, body.tipoPrecio, tasaCambio, { sinCosto: true });
                 if (tarifa.moneda !== moneda) throw new ErrorNegocio('La moneda no corresponde a la tarifa elegida');
-                item = { ...item, precioUnitario: tarifa.precio };
             }
             const alicuota = producto ? Number(producto.porcentajeIva) || 0 : REGLAS.alicuotaGeneral;
             // El POS decide si la venta lleva IVA; la alícuota de cada producto la fija su ficha
