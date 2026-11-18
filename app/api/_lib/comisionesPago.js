@@ -14,8 +14,10 @@ const diaCaracas = (f) => (f ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Ame
  * «Vendedor externo»): se le crea, con el % que ese vendedor tiene con ese cliente (el de su última línea; si no, el del vendedor).
  * Así una venta nunca se queda sin comisión porque no estaba en la hoja del vendedor (pasó con la F-146834 de Farmavit18, de Edgar Jiménez).
  * Si el cliente no tiene vendedor externo, no hace nada. Devuelve la línea creada.
+ * `fraccionPendiente` (0 a 1): cuando el cliente pasa a ser del vendedor con la factura ya a medio pagar, la línea solo comisiona lo que falta por cobrar
+ * (monto y base × fracción), para que los pagos que sigan completen exactamente esa comisión y no la de lo que ya se había pagado antes.
  */
-export async function asegurarComisionFactura({ venta, transaction: t }) {
+export async function asegurarComisionFactura({ venta, transaction: t, fraccionPendiente = 1 }) {
     if (!venta?.id || !venta.clienteId || !['FACTURA', 'NOTA_ENTREGA'].includes(venta.tipoDocumento) || venta.statusDespacho === 'Cancelado') return null;
     if (await ComisionVenta.count({ where: { ventaId: venta.id, concepto: 'FACTURA' }, transaction: t })) return null;
     const [dueno] = await sequelize.query(
@@ -36,15 +38,41 @@ export async function asegurarComisionFactura({ venta, transaction: t }) {
     const tasa = Number(venta.tasaCambio) || 1;
     const enUsd = (monto) => (venta.moneda === 'BS' ? r2(Number(monto) / tasa) : r2(monto));
     const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, attributes: ['montoTotal', 'moneda'], transaction: t });
-    const montoUsd = cxc && cxc.moneda === 'USD' ? r2(cxc.montoTotal) : enUsd(venta.totalFinal);
-    const baseUsd = enUsd(venta.subtotal);
+    const f = fraccionPendiente > 0 && fraccionPendiente < 1 ? fraccionPendiente : 1;
+    const montoUsd = r2((cxc && cxc.moneda === 'USD' ? Number(cxc.montoTotal) : enUsd(venta.totalFinal)) * f);
+    const baseUsd = r2(enUsd(venta.subtotal) * f);
     const digitos = String(venta.numeroDocumento || '').replace(/\D/g, '');
     return ComisionVenta.create({
         vendedorId: dueno.vendedorId, ventaId: venta.id, concepto: 'FACTURA', fecha: diaCaracas(venta.fechaEmision || venta.createdAt || new Date()), vencimiento: diaCaracas(venta.fechaVencimiento),
         documentoTexto: venta.tipoDocumento === 'NOTA_ENTREGA' ? digitos.replace(/^0+/, '') : digitos, clienteTexto: dueno.clienteTexto,
         montoUsd, baseUsd, porcentaje: dueno.porcentaje, comisionUsd: r2((baseUsd * dueno.porcentaje) / 100), estatusComision: 'PENDIENTE',
-        observacion: 'Agregada sola: el cliente es de este vendedor',
+        observacion: f < 1 ? `Agregada al asignarle el cliente: solo lo que faltaba por cobrar (${Math.round(f * 100)} % de la factura)` : 'Agregada sola: el cliente es de este vendedor',
     }, { transaction: t });
+}
+
+/**
+ * Al asignarle un cliente a un vendedor a comisión: sus facturas y notas de entrega con cuenta por cobrar todavía pendiente (y sin línea de comisión) entran a la hoja
+ * del vendedor, así lo que el cliente pague de ahora en adelante le genera su comisión. Lo que el cliente ya había pagado antes no comisiona.
+ * Devuelve { facturas, comisionUsd } con lo asociado.
+ */
+export async function asociarCuentasPendientesDelCliente({ clienteId, transaction: t }) {
+    const filas = await sequelize.query(
+        `SELECT v.id AS "ventaId", c."saldoPendiente"::float AS saldo, c."montoTotal"::float AS total
+           FROM "Ventas" v JOIN "CuentasPorCobrar" c ON c."ventaId" = v.id
+          WHERE v."clienteId" = :cliente AND v."tipoDocumento" IN ('FACTURA', 'NOTA_ENTREGA') AND v."statusDespacho" <> 'Cancelado'
+            AND c.estado = 'Pendiente' AND c."saldoPendiente" > 0.005
+            AND NOT EXISTS (SELECT 1 FROM "ComisionesVenta" cv WHERE cv."ventaId" = v.id AND cv.concepto = 'FACTURA')
+          ORDER BY v."createdAt"`,
+        { replacements: { cliente: clienteId }, type: sequelize.QueryTypes.SELECT, transaction: t },
+    );
+    let facturas = 0; let comisionUsd = 0;
+    for (const f of filas) {
+        const venta = await Venta.findByPk(f.ventaId, { transaction: t });
+        const fraccion = f.total > 0 ? Math.min(1, Math.max(0, f.saldo / f.total)) : 1;
+        const linea = await asegurarComisionFactura({ venta, transaction: t, fraccionPendiente: fraccion });
+        if (linea) { facturas += 1; comisionUsd += Number(linea.comisionUsd) || 0; }
+    }
+    return { facturas, comisionUsd: r2(comisionUsd) };
 }
 
 /**

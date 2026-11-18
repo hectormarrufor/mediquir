@@ -3,7 +3,7 @@
 // Piezas de la hoja de vendedores que usan igual la tabla (escritorio) y las tarjetas (teléfono):
 // el estado de la comisión (color + ícono + texto), el menú «⋯» de cada línea, la leyenda y los diálogos.
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActionIcon, Alert, Autocomplete, Box, Button, Group, Menu, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Text, Textarea, TextInput } from '@mantine/core';
+import { ActionIcon, Alert, Autocomplete, Box, Button, Group, Menu, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Switch, Text, Textarea, TextInput } from '@mantine/core';
 import { IconArrowBackUp, IconCircleCheck, IconCoin, IconDotsVertical, IconHourglass, IconInfoCircle, IconListCheck, IconPencil, IconPlus, IconReceipt, IconReceiptRefund, IconTrash } from '@tabler/icons-react';
 import { CONCEPTOS, ESTADOS, PORCENTAJES, esPago, estadoLinea, opcionesPct, r2 } from './comisiones';
 import { Dialogo } from './Piezas';
@@ -239,20 +239,50 @@ export function DialogoAgregarLinea({ abierto, inicial, vendedor, facturas, clie
     );
 }
 
+// Datos del vendedor: nombre, teléfono (para compartirle por WhatsApp el recibo de sus pagos), % por defecto, notas y si está activo
+export function DialogoEditarVendedor({ abierto, vendedor, onCerrar, onGuardar }) {
+    const [d, setD] = useState({ nombre: '', telefono: '', porcentaje: '5', notas: '', activo: true });
+    const [guardando, setGuardando] = useState(false);
+    useEffect(() => {
+        if (abierto && vendedor) setD({ nombre: vendedor.nombre || '', telefono: vendedor.telefono || '', porcentaje: String(Number(vendedor.porcentaje ?? 5)), notas: vendedor.notas || '', activo: vendedor.activo !== false });
+    }, [abierto, vendedor]);
+    const guardar = async () => {
+        setGuardando(true);
+        try { await onGuardar({ nombre: d.nombre.trim(), telefono: d.telefono.trim(), porcentaje: Number(d.porcentaje), notas: d.notas, activo: d.activo }); onCerrar(); } catch { /* ya se avisó */ } finally { setGuardando(false); }
+    };
+    return (
+        <Dialogo abierto={abierto} onCerrar={onCerrar} titulo={`Datos de ${vendedor?.nombre || ''}`} ancho="sm">
+            <Stack gap="sm">
+                <TextInput label="Nombre" value={d.nombre} onChange={(e) => setD({ ...d, nombre: e.currentTarget.value })} data-autofocus />
+                <TextInput label="Teléfono (WhatsApp)" description="Para compartirle el recibo de sus pagos directo a su chat" placeholder="0414-1234567 o +58 414-1234567" inputMode="tel" value={d.telefono} onChange={(e) => setD({ ...d, telefono: e.currentTarget.value })} />
+                <Select label="% de comisión por defecto" data={opcionesPct(d.porcentaje)} value={d.porcentaje} onChange={(v) => v && setD({ ...d, porcentaje: v })} allowDeselect={false} comboboxProps={{ withinPortal: true }} />
+                <Textarea label="Notas" autosize minRows={2} value={d.notas} onChange={(e) => setD({ ...d, notas: e.currentTarget.value })} />
+                <Switch label="Vendedor activo" description="Un vendedor inactivo no genera comisiones nuevas" checked={d.activo} onChange={(e) => setD({ ...d, activo: e.currentTarget.checked })} />
+                <Group justify="flex-end" gap="xs">
+                    <Button variant="default" size="sm" onClick={onCerrar}>Cancelar</Button>
+                    <Button size="sm" disabled={d.nombre.trim().length < 2} loading={guardando} onClick={guardar}>Guardar</Button>
+                </Group>
+            </Stack>
+        </Dialogo>
+    );
+}
+
 export function DialogoNuevoVendedor({ abierto, onCerrar, onCrear }) {
     const [nombre, setNombre] = useState('');
     const [porcentaje, setPorcentaje] = useState('5');
+    const [telefono, setTelefono] = useState('');
     const [guardando, setGuardando] = useState(false);
-    useEffect(() => { if (abierto) { setNombre(''); setPorcentaje('5'); } }, [abierto]);
+    useEffect(() => { if (abierto) { setNombre(''); setPorcentaje('5'); setTelefono(''); } }, [abierto]);
     const crear = async () => {
         setGuardando(true);
-        try { await onCrear({ nombre: nombre.trim(), porcentaje: Number(porcentaje) }); onCerrar(); } catch { /* ya se avisó */ } finally { setGuardando(false); }
+        try { await onCrear({ nombre: nombre.trim(), porcentaje: Number(porcentaje), telefono: telefono.trim() }); onCerrar(); } catch { /* ya se avisó */ } finally { setGuardando(false); }
     };
     return (
         <Dialogo abierto={abierto} onCerrar={onCerrar} titulo="Nuevo vendedor a comisión" ancho="sm">
             <Stack gap="sm">
                 <Text size="sm" c="#5c6675">No forma parte de la nómina ni entra al sistema: solo se le lleva su hoja de comisiones.</Text>
                 <TextInput label="Nombre" value={nombre} onChange={(e) => setNombre(e.currentTarget.value)} data-autofocus />
+                <TextInput label="Teléfono (WhatsApp)" description="Opcional: para compartirle el recibo de sus pagos" placeholder="0414-1234567" inputMode="tel" value={telefono} onChange={(e) => setTelefono(e.currentTarget.value)} />
                 <Select label="% de comisión por defecto" description="Se propone al agregar sus facturas; cada factura puede tener el suyo" data={PORCENTAJES.map((n) => ({ value: String(n), label: `${n}%` }))} value={porcentaje} onChange={(v) => v && setPorcentaje(v)} allowDeselect={false} comboboxProps={{ withinPortal: true }} />
                 <Group justify="flex-end" gap="xs">
                     <Button variant="default" size="sm" onClick={onCerrar}>Cancelar</Button>

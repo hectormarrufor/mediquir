@@ -8,11 +8,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ActionIcon, Affix, Alert, Box, Button, CloseButton, Group, Menu, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Tooltip, Transition } from '@mantine/core';
 import {
     IconAlertTriangle, IconArrowBackUp, IconBuildingBank, IconChecks, IconCircleCheck, IconCoin, IconDotsVertical, IconFold, IconHourglass,
-    IconCash, IconInbox, IconPercentage, IconPlus, IconSearch, IconSelectAll, IconUserPlus, IconUsers, IconX,
+    IconBrandWhatsapp, IconCash, IconInbox, IconPencil, IconPercentage, IconPlus, IconSearch, IconSelectAll, IconUserPlus, IconUsers, IconX,
 } from '@tabler/icons-react';
 import HojaTabla from './HojaTabla';
 import HojaTarjetas from './HojaTarjetas';
-import { DialogoAgregarLinea, DialogoEditarLinea, DialogoNuevoVendedor, LeyendaColores } from './PiezasVendedores';
+import { DialogoAgregarLinea, DialogoEditarLinea, DialogoEditarVendedor, DialogoNuevoVendedor, LeyendaColores } from './PiezasVendedores';
 import { EstadoVacio, Esqueleto, Kpi, useConfirmar } from './Piezas';
 import { DialogoPagarComision, DialogoPrestamo } from './PrestamosPagos';
 import DialogoClientesVendedor from './ClientesVendedor';
@@ -94,6 +94,7 @@ export default function HojasVendedores() {
     const idsPorPagar = new Set(hoja.porPagarVisibles);
     const facturasConPorPagar = new Set(hoja.lineas.filter((l) => idsPorPagar.has(l.id)).map(claveDoc)).size;
     const hayVendedores = hoja.vendedores.length > 0;
+    const wa = (() => { const d = String(actual?.telefono || '').replace(/\D/g, ''); return d ? (d.startsWith('58') ? d : d.startsWith('0') ? `58${d.slice(1)}` : d) : null; })();
 
     // ---------- Encabezado: vendedor elegido, su % por defecto y alta de vendedores ----------
     const selectorVendedor = !tarjetas && hoja.vendedores.length <= 6 ? (
@@ -119,9 +120,21 @@ export default function HojasVendedores() {
                             />
                         </Tooltip>
                     )}
+                    {actual && <Button size={tarjetas ? 'sm' : 'compact-sm'} variant="light" color="teal" leftSection={<IconUsers size={16} />} onClick={() => setDialogo({ tipo: 'clientes' })}>Clientes ({actual.nClientes ?? 0})</Button>}
+                    {actual && <Button size={tarjetas ? 'sm' : 'compact-sm'} variant="default" leftSection={<IconPencil size={16} />} onClick={() => setDialogo({ tipo: 'datos' })}>Datos</Button>}
                     <Button size={tarjetas ? 'sm' : 'compact-sm'} variant="light" leftSection={<IconUserPlus size={16} />} onClick={() => setDialogo({ tipo: 'vendedor' })}>Nuevo vendedor</Button>
                 </Group>
             </Group>
+            {actual && (
+                <Group gap={8} mt={6} wrap="wrap">
+                    {actual.telefono ? (
+                        <>
+                            <Text fz={12.5} c="#5c6675">Teléfono: <b>{actual.telefono}</b></Text>
+                            {wa && <Button component="a" href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer" size="compact-xs" variant="light" color="green" leftSection={<IconBrandWhatsapp size={14} />}>WhatsApp</Button>}
+                        </>
+                    ) : <Text fz={12.5} c="orange.8">Sin teléfono guardado: tócalo en «Datos» para compartirle sus recibos por WhatsApp directo.</Text>}
+                </Group>
+            )}
         </Box>
     );
 
@@ -297,6 +310,7 @@ export default function HojasVendedores() {
             {dialogo?.tipo === 'cobro' && <CambioDeudaModal cuenta={dialogo.cuenta} onCerrar={(guardado) => { cerrar(); if (guardado) queryClient.invalidateQueries({ queryKey: ['comisiones'] }); }} />}
             <DialogoAgregarLinea abierto={dialogo?.tipo === 'agregar'} inicial={dialogo?.inicial} vendedor={actual} facturas={hoja.facturas} clientes={hoja.clientes} onCerrar={cerrar} onAgregar={hoja.agregar} />
             <DialogoNuevoVendedor abierto={dialogo?.tipo === 'vendedor'} onCerrar={cerrar} onCrear={hoja.crearVendedor} />
+            <DialogoEditarVendedor abierto={dialogo?.tipo === 'datos'} vendedor={actual} onCerrar={cerrar} onGuardar={hoja.editarVendedor} />
             <DialogoPrestamo abierto={dialogo?.tipo === 'prestamo'} vendedor={actual} tasa={tasa} acumulado={acumulado} onCerrar={cerrar} onPrestar={hoja.prestar} onBorrar={hoja.borrarPrestamo} onRevertirPago={hoja.revertirPago} onAbonarSuelto={hoja.abonarPrestamo}
                 onAbonar={(monto) => hoja.pagarComision(idsAcumulado, { montoUsd: monto, abonoPrestamoUsd: monto })} />
             {dialogo?.tipo === 'pagar' && (

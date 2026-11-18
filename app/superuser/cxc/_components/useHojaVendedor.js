@@ -105,6 +105,14 @@ export function useHojaVendedor() {
             return r;
         } catch (e) { return avisar(e); }
     };
+    // Nombre, teléfono, % por defecto, notas o activo
+    const editarVendedor = async (campos) => {
+        try {
+            await enviar('/api/comisiones/vendedores', 'PATCH', { id: actual.id, ...campos });
+            notifications.show({ color: 'teal', message: `Datos de ${campos.nombre || actual.nombre} guardados` });
+            refrescar();
+        } catch (e) { return avisar(e); }
+    };
     const cambiarPctVendedor = (porcentaje) => enviar('/api/comisiones/vendedores', 'PATCH', { id: actual.id, porcentaje })
         .then(() => { notifications.show({ color: 'teal', message: `Porcentaje por defecto de ${actual.nombre}: ${porcentaje} %` }); refrescar(); })
         .catch(avisar);
@@ -141,6 +149,6 @@ export function useHojaVendedor() {
         sel, seleccion, alternarSel, seleccionarVarias, limpiarSeleccion: () => setSel(new Set()), porPagarVisibles,
         abiertos, alternarGrupo, expandirTodo: () => setAbiertos(new Set(grupos.map((g) => g.k))), contraerTodo: () => setAbiertos(new Set()),
         plegadas, alternarPlegada,
-        prestar, abonarPrestamo, borrarPrestamo, revertirPago, pagarComision, editar, marcar, marcarUna, agregar, borrar, crearVendedor, cambiarPctVendedor,
+        prestar, abonarPrestamo, borrarPrestamo, revertirPago, pagarComision, editar, marcar, marcarUna, agregar, borrar, crearVendedor, cambiarPctVendedor, editarVendedor,
     };
 }

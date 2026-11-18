@@ -38,8 +38,10 @@ export default function DialogoClientesVendedor({ abierto, vendedor, vendedores 
     const guardar = async (clienteId, vendedorComisionId, mensaje) => {
         setTrabajando(true);
         try {
-            await pedir(`/api/clientes/${clienteId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vendedorComisionId }) });
-            notifications.show({ color: 'teal', message: mensaje });
+            const r = await pedir(`/api/clientes/${clienteId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vendedorComisionId }) });
+            const a = r.comisionesAsociadas;
+            notifications.show({ color: 'teal', message: a?.facturas ? `${mensaje}. Se asociaron ${a.facturas} cuenta(s) por cobrar a su hoja: comisión de $${Number(a.comisionUsd).toFixed(2)} que irá cobrando a medida que el cliente pague.` : mensaje, autoClose: a?.facturas ? 10000 : 4000 });
+            queryClient.invalidateQueries({ queryKey: ['comisiones'] });
             ['clientes-de-vendedores', 'clientes-auditoria', 'clientes-pos', 'clientes'].forEach((k) => queryClient.invalidateQueries({ queryKey: [k] }));
             setElegido(null);
         } catch (e) { notifications.show({ color: 'red', title: 'No se guardó', message: e.message }); } finally { setTrabajando(false); }
@@ -48,7 +50,7 @@ export default function DialogoClientesVendedor({ abierto, vendedor, vendedores 
     const agregar = () => {
         const c = clientes.find((x) => String(x.id) === elegido);
         if (!c) return;
-        if (c.vendedorComisionId && !window.confirm(`${c.nombre} hoy es cliente de ${nombreDe(c.vendedorComisionId)}. ¿Pasarlo a ${vendedor.nombre}? Las facturas que se hagan desde ahora le generarán comisión a ${vendedor.nombre}.`)) return;
+        if (c.vendedorComisionId && !window.confirm(`${c.nombre} hoy es cliente de ${nombreDe(c.vendedorComisionId)}. ¿Pasarlo a ${vendedor.nombre}? Sus cuentas por cobrar pendientes y las facturas nuevas le generarán comisión a ${vendedor.nombre}.`)) return;
         guardar(c.id, vendedor.id, `${c.nombre} ahora es cliente de ${vendedor.nombre}`);
     };
     const quitar = (c) => {
@@ -60,7 +62,7 @@ export default function DialogoClientesVendedor({ abierto, vendedor, vendedores 
         <Dialogo abierto={abierto} onCerrar={onCerrar} titulo={`Clientes de ${vendedor?.nombre || ''}`} ancho="md">
             <Stack gap="sm">
                 <Alert color="blue" variant="light" p="xs" icon={<IconInfoCircle size={18} />}>
-                    Cuando se hace una factura o nota de entrega a uno de estos clientes, la comisión se le genera sola a {vendedor?.nombre}. En el POS aparece un aviso con su nombre.
+                    Al agregar un cliente, sus cuentas por cobrar pendientes entran a la hoja de {vendedor?.nombre} y le generan comisión a medida que el cliente paga (lo que ya había pagado antes no comisiona). Las facturas nuevas le generan comisión solas. En el POS aparece un aviso con su nombre.
                 </Alert>
                 <Group gap="xs" align="flex-end" wrap="nowrap">
                     <Select style={{ flex: 1 }} label="Agregar un cliente" placeholder={isLoading ? 'Cargando clientes…' : 'Busca por nombre'} searchable searchValue={busca} onSearchChange={setBusca} data={opciones} value={elegido} onChange={setElegido} nothingFoundMessage="No hay coincidencias" />

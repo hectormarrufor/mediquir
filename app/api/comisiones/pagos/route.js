@@ -25,8 +25,8 @@ export async function GET(request) {
         const id = Number(new URL(request.url).searchParams.get('id'));
         const pago = await PagoComision.findByPk(id, { raw: true });
         if (!pago) return NextResponse.json({ error: 'Ese pago no existe' }, { status: 404 });
-        const vendedor = await VendedorComision.findByPk(pago.vendedorId, { attributes: ['nombre'], raw: true });
-        return NextResponse.json({ pago: { ...pago, vendedorNombre: vendedor?.nombre || '' } });
+        const vendedor = await VendedorComision.findByPk(pago.vendedorId, { attributes: ['nombre', 'telefono'], raw: true });
+        return NextResponse.json({ pago: { ...pago, vendedorNombre: vendedor?.nombre || '', vendedorTelefono: vendedor?.telefono || null } });
     } catch (error) {
         console.error('Leer pago de comisión:', error);
         return NextResponse.json({ error: 'No se pudo cargar el pago' }, { status: 500 });

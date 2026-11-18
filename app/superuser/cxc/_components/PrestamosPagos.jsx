@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { ActionIcon, Alert, Box, Button, Group, NumberInput, SegmentedControl, Stack, Table, Text, Textarea } from '@mantine/core';
 import { IconArrowBackUp, IconBrandWhatsapp, IconCash, IconCircleCheck, IconInfoCircle, IconPrinter, IconTrash } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
-import { compartirReciboComision, prepararReciboComision } from './reciboComisionPdf';
+import { abrirChatVendedor, compartirReciboComision, prepararReciboComision } from './reciboComisionPdf';
 import { Dialogo } from './Piezas';
 import { bolivares, dolares, fmtFecha, hoy } from './utilidades';
 import classes from './cxc.module.css';
@@ -35,7 +35,12 @@ export function BotonWhatsAppRecibo({ pagoId, prepararYa = false, compacto = fal
     if (compacto) {
         return <ActionIcon variant="subtle" color="green" size="sm" aria-label="Compartir recibo por WhatsApp" title="Compartir recibo por WhatsApp" loading={estado === 'preparando'} onClick={alTocar}><IconBrandWhatsapp size={15} /></ActionIcon>;
     }
-    return <Button size={tamano} color="green" variant="filled" leftSection={<IconBrandWhatsapp size={18} />} loading={estado === 'preparando'} onClick={alTocar}>Compartir por WhatsApp</Button>;
+    return (
+        <Group gap="xs" wrap="wrap">
+            <Button size={tamano} color="green" variant="filled" leftSection={<IconBrandWhatsapp size={18} />} loading={estado === 'preparando'} onClick={alTocar}>Compartir recibo (PDF)</Button>
+            {preparado?.pago?.vendedorTelefono && <Button size={tamano} color="green" variant="light" leftSection={<IconBrandWhatsapp size={18} />} onClick={() => abrirChatVendedor(preparado)}>Chat de {preparado.pago.vendedorNombre}</Button>}
+        </Group>
+    );
 }
 
 // ---------- Préstamos: saldo, historial (se puede borrar un préstamo), alta de uno nuevo y abono con la comisión acumulada ----------

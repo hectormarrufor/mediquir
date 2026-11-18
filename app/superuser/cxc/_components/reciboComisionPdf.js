@@ -31,6 +31,14 @@ async function cargarPago(pagoId) {
     return cuerpo.pago;
 }
 
+// 0424-6371531 / +58 424-6371531 -> 584246371531 (para wa.me)
+export const aWhatsApp = (tel) => {
+    const d = String(tel || '').replace(/\D/g, '');
+    if (!d) return null;
+    if (d.startsWith('58')) return d;
+    return d.startsWith('0') ? `58${d.slice(1)}` : d;
+};
+
 // Texto corto del pago, para el mensaje de WhatsApp
 export function resumenPago(pago) {
     const tasa = Number(pago.tasaBcv) > 0 ? Number(pago.tasaBcv) : null;
@@ -124,6 +132,14 @@ export async function prepararReciboComision(pagoId) {
     return { pago, file, texto: resumenPago(pago) };
 }
 
+/** Abre directamente el chat del vendedor (si tiene teléfono guardado) con el resumen escrito del pago. */
+export function abrirChatVendedor(preparado) {
+    const numero = aWhatsApp(preparado.pago.vendedorTelefono);
+    if (!numero) return false;
+    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(preparado.texto)}`, '_blank');
+    return true;
+}
+
 /** Comparte el recibo ya preparado. Devuelve 'compartido' | 'descargado' | 'cancelado'. */
 export async function compartirReciboComision(preparado) {
     const { file, texto, pago } = preparado;
@@ -141,6 +157,8 @@ export async function compartirReciboComision(preparado) {
     const a = document.createElement('a');
     a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
+    // Con el teléfono del vendedor guardado, WhatsApp abre directo su chat
+    const numero = aWhatsApp(pago.vendedorTelefono);
+    window.open(`https://wa.me/${numero || ''}?text=${encodeURIComponent(texto)}`, '_blank');
     return 'descargado';
 }

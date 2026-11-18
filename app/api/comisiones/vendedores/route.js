@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import db from '@/models';
 import { requerirNoVendedor, rolDe } from '../../_lib/acceso';
 import { requerirStaff } from '../../inventario/_lib';
+import { formatearTelefono } from '@/app/constants/identificacion';
 
 export const dynamic = 'force-dynamic';
 const { VendedorComision } = db;
@@ -12,7 +13,7 @@ export async function GET() {
     if (acceso.error) return acceso.error;
     try {
         const esVend = rolDe(acceso.sesion) === 'vendedor';
-        const vendedores = await VendedorComision.findAll({ attributes: esVend ? ['id', 'nombre', 'activo'] : ['id', 'nombre', 'porcentaje', 'activo'], order: [['nombre', 'ASC']], raw: true });
+        const vendedores = await VendedorComision.findAll({ attributes: esVend ? ['id', 'nombre', 'activo'] : ['id', 'nombre', 'porcentaje', 'activo', 'telefono'], order: [['nombre', 'ASC']], raw: true });
         return NextResponse.json({ vendedores });
     } catch (error) {
         console.error('Lista de vendedores a comisión:', error);
@@ -31,7 +32,9 @@ export async function POST(request) {
         const porcentaje = Number(b.porcentaje);
         if (!(porcentaje >= 0 && porcentaje <= 100)) return NextResponse.json({ error: 'El porcentaje debe estar entre 0 y 100' }, { status: 400 });
         if (await VendedorComision.findOne({ where: { nombre } })) return NextResponse.json({ error: 'Ya existe un vendedor con ese nombre' }, { status: 409 });
-        const v = await VendedorComision.create({ nombre, porcentaje, notas: String(b.notas || '').trim() || null });
+        let telefono = null;
+        if (String(b.telefono || '').trim()) { const t = formatearTelefono(b.telefono); if (!t.valor) return NextResponse.json({ error: `El teléfono no es válido (${t.motivo})` }, { status: 400 }); telefono = t.valor; }
+        const v = await VendedorComision.create({ nombre, porcentaje, notas: String(b.notas || '').trim() || null, telefono });
         return NextResponse.json({ ok: true, vendedor: v }, { status: 201 });
     } catch (error) {
         console.error('Alta de vendedor a comisión:', error);
@@ -39,7 +42,7 @@ export async function POST(request) {
     }
 }
 
-// Cambia nombre, porcentaje por defecto, notas o si está activo: { id, ...campos }
+// Cambia nombre, teléfono, porcentaje por defecto, notas o si está activo: { id, ...campos }
 export async function PATCH(request) {
     const acceso = await requerirNoVendedor();
     if (acceso.error) return acceso.error;
@@ -52,6 +55,10 @@ export async function PATCH(request) {
         if (b.porcentaje !== undefined) { const p = Number(b.porcentaje); if (!(p >= 0 && p <= 100)) return NextResponse.json({ error: 'El porcentaje debe estar entre 0 y 100' }, { status: 400 }); c.porcentaje = p; }
         if (b.activo !== undefined) c.activo = Boolean(b.activo);
         if (b.notas !== undefined) c.notas = String(b.notas || '').trim() || null;
+        if (b.telefono !== undefined) {
+            if (!String(b.telefono || '').trim()) c.telefono = null;
+            else { const t = formatearTelefono(b.telefono); if (!t.valor) return NextResponse.json({ error: `El teléfono no es válido (${t.motivo})` }, { status: 400 }); c.telefono = t.valor; }
+        }
         await v.update(c);
         return NextResponse.json({ ok: true, vendedor: v });
     } catch (error) {

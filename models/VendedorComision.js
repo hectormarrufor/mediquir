@@ -9,6 +9,7 @@ const VendedorComision = sequelize.define('VendedorComision', {
     porcentaje: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 5 }, // % de comisión por defecto
     activo: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     notas: { type: DataTypes.TEXT, allowNull: true },
+    telefono: { type: DataTypes.STRING(30), allowNull: true }, // formato nacional (04246371531): el recibo de su pago se comparte por WhatsApp a este número
     // Lo ya pagado de su comisión acumulada que todavía no cubre una línea entera (pagos parciales): se descuenta de lo acumulado por pagar
     comisionAbonadaUsd: { type: DataTypes.DECIMAL(12, 2), allowNull: false, defaultValue: 0 },
 }, { tableName: 'VendedoresComision', timestamps: true });

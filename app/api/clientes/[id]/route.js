@@ -6,6 +6,7 @@ import { requerirStaff } from '../../inventario/_lib';
 import { Op } from 'sequelize';
 import { creditoDeCliente, estadoCobro, hoyCaracas, ventasDelCliente } from '../../b2b/_lib';
 import { filtrarCambiosCliente } from '@/app/constants/clienteCampos';
+import { asociarCuentasPendientesDelCliente } from '@/app/api/_lib/comisionesPago';
 import { borrarBlob, borrarSiReemplazado } from '@/app/lib/blob';
 
 const USD = `(CASE WHEN "moneda" = 'BS' THEN "totalFinal" / NULLIF("tasaCambio", 0) ELSE "totalFinal" END)`;
@@ -95,10 +96,22 @@ export async function PUT(req, { params }) {
         }
 
         const imagenAnterior = cliente.imagen;
-        await cliente.update(cambios);
+        // Si pasa a ser cliente de un vendedor a comisión, sus facturas con deuda entran de una vez a la hoja de ese vendedor (todo o nada)
+        const nuevoDueno = cambios.vendedorComisionId ? Number(cambios.vendedorComisionId) : null;
+        let comisionesAsociadas = null;
+        if (nuevoDueno && nuevoDueno !== Number(cliente.vendedorComisionId)) {
+            const t = await sequelize.transaction();
+            try {
+                await cliente.update(cambios, { transaction: t });
+                comisionesAsociadas = await asociarCuentasPendientesDelCliente({ clienteId: cliente.id, transaction: t });
+                await t.commit();
+            } catch (e) { if (!t.finished) await t.rollback(); throw e; }
+        } else {
+            await cliente.update(cambios);
+        }
         await borrarSiReemplazado(imagenAnterior, cambios.imagen);
 
-        return NextResponse.json({ message: 'Cliente actualizado exitosamente', cliente }, { status: 200 });
+        return NextResponse.json({ message: 'Cliente actualizado exitosamente', cliente, comisionesAsociadas }, { status: 200 });
     } catch (error) {
         console.error("Error al actualizar cliente:", error);
         

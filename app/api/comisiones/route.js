@@ -55,6 +55,8 @@ export async function GET() {
     if (acceso.error) return acceso.error;
     try {
         const vendedores = await VendedorComision.findAll({ order: [['nombre', 'ASC']], raw: true });
+        // Cuántos clientes tiene asignados cada vendedor (botón «Sus clientes»)
+        const conteoClientes = new Map((await sequelize.query(`SELECT "vendedorComisionId" AS id, COUNT(*)::int AS n FROM "Clientes" WHERE "vendedorComisionId" IS NOT NULL GROUP BY 1`, { type: sequelize.QueryTypes.SELECT })).map((x) => [Number(x.id), x.n]));
         // De la factura enlazada también: su cliente en el sistema y lo que todavía debe (saldo de su cuenta por cobrar, en USD),
         // para que la hoja muestre cuánto debe cada cliente y si cada factura ya se cobró
         const lineas = await sequelize.query(
@@ -98,7 +100,7 @@ export async function GET() {
             const conAbonos = new Set(ls.filter((l) => l.concepto === 'ABONO' && l.ventaId).map((l) => l.ventaId));
             const suma = (lista) => r2(lista.filter((l) => !(l.concepto === 'FACTURA' && l.ventaId && conAbonos.has(l.ventaId))).reduce((a, l) => a + (Number(l.comisionUsd) || 0), 0));
             return {
-                ...v, porcentaje: Number(v.porcentaje), comisionAbonadaUsd: Number(v.comisionAbonadaUsd) || 0, lineas: ls,
+                ...v, nClientes: conteoClientes.get(v.id) || 0, porcentaje: Number(v.porcentaje), comisionAbonadaUsd: Number(v.comisionAbonadaUsd) || 0, lineas: ls,
                 prestamo: { saldo: r2(prestado - abonado), prestado, abonado, movimientos: ms }, pagos: (pagosPor.get(v.id) || []).slice(0, 20),
                 resumen: { lineas: ls.length, comisionPendiente: suma(ls.filter((l) => l.estatusComision !== 'PAGADA')), comisionPagada: suma(ls.filter((l) => l.estatusComision === 'PAGADA')) },
             };
