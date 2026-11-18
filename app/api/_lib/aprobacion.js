@@ -102,7 +102,7 @@ export async function avisarAprobado({ tipo, id, aprobadorId }) {
             : await sequelize.query(`SELECT n."numeroDocumento" AS numero, COALESCE(n."registradoPorId", v."vendedorId") AS vendedor, (CASE WHEN n."tipo" = 'CREDITO' THEN 'la nota de crédito' ELSE 'la nota de débito' END) AS texto FROM "NotasFiscales" n LEFT JOIN "Ventas" v ON v.id = n."ventaId" WHERE n.id = :id`, { replacements: { id }, type: sequelize.QueryTypes.SELECT });
         if (!d) return;
         const quien = await nombreDeUsuario(aprobadorId).catch(() => null);
-        await avisarAlVendedor({ vendedorId: d.vendedor, actorId: aprobadorId, titulo: 'Documento aprobado ✅', texto: `${quien || 'Jolexi'} aprobó ${d.texto} ${d.numero}. Ya puedes imprimirla desde «Documentos por imprimir»: el número de control se asigna al imprimirla.` });
+        await avisarAlVendedor({ vendedorId: d.vendedor, actorId: aprobadorId, titulo: 'Documento aprobado ✅', texto: `${quien || 'Jolexi'} aprobó ${d.texto} ${d.numero}. Ya puedes imprimirla desde «Documentos por imprimir». Al imprimir, el sistema te dirá el N° de control que va a usar: compáralo con el de la forma que tienes en la impresora. Si no coincide, NO imprimas y cerciórate con Jolexi de que no tenga ningún documento pendiente por imprimir.` });
     } catch (e) { console.error('No se pudo avisar la aprobación:', e.message); }
 }
 
