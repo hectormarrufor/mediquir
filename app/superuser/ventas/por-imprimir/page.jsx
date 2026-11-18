@@ -52,7 +52,7 @@ export default function PorImprimirPage() {
                                 </Box>
                                 <Text fw={800} ta="right" style={{ whiteSpace: 'nowrap' }}>{monto(d)}</Text>
                             </Group>
-                            <Button fullWidth mt="xs" leftSection={<IconPrinter size={18} />} onClick={() => imprimir(d)}>Imprimir</Button>
+                            <Button fullWidth mt="xs" color={d.aprobacion === 'PENDIENTE' ? 'orange' : undefined} leftSection={<IconPrinter size={18} />} onClick={() => imprimir(d)}>{d.aprobacion === 'PENDIENTE' ? 'Por aprobar: revisar' : 'Imprimir'}</Button>
                         </Card>
                     ))}
                 </Stack>
@@ -69,7 +69,7 @@ export default function PorImprimirPage() {
                                     <Table.Td>{d.cliente}</Table.Td>
                                     <Table.Td>{formatearFechaHora(d.fecha)}</Table.Td>
                                     <Table.Td ta="right" fw={700}>{monto(d)}</Table.Td>
-                                    <Table.Td ta="right"><Button size="compact-md" leftSection={<IconPrinter size={16} />} onClick={() => imprimir(d)}>Imprimir</Button></Table.Td>
+                                    <Table.Td ta="right"><Button size="compact-md" color={d.aprobacion === 'PENDIENTE' ? 'orange' : undefined} leftSection={<IconPrinter size={16} />} onClick={() => imprimir(d)}>{d.aprobacion === 'PENDIENTE' ? 'Por aprobar: revisar' : 'Imprimir'}</Button></Table.Td>
                                 </Table.Tr>
                             ))}
                         </Table.Tbody>

@@ -38,20 +38,21 @@ export async function GET() {
             documentos = await consulta(
                 `SELECT * FROM (
                     SELECT v."id", 'FACTURA' AS tipo, v."numeroDocumento" AS numero, COALESCE(v."fechaEmision", v."createdAt") AS fecha, v."aprobadaAt", v."moneda"::text AS moneda, v."totalFinal"::float AS total,
-                           COALESCE(c."nombre", 'Cliente al detal') AS cliente, v."createdAt" AS creado
+                           COALESCE(c."nombre", 'Cliente al detal') AS cliente, v."createdAt" AS creado, v."aprobacionEstado" AS aprobacion
                       FROM "Ventas" v LEFT JOIN "Clientes" c ON c."id" = v."clienteId"
                      WHERE v."tipoDocumento" = 'FACTURA' AND v."facturaTalonario" = false AND v."numeroControl" IS NULL AND v."statusDespacho" <> 'Cancelado'
-                       AND v."createdAt" >= :desde AND v."aprobacionEstado" IS DISTINCT FROM 'PENDIENTE'
+                       AND v."createdAt" >= :desde
                     UNION ALL
                     SELECT n."id", CASE WHEN n."tipo" = 'CREDITO' THEN 'NOTA_CREDITO' ELSE 'NOTA_DEBITO' END, n."numeroDocumento", n."fecha"::timestamptz, n."aprobadaAt", n."moneda"::text, n."totalFinal"::float,
-                           COALESCE(c."nombre", 'Cliente al detal'), n."createdAt"
+                           COALESCE(c."nombre", 'Cliente al detal'), n."createdAt", n."aprobacionEstado"
                       FROM "NotasFiscales" n LEFT JOIN "Clientes" c ON c."id" = n."clienteId"
-                     WHERE n."origen" = 'VENTA' AND n."estado" = 'EMITIDA' AND n."numeroControl" IS NULL AND n."aprobacionEstado" IS DISTINCT FROM 'PENDIENTE' AND n."createdAt" >= :desde
+                     WHERE n."origen" = 'VENTA' AND n."estado" = 'EMITIDA' AND n."numeroControl" IS NULL AND n."createdAt" >= :desde
                  ) d ORDER BY d."creado"`,
                 { desde: DESDE_POR_IMPRIMIR },
             );
         }
-        const lista = documentos.map((d) => ({ ...d, url: d.tipo === 'FACTURA' ? `/superuser/ventas/imprimir/${d.id}` : `/superuser/notas/${d.id}/imprimir` }));
+        // Un documento de vendedor que aún no aprueba jolexi no se imprime: desde la lista se va a su pantalla para aprobarlo
+        const lista = documentos.map((d) => ({ ...d, url: d.aprobacion === "PENDIENTE" && d.tipo === "FACTURA" ? `/superuser/ventas/${d.id}` : (d.tipo === "FACTURA" ? `/superuser/ventas/imprimir/${d.id}` : `/superuser/notas/${d.id}/imprimir`) }));
         return NextResponse.json({ documentos: lista, total: lista.length });
     } catch (error) {
         if (error?.original?.code === '42703' || /aprobacionEstado|impresaAt|aprobadaAt/.test(error?.message || '')) return NextResponse.json({ documentos: [], total: 0, sinMigrar: true });
