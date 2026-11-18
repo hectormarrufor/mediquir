@@ -101,10 +101,31 @@ export default function CorregirFacturaModal({ opened, onClose, pedido, onListo,
         } finally { setEnviando(false); }
     };
 
+    const alertaBorrar = borrando && (
+        <Alert color="red" variant="light" mt="sm" icon={<IconAlertTriangle size={18} />} title={`Eliminar la factura ${pedido.numeroDocumento}`}>
+            <Text size="sm">Se elimina con todo su rastro (renglones, inventario, ingresos o cuenta por cobrar); no se puede deshacer.</Text>
+            <Text size="sm" fw={700} mt="xs">¿La forma física con el control {pedido.numeroControl} se usó (o se dañó)?</Text>
+            <Group mt="xs" gap="xs">
+                <Button size="xs" color="teal" loading={enviando} onClick={() => eliminar(false)}>No se usó (no salió o falló la impresión): recuperar el control</Button>
+                <Button size="xs" color="orange" loading={enviando} onClick={() => eliminar(true)}>Sí se usó o se dañó: anotarla como anulada</Button>
+                <Button size="xs" variant="default" onClick={() => setBorrando(false)}>Cancelar</Button>
+            </Group>
+        </Alert>
+    );
+
     return (
         <Modal {...PANTALLA_COMPLETA_MOVIL} opened={opened} onClose={onClose} size="xl" title={<Text fw={700}>Corregir factura {pedido.numeroDocumento}</Text>}>
             {isLoading ? <Group justify="center" p="xl"><Loader /></Group> : error ? <Alert color="red">{error.message}</Alert> : bloqueado ? (
-                <Alert color="orange" icon={<IconAlertTriangle size={18} />} title="No se puede corregir">{estado.bloqueo}</Alert>
+                <Stack gap="sm">
+                    <Alert color="orange" icon={<IconAlertTriangle size={18} />} title="No se puede corregir">{estado.bloqueo}</Alert>
+                    {!estado.bloqueoEliminar && pedido.numeroControl && (
+                        <>
+                            <Text size="sm" c="dimmed">Si la hoja no salió bien (se dañó, falló la impresora o se fue la luz), puedes eliminar la factura y volver a hacerla.</Text>
+                            {alertaBorrar}
+                            <Group><Button color="red" variant="outline" leftSection={<IconTrash size={16} />} onClick={() => setBorrando(true)}>Eliminar factura</Button></Group>
+                        </>
+                    )}
+                </Stack>
             ) : (
                 <Stack gap="md">
                     <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={18} />}>
@@ -153,17 +174,7 @@ export default function CorregirFacturaModal({ opened, onClose, pedido, onListo,
                         )}
                     </div>
 
-                    {borrando && (
-                        <Alert color="red" variant="light" mt="sm" icon={<IconAlertTriangle size={18} />} title={`Eliminar la factura ${pedido.numeroDocumento}`}>
-                            <Text size="sm">Se elimina con todo su rastro (renglones, inventario, ingresos o cuenta por cobrar); no se puede deshacer.</Text>
-                            <Text size="sm" fw={700} mt="xs">¿La forma física con el control {pedido.numeroControl} se usó (o se dañó)?</Text>
-                            <Group mt="xs" gap="xs">
-                                <Button size="xs" color="teal" loading={enviando} onClick={() => eliminar(false)}>No se usó: recuperar el control</Button>
-                                <Button size="xs" color="orange" loading={enviando} onClick={() => eliminar(true)}>Sí se usó: anotarla como anulada</Button>
-                                <Button size="xs" variant="default" onClick={() => setBorrando(false)}>Cancelar</Button>
-                            </Group>
-                        </Alert>
-                    )}
+                    {alertaBorrar}
                     <Group justify="space-between" mt="sm">
                         <Button color="red" variant="outline" leftSection={<IconTrash size={16} />} loading={enviando} onClick={() => (pedido.numeroControl ? setBorrando(true) : eliminar())}>Eliminar factura</Button>
                         <Group>

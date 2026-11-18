@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sequelize } from '@/models';
 import { getSesion } from '@/app/api/notificaciones/_lib';
-import { puedeAprobar, aprobar } from '@/app/api/_lib/aprobacion';
+import { puedeAprobar, aprobar, avisarAprobado } from '@/app/api/_lib/aprobacion';
 import { aplicarEfectosVenta, avisarPedidoMayor, ErrorEfectos } from '@/app/api/_lib/efectosVenta';
 import { aplicarEfectosNota } from '@/app/api/_lib/notasFiscales';
 import { ErrorNota } from '@/app/api/_lib/notasFiscales';
@@ -65,6 +65,7 @@ export async function POST(request) {
         const efectos = tipo === 'VENTA' ? await aplicarEfectosVenta({ ventaId: id, transaction: t }) : await aplicarEfectosNota({ notaId: id, transaction: t });
         await t.commit();
         if (tipo === 'VENTA' && efectos.aplicado) await avisarPedidoMayor(efectos.venta);
+        await avisarAprobado({ tipo, id, aprobadorId: Number(a.sesion.id) }); // el vendedor se entera: ya puede imprimirla
         return NextResponse.json({ success: true });
     } catch (error) {
         if (!t.finished) await t.rollback();

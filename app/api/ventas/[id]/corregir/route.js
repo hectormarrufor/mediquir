@@ -4,6 +4,7 @@ import db from '@/models';
 import { requerirStaff } from '../../../inventario/_lib';
 import { puedeCorregirFacturas, bloqueoCorreccion, modificarFactura, eliminarFacturaSinImprimir, ErrorCorreccion } from '../../../_lib/corregirFactura';
 import { borrarArchivosDeVenta } from '../../_eliminar';
+import { avisarAlVendedor } from '../../../_lib/aprobacion';
 import { numerosAnteriores } from '@/app/constants/documentosAnteriores';
 
 const { Venta, Cliente } = db;
@@ -33,8 +34,9 @@ export async function GET(request, { params }) {
         const venta = await Venta.findByPk(id);
         if (!venta) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
         const bloqueo = await bloqueoCorreccion(venta);
+        const bloqueoEliminar = await bloqueoCorreccion(venta, undefined, { paraEliminar: true }); // con control no se modifica, pero sí se puede eliminar
         const cliente = venta.clienteId ? await Cliente.findByPk(venta.clienteId, { attributes: ['diasCredito'] }) : null;
-        return NextResponse.json({ bloqueo, diasCreditoCliente: Number(cliente?.diasCredito) || 0 });
+        return NextResponse.json({ bloqueo, bloqueoEliminar, diasCreditoCliente: Number(cliente?.diasCredito) || 0 });
     } catch (e) { return responder(e, 'Error consultando corrección de factura:'); }
 }
 
@@ -50,6 +52,7 @@ export async function POST(request, { params }) {
         if (!venta) throw new ErrorCorreccion('Factura no encontrada', 404);
         const r = await modificarFactura({ venta, condicionPago: body.condicionPago, diasCredito: body.diasCredito, metodoPago: body.metodoPago, referencia: body.referencia, detalles: body.detalles, transaction: t });
         await t.commit();
+        await avisarAlVendedor({ vendedorId: venta.vendedorId, actorId: a.sesion.id, titulo: 'Factura corregida ✏️', texto: `Se corrigió tu factura ${venta.numeroDocumento}${r.renglonesCambiados ? ' (cambiaron renglones o precios)' : ''}. Revísala antes de imprimirla.`, url: `/superuser/ventas/${venta.id}` });
         return NextResponse.json({ success: true, ...r });
     } catch (e) {
         if (!t.finished) await t.rollback();
@@ -69,6 +72,7 @@ export async function DELETE(request, { params }) {
         const cuerpo = await request.json().catch(() => ({}));
         const r = await eliminarFacturaSinImprimir({ venta, formaUsada: typeof cuerpo.formaUsada === 'boolean' ? cuerpo.formaUsada : undefined, transaction: t });
         await t.commit();
+        await avisarAlVendedor({ vendedorId: venta.vendedorId, actorId: a.sesion.id, titulo: 'Factura eliminada 🗑️', texto: `Se eliminó tu factura ${venta.numeroDocumento}. Si la necesitas, vuelve a hacerla.`, url: '/superuser/ventas' });
         try {
             const conFotos = Boolean(venta.fotoCajaAbiertaUrl || venta.fotoCajaSelladaUrl);
             await borrarArchivosDeVenta([venta.numeroDocumento, ...(conFotos ? numerosAnteriores(venta.numeroDocumentoAnterior) : [])], r.archivos);

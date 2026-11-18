@@ -52,12 +52,13 @@ export async function marcarImpresa(ventaId) {
 }
 
 /** Mensaje de por qué la factura no se puede corregir (null si se puede). Bloquea las filas con FOR UPDATE si hay transacción. */
-export async function bloqueoCorreccion(venta, transaction) {
+export async function bloqueoCorreccion(venta, transaction, { paraEliminar = false } = {}) {
     if (venta.tipoDocumento !== 'FACTURA') return 'Solo se corrigen facturas';
     if (venta.statusDespacho === 'Cancelado') return 'La factura está anulada';
     // Mientras no tenga número de control (se asigna en la primera impresión) se puede corregir o eliminar; con control ya no (la de talonario trae el suyo escrito a mano)
-    if (venta.numeroControl && !venta.facturaTalonario) return `Esta factura ya tiene número de control (${venta.numeroControl}): se asignó al imprimirla por primera vez. Para corregirla usa una nota de crédito o débito`;
-    if (await estaImpresa(venta.id, transaction)) return 'Esta factura ya se imprimió en la forma libre: para corregirla usa una nota de crédito o débito';
+    // Eliminar sí se permite con control: quien elimina dice si la forma física se usó (queda anotada como anulada) o no (el control se recupera), por si se dañó o falló la impresión
+    if (!paraEliminar && venta.numeroControl && !venta.facturaTalonario) return `Esta factura ya tiene número de control (${venta.numeroControl}): se asignó al imprimirla por primera vez. Para corregirla usa una nota de crédito o débito`;
+    if (!paraEliminar && await estaImpresa(venta.id, transaction)) return 'Esta factura ya se imprimió en la forma libre: para corregirla usa una nota de crédito o débito';
     if (venta.numeroDocumentoAnterior) return `Esta factura salió de otro documento (${venta.numeroDocumentoAnterior}): para corregirla usa la anulación con nota de crédito`;
     const where = { ventaId: venta.id };
     const [abonos, retenciones, notas, pagos, pagadas] = await Promise.all([
@@ -250,7 +251,7 @@ export async function modificarFactura({ venta, condicionPago, diasCredito, meto
 
 /** Elimina la factura sin imprimir con todo su rastro. Devuelve lo que `eliminarVenta` y los archivos del Blob por borrar. */
 export async function eliminarFacturaSinImprimir({ venta, formaUsada, transaction: t }) {
-    const bloqueo = await bloqueoCorreccion(venta, t);
+    const bloqueo = await bloqueoCorreccion(venta, t, { paraEliminar: true });
     if (bloqueo) throw new ErrorCorreccion(bloqueo, 409);
     const control = /^00-(\d+)$/.exec(String(venta.numeroControl || ''));
     // Con control asignado hay que saber qué pasó con la hoja física: si se usó (o se dañó) queda anotada como anulada; si no se usó, el control se recupera

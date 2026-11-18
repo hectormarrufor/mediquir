@@ -7,6 +7,7 @@ import { notificarUsuario } from '@/app/handlers/notificar';
 import { puedeCorregirFacturas } from './corregirFactura';
 
 export const URL_POR_APROBAR = '/superuser/ventas/por-aprobar';
+export const URL_POR_IMPRIMIR = '/superuser/ventas/por-imprimir';
 const TABLAS = { VENTA: 'Ventas', NOTA: 'NotasFiscales' };
 const columnaFaltante = (e) => e?.original?.code === '42703' || /aprobacionEstado/.test(e?.message || '');
 
@@ -83,6 +84,26 @@ export async function avisarPorAprobar({ tipoDoc, numero, vendedor }) {
             });
         }
     } catch (e) { console.error('No se pudo avisar de un documento por aprobar:', e.message); }
+}
+
+/** Avisa al vendedor dueño de un documento (si quien actúa no es él). Nunca falla (es un aviso). */
+export async function avisarAlVendedor({ vendedorId, actorId = null, titulo, texto, url = URL_POR_IMPRIMIR }) {
+    try {
+        if (!vendedorId || Number(vendedorId) === Number(actorId)) return;
+        await notificarUsuario(Number(vendedorId), { title: titulo, body: texto, url, tipo: 'Info' });
+    } catch (e) { console.error('No se pudo avisar al vendedor:', e.message); }
+}
+
+/** Al aprobar: el vendedor se entera de que ya puede imprimir su factura o nota. */
+export async function avisarAprobado({ tipo, id, aprobadorId }) {
+    try {
+        const [d] = tipo === 'VENTA'
+            ? await sequelize.query(`SELECT v."numeroDocumento" AS numero, v."vendedorId" AS vendedor, 'la factura' AS texto FROM "Ventas" v WHERE v.id = :id`, { replacements: { id }, type: sequelize.QueryTypes.SELECT })
+            : await sequelize.query(`SELECT n."numeroDocumento" AS numero, COALESCE(n."registradoPorId", v."vendedorId") AS vendedor, (CASE WHEN n."tipo" = 'CREDITO' THEN 'la nota de crédito' ELSE 'la nota de débito' END) AS texto FROM "NotasFiscales" n LEFT JOIN "Ventas" v ON v.id = n."ventaId" WHERE n.id = :id`, { replacements: { id }, type: sequelize.QueryTypes.SELECT });
+        if (!d) return;
+        const quien = await nombreDeUsuario(aprobadorId).catch(() => null);
+        await avisarAlVendedor({ vendedorId: d.vendedor, actorId: aprobadorId, titulo: 'Documento aprobado ✅', texto: `${quien || 'Jolexi'} aprobó ${d.texto} ${d.numero}. Ya puedes imprimirla desde «Documentos por imprimir»: el número de control se asigna al imprimirla.` });
+    } catch (e) { console.error('No se pudo avisar la aprobación:', e.message); }
 }
 
 /** Nombre del usuario (empleado o usuario) para los avisos. */

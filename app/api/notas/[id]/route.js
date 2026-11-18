@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { Marca, Producto, Cliente, NotaFiscal, NotaFiscalDetalle, Proveedor, Venta, FacturaCompra, sequelize } from '@/models';
+import { Marca, Producto, Cliente, NotaFiscal, NotaFiscalDetalle, Proveedor, Venta, FacturaCompra, FormaAnulada, Correlativo, sequelize } from '@/models';
 import { requerirAdmin, requerirNoVendedor } from '@/app/api/_lib/acceso';
 import { tasaVigente } from '@/app/api/_lib/tasaBcv';
-import { estaPorAprobar, esNotaAprobadaDe } from '@/app/api/_lib/aprobacion';
+import { estaPorAprobar, esNotaAprobadaDe, avisarAlVendedor } from '@/app/api/_lib/aprobacion';
 import { getSesion } from '@/app/api/notificaciones/_lib';
 import { rolDe } from '@/app/constants/roles';
 import { ErrorNota, anularNota, registrarReintegro, compensarSaldoAFavor } from '@/app/api/_lib/notasFiscales';
@@ -54,6 +54,7 @@ export async function PUT(request, { params }) {
     const t = await sequelize.transaction();
     let compensacion = null;
     let eliminada = false;
+    let avisoEliminada = null;
     try {
         const { id } = await params;
         const body = await request.json();
@@ -82,17 +83,30 @@ export async function PUT(request, { params }) {
         } else if (accion === 'ANULAR') {
             await anularNota({ nota, transaction: t });
         } else if (accion === 'ELIMINAR') {
-            // Una nota sin número de control (aún no se imprimió) se puede eliminar: se revierten sus efectos y desaparece; su número queda libre si era el último
+            // Una nota se puede eliminar: se revierten sus efectos y desaparece; su número queda libre si era el último. Si ya tiene control (se mandó a imprimir),
+            // quien elimina dice qué pasó con la forma física: si se usó o se dañó queda anotada como anulada; si no salió, el control se recupera.
             if (!(await puedeCorregirFacturas(acceso.sesion))) throw new ErrorNota('Solo Jolexi o el usuario 1 pueden eliminar notas', 403);
             if (nota.origen !== 'VENTA') throw new ErrorNota('Solo se eliminan las notas que emitió la empresa', 409);
-            if (nota.numeroControl) throw new ErrorNota(`Esta nota ya tiene número de control (${nota.numeroControl}): se asignó al imprimirla y ya no se puede eliminar`, 409);
+            const control = /^00-(d+)$/.exec(String(nota.numeroControl || ''));
+            if (nota.numeroControl && typeof body.formaUsada !== 'boolean') throw new ErrorNota(`Indica si la forma física con el control ${nota.numeroControl} se usó o no antes de eliminar la nota`, 400);
             if (nota.estado === 'EMITIDA') await anularNota({ nota, transaction: t }); // revierte inventario, abono y saldo a favor
             await NotaFiscal.destroy({ where: { id: nota.id }, transaction: t }); // sus renglones se borran en cascada
+            if (control) {
+                const n = Number(control[1]);
+                if (body.formaUsada) {
+                    await FormaAnulada.findOrCreate({ where: { numero: n }, defaults: { motivo: `Forma usada o dañada: se eliminó la nota ${nota.numeroDocumento}` }, transaction: t });
+                } else {
+                    const c = await Correlativo.findOne({ where: { prefijo: 'CONTROL' }, transaction: t, lock: t.LOCK.UPDATE });
+                    if (c && n < Number(c.siguienteNumero)) { c.siguienteNumero = n; await c.save({ transaction: t }); }
+                }
+            }
+            avisoEliminada = { vendedorId: nota.registradoPorId, numero: nota.numeroDocumento, actorId: acceso.sesion.id };
             eliminada = true;
         } else {
             throw new ErrorNota('Acción no válida');
         }
         await t.commit();
+        if (avisoEliminada) await avisarAlVendedor({ vendedorId: avisoEliminada.vendedorId, actorId: avisoEliminada.actorId, titulo: 'Nota eliminada 🗑️', texto: `Se eliminó tu nota ${avisoEliminada.numero}. Si la necesitas, vuelve a emitirla.`, url: '/superuser/ventas' });
         return NextResponse.json({ success: true, nota, compensacion, eliminada });
     } catch (error) {
         if (!t.finished) await t.rollback();
