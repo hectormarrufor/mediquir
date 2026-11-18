@@ -190,9 +190,10 @@ export async function emitirFacturasDeNotas({ cargadas, grupos, moneda = 'USD', 
 
     const emitidas = [];
     const faltantes = [];
+    const avisosNumero = [];
     for (const g of grupos) {
         const calc = calcular(g.renglones);
-        const numero = await siguienteNumeroFactura(t, g.numero ?? null);
+        const numero = await siguienteNumeroFactura(t, g.numero ?? null, avisosNumero);
         const anteriores = unirAnteriores(g.renglones.map((l) => notaPorId.get(l.notaId)?.numeroDocumento).sort());
         if (anteriores.length > 255) throw new ErrorConversion('Son demasiadas notas para una sola factura');
         const factura = await Venta.create({
@@ -286,7 +287,7 @@ export async function emitirFacturasDeNotas({ cargadas, grupos, moneda = 'USD', 
 
     return {
         facturas: emitidas.map((e) => ({ ventaId: e.factura.id, numeroDocumento: e.numero, notas: e.anteriores, totalUsd: e.totalUsd, total: e.calc.totalFinal, moneda })),
-        notas: cargadas.map((c) => c.venta.numeroDocumento), faltantes,
+        notas: cargadas.map((c) => c.venta.numeroDocumento), faltantes, avisoNumero: avisosNumero.length ? avisosNumero.join(' ') : null,
     };
 }
 
@@ -300,7 +301,7 @@ export async function facturarNotas({ notaIds, manuales = {}, porFactura = MAX_R
     const grupos = repartir(lineas, porFactura);
     if (esConversionSimple(cargadas, lineas, grupos, moverInventario)) {
         const r = await convertirNotaEntregaAFactura({ venta: cargadas[0].venta, tasaHoy: tasa, transaction: t, numeroManual: copias[0]?.numero || null, numeroControl: copias[0]?.control || null, fecha });
-        return { facturas: [{ ventaId: r.ventaId, numeroDocumento: r.numeroDocumento, notas: r.numeroAnterior, totalUsd: r.totalUsd, moneda: 'USD' }], notas: [r.numeroAnterior], faltantes: [] };
+        return { facturas: [{ ventaId: r.ventaId, numeroDocumento: r.numeroDocumento, notas: r.numeroAnterior, totalUsd: r.totalUsd, moneda: 'USD' }], notas: [r.numeroAnterior], faltantes: [], avisoNumero: r.avisoNumero || null };
     }
     return emitirFacturasDeNotas({
         cargadas, grupos: grupos.map((g, i) => ({ renglones: g, numero: copias[i]?.numero || null, control: copias[i]?.control || null })),

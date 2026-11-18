@@ -107,6 +107,7 @@ export default function FacturarNotasModal({ opened, onClose, pedido, onListo })
         onSuccess: (r) => {
             const nums = r.facturas.map((f) => f.numeroDocumento).join(', ');
             notifications.show({ title: r.facturas.length > 1 ? 'Facturas emitidas' : 'Factura emitida', message: `${nums}. ${r.notas.length > 1 ? 'Las notas quedaron anuladas' : 'La nota quedó anulada'} (se conservan en el historial)${r.faltantes?.length ? `. ${r.faltantes.length} producto(s) no tenían existencia suficiente en el sistema: se descontó lo que había.` : '.'}`, color: 'green', autoClose: 9000 });
+            if (r.avisoNumero) notifications.show({ color: 'orange', title: 'Aviso sobre el número', message: r.avisoNumero, autoClose: 20000, withCloseButton: true });
             onClose();
             onListo?.();
             if (r.facturas[0]?.ventaId) router.push(`/superuser/ventas/${r.facturas[0].ventaId}`);

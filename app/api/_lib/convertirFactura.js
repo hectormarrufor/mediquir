@@ -8,7 +8,7 @@ import db from '../../../models/index.js';
 import { calcularFactura, REGLAS } from '../../constants/facturacion.js';
 import { recalcularCobro } from './retencionesVenta.js';
 import { fechaCaracas } from '../../constants/hora.js';
-import { primerLibre } from './correlativoLibre.js';
+import { primerLibre, desdeLibreFacturas } from './correlativoLibre.js';
 import { asegurarComisionFactura } from './comisionesPago.js';
 import { controlAlNacer } from './numeracion.js';
 
@@ -24,7 +24,8 @@ const CAT_IVA = 'IVA Recaudado';
 // Siguiente número de factura: nunca por debajo del mayor F- ya emitido.
 // `manual`: el número que ya tiene esa factura en el sistema anterior (mientras convivan los dos, la factura se copia con SU número y no con uno nuevo).
 // Si ya existe una factura con ese número se rechaza (no se renumera en silencio); el correlativo avanza para que el siguiente sea el que sigue.
-export async function siguienteNumeroFactura(t, manual = null) {
+// `avisos` (arreglo opcional) recibe los avisos de numeración: número escrito por debajo del correlativo, o número libre reutilizado (hueco de una factura eliminada).
+export async function siguienteNumeroFactura(t, manual = null, avisos = null) {
     let corr = await Correlativo.findOne({ where: { prefijo: 'F' }, transaction: t, lock: t.LOCK.UPDATE });
     if (!corr) corr = await Correlativo.create({ prefijo: 'F', siguienteNumero: 1, cerosRelleno: 5 }, { transaction: t });
     const ceros = corr.cerosRelleno || 5;
@@ -33,13 +34,17 @@ export async function siguienteNumeroFactura(t, manual = null) {
         if (!Number.isInteger(n) || n < 1) throw new ErrorConversion('El número de factura no es válido', 400);
         const numero = `F-${String(n).padStart(ceros, '0')}`;
         if (await Venta.findOne({ where: { numeroDocumento: numero }, attributes: ['id'], transaction: t })) throw new ErrorConversion(`Ya existe la factura ${numero}`, 409);
+        if (avisos && n < (Number(corr.siguienteNumero) || 1)) avisos.push(`Escribiste el número ${numero}, menor que el siguiente del correlativo (F-${String(corr.siguienteNumero).padStart(ceros, '0')}): se usó tal cual. Verifica que sea el correcto.`);
         // Una factura copiada con su número NO mueve el correlativo: solo si era justo el siguiente, avanza al próximo libre
         corr.siguienteNumero = await primerLibre({ prefijo: 'F', desde: Number(corr.siguienteNumero) || 1, ocupados: [n], transaction: t });
         await corr.save({ transaction: t });
         return numero;
     }
-    const n = await primerLibre({ prefijo: 'F', desde: Number(corr.siguienteNumero) || 1, transaction: t });
-    corr.siguienteNumero = await primerLibre({ prefijo: 'F', desde: n + 1, transaction: t });
+    // El número libre más bajo por encima de la última factura con control (hueco de una factura eliminada) sale primero; el correlativo guardado no baja
+    const siguiente = Number(corr.siguienteNumero) || 1;
+    const n = await primerLibre({ prefijo: 'F', desde: await desdeLibreFacturas({ siguiente, transaction: t }), transaction: t });
+    if (avisos && n < siguiente) avisos.push(`Se reutilizó el número libre F-${String(n).padStart(ceros, '0')} (de una factura eliminada) para no dejar un hueco en la numeración.`);
+    corr.siguienteNumero = await primerLibre({ prefijo: 'F', desde: n < siguiente ? siguiente : n + 1, transaction: t });
     await corr.save({ transaction: t });
     return `F-${String(n).padStart(ceros, '0')}`;
 }
@@ -60,7 +65,8 @@ export async function convertirAFactura({ venta, transaction: t, numeroManual = 
 
     const anterior = venta.numeroDocumento;
     const emision = fechaEmisionDe(fecha);
-    const numero = await siguienteNumeroFactura(t, numeroManual);
+    const avisos = [];
+    const numero = await siguienteNumeroFactura(t, numeroManual, avisos);
     venta.numeroDocumentoAnterior = anterior;
     venta.numeroDocumento = numero;
     venta.tipoDocumento = 'FACTURA';
@@ -83,7 +89,7 @@ export async function convertirAFactura({ venta, transaction: t, numeroManual = 
     );
     // El recibo pasa a ser factura: si el cliente es de un vendedor externo, lleva su línea de comisión
     await asegurarComisionFactura({ venta, transaction: t });
-    return { numeroDocumento: numero, numeroAnterior: anterior, ivaReservado: reclasificados > 0 };
+    return { numeroDocumento: numero, numeroAnterior: anterior, ivaReservado: reclasificados > 0, avisoNumero: avisos[0] || null };
 }
 
 // ------------------------------------------------------------------ nota de entrega (a crédito) -> factura el día del pago
@@ -125,7 +131,8 @@ export async function convertirNotaEntregaAFactura({ venta, tasaHoy, transaction
     const p = await planConversionNE(venta, t);
     const anterior = venta.numeroDocumento;
     const emision = fechaEmisionDe(fecha);
-    const numero = await siguienteNumeroFactura(t, numeroManual);
+    const avisos = [];
+    const numero = await siguienteNumeroFactura(t, numeroManual, avisos);
     const sql = (texto, reemplazos) => sequelize.query(texto, { replacements: reemplazos, transaction: t });
 
     // 1. La factura nueva: copia de la nota con su número, su fecha, la tasa de hoy y el IVA
@@ -165,5 +172,5 @@ export async function convertirNotaEntregaAFactura({ venta, tasaHoy, transaction
     await recalcularCobro(factura, t);
     // Si la nota no traía comisión pero el cliente es de un vendedor externo, la factura la toma
     await asegurarComisionFactura({ venta: factura, transaction: t });
-    return { numeroDocumento: numero, numeroAnterior: anterior, tasaHoy: Number(tasaHoy), ivaAgregadoUsd: p.deltaIva, totalUsd: p.totalNuevo, ventaId: factura.id };
+    return { numeroDocumento: numero, numeroAnterior: anterior, tasaHoy: Number(tasaHoy), ivaAgregadoUsd: p.deltaIva, totalUsd: p.totalNuevo, ventaId: factura.id, avisoNumero: avisos[0] || null };
 }

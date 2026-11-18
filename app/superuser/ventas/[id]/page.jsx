@@ -125,6 +125,7 @@ export default function DetallePedidoMayorPage() {
             if (!res.ok) throw new Error(data.error || `Error en ${accion}`);
 
             notifications.show({ title: 'Éxito', message: successMsg, color: 'green' });
+            if (data.avisoNumero) notifications.show({ color: 'orange', title: 'Aviso sobre el número', message: data.avisoNumero, autoClose: 20000, withCloseButton: true });
             if (modalSetter) modalSetter(false);
             refetch();
         } catch (error) {
