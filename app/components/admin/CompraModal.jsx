@@ -7,7 +7,7 @@ import {
     Text, Divider, Badge, Checkbox, Box, ScrollArea, Alert, SegmentedControl, ThemeIcon, Popover, FileButton
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { useMediaQuery } from '@mantine/hooks';
+import { useMediaQuery, useDebouncedValue } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import ProductoForm from './ProductoForm';
 import { 
@@ -491,6 +491,22 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     const eliminarItem = (id) => setCarritoCompra(carritoCompra.filter(i => i.id !== id));
 
     const esFactura = formCompra.values.tipoDocumento === 'FACTURA';
+    // Primer paso: con el proveedor y el número (y el control, si se tiene) se consulta si la factura ya está registrada, antes de seguir llenando
+    const tipoVerificable = ['FACTURA', 'NOTA_ENTREGA'].includes(formCompra.values.tipoDocumento);
+    const [numeroVerif] = useDebouncedValue(String(formCompra.values.numeroDocumento || '').trim(), 500);
+    const [controlVerif] = useDebouncedValue(String(formCompra.values.numeroControl || '').trim(), 500);
+    const provVerif = !modoNuevoProveedor && formCompra.values.proveedorId ? Number(formCompra.values.proveedorId) : null;
+    const { data: verificacion } = useQuery({
+        queryKey: ['compra-repetida', provVerif, formCompra.values.tipoDocumento, numeroVerif, esFactura ? controlVerif : ''],
+        enabled: opened && !esGasto && tipoVerificable && Boolean(provVerif) && (numeroVerif.length > 0 || (esFactura && controlVerif.length > 0)), staleTime: 0, retry: false,
+        queryFn: async () => {
+            const p = new URLSearchParams({ proveedorId: String(provVerif), tipo: formCompra.values.tipoDocumento, numero: numeroVerif, control: esFactura ? controlVerif : '' });
+            const r = await fetch(`/api/compras/verificar?${p}`);
+            return r.ok ? r.json() : null;
+        },
+    });
+    const yaRegistrada = verificacion?.exacta || null;
+    const fechaCorta = (f) => String(f || '').slice(0, 10).split('-').reverse().join('/');
     // Los números se usan TAL CUAL se escriben: cada renglón = precio × cantidad exacto, la base y el exento son la suma exacta
     // de los renglones y el IVA se calcula una vez sobre la base de cada alícuota. Nada se redondea a céntimos.
     let subtotal = 0;
@@ -547,7 +563,9 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     const faltaNumeracionRet = montoRetencion > 0 && Boolean(serieRet) && !serieRet.configurado;
     const periodoRet = String(formCompra.values.fechaFactura || fechaCaracas()).slice(0, 7).replace('-', '');
 
+    const avisoRepetida = () => notifications.show({ color: 'red', title: 'Esta factura ya está registrada', message: `${yaRegistrada.numeroDocumento} de este proveedor, del ${fechaCorta(yaRegistrada.fechaFactura)}. No se registra dos veces: duplicaría el inventario y la retención.` });
     const handleLanzarSimulacion = async () => {
+        if (yaRegistrada) return avisoRepetida();
         if (carritoCompra.length === 0) return notifications.show({ message: 'El carrito de compra está vacío', color: 'orange' });
         if (!formCompra.values.numeroDocumento) return notifications.show({ message: 'Indica el número de factura o recibo', color: 'red' });
         if (!formCompra.values.proveedorId && !modoNuevoProveedor) return notifications.show({ message: 'Selecciona o crea un proveedor', color: 'red' });
@@ -669,7 +687,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
 
     const sim = formCompra.values.moneda === 'BS' ? 'Bs' : '$';
     const accionRegistrar = esGasto ? handleRegistrarGasto : handleLanzarSimulacion;
-    const registroBloqueado = (esGasto ? !(subtotal > 0) : carritoCompra.length === 0) || faltaNumeracionRet || (esBs && !(tasa > 0));
+    const registroBloqueado = Boolean(yaRegistrada) || (esGasto ? !(subtotal > 0) : carritoCompra.length === 0) || faltaNumeracionRet || (esBs && !(tasa > 0));
     const labelBoton = esGasto ? 'Registrar gasto' : 'Analizar compra y costos';
 
     // ---- Declaración de responsabilidad (una línea en escritorio) ----
@@ -753,6 +771,19 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                 {esFactura && (
                     <Grid.Col span={{ base: 12, md: 2 }}>
                         <TextInput size="sm" label="Nro. de control" placeholder="00-009497" {...formCompra.getInputProps('numeroControl')} />
+                    </Grid.Col>
+                )}
+                {(yaRegistrada || verificacion?.parecidas?.length > 0) && (
+                    <Grid.Col span={12}>
+                        {yaRegistrada ? (
+                            <Alert color="red" variant="filled" icon={<IconAlertTriangle size={18} />} title="Esta factura ya está registrada">
+                                {yaRegistrada.numeroDocumento}{yaRegistrada.numeroControl ? ` (control ${yaRegistrada.numeroControl})` : ''} de este proveedor, del {fechaCorta(yaRegistrada.fechaFactura)}, por {yaRegistrada.moneda === 'BS' ? 'Bs ' : '$'}{formatoExacto(yaRegistrada.total)}{yaRegistrada.por === 'control' ? ' — coincide el número de control' : ''}. No se puede registrar dos veces.
+                            </Alert>
+                        ) : (
+                            <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={18} />} title="Hay una factura parecida de este proveedor">
+                                {verificacion.parecidas.map((f) => `${f.numeroDocumento} del ${fechaCorta(f.fechaFactura)} por ${f.moneda === 'BS' ? 'Bs ' : '$'}${formatoExacto(f.total)}`).join(' · ')}. Tiene los mismos dígitos: confirma que no sea la misma factura escrita distinto.
+                            </Alert>
+                        )}
                     </Grid.Col>
                 )}
                 <Grid.Col span={{ base: 6, md: 2 }}>

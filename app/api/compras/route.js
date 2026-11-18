@@ -10,6 +10,7 @@ import { fechaCaracas } from '@/app/constants/hora';
 import { notificarCabezas } from '@/app/handlers/notificar';
 import { siguienteComprobante, usarComprobanteManual, periodoDe, marcarRetencionPendiente } from '../_lib/retenciones';
 import { ErrorNumeracion } from '../_lib/numeracion';
+import { buscarCompraDuplicada } from '../_lib/compraDuplicada';
 import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { datosProveedor, rifRepetido } from '../proveedores/_datos';
 import { esSinRif } from '@/app/constants/identificacion';
@@ -230,6 +231,12 @@ export async function POST(request) {
             });
         }
 
+        // La factura ya registrada se detecta desde la simulación (antes de pedir confirmación), no solo al guardar
+        if (simular && proveedorId && (tipoDocumento === 'FACTURA' || tipoDocumento === 'NOTA_ENTREGA')) {
+            const d = await buscarCompraDuplicada({ proveedorId: Number(proveedorId), tipo: tipoDocumento, numero: numeroDocumento, control: esFactura ? numeroControlCliente : null });
+            if (d.exacta) throw new ErrorCompra(`Ya registraste ${esFactura ? 'la factura' : 'la nota de entrega'} ${d.exacta.numeroDocumento} de este proveedor (${d.exacta.por === 'control' ? 'mismo número de control' : 'mismo número'}, fecha ${String(d.exacta.fechaFactura).slice(0, 10)}).`, 409);
+        }
+
         if (simular) {
             return NextResponse.json({
                 modoSimulacion: true,
@@ -263,8 +270,8 @@ export async function POST(request) {
             }
 
             // El mismo documento del mismo proveedor no se registra dos veces (duplicaría el inventario y la retención)
-            const repetida = await FacturaCompra.findOne({ where: { proveedorId: idProveedorFinal, tipoDocumento, numeroDocumento }, attributes: ['id'], transaction: t });
-            if (repetida) throw new ErrorCompra(`Ya registraste ${esFactura ? 'la factura' : 'la nota de entrega'} ${numeroDocumento} de este proveedor`, 409);
+            const { exacta: repetida } = await buscarCompraDuplicada({ proveedorId: idProveedorFinal, tipo: tipoDocumento, numero: numeroDocumento, control: esFactura ? numeroControlCliente : null, transaction: t });
+            if (repetida) throw new ErrorCompra(`Ya registraste ${esFactura ? 'la factura' : 'la nota de entrega'} ${repetida.numeroDocumento} de este proveedor (${repetida.por === 'control' ? 'mismo número de control' : 'mismo número'}, fecha ${String(repetida.fechaFactura).slice(0, 10)}).`, 409);
 
             // Vence N días después de la fecha de la factura. Se cuenta sobre la fecha (AAAA-MM-DD), sin horas: antes, según el huso
             // horario del servidor, podía quedar un día antes.
