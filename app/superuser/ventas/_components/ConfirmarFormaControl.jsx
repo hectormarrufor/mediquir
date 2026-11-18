@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { Alert, Button, Center, Loader, Paper, Stack, Text, TextInput } from '@mantine/core';
 import { IconAlertTriangle, IconPrinter } from '@tabler/icons-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { notifications } from '@mantine/notifications';
 
 // El número de control que se asignará al imprimir (el siguiente libre), leído al momento: no se reserva hasta que se confirma
 export function useControlPrevisto(activo) {
@@ -23,8 +24,25 @@ const numeroDe = (texto) => {
 // Antes de imprimir: quien imprime ESCRIBE el número de control que lleva la forma preimpresa que tiene en la impresora y solo si coincide con el que va a
 // salir impreso se puede continuar. El control se asigna recién cuando se confirma (si se cancela, no se gasta ningún número).
 // Un número equivocado en la forma es un documento fiscal mal impreso: por eso no basta una casilla.
-export default function ConfirmarFormaControl({ tipo, documento, control, nuevo, onConfirmar, onCancelar }) {
+export default function ConfirmarFormaControl({ tipo, documento, control, nuevo, origen, idDocumento, onConfirmar, onCancelar }) {
     const [escrito, setEscrito] = useState('');
+    const [danando, setDanando] = useState(false);
+    const queryClient = useQueryClient();
+    // La forma que iba a usarse se dañó (se arrugó, se atascó…): ese número se anota como forma anulada y se pasa al siguiente
+    const danada = async () => {
+        if (!window.confirm(`¿Este número de control (${control}) se dañó? Quedará anotado como forma anulada y se usará el siguiente.`)) return;
+        setDanando(true);
+        try {
+            const res = await fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'DANAR_SIGUIENTE', origen, id: idDocumento, control, documento: `${tipo} ${documento}` }) });
+            const cuerpo = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(cuerpo?.error || 'No se pudo marcar la forma como dañada');
+            notifications.show({ color: 'orange', title: 'Forma anotada como dañada', message: `El control ${cuerpo.danada} quedó como forma anulada. Ahora toca el ${cuerpo.siguiente}: pon la forma que lleva ese número.`, autoClose: 9000 });
+            setEscrito('');
+            await queryClient.invalidateQueries({ queryKey: ['control-previsto'] });
+        } catch (e) {
+            notifications.show({ color: 'red', title: 'No se pudo', message: e.message });
+        } finally { setDanando(false); }
+    };
     // Cuántos documentos esperan su control (solo informativo; para un vendedor son los suyos)
     const { data: pendientes } = useQuery({
         queryKey: ['por-imprimir-conteo'], staleTime: 0, retry: false,
@@ -62,6 +80,9 @@ export default function ConfirmarFormaControl({ tipo, documento, control, nuevo,
                                 <Alert color="blue" variant="light">Hay {otros} documento{otros === 1 ? '' : 's'} más esperando su número de control. Imprime en el orden en que están las formas.</Alert>
                             )}
                             <Button size="lg" leftSection={<IconPrinter size={20} />} disabled={!coincide} onClick={() => onConfirmar(control)}>Coincide: imprimir</Button>
+                            {nuevo && origen && idDocumento && (
+                                <Button variant="light" color="orange" loading={danando} onClick={danada}>Este número de control se dañó: usar el siguiente</Button>
+                            )}
                         </>
                     ) : <Stack align="center"><Loader /><Text size="sm" c="dimmed">Buscando el número de control…</Text></Stack>}
                     <Button variant="subtle" color="gray" onClick={onCancelar}>Cancelar (no se gasta ningún número)</Button>

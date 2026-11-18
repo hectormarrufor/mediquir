@@ -169,12 +169,11 @@ export async function siguienteControl(t) {
  * Número de control de un documento que nace ahora: el que se indique (copiado de una forma ya impresa) o, si no, el siguiente del correlativo.
  * Todo documento fiscal (factura, nota de crédito o débito) lo toma al crearse, dentro de la misma transacción.
  */
-export async function controlAlNacer(texto, t) {
-    // Ningún documento nace con control, y NADIE lo escribe a mano: el número de control se asigna solo, AL IMPRIMIR por primera vez (asignarControl).
-    // Lo que llegue escrito (de un formulario viejo o una llamada directa) se ignora a propósito: un control mal tecleado ya causó un error fiscal.
-    return null;
-    // eslint-disable-next-line no-unreachable
-    const dado = String(texto ?? '').trim().slice(0, 30);
+export async function controlAlNacer(texto, t, permitirEscrito = false) {
+    // Nadie escribe el control al crear un documento: se asigna solo, AL IMPRIMIR por primera vez (asignarControl). La única excepción, rarísima, es registrar
+    // un hueco desde «Números de control» (administración): ahí quien llama pasa permitirEscrito=true. Si no, lo que llegue escrito se ignora a propósito.
+    const dado = permitirEscrito ? String(texto ?? '').trim().slice(0, 30) : '';
+    if (!dado) return null;
     try {
         return await reservarControl(dado, t);
     } catch (e) {

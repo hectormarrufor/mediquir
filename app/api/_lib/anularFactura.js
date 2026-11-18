@@ -172,7 +172,7 @@ export async function planAnulacion({ venta, transaction }) {
  *   afectaCxc: obligatorio salvo en la anulación total de una factura que salió de notas de entrega (ahí la deuda vuelve a las notas)
  *   documentos: { [ventaId de la factura]: { numero?, control } } -> número de NC (si ya se emitió en el sistema anterior) y su control
  */
-export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = null, motivo, documentos = {}, notas = null, fecha = null, usuarioId = null, confirmarPagada = false, modificarPago = false, diferir = false, transaction: t }) {
+export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = null, motivo, documentos = {}, notas = null, fecha = null, usuarioId = null, confirmarPagada = false, modificarPago = false, diferir = false, permitirControl = false, transaction: t }) {
     const varias = Array.isArray(notas) && notas.length > 1;
     // Un vendedor no devuelve deudas a notas de entrega ni rebaja pagos: eso lo hace administración (lo que él emite no mueve nada hasta aprobarse)
     if (diferir && modificarPago) throw new ErrorAnulacion('Rebajar un pago ya registrado lo hace administración: pídele a Jolexi que emita la nota');
@@ -183,11 +183,13 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
     if (plan.factura.acreditable <= 0.005) throw new ErrorAnulacion('Esta factura ya está acreditada por completo con notas de crédito', 409);
     const datosDe = (id) => documentos?.[id] || {};
     const control = async (id) => {
-        return null; // el control no se escribe: se asigna solo, al imprimir la nota por primera vez
+        const c = String(datosDe(id).control || '').trim();
+        if (!c || !permitirControl) return null; // sin control escrito (o sin ser un hueco que se registra): se asigna solo, al imprimir la nota por primera vez
+        try { return await reservarControl(c, t); } catch (e) { if (e instanceof ErrorNumeracion) throw new ErrorAnulacion(e.message, e.status); throw e; }
     };
     const emitir = async (factura, lineas, devuelve, afecta, texto) => emitirNotaVenta({
         venta: factura, tipo: 'CREDITO', renglones: lineas, motivo: texto, devuelveInventario: devuelve, afectaCxc: afecta, usuarioId, transaction: t,
-        numeroManual: datosDe(factura.id).numero || null, numeroControl: await control(factura.id), fecha, diferir,
+        numeroManual: datosDe(factura.id).numero || null, numeroControl: await control(factura.id), fecha, diferir, permitirControl,
     });
     const todos = (r) => r.filter((x) => x.restante > 0).map((x) => ({ ventaDetalleId: x.id, cantidad: x.restante }));
 
@@ -222,11 +224,12 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
         const emitidasAqui = [];
         for (let i = 0; i < grupos.length; i++) {
             const g = grupos[i];
-            const ctrl = null; // el control no se escribe: se asigna solo, al imprimir la nota por primera vez
+            let ctrl;
+            try { ctrl = permitirControl && String(g.control || '').trim() ? await reservarControl(String(g.control).trim(), t) : null; } catch (e) { if (e instanceof ErrorNumeracion) throw new ErrorAnulacion(`Nota ${i + 1}: ${e.message}`, e.status); throw e; }
             const nota = await emitirNotaVenta({
                 venta, tipo: 'CREDITO', renglones: g.renglones, devuelveInventario: devuelve, afectaCxc: sinCxc ? false : afectaCxc, usuarioId, transaction: t,
                 motivo: `Anulación ${completa ? 'total' : 'parcial'} de la factura ${venta.numeroDocumento} en ${grupos.length} notas de crédito (${i + 1} de ${grupos.length}): ${motivoTxt}`,
-                numeroManual: g.numero || null, numeroControl: ctrl, fecha, diferir,
+                numeroManual: g.numero || null, numeroControl: ctrl, fecha, diferir, permitirControl,
             });
             const pagoRebajado = modificarPago ? await rebajarPago({ venta, nota, transaction: t }) : false;
             emitidasAqui.push({ id: nota.id, numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda, pagoRebajado });

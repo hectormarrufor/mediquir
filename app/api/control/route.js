@@ -4,7 +4,10 @@ import { requerirNoVendedor } from '@/app/api/_lib/acceso';
 import { requerirStaff } from '@/app/api/inventario/_lib';
 import { esFacturaAprobadaDe, esNotaAprobadaDe } from '@/app/api/_lib/aprobacion';
 import { rolDe } from '@/app/constants/roles';
-import { ErrorNumeracion, asignarControl } from '@/app/api/_lib/numeracion';
+import { ErrorNumeracion, asignarControl, controlesLibres } from '@/app/api/_lib/numeracion';
+import { FormaAnulada } from '@/models';
+import { notificarAdmins } from '@/app/handlers/notificar';
+import { nombreDeUsuario } from '@/app/api/_lib/aprobacion';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,13 +25,29 @@ export async function POST(request) {
 
     const t = await sequelize.transaction();
     try {
-        const { origen, id, reasignar } = await request.json();
+        const { origen, id, reasignar, accion, control: controlVisto, documento } = await request.json();
         if (esVend) {
             const suyo = !reasignar && UUID.test(String(id || '')) && (origen === 'VENTA' ? await esFacturaAprobadaDe(id, sesion.sesion.id) : origen === 'NOTA' && await esNotaAprobadaDe(id, sesion.sesion.id));
             if (!suyo) throw new ErrorNumeracion('Solo puedes imprimir tus facturas y notas ya aprobadas', 403);
         }
         if (!UUID.test(String(id || ''))) throw new ErrorNumeracion('Documento no encontrado', 404);
         if (reasignar && rolDe(acceso.sesion) !== 'admin') throw new ErrorNumeracion('Solo un administrador puede reasignar el número de control', 403);
+
+        if (accion === 'DANAR_SIGUIENTE') {
+            // La forma que iba a usarse se dañó antes de imprimir: ese número queda anotado como forma anulada y el siguiente pasa a ser el que se asigna
+            const [libre] = await controlesLibres(1, t);
+            if (!libre) throw new ErrorNumeracion('Antes de emitir documentos debes indicar el número de control de la forma libre con la que empiezas', 409, 'CONTROL_PENDIENTE');
+            const n = Number(/^00-0*(\d+)$/.exec(libre)[1]);
+            if (controlVisto && Number(String(controlVisto).replace(/\D/g, '')) !== n) throw new ErrorNumeracion(`El siguiente número de control cambió a ${libre}: vuelve a verificar la forma`, 409);
+            await FormaAnulada.findOrCreate({ where: { numero: n }, defaults: { motivo: `Forma dañada antes de imprimir ${String(documento || '').slice(0, 60)}`.trim(), usuarioId: Number(sesion.sesion.id) || null }, transaction: t });
+            const [siguiente] = await controlesLibres(1, t);
+            await t.commit();
+            if (esVend) {
+                const quien = await nombreDeUsuario(sesion.sesion.id).catch(() => null);
+                await notificarAdmins({ title: 'Forma dañada 🧾', body: `${quien || 'Un vendedor'} marcó como dañada la forma con el control ${libre} al imprimir ${String(documento || 'un documento').slice(0, 60)}. Quedó anotada como forma anulada.`, url: '/superuser/ventas/controles', tipo: 'Info' }).catch(() => {});
+            }
+            return NextResponse.json({ success: true, danada: libre, siguiente });
+        }
 
         const r = await asignarControl({ origen, id, reasignar: Boolean(reasignar), transaction: t });
         await t.commit();

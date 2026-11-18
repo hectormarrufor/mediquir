@@ -115,7 +115,7 @@ export async function otrasFacturasDelCliente(venta, transaction) {
  * @param {boolean} p.afectaCxc   Solo nota de crédito: false = no baja lo que el cliente debe (ni deja saldo a favor); p. ej. una anulación parcial
  *                                que no toca la cuenta por cobrar, o la de una factura cuya deuda vuelve a su nota de entrega.
  */
-export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario = false, afectaCxc = true, otrasFacturasIds = [], usuarioId = null, transaction: t, numeroManual = null, numeroControl = null, fecha = null, diferir = false }) {
+export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario = false, afectaCxc = true, otrasFacturasIds = [], usuarioId = null, transaction: t, numeroManual = null, numeroControl = null, fecha = null, diferir = false, permitirControl = false }) {
     if (!PREFIJO[tipo]) throw new ErrorNota('Tipo de nota no válido');
     if (venta.tipoDocumento !== 'FACTURA') throw new ErrorNota('Las notas de crédito y de débito solo se emiten sobre facturas', 409);
     if (venta.statusDespacho === 'Cancelado') throw new ErrorNota('La factura está anulada', 409);
@@ -191,7 +191,7 @@ export async function emitirNotaVenta({ venta, tipo, renglones, motivo, devuelve
     // Fecha de la nota: hoy, o la que tiene en el sistema anterior (YYYY-MM-DD, nunca futura); y su control si ya lo tiene (si no, se asigna al imprimir)
     if (fecha && (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha)) || String(fecha) > hoyCaracas())) throw new ErrorNota('La fecha de la nota no es válida (no puede ser futura)');
     const nota = await NotaFiscal.create({
-        tipo, origen: 'VENTA', numeroDocumento: numero, numeroControl: await controlAlNacer(numeroControl, t), fecha: fecha || hoyCaracas(), ventaId: venta.id, clienteId: venta.clienteId,
+        tipo, origen: 'VENTA', numeroDocumento: numero, numeroControl: await controlAlNacer(numeroControl, t, permitirControl), fecha: fecha || hoyCaracas(), ventaId: venta.id, clienteId: venta.clienteId,
         moneda, tasaCambio: tasa, subtotal: factura.subtotal, baseImponible: factura.baseImponible, montoExento: factura.exento,
         montoIva: factura.montoIva, alicuotaIva: REGLAS.alicuotaGeneral, totalFinal: factura.totalFinal, motivo: motivoTxt,
         devuelveInventario: Boolean(devuelveInventario) && tipo === 'CREDITO', facturasAfectadas, registradoPorId: usuarioId,

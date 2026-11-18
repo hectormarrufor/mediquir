@@ -86,7 +86,7 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     tipo, motivo: motivoFinal, devuelveInventario: esCredito && hayDevolucion && devuelve, otrasFacturasIds: esCredito ? [] : otras,
-                    numeroNota: copia.numero, numeroControl: copia.control, fecha: copia.fecha,
+                    numeroNota: copia.numero, numeroControl: copia.control, huecoControl: Boolean(controlInicial), fecha: copia.fecha,
                     renglones: lineas.map((l) => (l.ventaDetalleId ? { ventaDetalleId: l.ventaDetalleId, cantidad: l.cantidad } : { descripcion: l.descripcion, cantidad: 1, precioUnitario: l.precioUnitario, aplicaIva: l.aplicaIva })),
                 }),
             });
@@ -186,7 +186,7 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
                             {excede && <Text size="xs" fw={700} mt={4}>Supera lo que queda por acreditar ({simbolo}{nf(data.acreditable)}).</Text>}
                         </Alert>
                     )}
-                    <DatosDeCopia valores={copia} onCambio={setCopia} etiquetaNumero={esCredito ? 'Número de la nota de crédito' : 'Número de la nota de débito'} placeholderNumero={serie?.siguienteNumero ? String(serie.siguienteNumero) : ''} />
+                    <DatosDeCopia conControl={Boolean(controlInicial)} valores={copia} onCambio={setCopia} etiquetaNumero={esCredito ? 'Número de la nota de crédito' : 'Número de la nota de débito'} placeholderNumero={serie?.siguienteNumero ? String(serie.siguienteNumero) : ''} />
                     {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error}</Alert>}
 
                     <Group justify="flex-end" style={telefono ? { flexDirection: 'column-reverse', alignItems: 'stretch' } : undefined}>

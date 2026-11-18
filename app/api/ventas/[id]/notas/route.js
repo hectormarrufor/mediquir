@@ -45,7 +45,7 @@ export async function POST(request, { params }) {
     try {
         const { id } = await params;
         if (!UUID.test(id)) throw new ErrorNota('Factura no encontrada', 404);
-        const { tipo, motivo, renglones, devuelveInventario, usdDiferencial, otrasFacturasIds, numeroNota, numeroControl, fecha } = await request.json();
+        const { tipo, motivo, renglones, devuelveInventario, usdDiferencial, otrasFacturasIds, numeroNota, numeroControl, fecha, huecoControl } = await request.json();
 
         const venta = await Venta.findByPk(id, { transaction: t, lock: t.LOCK.UPDATE });
         if (!venta) throw new ErrorNota('Factura no encontrada', 404);
@@ -62,7 +62,7 @@ export async function POST(request, { params }) {
         const diferir = esVend && tipo !== 'DIFERENCIAL' && (await efectosDiferidosDisponible());
         const nota = tipo === 'DIFERENCIAL'
             ? await emitirNotaDiferencial({ venta, tasaHoy: await tasaVigente({ transaction: t }), usdSolicitado: usdDiferencial, usuarioId: Number(acceso.sesion.id) || null, transaction: t })
-            : await emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario: Boolean(devuelveInventario), otrasFacturasIds, usuarioId: Number(acceso.sesion.id) || null, transaction: t, numeroManual: numeroNota || null, numeroControl: numeroControl || null, fecha: fecha || null, diferir });
+            : await emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario: Boolean(devuelveInventario), otrasFacturasIds, usuarioId: Number(acceso.sesion.id) || null, transaction: t, numeroManual: numeroNota || null, numeroControl: numeroControl || null, fecha: fecha || null, diferir, permitirControl: !esVend && huecoControl === true });
         if (diferir) await marcarPorAprobar('NOTA', nota.id, t); // por aprobar en la misma transacción
         await t.commit();
         let porAprobar = false;

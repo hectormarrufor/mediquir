@@ -50,10 +50,14 @@ function MenuFaltante({ fila, onAccion }) {
     return (
         <Menu position="bottom-end" withinPortal>
             <Menu.Target>
-                <Button size="xs" color="red" variant="light">¿Qué pasó?</Button>
+                <Button size="xs" color="red" variant="light">Registrar…</Button>
             </Menu.Target>
             <Menu.Dropdown>
                 <Menu.Label>{fila.control}</Menu.Label>
+                <Menu.Item leftSection={<IconFileInvoice size={16} />} onClick={() => onAccion('FACTURA', fila)}>Factura</Menu.Item>
+                <Menu.Item leftSection={<IconReceiptRefund size={16} />} onClick={() => onAccion('CREDITO', fila)}>Nota de crédito</Menu.Item>
+                <Menu.Item leftSection={<IconReceiptRefund size={16} />} onClick={() => onAccion('DEBITO', fila)}>Nota de débito</Menu.Item>
+                <Menu.Divider />
                 <Menu.Item leftSection={<IconFileOff size={16} />} onClick={() => onAccion('ANULAR', fila)}>Forma dañada o nunca usada</Menu.Item>
             </Menu.Dropdown>
         </Menu>
@@ -138,7 +142,7 @@ export default function NumerosDeControlPage() {
     const celdaEstado = (f) => {
         if (f.estado === 'FALTA') return (
             <Group gap={6} wrap="nowrap" justify="space-between">
-                <Group gap={4} wrap="nowrap"><IconAlertTriangle size={16} color="var(--mantine-color-red-7)" /><Text size="sm" c="red.8" fw={600}>Este número de control no tiene documento</Text></Group>
+                <Group gap={4} wrap="nowrap"><IconAlertTriangle size={16} color="var(--mantine-color-red-7)" /><Text size="sm" c="red.8" fw={600}>Falta registro en este número de control</Text></Group>
                 {isAdmin && <MenuFaltante fila={f} onAccion={accion} />}
             </Group>
         );

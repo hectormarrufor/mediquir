@@ -65,7 +65,7 @@ export default function ImprimirRecibo() {
     const esFactura = venta.tipoDocumento === 'FACTURA';
     // Las facturas se imprimen sobre la forma libre preimpresa (media carta): sin membrete, logo ni franja legal
     if (esFactura) {
-        if (hayQueConfirmar) return <ConfirmarFormaControl tipo="Factura" documento={venta.numeroDocumento} control={controlAVerificar} nuevo={!venta.numeroControl} onConfirmar={setConfirmado} onCancelar={() => { if (window.history.length > 1) window.history.back(); else window.close(); }} />;
+        if (hayQueConfirmar) return <ConfirmarFormaControl tipo="Factura" documento={venta.numeroDocumento} origen="VENTA" idDocumento={venta.id} control={controlAVerificar} nuevo={!venta.numeroControl} onConfirmar={setConfirmado} onCancelar={() => { if (window.history.length > 1) window.history.back(); else window.close(); }} />;
         if (necesitaControl && ctl.estado !== 'listo') return <ControlFiscalPaso estado={ctl.estado} mensaje={ctl.mensaje} onReintentar={() => ctl.asignar(false)} />;
         if (necesitaControl && !listoVisto) return <ControlFiscalPaso estado="listo" control={ctl.control} nuevo={ctl.nuevo} />;
         const reasignar = rolUsuario === 'admin' && !guia

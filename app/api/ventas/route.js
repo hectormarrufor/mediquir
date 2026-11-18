@@ -254,7 +254,7 @@ export async function POST(request) {
         }
         const fechaVencimiento = condicionPago === 'Credito' ? new Date((momentoDoc ? momentoDoc.getTime() : Date.now()) + diasCredito * 86400000) : null;
         // La factura nace con su número de control (el de la forma si se escribió, o el siguiente del correlativo)
-        const controlFactura = esTalonario ? controlTalonario : (tipoDocumento === 'FACTURA' ? await controlAlNacer(esVend ? null : numeroControl, t).catch((e) => { throw e instanceof ErrorNumeracion ? new ErrorNegocio(e.message, e.status) : e; }) : null); // el vendedor nunca elige el control: lo asigna el servidor
+        const controlFactura = esTalonario ? controlTalonario : (tipoDocumento === 'FACTURA' ? await controlAlNacer(numeroControl, t, !esVend && body.huecoControl === true).catch((e) => { throw e instanceof ErrorNumeracion ? new ErrorNegocio(e.message, e.status) : e; }) : null); // el vendedor nunca elige el control: lo asigna el servidor
         const nuevaVenta = await Venta.create({
             clienteId: clienteId || null,
             vendedorId: esVend ? Number(acceso.sesion.id) : (vendedorId || null),

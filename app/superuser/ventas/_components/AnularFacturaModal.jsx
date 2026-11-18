@@ -104,6 +104,7 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     tipo, motivo: motivoFinal, fecha: fecha || null, afectaCxc: deNotas || parcialPagada ? null : afecta === 'si', confirmarPagada: parcialPagada, modificarPago: pagoRebajar,
+                    huecoControl: Boolean(controlInicial), // solo al registrar un hueco desde «Números de control»
                     documentos: { ...documentos, [plan.factura.id]: controles[0] || {} },
                     notas: varias ? controles.slice(0, cuantas).map((c, k) => ({
                         numero: c.numero, control: c.control,
@@ -141,6 +142,8 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                                         <Text size="sm">{plan.renglones.filter((r) => Number(repartos[k]?.[r.id]) > 0).length} renglones · <b>{simbolo} {nf(montoNota(k))}</b></Text>
                                     </Group>
                                     <Group grow align="flex-start" mb={6}>
+                                        {controlInicial && <TextInput size="xs" label="N° de control (hueco que se registra)" placeholder="déjalo vacío" value={controles[k]?.control || ''}
+                                            onChange={(e) => setControles((c) => c.map((x, i) => (i === k ? { ...x, control: e.currentTarget.value } : x)))} />}
                                         <TextInput size="xs" label="Número de NC (si ya la emitiste en el sistema anterior)" placeholder={sumarNumero(plan.siguienteNc, k)} value={controles[k]?.numero || ''}
                                             onChange={(e) => setControles((c) => c.map((x, i) => (i === k ? { ...x, numero: e.currentTarget.value } : x)))} />
                                     </Group>
@@ -224,6 +227,8 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                             <Card withBorder radius="md" p="xs">
                                 <Text size="sm" fw={700} mb={4}>Nota de crédito sobre {plan.factura.numero}</Text>
                                 <Group grow align="flex-start">
+                                    {controlInicial && <TextInput size="xs" label="N° de control (hueco que se registra)" placeholder="déjalo vacío" value={controles[0]?.control || ''}
+                                        onChange={(e) => setControles((c) => c.map((x, i) => (i === 0 ? { ...x, control: e.currentTarget.value } : x)))} />}
                                     <TextInput size="xs" label="Número de NC (si ya la emitiste en el sistema anterior)" placeholder={plan.siguienteNc || ''} value={controles[0]?.numero || ''}
                                         onChange={(e) => setControles((c) => c.map((x, i) => (i === 0 ? { ...x, numero: e.currentTarget.value } : x)))} />
                                 </Group>
@@ -233,6 +238,8 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                             <Card key={f.id} withBorder radius="md" p="xs">
                                 <Text size="sm" fw={700} mb={4}>Nota de crédito sobre {f.numero}{deNotas ? ` (${f.moneda === 'BS' ? 'Bs' : '$'} ${nf(f.acreditable)})` : ''}</Text>
                                 <Group grow align="flex-start">
+                                    {controlInicial && <TextInput size="xs" label="N° de control (hueco que se registra)" placeholder="déjalo vacío" value={documentos[f.id]?.control || ''}
+                                        onChange={(e) => setDocumentos((d) => ({ ...d, [f.id]: { ...d[f.id], control: e.currentTarget.value } }))} />}
                                     <TextInput size="xs" label="Número de NC (si ya la emitiste en el sistema anterior)" placeholder={plan.siguienteNc || ''} value={documentos[f.id]?.numero || ''}
                                         onChange={(e) => setDocumentos((d) => ({ ...d, [f.id]: { ...d[f.id], numero: e.currentTarget.value } }))} />
                                 </Group>

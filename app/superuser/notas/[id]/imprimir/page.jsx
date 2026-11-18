@@ -47,7 +47,7 @@ export default function ImprimirNota() {
     if (nota.origen !== 'VENTA') return <div style={{ padding: '2rem', textAlign: 'center' }}>Solo se imprimen las notas que emite la empresa (las de proveedores se registran, no se imprimen).</div>;
     if (pendiente) return <div style={{ padding: '2rem', textAlign: 'center' }}>Esta nota está por aprobar: se podrá imprimir cuando la apruebe Jolexi.</div>;
     if (nota.estado !== 'EMITIDA') return <div style={{ padding: '2rem', textAlign: 'center' }}>Esta nota está anulada.</div>;
-    if (hayQueConfirmar) return <ConfirmarFormaControl tipo={nota.tipo === 'CREDITO' ? 'Nota de crédito' : 'Nota de débito'} documento={nota.numeroDocumento} control={controlAVerificar} nuevo={!nota.numeroControl} onConfirmar={setConfirmado} onCancelar={() => { if (window.history.length > 1) window.history.back(); else window.close(); }} />;
+    if (hayQueConfirmar) return <ConfirmarFormaControl tipo={nota.tipo === 'CREDITO' ? 'Nota de crédito' : 'Nota de débito'} documento={nota.numeroDocumento} origen="NOTA" idDocumento={id} control={controlAVerificar} nuevo={!nota.numeroControl} onConfirmar={setConfirmado} onCancelar={() => { if (window.history.length > 1) window.history.back(); else window.close(); }} />;
     if (necesitaControl && ctl.estado !== 'listo') return <ControlFiscalPaso estado={ctl.estado} mensaje={ctl.mensaje} onReintentar={() => ctl.asignar(false)} />;
     if (necesitaControl && !listoVisto) return <ControlFiscalPaso estado="listo" control={ctl.control} nuevo={ctl.nuevo} />;
 
