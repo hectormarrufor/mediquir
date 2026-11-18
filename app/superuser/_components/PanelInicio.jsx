@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { ActionIcon, Badge, Box, Button, Card, Grid, Group, Paper, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, Tooltip, UnstyledButton } from '@mantine/core';
 import { LineChart } from '@mantine/charts';
@@ -11,8 +12,10 @@ import ErroresEmpaqueCard from './ErroresEmpaqueCard';
 import DeliveryDiferenciasCard from './DeliveryDiferenciasCard';
 import {
     IconAlertTriangle, IconArrowDownRight, IconArrowRight, IconArrowUpRight, IconBuildingStore, IconCash, IconCheck, IconClockExclamation, IconPackage,
-    IconPrinter, IconReceipt, IconReceiptTax, IconSettings, IconShoppingCart, IconTruckDelivery, IconWallet,
+    IconPrinter, IconTags, IconReceipt, IconReceiptTax, IconSettings, IconShoppingCart, IconTruckDelivery, IconWallet,
 } from '@tabler/icons-react';
+
+const ConsultorPrecios = dynamic(() => import('./ConsultorPrecios'), { ssr: false });
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtUsd = (v) => `$${usd.format(Number(v) || 0)}`;
@@ -53,6 +56,7 @@ function Pulso({ icono: Icono, color, titulo, valor, detalle, cambio, href, carg
 // Panel de inicio del personal: cabecera, pulso del negocio, alertas, módulos y tareas
 export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, modulos, tareas }) {
     const { isAdmin } = useAuth();
+    const [consultorAbierto, setConsultorAbierto] = useState(false);
     const movil = useMediaQuery('(max-width: 48em)');
     const { data, isLoading } = useQuery({ queryKey: ['dashboard', 'resumen'], queryFn: () => pedirJson('/api/dashboard/resumen'), refetchInterval: 120000, refetchOnWindowFocus: true });
     const d = data;
@@ -95,6 +99,7 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
                         </Box>
                         <Group gap="xs" w={{ base: '100%', sm: 'auto' }} wrap="wrap">
                             {isAdmin && <Button component={Link} href={`/superuser/notas/vista-previa${tasa ? `?tasa=${tasa}` : ''}`} size="sm" radius="xl" tt="none" variant="white" color="navy.9" leftSection={<IconReceiptTax size={18} />} style={{ flex: '1 1 auto' }}>Vista previa de nota</Button>}
+                            <Button size="sm" radius="xl" tt="none" variant="white" color="teal.8" leftSection={<IconTags size={18} />} onClick={() => setConsultorAbierto(true)} style={{ flex: '1 1 auto' }}>Consultor de precios</Button>
                             <Button size="sm" radius="xl" tt="none" variant="white" color="navy.9" leftSection={<IconReceipt size={18} />} onClick={onCompra} style={{ flex: '1 1 auto' }}>Registrar compra</Button>
                             <Button size="sm" radius="xl" tt="none" color="accent.6" leftSection={<IconBuildingStore size={18} />} onClick={onPos} style={{ flex: '1 1 auto' }}>Nueva venta (POS)</Button>
                         </Group>
@@ -184,6 +189,7 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
                     </Box>
                 )}
             </Stack>
+            {consultorAbierto && <ConsultorPrecios opened={consultorAbierto} onClose={() => setConsultorAbierto(false)} />}
         </Box>
     );
 }
