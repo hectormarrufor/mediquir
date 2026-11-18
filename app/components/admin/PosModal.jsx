@@ -494,6 +494,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         if (carrito.length === 0) { setVista('productos'); return notifications.show({ message: 'El carrito está vacío', color: 'orange' }); }
         if (tipoVenta === 'MAYOR' && !formVenta.values.clienteId) { setVista('datos'); return notifications.show({ message: 'Debe seleccionar un cliente mayorista', color: 'red' }); }
         if (faltaDocumento) { setVista('datos'); return notifications.show({ title: 'Falta el documento', message: 'Elige si vas a emitir FACTURA o NOTA DE ENTREGA antes de revisar la venta', color: 'red' }); }
+        if (esVendedor && !esPresupuesto && tipoDocumentoActual === 'FACTURA' && ['precio7', 'precio6', 'precio1'].includes(formVenta.values.tipoPrecio)) { setVista('datos'); return notifications.show({ color: 'red', title: 'No se factura en dólares', message: 'Los vendedores no pueden facturar en dólares: selecciona un precio en bolívares, P4 (detal) o P5 (mayor).' }); }
         if (!formVenta.values.numeroDocumento) { setVista('datos'); return notifications.show({ message: 'El número de documento es obligatorio', color: 'red' }); }
         if (faltaCobro) { setVista('datos'); return notifications.show({ title: 'Falta la forma de cobro', message: 'Elige si la venta es de CONTADO o a CRÉDITO antes de revisarla', color: 'red' }); }
         // Factura: el cliente debe tener dirección (obligatoria); teléfono y correo son opcionales. Lo escrito aquí se guarda de una vez en el cliente.
@@ -741,14 +742,12 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const tamCampo = isMobile ? 'md' : 'sm'; // en el teléfono, campos más altos (se tocan con el dedo y la letra no obliga a acercar)
     // Los vendedores, al VENDER, solo trabajan y ven bolívares (tarifas P4/P5); los dólares son solo de los presupuestos y de administración.
     const soloBs = esVendedor && !esPresupuesto;
+    // Ven todos los precios, pero una factura de un vendedor solo se emite en bolívares (P4/P5)
+    const vendedorFacturaEnDolares = soloBs && esFactura && ['precio7', 'precio6', 'precio1'].includes(formVenta.values.tipoPrecio);
     useEffect(() => {
-        if (soloBs && ['precio7', 'precio6', 'precio1'].includes(formVenta.values.tipoPrecio)) formVenta.setFieldValue('tipoPrecio', formVenta.values.tipoPrecio === 'precio6' ? 'precio5' : 'precio4');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [soloBs, formVenta.values.tipoPrecio]);
-    const opcionesTarifa = soloBs ? [
-        { value: 'precio4', label: 'P4 (Detal, P7 en Bs)' },
-        { value: 'precio5', label: 'P5 (Mayor, P6 en Bs)' },
-    ] : [
+        if (vendedorFacturaEnDolares) notifications.show({ color: 'red', title: 'No se factura en dólares', message: 'Los vendedores no pueden facturar en dólares: selecciona un precio en bolívares, P4 (detal) o P5 (mayor).' });
+    }, [vendedorFacturaEnDolares]);
+    const opcionesTarifa = [
         { value: 'precio7', label: 'P7 (Detal USD)' },
         { value: 'precio6', label: 'P6 (Mayor USD)' },
         // P4/P5: P7/P6 en Bs a la tasa del día (el presupuesto en Bs se guarda en Bs y muestra el equivalente en $)
