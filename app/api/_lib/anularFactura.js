@@ -183,9 +183,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
     if (plan.factura.acreditable <= 0.005) throw new ErrorAnulacion('Esta factura ya está acreditada por completo con notas de crédito', 409);
     const datosDe = (id) => documentos?.[id] || {};
     const control = async (id) => {
-        const c = String(datosDe(id).control || '').trim();
-        if (!c) return null; // sin control escrito: se asigna al imprimir la nota
-        try { return await reservarControl(c, t); } catch (e) { if (e instanceof ErrorNumeracion) throw new ErrorAnulacion(e.message, e.status); throw e; }
+        return null; // el control no se escribe: se asigna solo, al imprimir la nota por primera vez
     };
     const emitir = async (factura, lineas, devuelve, afecta, texto) => emitirNotaVenta({
         venta: factura, tipo: 'CREDITO', renglones: lineas, motivo: texto, devuelveInventario: devuelve, afectaCxc: afecta, usuarioId, transaction: t,
@@ -224,8 +222,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
         const emitidasAqui = [];
         for (let i = 0; i < grupos.length; i++) {
             const g = grupos[i];
-            let ctrl;
-            try { ctrl = String(g.control || '').trim() ? await reservarControl(String(g.control).trim(), t) : null; } catch (e) { if (e instanceof ErrorNumeracion) throw new ErrorAnulacion(`Nota ${i + 1}: ${e.message}`, e.status); throw e; }
+            const ctrl = null; // el control no se escribe: se asigna solo, al imprimir la nota por primera vez
             const nota = await emitirNotaVenta({
                 venta, tipo: 'CREDITO', renglones: g.renglones, devuelveInventario: devuelve, afectaCxc: sinCxc ? false : afectaCxc, usuarioId, transaction: t,
                 motivo: `Anulación ${completa ? 'total' : 'parcial'} de la factura ${venta.numeroDocumento} en ${grupos.length} notas de crédito (${i + 1} de ${grupos.length}): ${motivoTxt}`,

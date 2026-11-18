@@ -186,7 +186,7 @@ export default function EmitirNotaModal({ opened, onClose, factura, tipo, onEmit
                             {excede && <Text size="xs" fw={700} mt={4}>Supera lo que queda por acreditar ({simbolo}{nf(data.acreditable)}).</Text>}
                         </Alert>
                     )}
-                    <DatosDeCopia conControl={Boolean(controlInicial)} valores={copia} onCambio={setCopia} etiquetaNumero={esCredito ? 'Número de la nota de crédito' : 'Número de la nota de débito'} placeholderNumero={serie?.siguienteNumero ? String(serie.siguienteNumero) : ''} />
+                    <DatosDeCopia valores={copia} onCambio={setCopia} etiquetaNumero={esCredito ? 'Número de la nota de crédito' : 'Número de la nota de débito'} placeholderNumero={serie?.siguienteNumero ? String(serie.siguienteNumero) : ''} />
                     {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error}</Alert>}
 
                     <Group justify="flex-end" style={telefono ? { flexDirection: 'column-reverse', alignItems: 'stretch' } : undefined}>
