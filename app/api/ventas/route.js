@@ -133,7 +133,6 @@ export async function POST(request) {
         // Esto se consulta fuera de la transacción; sin las migraciones de aprobación todo se aplica al crearla, como antes.
         const diferir = esVend && tipoDocumento === 'FACTURA' && (await aprobacionDisponible()) && (await efectosDiferidosDisponible());
         if (esVend) {
-            if (detalles.some((d) => d.isFicticio)) throw new ErrorNegocio('Solo administración puede vender productos genéricos con precio libre', 403);
             if (!TARIFAS_VENDEDOR.includes(body.tipoPrecio)) throw new ErrorNegocio('Tarifa de precio no permitida', 403);
             if (tipoDocumento === 'FACTURA' && ['precio7', 'precio6'].includes(body.tipoPrecio)) throw new ErrorNegocio('Un vendedor no puede facturar en dólares: usa un precio en bolívares (P4 o P5)', 403);
         }
@@ -186,7 +185,8 @@ export async function POST(request) {
             const alicuota = producto ? Number(producto.porcentajeIva) || 0 : REGLAS.alicuotaGeneral;
             // El POS decide si la venta lleva IVA; la alícuota de cada producto la fija su ficha
             // En una FACTURA de un vendedor el IVA no es opcional
-            const aplicaIva = (esVend && tipoDocumento === 'FACTURA' ? true : Boolean(item.aplicaIva)) && alicuota > 0;
+            // (el ítem ficticio no tiene ficha de producto: ahí sí vale lo que se marcó)
+            const aplicaIva = (esVend && tipoDocumento === 'FACTURA' && !item.isFicticio ? true : Boolean(item.aplicaIva)) && alicuota > 0;
             return { precioUnitario: item.precioUnitario, cantidad: item.cantidad, aplicaIva, porcentajeIva: alicuota };
         });
         let factura;

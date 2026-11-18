@@ -800,12 +800,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 // En el teléfono no se enfoca solo: el teclado taparía media pantalla apenas se abre la venta
                 data-autofocus={isMobile ? undefined : true}
             />
-            {/* El producto genérico (precio escrito a mano) es solo de administración */}
-            {!esVendedor && (
-                <Button color="grape" variant="light" size={tamCampo} px="sm" onClick={() => setModalFicticio(true)} title="Agregar ítem ficticio (1010)" style={{ flexShrink: 0 }}>
-                    + Ficticio
-                </Button>
-            )}
+            {/* El producto genérico (precio escrito a mano): también lo agrega un vendedor; Jolexi lo revisa al aprobar la factura */}
+            <Button color="grape" variant="light" size={tamCampo} px="sm" onClick={() => setModalFicticio(true)} title="Agregar ítem ficticio (1010)" style={{ flexShrink: 0 }}>
+                + Ficticio
+            </Button>
         </Group>
     );
 
