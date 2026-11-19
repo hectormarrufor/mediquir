@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Avatar, Group, Menu, Text, UnstyledButton, rem, Box } from '@mantine/core';
-import { IconKey, IconLogout, IconChevronDown, IconLayoutDashboard, IconBrandWhatsapp, IconLogin } from '@tabler/icons-react';
+import { IconKey, IconLogout, IconChevronDown, IconLayoutGrid, IconBrandWhatsapp, IconLogin } from '@tabler/icons-react';
 import ChangePasswordForm from './ChangePasswordForm';
 import classes from './components/nav/navigation.module.css';
 
@@ -42,9 +42,9 @@ const LayoutMenu = ({ router }) => {
 
     return (
         <>
-            <Group gap="sm" wrap="nowrap">
+            <Group gap={10} wrap="nowrap">
                 <UnstyledButton className={classes.pill} onClick={handleMainMenuClick}>
-                    <IconLayoutDashboard size={18} stroke={1.8} />
+                    <IconLayoutGrid size={17} stroke={1.8} />
                     {clienteId ? 'Mi portal' : 'Menú Principal'}
                 </UnstyledButton>
 
@@ -58,20 +58,16 @@ const LayoutMenu = ({ router }) => {
                 >
                     <Menu.Target>
                         <UnstyledButton className={`${classes.pill} ${classes.pillUser}`} aria-label="Menú de cuenta">
-                            <Avatar
-                                src={imagen ? imagen : null}
-                                alt={nombre}
-                                radius="xl"
-                                size={32}
-                                color="blue"
-                                style={{ border: '2px solid rgba(25,113,194,0.45)' }}
-                            >
-                                {nombre?.charAt(0)}
-                            </Avatar>
-                            <Text size="sm" fw={600} c="navy.9" lh={1}>
-                                {nombre?.split(' ')[0]}
-                            </Text>
-                            <IconChevronDown size={14} stroke={2} color="var(--mantine-color-navy-9)" />
+                            <span className={classes.avatarWrap}>
+                                <Avatar src={imagen || null} alt={nombre} radius="xl" size={32} variant="gradient" gradient={{ from: 'brand.5', to: 'sky.5', deg: 135 }} className={classes.avatar}>
+                                    {nombre?.charAt(0)}
+                                </Avatar>
+                            </span>
+                            <Box style={{ textAlign: 'left' }}>
+                                <Text size="sm" fw={700} c="navy.9" lh={1.15}>{nombre?.split(' ')[0]}</Text>
+                                {rolTexto && <Text fz={11} fw={500} c="dimmed" lh={1.2}>{rolTexto}</Text>}
+                            </Box>
+                            <IconChevronDown size={15} stroke={2} className={classes.chevron} />
                         </UnstyledButton>
                     </Menu.Target>
 

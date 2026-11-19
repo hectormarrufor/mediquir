@@ -1,9 +1,9 @@
-/* Navegación 2026: header de vidrio CLARO (para que el logo original, azul marino, contraste) + menú lateral móvil oscuro + botones "pill".
+/* Navegación: header flotante de vidrio esmerilado CLARO, limpio (sin brillos ni resplandores), con borde fino, sombra suave
+   e indicador deslizante en los enlaces + menú lateral móvil oscuro.
    Paleta: navy var(--mantine-color-navy-9), azul var(--mantine-color-brand-6), cian var(--mantine-color-sky-3), acento naranja var(--mantine-color-accent-6). */
 
 /* ---------- HEADER ---------- */
-/* El AppShell.Header conserva su alto (así el headroom lo esconde igual) pero va transparente:
-   lo que se ve es la barra interior, flotando con margen y bordes redondeados, a juego con las superficies de vidrio. */
+/* El AppShell.Header conserva su alto (así el headroom lo esconde igual) pero va transparente: lo que se ve es la barra interior, flotando. */
 .header {
     background: transparent !important;
     border: 0 !important;
@@ -16,151 +16,184 @@
     pointer-events: auto;
     height: 52px;
     margin: 8px 10px 0;
-    border-radius: 18px;
-    /* CRISTAL con RESPLANDOR. De arriba hacia abajo, las capas son:
-       1) destello diagonal que cruza la barra despacio (animado) · 2) brillo especular del borde superior del vidrio ·
-       3) resplandor azul cielo que nace del extremo derecho · 4) base: blanco sólido del lado del logo, translúcido (vidrio esmerilado) desde el 25 %
-       y virando al azul cielo de la marca desde el 70 %. */
-    background:
-        linear-gradient(105deg, transparent 0%, transparent 38%, rgba(255, 255, 255, 0.8) 46%, rgba(255, 255, 255, 0.18) 52%, transparent 60%, transparent 100%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.26) 38%, rgba(255, 255, 255, 0) 62%),
-        radial-gradient(38% 190% at 100% 55%, alpha(var(--mantine-color-sky-3), 1) 0%, alpha(var(--mantine-color-sky-3), 0.55) 45%, transparent 78%),
-        linear-gradient(90deg,
-            rgba(255, 255, 255, 0.99) 0%,
-            rgba(255, 255, 255, 0.97) 25%,
-            rgba(244, 249, 255, 0.72) 45%,
-            rgba(222, 238, 255, 0.64) 70%,
-            alpha(var(--mantine-color-sky-3), 0.9) 100%);
-    background-size: 260% 100%, 100% 100%, 100% 100%, 100% 100%;
-    background-repeat: no-repeat;
-    -webkit-backdrop-filter: blur(28px) saturate(200%) brightness(1.08);
-    backdrop-filter: blur(28px) saturate(200%) brightness(1.08);
-    border: 1px solid rgba(255, 255, 255, 0.9);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.74);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(11, 27, 61, 0.07);
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 1),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.4),
-        inset 0 -10px 22px -12px alpha(var(--mantine-color-sky-3), 0.75),
-        0 0 0 1px alpha(var(--mantine-color-sky-3), 0.35),
-        0 0 22px alpha(var(--mantine-color-sky-3), 0.6),
-        0 0 58px alpha(var(--mantine-color-brand-5), 0.38),
-        0 16px 34px -14px rgba(2, 8, 23, 0.55);
-    animation: barraBrillo 8s ease-in-out infinite alternate;
-    transition: background-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-@keyframes barraBrillo {
-    from { background-position: 135% 0, 0 0, 0 0, 0 0; }
-    to { background-position: -35% 0, 0 0, 0 0, 0 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .barra { animation: none; background-position: 60% 0, 0 0, 0 0, 0 0; }
+        inset 0 1px 0 rgba(255, 255, 255, 0.9),
+        0 1px 2px rgba(11, 27, 61, 0.05),
+        0 10px 30px -14px rgba(11, 27, 61, 0.22);
+    transition: background 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
 }
 
 @media (min-width: 48em) {
     .barra {
-        height: 60px;
+        height: 62px;
         margin: 8px 16px 0;
+        border-radius: 18px;
     }
 }
 
-/* Filo luminoso inferior (brilla) */
+/* Filo de marca: una línea finísima azul → cian → naranja, apenas visible, en el borde inferior */
 .barra::after {
     content: '';
     position: absolute;
-    left: 22px;
-    right: 22px;
+    left: 18%;
+    right: 18%;
     bottom: -1px;
-    height: 2px;
-    border-radius: 2px;
-    background: linear-gradient(90deg, transparent 0%, alpha(var(--mantine-color-sky-3), 1) 28%, alpha(var(--mantine-color-accent-6), 0.85) 72%, transparent 100%);
-    box-shadow: 0 0 10px alpha(var(--mantine-color-sky-3), 0.9), 0 0 24px alpha(var(--mantine-color-brand-5), 0.6);
-    opacity: 0.85;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, alpha(var(--mantine-color-brand-5), 0.55) 25%, alpha(var(--mantine-color-sky-4), 0.7) 55%, alpha(var(--mantine-color-accent-5), 0.5) 80%, transparent);
+    opacity: 0.7;
     transition: opacity 0.3s ease;
 }
 
-/* Al hacer scroll: un poco más opaco y con más sombra para separar del contenido (conserva el vidrio y el resplandor) */
+/* Al hacer scroll: más opaca y con más sombra para separarse del contenido */
 .barra[data-scrolled] {
-    background-color: rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(11, 27, 61, 0.09);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 1),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.45),
-        inset 0 -10px 22px -12px alpha(var(--mantine-color-sky-3), 0.75),
-        0 0 0 1px alpha(var(--mantine-color-sky-3), 0.4),
-        0 0 24px alpha(var(--mantine-color-sky-3), 0.7),
-        0 0 62px alpha(var(--mantine-color-brand-5), 0.45),
-        0 20px 40px -14px rgba(2, 8, 23, 0.7);
+        0 1px 2px rgba(11, 27, 61, 0.06),
+        0 18px 40px -18px rgba(11, 27, 61, 0.35);
 }
 
 .barra[data-scrolled]::after {
     opacity: 1;
 }
 
-/* ---------- LINKS CENTRALES (escritorio) ---------- */
+.logoBtn {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 10px;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.logoBtn:hover {
+    opacity: 0.88;
+}
+
+.logoBtn:active {
+    transform: scale(0.98);
+}
+
+/* ---------- LINKS CENTRALES (escritorio): control segmentado con indicador que se desliza ---------- */
 .nav {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
     padding: 4px;
-    border-radius: 999px;
-    background: rgba(10, 26, 58, 0.05);
-    border: 1px solid rgba(10, 26, 58, 0.1);
+    border-radius: 12px;
+    background: rgba(11, 27, 61, 0.045);
+    border: 1px solid rgba(11, 27, 61, 0.06);
+}
+
+.navIndicator {
+    border-radius: 9px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(11, 27, 61, 0.08), 0 4px 12px -4px rgba(11, 27, 61, 0.18);
 }
 
 .navLink {
+    position: relative;
+    z-index: 1;
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 16px;
+    padding: 7px 14px;
     border: 0;
-    border-radius: 999px;
+    border-radius: 9px;
     background: transparent;
-    color: rgba(10, 26, 58, 0.78);
+    color: rgba(11, 27, 61, 0.62);
     font-size: 14px;
     font-weight: 600;
+    letter-spacing: -0.01em;
     white-space: nowrap;
     cursor: pointer;
-    transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    transition: color 0.2s ease;
 }
 
 .navLink:hover {
     color: var(--mantine-color-navy-9);
-    background: rgba(10, 26, 58, 0.08);
 }
 
 .navLink[data-active] {
-    color: #fff;
-    background: linear-gradient(135deg, var(--mantine-color-brand-6), var(--mantine-color-brand-7));
-    box-shadow: 0 4px 16px alpha(var(--mantine-color-brand-6), 0.35);
+    color: var(--mantine-color-navy-9);
 }
 
-/* ---------- BOTONES PILL ---------- */
+/* ---------- BOTONES ---------- */
 .pill {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 14px;
-    border-radius: 999px;
-    border: 1px solid rgba(10, 26, 58, 0.18);
-    background: rgba(10, 26, 58, 0.05);
+    height: 38px;
+    padding: 0 14px;
+    border-radius: 11px;
+    border: 1px solid rgba(11, 27, 61, 0.1);
+    background: rgba(255, 255, 255, 0.7);
     color: var(--mantine-color-navy-9);
     font-size: 14px;
     font-weight: 600;
-    -webkit-backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+    letter-spacing: -0.01em;
+    box-shadow: 0 1px 2px rgba(11, 27, 61, 0.05);
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
 }
 
 .pill:hover {
-    background: rgba(10, 26, 58, 0.1);
-    border-color: rgba(10, 26, 58, 0.3);
+    background: #fff;
+    border-color: rgba(11, 27, 61, 0.16);
+    box-shadow: 0 2px 8px -2px rgba(11, 27, 61, 0.14);
 }
 
+.pill:active {
+    transform: translateY(1px);
+}
+
+/* Chip de la cuenta: avatar con anillo y punto «en línea», nombre y rol; la flecha gira al abrir */
 .pillUser {
-    padding: 4px 12px 4px 4px;
+    height: 42px;
+    padding: 0 10px 0 4px;
+    gap: 10px;
+}
+
+.avatarWrap {
+    position: relative;
+    display: inline-flex;
+}
+
+.avatarWrap::after {
+    content: '';
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #12b886;
+    border: 2px solid #fff;
+}
+
+.avatar {
+    box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px alpha(var(--mantine-color-brand-5), 0.35);
+}
+
+.chevron {
+    color: rgba(11, 27, 61, 0.5);
+    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pillUser[data-expanded] .chevron {
+    transform: rotate(180deg);
+}
+
+.separador {
+    width: 1px;
+    height: 24px;
+    background: rgba(11, 27, 61, 0.1);
 }
 
 .cta {
@@ -168,15 +201,17 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 18px;
-    border-radius: 999px;
+    height: 38px;
+    padding: 0 16px;
+    border-radius: 11px;
     overflow: hidden;
     color: #fff;
     font-size: 14px;
     font-weight: 700;
+    letter-spacing: -0.01em;
     text-decoration: none;
-    background: var(--mm-gradient-accent);
-    box-shadow: 0 6px 20px alpha(var(--mantine-color-accent-6), 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    background: linear-gradient(180deg, var(--mantine-color-accent-5), var(--mantine-color-accent-6));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 1px 2px rgba(11, 27, 61, 0.1), 0 6px 16px -6px alpha(var(--mantine-color-accent-6), 0.6);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -188,14 +223,14 @@
     bottom: 0;
     left: -60%;
     width: 40%;
-    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.35), transparent);
     transform: skewX(-20deg);
     transition: left 0.6s ease;
 }
 
 .cta:hover {
     transform: translateY(-1px);
-    box-shadow: 0 10px 28px alpha(var(--mantine-color-accent-6), 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 2px 4px rgba(11, 27, 61, 0.1), 0 10px 24px -8px alpha(var(--mantine-color-accent-6), 0.7);
 }
 
 .cta:hover::after {
@@ -203,21 +238,21 @@
 }
 
 .iconBtn {
-    color: rgba(10, 26, 58, 0.85);
-    border-radius: 999px;
+    color: rgba(11, 27, 61, 0.72);
+    border-radius: 11px;
     transition: background 0.2s ease, color 0.2s ease;
 }
 
 .iconBtn:hover {
-    background: rgba(10, 26, 58, 0.08);
+    background: rgba(11, 27, 61, 0.06);
     color: var(--mantine-color-navy-9);
 }
 
 /* ---------- MENÚ DE CUENTA (dropdown) ---------- */
 .menuDropdown {
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.7);
-    background: rgba(255, 255, 255, 0.92);
+    border-radius: 14px;
+    border: 1px solid rgba(11, 27, 61, 0.08);
+    background: rgba(255, 255, 255, 0.96);
     -webkit-backdrop-filter: blur(16px) saturate(160%);
     backdrop-filter: blur(16px) saturate(160%);
     box-shadow: 0 20px 50px alpha(var(--mantine-color-navy-9), 0.22);

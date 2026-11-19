@@ -17,7 +17,7 @@ export default function BrandLogo() {
             alt={`Logo ${tenant.name}`}
             fetchPriority="high"
             display="block"
-            h={{ base: 46, sm: 54 }}
+            h={{ base: 42, sm: 50 }}
             w="auto"
             style={{ filter: 'contrast(1.15) saturate(1.2)' }}
         />
