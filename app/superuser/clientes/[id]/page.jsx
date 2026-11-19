@@ -44,7 +44,7 @@ function EstadoCuenta({ cliente, router }) {
                                 <Table.Thead><Table.Tr><Table.Th>Documento</Table.Th><Table.Th>Emisión</Table.Th><Table.Th>Vence</Table.Th><Table.Th ta="right">Total</Table.Th><Table.Th ta="right">Saldo</Table.Th></Table.Tr></Table.Thead>
                                 <Table.Tbody>
                                     {ec.pendientes.map((p) => (
-                                        <Table.Tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => router.push(`/superuser/ventas/${p.id}`)}>
+                                        <Table.Tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => router.push(p.manual ? '/superuser/cxc' : `/superuser/ventas/${p.id}`)}>
                                             <Table.Td fw={700}>{p.numero}</Table.Td>
                                             <Table.Td>{formatearFecha(p.fecha)}</Table.Td>
                                             <Table.Td><Text size="sm">{formatearFecha(p.vence) || '—'}</Text><Badge size="xs" variant="light" color={COLOR_COBRO[p.estado] || 'gray'}>{p.etiqueta}</Badge></Table.Td>

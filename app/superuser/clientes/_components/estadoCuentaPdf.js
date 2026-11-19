@@ -16,7 +16,7 @@ const VERDE = [13, 120, 100];
 
 const usd = (v) => `$ ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0)}`;
 const bs = (v) => `Bs ${new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0)}`;
-const DOC = { FACTURA: 'Factura', NOTA_ENTREGA: 'N. entrega', VENTA_RAPIDA: 'V. rápida' };
+const DOC = { FACTURA: 'Factura', NOTA_ENTREGA: 'N. entrega', VENTA_RAPIDA: 'V. rápida', MANUAL: 'Cuenta manual' };
 
 export function construirPdf({ jsPDF, autoTable, cliente, logo, generado }) {
     const ec = cliente.estadoCuenta || { pendientes: [], pagos: [], total: 0 };

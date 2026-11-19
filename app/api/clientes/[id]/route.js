@@ -53,8 +53,25 @@ export async function GET(req, { params }) {
                 const cobro = estadoCobro(v, hoy);
                 return { id: v.id, numero: v.numeroDocumento, fecha: v.createdAt, tipoDocumento: v.tipoDocumento, total: v.moneda === 'BS' ? Number(v.totalFinal) / (Number(v.tasaCambio) || 1) : Number(v.totalFinal), saldo: cobro.saldo, vence: cobro.vence, estado: cobro.clave, etiqueta: cobro.etiqueta };
             })
-            .filter((p) => p.saldo > 0)
-            .sort((a, b) => (a.vence || '9999').localeCompare(b.vence || '9999'));
+            .filter((p) => p.saldo > 0);
+        // Cuentas por cobrar MANUALES del cliente (deudas o facturas del sistema anterior cargadas a mano en Cuentas por cobrar):
+        // también son deuda, igual que en el libro de cobranza. Antes el estado de cuenta las dejaba fuera.
+        const manuales = await sequelize.query(
+            'SELECT id, concepto, fecha, vence, "montoUsd"::float AS "montoUsd", abonos FROM "CuentasManuales" WHERE "clienteId" = :id',
+            { replacements: { id: cliente.id }, type: sequelize.QueryTypes.SELECT }
+        ).catch(() => []);
+        for (const m of manuales) {
+            const abonado = (Array.isArray(m.abonos) ? m.abonos : []).reduce((a, x) => a + (Number(x.monto) || 0), 0);
+            const saldo = Math.round((Number(m.montoUsd) - abonado) * 100) / 100;
+            if (!(saldo > 0.005)) continue;
+            const vence = m.vence ? String(m.vence instanceof Date ? m.vence.toISOString() : m.vence).slice(0, 10) : null;
+            const vencida = Boolean(vence) && vence < hoy;
+            pendientes.push({
+                id: `m${m.id}`, manual: true, numero: m.concepto, fecha: m.fecha, tipoDocumento: 'MANUAL', total: Number(m.montoUsd), saldo, vence,
+                estado: vencida ? 'vencido' : 'pendiente', etiqueta: vencida ? 'Vencida' : vence ? 'Por vencer' : 'Pendiente de pago',
+            });
+        }
+        pendientes.sort((a, b) => (a.vence || '9999').localeCompare(b.vence || '9999'));
         const deudaPendiente = Number(pendientes.reduce((a, p) => a + p.saldo, 0).toFixed(2));
         const pagos = await sequelize.query(
             `SELECT a."id", a."fechaPago" AS fecha, a."metodoPago" AS metodo, a."referencia", a."montoUsd"::float AS "montoUsd", a."montoVes"::float AS "montoVes",
