@@ -16,7 +16,7 @@ const NOTAS_USD = (campo, origen) => `(SELECT COALESCE(SUM((CASE WHEN n."tipo" =
 // El IVA que se cobra al vender no es ingreso de la empresa: el sistema lo asienta aparte con esta categoría
 const CAT_IVA = 'IVA Recaudado';
 
-// El balance solo toma en cuenta los documentos desde esta fecha: lo anterior no se muestra (ni cuenta en los acumulados ni en lo por cobrar y por pagar)
+// Los INGRESOS y GASTOS (y el IVA del periodo) solo se cuentan desde esta fecha. Las cuentas por cobrar y por pagar y el inventario figuran completos.
 export const INICIO_BALANCE = '2026-11-01';
 
 // Balance de un rango de fechas: resultado del periodo, series para gráficos, posición actual e IVA del periodo
@@ -30,10 +30,8 @@ export async function GET(request) {
         const hasta = searchParams.get('hasta');
         if (!FECHA.test(desde || '') || !FECHA.test(hasta || '')) return NextResponse.json({ error: 'Rango de fechas inválido' }, { status: 400 });
 
-        // Rango que termina antes del inicio: no hay balance que mostrar
-        if (hasta < INICIO_BALANCE) {
-            return NextResponse.json({ antesDelInicio: true, inicio: INICIO_BALANCE });
-        }
+        // Un rango que termina antes del inicio queda vacío (sin ingresos ni gastos); la posición (por cobrar, por pagar, inventario) se muestra igual
+        const antesDelInicio = hasta < INICIO_BALANCE;
         const recortado = desde < INICIO_BALANCE;
         const rep = { desde: recortado ? INICIO_BALANCE : desde, hasta, catIva: CAT_IVA, inicio: INICIO_BALANCE };
         const q = (sql) => sequelize.query(sql, { replacements: rep, type: sequelize.QueryTypes.SELECT });
@@ -64,13 +62,13 @@ export async function GET(request) {
             // Posición actual (no depende del rango): lo que hay en almacén a costo, lo que te deben y lo que debes
             q(`SELECT
                 (SELECT COALESCE(SUM("stockAlmacen" * "costoUsd"), 0)::float FROM "Productos") AS inventario,
-                (SELECT COALESCE(SUM(CASE WHEN "moneda" = 'BS' THEN "saldoPendiente" / NULLIF("tasaCambio", 0) ELSE "saldoPendiente" END), 0)::float FROM "CuentasPorCobrar" WHERE "estado" <> 'Pagado' AND "createdAt" >= :inicio::date)
+                (SELECT COALESCE(SUM(CASE WHEN "moneda" = 'BS' THEN "saldoPendiente" / NULLIF("tasaCambio", 0) ELSE "saldoPendiente" END), 0)::float FROM "CuentasPorCobrar" WHERE "estado" <> 'Pagado')
                  + (SELECT COALESCE(SUM(CASE WHEN v."moneda" = 'BS'
                         THEN GREATEST(v."totalFinal" - COALESCE((SELECT SUM(a."montoVes") FROM "Abonos" a WHERE a."ventaId" = v."id"), 0), 0) / NULLIF(v."tasaCambio", 0)
                         ELSE GREATEST(v."totalFinal" - COALESCE((SELECT SUM(a."montoUsd") FROM "Abonos" a WHERE a."ventaId" = v."id"), 0), 0) END), 0)::float
-                    FROM "Ventas" v WHERE v."clienteId" IS NOT NULL AND v."statusPago" <> 'Pagado' AND v."statusDespacho" <> 'Cancelado' AND v."createdAt" >= :inicio::date
+                    FROM "Ventas" v WHERE v."clienteId" IS NOT NULL AND v."statusPago" <> 'Pagado' AND v."statusDespacho" <> 'Cancelado'
                       AND NOT EXISTS (SELECT 1 FROM "CuentasPorCobrar" x WHERE x."ventaId" = v."id")) AS "porCobrar",
-                (SELECT COALESCE(SUM(CASE WHEN "moneda" = 'BS' THEN "saldoPendiente" / NULLIF("tasaCambio", 0) ELSE "saldoPendiente" END), 0)::float FROM "CuentasPorPagar" WHERE "estado" <> 'Pagado' AND "createdAt" >= :inicio::date) AS "porPagar",
+                (SELECT COALESCE(SUM(CASE WHEN "moneda" = 'BS' THEN "saldoPendiente" / NULLIF("tasaCambio", 0) ELSE "saldoPendiente" END), 0)::float FROM "CuentasPorPagar" WHERE "estado" <> 'Pagado') AS "porPagar",
                 (SELECT COALESCE(SUM(CASE WHEN m."tipo" = 'INGRESO' THEN m."montoUsd" ELSE -m."montoUsd" END), 0)::float
                     FROM "MovimientosFinancieros" m LEFT JOIN "CategoriasFinancieras" c ON c."id" = m."categoriaId" WHERE COALESCE(c."nombre", '') <> :catIva AND m."fecha" >= :inicio::date) AS "flujoAcumulado"`),
             q(`SELECT
@@ -84,7 +82,7 @@ export async function GET(request) {
 
         const utilidad = Number((kpi.ingresos - kpi.gastos).toFixed(2));
         return NextResponse.json({
-            inicio: INICIO_BALANCE, recortado,
+            inicio: INICIO_BALANCE, recortado, antesDelInicio,
             kpi: { ...kpi, utilidad, margen: kpi.ingresos > 0 ? Number(((utilidad / kpi.ingresos) * 100).toFixed(1)) : 0 },
             porDia, mensual,
             gastosPorCategoria: porCategoria.filter((c) => c.tipo === 'GASTO'),
