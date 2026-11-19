@@ -7,7 +7,7 @@ import { LineChart, BarChart, DonutChart } from '@mantine/charts';
 import { DatePickerInput } from '@mantine/dates';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import { IconAlertTriangle, IconArrowDownRight, IconArrowUpRight, IconBuildingWarehouse, IconChevronRight, IconPercentage, IconReceiptTax, IconScale, IconUsers, IconWallet } from '@tabler/icons-react';
+import { IconInfoCircle, IconAlertTriangle, IconArrowDownRight, IconArrowUpRight, IconBuildingWarehouse, IconChevronRight, IconPercentage, IconReceiptTax, IconScale, IconUsers, IconWallet } from '@tabler/icons-react';
 import { aBolivares } from '@/app/constants/facturacion';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 
@@ -128,11 +128,19 @@ export default function BalanceTab() {
         <Stack gap="lg">
             <Group gap="sm" wrap="wrap">
                 <SegmentedControl color="navy.9" value={periodo} onChange={setPeriodo} data={[{ value: 'MES', label: 'Este mes' }, { value: 'MES_ANT', label: 'Mes pasado' }, { value: 'ANIO', label: 'Este año' }, { value: 'RANGO', label: 'Rango' }]} />
-                {periodo === 'RANGO' && <DatePickerInput type="range" valueFormat="DD/MM/YYYY" value={rango} onChange={setRango} placeholder="Elige el rango" maxDate={new Date()} clearable w={{ base: '100%', sm: 280 }} />}
+                {periodo === 'RANGO' && <DatePickerInput type="range" valueFormat="DD/MM/YYYY" value={rango} onChange={setRango} placeholder="Elige el rango" minDate={new Date(2026, 10, 1)} maxDate={new Date()} clearable w={{ base: '100%', sm: 280 }} />}
             </Group>
+
+            <Alert color="blue" variant="light" icon={<IconInfoCircle size={18} />} title="El balance se toma desde el 1 de noviembre de 2026">
+                Solo se cuentan los documentos y movimientos a partir del 1 de noviembre de 2026; lo anterior a esa fecha no se muestra en el balance.
+                {data?.recortado ? ' El periodo elegido empieza antes: se muestra solo desde el 1 de noviembre.' : ''}
+            </Alert>
 
             {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}
 
+            {data?.antesDelInicio && <Center py={50}><Text c="dimmed" ta="center">No hay balance antes del 1 de noviembre de 2026. Elige un periodo desde esa fecha.</Text></Center>}
+
+            {!data?.antesDelInicio && (<>
             <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
                 <Indicador icono={IconArrowUpRight} color="teal" titulo="Ingresos" href="/superuser/finanzas?tab=movimientos" verEn="Movimientos de caja" cargando={isLoading} valor={fmtUsd(k?.ingresos)} detalle={tasa ? fmtBs(aBolivares(k?.ingresos || 0, tasa)) : 'Cobros del periodo, sin IVA'} />
                 <Indicador icono={IconArrowDownRight} color="red" titulo="Gastos" href="/superuser/finanzas?tab=movimientos" verEn="Movimientos de caja" cargando={isLoading} valor={fmtUsd(k?.gastos)} detalle={tasa ? fmtBs(aBolivares(k?.gastos || 0, tasa)) : undefined} />
@@ -165,8 +173,9 @@ export default function BalanceTab() {
                     <Tarjeta titulo="Ingresos por método de pago" cargando={isLoading} vacio={!data?.porMetodo?.length}><Dona filas={data?.porMetodo || []} /></Tarjeta>
                 </Grid.Col>
             </Grid>
+            </>)}
 
-            <Text size="xs" c="gray.5">Ingresos = cobros registrados en caja sin el IVA recaudado (que no es de la empresa). Los gastos incluyen el IVA pagado en las compras. La posición actual no depende del periodo elegido; el inventario se valora al costo registrado.</Text>
+            <Text size="xs" c="gray.5">Ingresos = cobros registrados en caja sin el IVA recaudado (que no es de la empresa). Los gastos incluyen el IVA pagado en las compras. La posición actual no depende del periodo elegido: lo por cobrar y por pagar cuentan solo los documentos desde el 1 de noviembre de 2026, y el inventario se valora al costo registrado (es la existencia de hoy).</Text>
         </Stack>
     );
 }
