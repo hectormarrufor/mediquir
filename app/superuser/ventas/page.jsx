@@ -38,6 +38,9 @@ async function pedirJson(url, opciones) {
 const TIPOS = { DETAL: { etiqueta: 'Detal', color: 'yellow' }, MAYOR: { etiqueta: 'Mayor', color: 'grape' }, ONLINE: { etiqueta: 'Online', color: 'cyan' } };
 const COLOR_DESPACHO = { Pendiente: 'blue', Empacado: 'violet', Parcial: 'orange', Completado: 'teal', Cancelado: 'gray' };
 const COLOR_PAGO = { Pagado: 'teal', Pendiente: 'orange', Vencido: 'red' };
+// Cómo se vendió: a crédito (se paga después) o de contado
+const CONDICION = { Credito: { texto: 'Crédito', color: 'indigo' }, Contado: { texto: 'Contado', color: 'green' } };
+const BadgeCondicion = ({ condicion }) => (CONDICION[condicion] ? <Badge variant="outline" color={CONDICION[condicion].color} tt="none">{CONDICION[condicion].texto}</Badge> : null);
 // El cliente retuvo el IVA de la factura (declarado en el abono o en la factura): falta o no el comprobante
 const RETENCION = {
     REGISTRADA: { texto: 'Retenida', color: 'grape' },
@@ -115,6 +118,7 @@ function TarjetaVenta({ v, esVendedor, isAdmin, onAbrir, onEliminar }) {
             <Group justify="space-between" wrap="nowrap" mt={8} gap="xs">
                 <Group gap={6} wrap="wrap" style={{ minWidth: 0 }}>
                     <Badge variant="light" color={(esNota(v) ? COLOR_NOTA : COLOR_DESPACHO)[v.estado] || 'gray'}>{v.estado}</Badge>
+                    <BadgeCondicion condicion={v.condicionPago} />
                     {v.pago && <Badge variant="light" color={COLOR_PAGO[v.pago] || 'gray'}>{v.pago}</Badge>}
                     <BadgeRetencion estado={v.retencion} />
                     {v.tipo === 'MAYOR' && v.empacadorId && (
@@ -277,7 +281,7 @@ export default function VentasDashboard() {
     };
 
     return (
-        <Box maw={1500} mx="auto" px={{ base: 'xs', sm: 'md' }} py="md">
+        <Box w="100%" px={{ base: 'xs', sm: 'md' }} py="md">
             <Stack gap={telefono ? 'md' : 'lg'}>
                 <Group justify="space-between" align="flex-end" wrap="wrap">
                     <Box>
@@ -379,7 +383,7 @@ export default function VentasDashboard() {
                                 ))}
                             </Stack>
                         ) : (
-                            <Table.ScrollContainer minWidth={900}>
+                            <Table.ScrollContainer minWidth={1000}>
                                 <Table verticalSpacing="sm" highlightOnHover style={{ opacity: lista.isFetching ? 0.7 : 1 }}>
                                     <Table.Thead>
                                         <Table.Tr>
@@ -390,6 +394,7 @@ export default function VentasDashboard() {
                                             <Table.Th ta="right">Art.</Table.Th>
                                             <Encabezado campo="total" etiqueta="Total" orden={orden} onOrden={cambiarOrden} align="right" />
                                             <Table.Th>Despacho</Table.Th>
+                                            <Table.Th>Condición</Table.Th>
                                             <Table.Th>Pago</Table.Th>
                                             <Table.Th />
                                         </Table.Tr>
@@ -399,7 +404,7 @@ export default function VentasDashboard() {
                                             <Table.Tr key={`${v.tipoDocumento}-${v.id}`} style={{ cursor: 'pointer' }} onClick={() => router.push(`/superuser/ventas/${v.ventaId || v.id}`)}>
                                                 <Table.Td><Group gap={6} wrap="nowrap"><Text fw={700} size="sm">{v.numero}</Text><Badge size="xs" variant="light" color={DOC[v.tipoDocumento]?.color}>{DOC[v.tipoDocumento]?.etiqueta}</Badge>{v.tipo && <Badge size="xs" variant="light" color={TIPOS[v.tipo]?.color}>{TIPOS[v.tipo]?.etiqueta}</Badge>}{v.porAprobar && <Badge size="xs" variant="filled" color="orange">Por aprobar</Badge>}{v.porImprimir && !v.porAprobar && <Badge size="xs" variant="filled" color="blue.8">Falta imprimir</Badge>}</Group></Table.Td>
                                                 <Table.Td><Text size="xs">{fmtFecha(v.fecha)}</Text></Table.Td>
-                                                <Table.Td><Tooltip label={v.cliente} multiline maw={340} withArrow openDelay={250}><Text size="sm" lineClamp={1} maw={180}>{v.cliente}</Text></Tooltip></Table.Td>
+                                                <Table.Td><Tooltip label={v.cliente} multiline maw={340} withArrow openDelay={250}><Text size="sm" lineClamp={1} maw={320}>{v.cliente}</Text></Tooltip></Table.Td>
                                                 {!esVendedor && <Table.Td><Tooltip label={v.vendedor || '—'} multiline maw={340} withArrow openDelay={250}><Text size="sm" c="dimmed" lineClamp={1} maw={140}>{v.vendedor || '—'}</Text></Tooltip></Table.Td>}
                                                 <Table.Td ta="right"><Text size="sm">{esNota(v) ? '—' : v.articulos}</Text></Table.Td>
                                                 <Table.Td ta="right">
@@ -419,6 +424,7 @@ export default function VentasDashboard() {
                                                         )}
                                                     </Group>
                                                 </Table.Td>
+                                                <Table.Td>{v.condicionPago ? <BadgeCondicion condicion={v.condicionPago} /> : <Text size="sm" c="dimmed">—</Text>}</Table.Td>
                                                 <Table.Td>
                                                     {v.pago ? (
                                                         <Group gap={4} wrap="wrap"><Badge variant="light" color={COLOR_PAGO[v.pago] || 'gray'}>{v.pago}</Badge><BadgeRetencion estado={v.retencion} /></Group>
