@@ -61,6 +61,8 @@ const VENDEDOR_API = [
     // Los vendedores NO registran compras: solo ventas (y esas las aprueba jolexi antes de imprimirse)
     ['GET', /^\/api\/vendedor\/[^/]+$/],
     ['GET', /^\/api\/inventario\/lista-precios$/],
+    // Consultor de precios: el vendedor solo CONSULTA (la ruta le quita costos y P1); cambiar precios (/api/precios/cambiar) sigue cerrado para él
+    ['GET', /^\/api\/precios\/consulta$/],
     // Tareas: cada quien ve y gestiona las suyas (la ruta valida por sesión quién puede qué)
     ['GET', /^\/api\/tareas(\/asignables|\/[^/]+(\/comentarios)?)?$/],
     ['POST', /^\/api\/tareas(\/[^/]+\/comentarios)?$/],
