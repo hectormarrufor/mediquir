@@ -14,12 +14,12 @@ const Producto = sequelize.define('Producto', {
     
     // --- CONTROL DE STOCK E IMPUESTOS ---
     stockAlmacen: { 
-        type: DataTypes.DECIMAL(10, 2), 
+        type: DataTypes.DECIMAL(20, 3), 
         allowNull: false, 
         defaultValue: 0.00 
     },
     stockMinimo: { 
-        type: DataTypes.DECIMAL(10, 2), 
+        type: DataTypes.DECIMAL(20, 3), 
         defaultValue: 0.00 
     },
     porcentajeIva: { 
@@ -52,7 +52,7 @@ const Producto = sequelize.define('Producto', {
     presentacionesVerificadasPorId: { type: DataTypes.INTEGER, allowNull: true },
     // --- ESTRUCTURA DE PRECIOS Y COSTOS (En USD) ---
     costoUsd: { 
-        type: DataTypes.DECIMAL(12, 5), // costo de UNA unidad: necesita más decimales (p. ej. 0.00825 por guante)
+        type: DataTypes.DECIMAL(20, 8), // costo de UNA unidad: necesita más decimales (p. ej. 0.00825 por guante)
         comment: 'Costo por unidad',
         allowNull: false, 
         defaultValue: 0.00 

@@ -20,15 +20,15 @@ const MovimientoFinanciero = sequelize.define('MovimientoFinanciero', {
         allowNull: true
     },
     montoUsd: {
-        type: DataTypes.DECIMAL(12, 2),
+        type: DataTypes.DECIMAL(20, 6),
         allowNull: false
     },
     tasaBcvAplicada: {
-        type: DataTypes.DECIMAL(10, 2),
+        type: DataTypes.DECIMAL(20, 8),
         allowNull: false
     },
     montoVes: {
-        type: DataTypes.DECIMAL(12, 2),
+        type: DataTypes.DECIMAL(20, 6),
         allowNull: false
     },
     descripcion: {

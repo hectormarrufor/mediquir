@@ -18,11 +18,11 @@ const CuentaPorPagar = sequelize.define('CuentaPorPagar', {
         references: { model: 'FacturasCompras', key: 'id' }
     },
     montoTotal: {
-        type: DataTypes.DECIMAL(12, 2),
+        type: DataTypes.DECIMAL(20, 6),
         allowNull: false
     },
     saldoPendiente: {
-        type: DataTypes.DECIMAL(12, 2),
+        type: DataTypes.DECIMAL(20, 6),
         allowNull: false
     },
     moneda: {

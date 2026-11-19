@@ -8,7 +8,7 @@ const EntradaInventario = sequelize.define('EntradaInventario', {
         autoIncrement: true,
     },
     cantidad: {
-        type: DataTypes.DECIMAL(10, 2),
+        type: DataTypes.DECIMAL(20, 3),
         allowNull: false,
     },
     fecha: {
