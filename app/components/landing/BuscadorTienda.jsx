@@ -24,7 +24,7 @@ export default function BuscadorTienda({ valor = '', productos, onBuscar, placeh
     // La lista se calcula con el texto "diferido": escribir nunca se traba aunque el teléfono sea lento
     const consulta = useDeferredValue(texto).trim();
     const resultados = useMemo(
-        () => (consulta.length >= 2 && productos?.length ? buscarProductos(productos, consulta, { desempate: enStock }) : []),
+        () => (consulta.length >= 2 && productos?.length ? buscarProductos(productos, consulta, { desempate: enStock, estricto: true }) : []),
         [productos, consulta]
     );
     const visibles = resultados.slice(0, MAX_SUGERENCIAS);

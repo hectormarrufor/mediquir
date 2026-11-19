@@ -7,6 +7,11 @@
 // Resultado, del más al menos relevante:
 //   1. Productos que coinciden con TODAS las palabras.
 //   2. Productos que coinciden solo con algunas (se ofrecen para no dejar al cliente con las manos vacías).
+//
+// Modo ESTRICTO (opción `estricto`, lo usa la tienda de la landing): no ofrece coincidencias parciales y la palabra debe estar completa o
+// empezar igual en algún campo ("guante" -> "guantes"). Los errores de tipeo solo se perdonan si NO hay ningún resultado exacto, solo en el
+// nombre y las etiquetas (nunca en marca, categoría ni presentación), en palabras de 6+ letras y que empiecen por la misma letra.
+// Así «medias» ya no trae lo de la marca «MEDICS».
 
 const PESOS = { nombre: 10, codigo: 8, tags: 6, marca: 5, grupo: 4, categoria: 3, presentacion: 3 };
 const PALABRAS_VACIAS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'para', 'con', 'y', 'en', 'por', 'un', 'una', 'al', 'a']);
@@ -49,18 +54,18 @@ const cache = new WeakMap();
 function camposDe(producto) {
     let c = cache.get(producto);
     if (c) return c;
-    const campo = (peso, texto) => {
+    const campo = (clave, texto) => {
         const t = normalizar(texto);
-        return t ? { peso, texto: t, palabras: t.split(' ') } : null;
+        return t ? { clave, peso: PESOS[clave], texto: t, palabras: t.split(' ') } : null;
     };
     c = [
-        campo(PESOS.nombre, producto.nombre),
-        campo(PESOS.codigo, producto.codigo),
-        campo(PESOS.tags, (producto.tags || []).map((t) => t?.nombre).filter(Boolean).join(' ')),
-        campo(PESOS.marca, producto.marca?.nombre),
-        campo(PESOS.grupo, producto.grupoEquivalencia?.nombre),
-        campo(PESOS.categoria, producto.categoria?.nombre),
-        campo(PESOS.presentacion, producto.presentacion),
+        campo('nombre', producto.nombre),
+        campo('codigo', producto.codigo),
+        campo('tags', (producto.tags || []).map((t) => t?.nombre).filter(Boolean).join(' ')),
+        campo('marca', producto.marca?.nombre),
+        campo('grupo', producto.grupoEquivalencia?.nombre),
+        campo('categoria', producto.categoria?.nombre),
+        campo('presentacion', producto.presentacion),
     ].filter(Boolean);
     cache.set(producto, c);
     return c;
@@ -83,16 +88,59 @@ function valorDePalabra({ p, singular }, campos) {
     return mejor;
 }
 
+// Modo estricto: palabra exacta o que empieza igual; un trozo suelto solo cuenta si lo escrito lleva números (5mm dentro de 1.5mm).
+// Con `conTipeo` también se perdonan errores de tipeo, pero solo en nombre y etiquetas (ver arriba).
+function valorEstricto({ p, singular }, campos, conTipeo) {
+    const lleva = /d/.test(p);
+    let mejor = 0;
+    for (const { clave, peso, texto, palabras } of campos) {
+        let v = 0;
+        if (palabras.includes(p) || palabras.includes(singular)) v = peso * 1.5;
+        else if (palabras.some((w) => w.startsWith(p) || w.startsWith(singular))) v = peso * 1.2;
+        else if (lleva && texto.includes(p)) v = peso;
+        else if (conTipeo && (clave === 'nombre' || clave === 'tags') && p.length >= 6) {
+            const tolerancia = p.length >= 9 ? 2 : 1;
+            if (palabras.some((w) => w.length >= 5 && w[0] === p[0] && (cercana(p, w, tolerancia) || cercana(singular, w, tolerancia)))) v = peso * 0.6;
+        }
+        if (v > mejor) mejor = v;
+    }
+    return mejor;
+}
+
+function buscarEstricto(lista, palabras, desempate) {
+    const pasada = (conTipeo) => {
+        const halladas = [];
+        for (const producto of lista) {
+            const campos = camposDe(producto);
+            let puntos = 0;
+            let todas = true;
+            for (const palabra of palabras) {
+                const v = valorEstricto(palabra, campos, conTipeo);
+                if (v <= 0) { todas = false; break; }
+                puntos += v;
+            }
+            if (todas) halladas.push({ producto, puntos });
+        }
+        return halladas;
+    };
+    let r = pasada(false);
+    if (!r.length) r = pasada(true); // solo si nada coincide tal cual: tal vez hay un error de tipeo
+    return r
+        .sort((a, b) => (desempate ? (Number(desempate(b.producto)) || 0) - (Number(desempate(a.producto)) || 0) : 0) || (b.puntos - a.puntos))
+        .map((x) => x.producto);
+}
+
 /**
  * @param {Array} productos lista del API (con marca, tags, categoria y grupoEquivalencia)
  * @param {string} texto lo que escribió la persona
- * @param {{ desempate?: (p) => number }} opciones desempate: dentro del mismo nivel de coincidencia va primero el que devuelva más
+ * @param {{ desempate?: (p) => number, estricto?: boolean }} opciones estricto: ver el modo estricto arriba. desempate: dentro del mismo nivel de coincidencia va primero el que devuelva más
  *        (p. ej. los disponibles en stock)
  */
-export function buscarProductos(productos, texto, { desempate } = {}) {
+export function buscarProductos(productos, texto, { desempate, estricto = false } = {}) {
     const lista = productos || [];
     const palabras = palabrasDeBusqueda(texto);
     if (!palabras.length) return lista;
+    if (estricto) return buscarEstricto(lista, palabras, desempate);
 
     const completos = [];
     const parciales = [];

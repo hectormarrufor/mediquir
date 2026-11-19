@@ -88,7 +88,7 @@ export default function CatalogoSection({ searchQuery, onSearchChange, selectedC
         if (marca) l = l.filter((p) => p.marca?.nombre?.trim() === marca);
         if (soloDisponibles) l = l.filter(enStock);
         // Búsqueda por palabras sueltas, tolerante a tildes, plurales y errores de tipeo; ya devuelve primero lo más parecido
-        if (searchQuery) l = buscarProductos(l, searchQuery, { desempate: enStock });
+        if (searchQuery) l = buscarProductos(l, searchQuery, { desempate: enStock, estricto: true });
 
         if (orden === 'auto') {
             return searchQuery ? l : [...l].sort((a, b) => (enStock(b) - enStock(a)) || ((b.nroVentas || 0) - (a.nroVentas || 0)));
