@@ -15,7 +15,10 @@ export const TIPOS_PAGO = {
     QUINCENA: { etiqueta: 'Quincena', titulo: 'QUINCENA', color: 'teal', porDias: false, conceptos: [], nota: '' },
 };
 
-export const FORMAS_PAGO = { EFECTIVO: 'Efectivo', CHEQUE: 'Cheque', TRANSFERENCIA: 'Transferencia' };
+// Etiquetas de todas las formas de pago (los recibos viejos pueden decir efectivo o cheque)
+export const FORMAS_PAGO = { EFECTIVO: 'Efectivo', CHEQUE: 'Cheque', TRANSFERENCIA: 'Transferencia', PAGO_MOVIL: 'Pago móvil' };
+// Las únicas que se pueden elegir al registrar un pago nuevo
+export const FORMAS_PAGO_ACTIVAS = { TRANSFERENCIA: 'Transferencia', PAGO_MOVIL: 'Pago móvil' };
 export const ESTADOS_PAGO = {
     PENDIENTE: { etiqueta: 'Por firmar', color: 'yellow' },
     CONFIRMADO: { etiqueta: 'Firmado', color: 'teal' },

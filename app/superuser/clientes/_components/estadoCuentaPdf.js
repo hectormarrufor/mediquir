@@ -7,6 +7,8 @@ import { formatearFecha } from '@/app/constants/hora';
 const AZUL_OSCURO = [11, 27, 61];
 const AZUL = [0, 90, 170];
 const AZUL_CLARO = [230, 241, 252];
+const FONDO_MEMBRETE = [236, 244, 252]; // membrete claro para que se note el logo
+const TEXTO_MEMBRETE = [40, 55, 80];
 const GRIS = [110, 120, 135];
 const GRIS_LINEA = [222, 228, 236];
 const ROJO = [185, 28, 28];
@@ -123,17 +125,17 @@ export function construirPdf({ jsPDF, autoTable, cliente, logo, generado }) {
     const paginas = doc.getNumberOfPages();
     for (let i = 1; i <= paginas; i += 1) {
         doc.setPage(i);
-        doc.setFillColor(...AZUL_OSCURO); doc.rect(0, 0, ANCHO, CAB, 'F');
+        doc.setFillColor(...FONDO_MEMBRETE); doc.rect(0, 0, ANCHO, CAB, 'F');
         doc.setFillColor(...AZUL); doc.rect(0, CAB, ANCHO, 0.9, 'F');
         if (logo) {
             const alto = 15;
             doc.addImage(logo.data, 'PNG', M, (CAB - alto) / 2, alto * (logo.w / logo.h), alto, undefined, 'FAST');
         } else {
-            doc.setTextColor(255); doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(18); doc.text('MEDIQUIR', M, 16);
+            doc.setTextColor(...AZUL_OSCURO); doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(18); doc.text('MEDIQUIR', M, 16);
         }
-        doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+        doc.setTextColor(...AZUL_OSCURO); doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
         doc.text(MEMBRETE_MEDIQUIR.nombre, ANCHO - M, 8.5, { align: 'right' });
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(170, 205, 240);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...TEXTO_MEMBRETE);
         doc.text(`RIF: ${MEMBRETE_MEDIQUIR.rif}`, ANCHO - M, 13.5, { align: 'right' });
         doc.text(doc.splitTextToSize(MEMBRETE_MEDIQUIR.direccion, 105), ANCHO - M, 17.5, { align: 'right' });
         doc.text(`${MEMBRETE_MEDIQUIR.telefonos} · ${MEMBRETE_MEDIQUIR.email}`, ANCHO - M, 25.5, { align: 'right' });

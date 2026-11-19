@@ -8,6 +8,8 @@ import { TIPOS_PAGO, FORMAS_PAGO, fechaCorta, textoPeriodo } from '@/app/constan
 const AZUL_OSCURO = [11, 27, 61];
 const AZUL = [0, 90, 170];
 const AZUL_CLARO = [230, 241, 252];
+const FONDO_MEMBRETE = [236, 244, 252]; // membrete claro para que se note el logo
+const TEXTO_MEMBRETE = [40, 55, 80]; // gris azulado oscuro: buen contraste sobre el fondo claro
 const GRIS = [110, 120, 135];
 const GRIS_LINEA = [200, 208, 220];
 
@@ -35,17 +37,18 @@ export function construirPdf({ jsPDF, autoTable, pago, logo, generado }) {
     const codigo = String(pago.id).slice(0, 8).toUpperCase();
 
     // ---- Membrete
-    doc.setFillColor(...AZUL_OSCURO); doc.rect(0, 0, ANCHO, CAB, 'F');
+    // Fondo claro: el logo es de letras azules y sobre un fondo oscuro no se vería
+    doc.setFillColor(...FONDO_MEMBRETE); doc.rect(0, 0, ANCHO, CAB, 'F');
     doc.setFillColor(...AZUL); doc.rect(0, CAB, ANCHO, 0.9, 'F');
     if (logo) {
         const alto = 16;
         doc.addImage(logo.data, 'PNG', M, (CAB - alto) / 2, alto * (logo.w / logo.h), alto, undefined, 'FAST');
     } else {
-        doc.setTextColor(255); doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(20); doc.text('MEDIQUIR', M, 17);
+        doc.setTextColor(...AZUL_OSCURO); doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(20); doc.text('MEDIQUIR', M, 17);
     }
-    doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+    doc.setTextColor(...AZUL_OSCURO); doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
     doc.text(MEMBRETE_MEDIQUIR.nombre, ANCHO - M, 9.5, { align: 'right' });
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(170, 205, 240);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...TEXTO_MEMBRETE);
     doc.text(`RIF: ${MEMBRETE_MEDIQUIR.rif}`, ANCHO - M, 14.5, { align: 'right' });
     doc.text(doc.splitTextToSize(MEMBRETE_MEDIQUIR.direccion, 105), ANCHO - M, 18.5, { align: 'right' });
     doc.text(`${MEMBRETE_MEDIQUIR.telefonos} · ${MEMBRETE_MEDIQUIR.email}`, ANCHO - M, 27, { align: 'right' });
@@ -99,13 +102,16 @@ export function construirPdf({ jsPDF, autoTable, pago, logo, generado }) {
         fila('POR CONCEPTO DE:', pago.conceptoTexto || pago.conceptos?.[0]?.concepto || '');
         y += 4;
         doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(25, 35, 55);
-        [['EFECTIVO', 'EFECTIVO'], ['CHEQUE', 'CHEQUE'], ['TRANSF', 'TRANSFERENCIA']].forEach(([txt, clave], i) => {
-            const x = M + i * 48;
+        [['TRANSFERENCIA', 'TRANSFERENCIA'], ['PAGO MÓVIL', 'PAGO_MOVIL']].forEach(([txt, clave], i) => {
+            const x = M + i * 72;
             doc.text(`${txt}:`, x, y);
             doc.setDrawColor(...GRIS); doc.setLineWidth(0.3); doc.rect(x + doc.getTextWidth(`${txt}: `) + 1, y - 4, 5, 5, 'S');
             if (pago.formaPago === clave) { doc.setFont('helvetica', 'bold'); doc.text('X', x + doc.getTextWidth(`${txt}: `) + 2.2, y - 0.2); doc.setFont('helvetica', 'normal'); }
         });
-        if (pago.referencia) { doc.setFontSize(9); doc.setTextColor(...GRIS); doc.text(`Referencia: ${pago.referencia}${pago.formaPago ? ` (${FORMAS_PAGO[pago.formaPago]})` : ''}`, M, y + 7); }
+        // Recibos viejos pagados en efectivo o cheque: ya no hay casilla para eso, se deja escrito
+        const antigua = pago.formaPago && !['TRANSFERENCIA', 'PAGO_MOVIL'].includes(pago.formaPago);
+        const detalle = [antigua && `Forma de pago: ${FORMAS_PAGO[pago.formaPago] || pago.formaPago}`, pago.referencia && `Referencia: ${pago.referencia}${pago.formaPago && !antigua ? ` (${FORMAS_PAGO[pago.formaPago]})` : ''}`].filter(Boolean).join('   ·   ');
+        if (detalle) { doc.setFontSize(9); doc.setTextColor(...GRIS); doc.text(detalle, M, y + 7); }
         y += 18;
         bloqueFirma(y);
     } else {

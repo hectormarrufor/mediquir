@@ -7,7 +7,7 @@ import { notifications } from '@mantine/notifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconArrowLeft, IconBan, IconCheck, IconFileTypePdf, IconPlus, IconTrash } from '@tabler/icons-react';
 import { fechaCaracas } from '@/app/constants/hora';
-import { TIPOS_PAGO, FORMAS_PAGO, ESTADOS_PAGO, totalesPago, fechaCorta, textoPeriodo } from '@/app/constants/pagosEmpleados';
+import { TIPOS_PAGO, FORMAS_PAGO_ACTIVAS, ESTADOS_PAGO, totalesPago, fechaCorta, textoPeriodo } from '@/app/constants/pagosEmpleados';
 import { abrirReciboPdf, montoEnLetras } from './_lib/reciboPdf';
 import { useVolver } from '@/app/helpers/useVolver';
 
@@ -83,7 +83,7 @@ function FormularioRecibo({ opened, onClose, empleados, historial }) {
                         <NumberInput label="Monto (Bs)" withAsterisk min={0} decimalScale={2} thousandSeparator="." decimalSeparator="," hideControls value={f.monto} onChange={(v) => set({ monto: v })} />
                         <TextInput label="Por concepto de" value={f.conceptoTexto} onChange={(e) => set({ conceptoTexto: e.currentTarget.value })} placeholder={conceptoQuincena} maxLength={250} />
                         <Group grow align="flex-start">
-                            <Select label="¿Cómo se pagó?" allowDeselect={false} value={f.formaPago} onChange={(v) => set({ formaPago: v })} data={Object.entries(FORMAS_PAGO).map(([value, label]) => ({ value, label }))} />
+                            <Select label="¿Cómo se pagó?" allowDeselect={false} value={f.formaPago} onChange={(v) => set({ formaPago: v })} data={Object.entries(FORMAS_PAGO_ACTIVAS).map(([value, label]) => ({ value, label }))} />
                             <TextInput label="Referencia (opcional)" value={f.referencia} onChange={(e) => set({ referencia: e.currentTarget.value })} maxLength={100} />
                         </Group>
                         {t.totalCobrar > 0 && <Text size="sm" c="dimmed">La cantidad de: <b>{montoEnLetras(t.totalCobrar)}</b></Text>}

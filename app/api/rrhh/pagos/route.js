@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
 import db from '@/models';
 import { fechaCaracas } from '@/app/constants/hora';
-import { TIPOS_PAGO, FORMAS_PAGO, totalesPago } from '@/app/constants/pagosEmpleados';
+import { TIPOS_PAGO, FORMAS_PAGO_ACTIVAS, totalesPago } from '@/app/constants/pagosEmpleados';
 import { requerirAdministracion, nombreDe, FECHA } from './_lib';
 
 export const dynamic = 'force-dynamic';
@@ -70,8 +70,8 @@ export async function POST(request) {
 
         let formaPago = null, referencia = null, conceptoTexto = null;
         if (tipo === 'QUINCENA') {
-            formaPago = Object.keys(FORMAS_PAGO).includes(b.formaPago) ? b.formaPago : null;
-            if (!formaPago) return NextResponse.json({ error: 'Elige cómo se pagó (efectivo, cheque o transferencia)' }, { status: 400 });
+            formaPago = Object.keys(FORMAS_PAGO_ACTIVAS).includes(b.formaPago) ? b.formaPago : null;
+            if (!formaPago) return NextResponse.json({ error: 'Elige cómo se pagó (transferencia o pago móvil)' }, { status: 400 });
             referencia = String(b.referencia || '').trim().slice(0, 100) || null;
             conceptoTexto = String(b.conceptoTexto || conceptos[0].concepto).trim().slice(0, 250);
             conceptos = [{ concepto: conceptoTexto, asignacion: t.totalCobrar, deduccion: 0 }];
