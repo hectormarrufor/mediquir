@@ -1,13 +1,15 @@
 'use client';
 
-import React, { use } from 'react';
+import React, { use, useState } from 'react';
+import { notifications } from '@mantine/notifications';
+import { abrirEstadoCuentaPdf } from '../_components/estadoCuentaPdf';
 import { useQuery } from '@tanstack/react-query';
 import { 
     Box, Paper, Title, Text, Avatar, Group, Badge, Grid, 
     Tabs, Table, Stack, Center, Loader, ActionIcon, Card, Button
 } from '@mantine/core';
 import { useRouter } from 'next/navigation';
-import { IconArrowLeft, IconEdit, IconReceipt2, IconAlertCircle, IconMapPin, IconPhone, IconMail, IconCash, IconBrandWhatsapp } from '@tabler/icons-react';
+import { IconArrowLeft, IconEdit, IconReceipt2, IconAlertCircle, IconMapPin, IconPhone, IconMail, IconCash, IconBrandWhatsapp, IconFileTypePdf } from '@tabler/icons-react';
 import dayjs from 'dayjs';
 import { formatearFecha } from '@/app/constants/hora';
 import { telefonoWhatsapp } from '../_components/AccesoModal';
@@ -20,6 +22,17 @@ function EstadoCuenta({ cliente, router }) {
     const ec = cliente.estadoCuenta || { pendientes: [], pagos: [], total: 0 };
     const vencido = ec.pendientes.filter((p) => p.estado === 'vencido').reduce((a, p) => a + p.saldo, 0);
     const wa = telefonoWhatsapp(cliente.telefono);
+    const [generandoPdf, setGenerandoPdf] = useState(false);
+    const generarPdf = async () => {
+        setGenerandoPdf(true);
+        try {
+            await abrirEstadoCuentaPdf(cliente);
+        } catch (e) {
+            notifications.show({ color: 'red', title: 'No se pudo generar el PDF', message: e.message });
+        } finally {
+            setGenerandoPdf(false);
+        }
+    };
     const textoWa = `Hola ${cliente.nombre || ''}, te escribimos de Mediquir. Tu saldo pendiente es de ${fmtUsd(ec.total)}: ${ec.pendientes.map((p) => `${p.numero} (${fmtUsd(p.saldo)}${p.vence ? `, vence ${formatearFecha(p.vence)}` : ''})`).join('; ')}. ¡Gracias!`;
     return (
         <Grid gutter="md">
@@ -30,9 +43,12 @@ function EstadoCuenta({ cliente, router }) {
                             <Text fw={800} c="navy.9">Documentos con saldo</Text>
                             <Text size="sm" c="dimmed">Total pendiente <b>{fmtUsd(ec.total)}</b>{vencido > 0 ? ` · vencido ${fmtUsd(vencido)}` : ''}</Text>
                         </Box>
-                        {wa && ec.pendientes.length > 0 && (
-                            <Button size="xs" color="green" variant="light" leftSection={<IconBrandWhatsapp size={16} />} component="a" href={`https://wa.me/${wa}?text=${encodeURIComponent(textoWa)}`} target="_blank">Enviar estado de cuenta</Button>
-                        )}
+                        <Group gap="xs">
+                            <Button size="xs" color="navy.9" variant="light" leftSection={<IconFileTypePdf size={16} />} loading={generandoPdf} onClick={generarPdf}>Estado de cuenta en PDF</Button>
+                            {wa && ec.pendientes.length > 0 && (
+                                <Button size="xs" color="green" variant="light" leftSection={<IconBrandWhatsapp size={16} />} component="a" href={`https://wa.me/${wa}?text=${encodeURIComponent(textoWa)}`} target="_blank">Enviar estado de cuenta</Button>
+                            )}
+                        </Group>
                     </Group>
                     {!ec.pendientes.length ? <Text c="dimmed" size="sm" py="md">Este cliente no debe nada.</Text> : (
                         <Table.ScrollContainer minWidth={520}>
