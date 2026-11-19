@@ -550,7 +550,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
 
     let montoRetencion = 0;
     // De contado se paga ya: la retención no puede quedar para el pago
-    const retencionModo = formCompra.values.condicionPago === 'Contado' && formCompra.values.retencionModo === 'despues' ? 'ahora' : formCompra.values.retencionModo;
+    const retencionModo = !CONFIG_FISCAL.agenteRetencionIva ? 'no' : formCompra.values.condicionPago === 'Contado' && formCompra.values.retencionModo === 'despues' ? 'ahora' : formCompra.values.retencionModo;
     if (retencionModo === 'ahora' && esFactura && montoIva > 0) {
         // Lo mismo que dirá el comprobante: IVA en Bs (a céntimos) × %, a céntimos (app/constants/facturacion.js)
         montoRetencion = retencionCompra({ moneda: formCompra.values.moneda, tasaCambio: tasa, montoIva, porcentaje: formCompra.values.porcentajeRetencion }).enMoneda;
@@ -817,7 +817,7 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
                             ? <Text span size="xs">BCV hoy {tasaBcv} · <Text span size="xs" c="blue" style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setTasaFactura(null)}>usar la de hoy</Text></Text>
                             : 'BCV de hoy, o la que imprima la factura'} />
                 </Grid.Col>
-                {esFactura && montoIva > 0 && (
+                {esFactura && CONFIG_FISCAL.agenteRetencionIva && montoIva > 0 && (
                     <Grid.Col span={{ base: 12, md: 'auto' }}>
                         <Group gap="sm" wrap="nowrap" align="flex-end">
                             <Select size="sm" w={170} label="Retención de IVA" allowDeselect={false} value={retencionModo} onChange={(v) => formCompra.setFieldValue('retencionModo', v)}

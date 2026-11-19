@@ -22,7 +22,7 @@ export const AGENTE_RETENCION = {
 // SUPUESTO (confírmalo con tu contador): la empresa es AGENTE DE RETENCIÓN de IVA y retiene el 75 % del IVA de toda factura de compra
 // con IVA, como se ve en el libro de compras de ejemplo. Si dejara de serlo, pon agenteRetencionIva en false.
 export const CONFIG_FISCAL = {
-    agenteRetencionIva: true,
+    agenteRetencionIva: false, // ya NO somos agentes de retención: las facturas de compra no retienen IVA
     porcentajeRetencionCompras: 75,
     alicuotaGeneral: 16,
     agencia: 'Oficina Principal',
