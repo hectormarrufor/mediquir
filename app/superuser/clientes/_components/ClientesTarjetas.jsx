@@ -6,6 +6,7 @@ import React from 'react';
 import { ActionIcon, Badge, Box, Button, Card, Group, Menu, Stack, Text } from '@mantine/core';
 import { IconBrandWhatsapp, IconDotsVertical, IconEye, IconKey, IconMapPin, IconPhone } from '@tabler/icons-react';
 import { formatearFecha } from '@/app/constants/hora';
+import EstadoCuentaAcciones from './EstadoCuentaAcciones';
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -63,6 +64,7 @@ export default function ClientesTarjetas({ filas, esVendedor, permisos, onFicha,
                             {f.telefono ? (
                                 <Button component="a" href={`tel:${String(f.telefono).replace(/[^\d+]/g, '')}`} size="sm" variant="light" leftSection={<IconPhone size={16} />} style={{ minWidth: 0 }}>{f.telefono}</Button>
                             ) : <Button size="sm" variant="default" disabled leftSection={<IconPhone size={16} />}>Sin teléfono</Button>}
+                            {!esVendedor && <EstadoCuentaAcciones clienteId={f.id} size="sm" />}
                             {wa && <Button component="a" href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer" size="sm" variant="light" color="green" leftSection={<IconBrandWhatsapp size={16} />} style={{ flex: '0 0 auto' }}>WhatsApp</Button>}
                         </Group>
                     </Card>

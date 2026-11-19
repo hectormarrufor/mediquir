@@ -8,6 +8,7 @@ import { IconChevronDown, IconChevronRight, IconCoin, IconReceipt, IconTrash } f
 import CeldaEditable from './CeldaEditable';
 import { EstadoDocumento, MenuDocumento } from './PiezasLibro';
 import NumeroFactura from './NumeroFactura';
+import EstadoCuentaAcciones from '@/app/superuser/clientes/_components/EstadoCuentaAcciones';
 import { DESPLAZAMIENTO_CABECERA, fmtFecha, useAnchoGrande, usd } from './utilidades';
 import classes from './cxc.module.css';
 
@@ -110,7 +111,10 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
                             <Table.Td ta="right"><Text fz={12} fw={700} pr={6} c="#1971c2">{usd(g.abonado)}</Text></Table.Td>
                             <Table.Td ta="right"><Text size="sm" fw={800} pr={6} c={g.vencido > 0 ? 'red.8' : 'navy.9'}>{usd(g.saldo)}</Text></Table.Td>
                             <Table.Td colSpan={columnas - 11} ta="right">
-                                {g.filas.some((f) => !f.manual && f.abonos.some((a) => a.monto > 0)) && <Button size="compact-xs" variant="light" color="teal" leftSection={<IconReceipt size={13} />} onClick={(e) => { e.stopPropagation(); acc.recibo(g); }} aria-label={`Recibo de cobro de ${g.nombre}`}>Recibo</Button>}
+                                <Group gap={4} wrap="nowrap" justify="flex-end">
+                                    <EstadoCuentaAcciones clienteId={g.id} variante="icono" />
+                                    {g.filas.some((f) => !f.manual && f.abonos.some((a) => a.monto > 0)) && <Button size="compact-xs" variant="light" color="teal" leftSection={<IconReceipt size={13} />} onClick={(e) => { e.stopPropagation(); acc.recibo(g); }} aria-label={`Recibo de cobro de ${g.nombre}`}>Recibo</Button>}
+                                </Group>
                             </Table.Td>
                         </Table.Tr>
                         {abierto(g.id) && g.filas.map((f) => (

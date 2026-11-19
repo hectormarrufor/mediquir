@@ -159,21 +159,69 @@ async function logoPng() {
     }
 }
 
+async function crearDoc(cliente) {
+    const [{ jsPDF }, { default: autoTable }, logo] = await Promise.all([import('jspdf'), import('jspdf-autotable'), logoPng()]);
+    const ahora = new Date();
+    const generado = {
+        fecha: ahora.toLocaleDateString('es-VE', { timeZone: 'America/Caracas' }),
+        completo: ahora.toLocaleString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'short', timeStyle: 'short' }),
+    };
+    const doc = construirPdf({ jsPDF, autoTable, cliente, logo, generado });
+    doc.setProperties({ title: `Estado de cuenta ${cliente.nombre || cliente.identificacion || ''}` });
+    return doc;
+}
+
+export const nombreArchivoEstadoCuenta = (cliente) => `estado-de-cuenta-${String(cliente.nombre || cliente.identificacion || cliente.id || 'cliente').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}.pdf`;
+
+// El cliente con su estado de cuenta (documentos con saldo y últimos pagos), tal como lo entrega la ficha
+export async function cargarClienteConEstadoCuenta(id) {
+    const res = await fetch(`/api/clientes/${id}`);
+    const cuerpo = await res.json().catch(() => null);
+    if (!res.ok || !cuerpo) throw new Error(cuerpo?.error || 'No se pudo cargar el estado de cuenta del cliente');
+    return cuerpo;
+}
+
+export async function blobEstadoCuenta(cliente) {
+    return (await crearDoc(cliente)).output('blob');
+}
+
+export async function descargarEstadoCuentaPdf(cliente) {
+    const blob = await blobEstadoCuenta(cliente);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nombreArchivoEstadoCuenta(cliente);
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+// Teléfono móvil venezolano (0412, 0414, 0416, 0422, 0424, 0426 o +58 4xx) -> 58414XXXXXXX para wa.me.
+// Los fijos (02xx / +58 2xx) y todo lo que no parezca un móvil dan '' (no se manda a un chat en particular).
+export function whatsappMovil(tel) {
+    const d = String(tel || '').split(/[/,;]/)[0].replace(/\D/g, '');
+    const local = d.startsWith('58') ? d.slice(2) : d.replace(/^0+/, '');
+    return /^4(12|14|16|22|24|26)\d{7}$/.test(local) ? `58${local}` : '';
+}
+
+// Mensaje alusivo para WhatsApp
+export function mensajeEstadoCuenta(cliente) {
+    const ec = cliente.estadoCuenta || { pendientes: [], total: 0 };
+    const vencido = ec.pendientes.filter((p) => p.estado === 'vencido').reduce((a, p) => a + p.saldo, 0);
+    const fecha = new Date().toLocaleDateString('es-VE', { timeZone: 'America/Caracas' });
+    const saludo = `Hola${cliente.nombre ? ` ${cliente.nombre}` : ''}, te saludamos de ${MEMBRETE_MEDIQUIR.nombre}.`;
+    if (!ec.pendientes.length) return `${saludo} Te enviamos tu estado de cuenta al ${fecha}: no tienes saldo pendiente con nosotros. ¡Gracias por tu preferencia!`;
+    const n = ec.pendientes.length;
+    return `${saludo} Te enviamos tu estado de cuenta al ${fecha}: tienes ${n} documento${n === 1 ? '' : 's'} con saldo pendiente por un total de ${usd(ec.total)}${vencido > 0 ? `, de los cuales ${usd(vencido)} ya están vencidos` : ''}. En el PDF adjunto está el detalle. Cualquier duda, estamos a la orden. ¡Gracias!`;
+}
+
 // Abre el PDF en una pestaña nueva (visor del navegador: descargar o imprimir). Si el navegador bloquea la pestaña, lo descarga.
-export async function abrirEstadoCuentaPdf(cliente) {
-    const pestana = window.open('', '_blank'); // se abre ya, con el toque del usuario, para que no la bloqueen
+// Recibe el cliente o una función que lo carga (la pestaña se abre ya, con el toque del usuario, para que no la bloqueen).
+export async function abrirEstadoCuentaPdf(clienteOCarga) {
+    const pestana = window.open('', '_blank');
     try {
-        const [{ jsPDF }, { default: autoTable }, logo] = await Promise.all([import('jspdf'), import('jspdf-autotable'), logoPng()]);
-        const ahora = new Date();
-        const generado = {
-            fecha: ahora.toLocaleDateString('es-VE', { timeZone: 'America/Caracas' }),
-            completo: ahora.toLocaleString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'short', timeStyle: 'short' }),
-        };
-        const doc = construirPdf({ jsPDF, autoTable, cliente, logo, generado });
-        const nombre = `estado-de-cuenta-${(cliente.identificacion || cliente.id || 'cliente').toString().replace(/[^\w-]+/g, '')}`;
-        doc.setProperties({ title: `Estado de cuenta ${cliente.nombre || cliente.identificacion || ''}` });
+        const cliente = typeof clienteOCarga === 'function' ? await clienteOCarga() : clienteOCarga;
+        const doc = await crearDoc(cliente);
         if (pestana) pestana.location.href = String(doc.output('bloburl'));
-        else doc.save(`${nombre}.pdf`);
+        else doc.save(nombreArchivoEstadoCuenta(cliente));
     } catch (e) {
         pestana?.close();
         throw e;

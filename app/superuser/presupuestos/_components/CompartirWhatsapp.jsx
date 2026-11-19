@@ -28,7 +28,7 @@ const descargar = (blob, nombre) => {
     setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
 
-export default function CompartirPresupuestoModal({ opened, onClose, mensajeInicial, telefonoInicial = '', nombreArchivo, generarPdf }) {
+export default function CompartirPresupuestoModal({ opened, onClose, mensajeInicial, telefonoInicial = '', nombreArchivo, generarPdf, numeroDeChat = telefonoWhatsapp, etiquetaMensaje = 'Mensaje para el cliente', descripcionTelefono = 'Solo se usa en la computadora, para abrir su conversación' }) {
     const [mensaje, setMensaje] = useState(mensajeInicial);
     const [telefono, setTelefono] = useState(telefonoInicial);
     const [estado, setEstado] = useState('idle'); // idle | preparando | listo | error
@@ -61,7 +61,7 @@ export default function CompartirPresupuestoModal({ opened, onClose, mensajeInic
             return;
         }
         descargar(pdf.current, nombreArchivo);
-        const tel = telefonoWhatsapp(telefono);
+        const tel = numeroDeChat(telefono);
         window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`, '_blank', 'noopener');
         notifications.show({ color: 'teal', title: 'PDF descargado', message: 'WhatsApp se abrió con el mensaje: arrastra o adjunta el PDF que se descargó a la conversación.', autoClose: 9000 });
         onClose();
@@ -70,8 +70,8 @@ export default function CompartirPresupuestoModal({ opened, onClose, mensajeInic
     return (
         <Modal {...PANTALLA_COMPLETA_MOVIL} opened={opened} onClose={onClose} centered title={<Text fw={800}>Compartir por WhatsApp</Text>}>
             <Stack gap="sm">
-                <Textarea label="Mensaje para el cliente" description="Puedes cambiarlo antes de enviarlo" autosize minRows={6} maxRows={12} value={mensaje} onChange={(e) => setMensaje(e.currentTarget.value)} />
-                <TextInput label="WhatsApp del cliente (opcional)" description="Solo se usa en la computadora, para abrir su conversación" placeholder="0414-1234567" inputMode="tel" value={telefono} onChange={(e) => setTelefono(e.currentTarget.value)} />
+                <Textarea label={etiquetaMensaje} description="Puedes cambiarlo antes de enviarlo" autosize minRows={6} maxRows={12} value={mensaje} onChange={(e) => setMensaje(e.currentTarget.value)} />
+                <TextInput label="WhatsApp del cliente (opcional)" description={descripcionTelefono} placeholder="0414-1234567" inputMode="tel" value={telefono} onChange={(e) => setTelefono(e.currentTarget.value)} />
                 {estado === 'preparando' && <Group gap="xs"><Loader size="xs" /><Text size="sm" c="dimmed">Preparando el PDF…</Text></Group>}
                 {estado === 'error' && <Alert color="red" p="xs">{error}</Alert>}
                 <Group justify="space-between" gap="xs" wrap="wrap">

@@ -8,6 +8,7 @@ import { Badge, Box, Button, Collapse, Group, Stack, Text, UnstyledButton } from
 import { IconAlertTriangle, IconChevronDown, IconCoin, IconPencil, IconReceipt } from '@tabler/icons-react';
 import { MenuDocumento } from './PiezasLibro';
 import NumeroFactura from './NumeroFactura';
+import EstadoCuentaAcciones from '@/app/superuser/clientes/_components/EstadoCuentaAcciones';
 import { bolivares, dolares, fmtFecha, usd, vencimientoEnPalabras } from './utilidades';
 import classes from './cxc.module.css';
 
@@ -110,6 +111,7 @@ export default function LibroTarjetas({ grupos, acc, buscando }) {
                         </UnstyledButton>
                         {abierto && (
                             <Stack gap={8} p={8}>
+                                <EstadoCuentaAcciones clienteId={g.id} size="sm" />
                                 {g.filas.some((x) => !x.manual && x.abonos.some((a) => a.monto > 0)) && <Button size="sm" variant="light" color="teal" leftSection={<IconReceipt size={16} />} onClick={() => acc.recibo(g)}>Recibo de cobro de {g.nombre}</Button>}
                                 {g.filas.map((f) => <TarjetaDocumento key={f.id} f={f} g={g} acc={acc} />)}
                             </Stack>

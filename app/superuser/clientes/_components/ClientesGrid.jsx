@@ -9,6 +9,7 @@ import { validarCampoCliente } from '@/app/constants/clienteCampos';
 import classes from '../../inventario/productos/_components/grid.module.css';
 import { OPCIONES, textoEdicion } from './columnasClientes';
 import FotoClienteModal from './FotoClienteModal';
+import EstadoCuentaAcciones from './EstadoCuentaAcciones';
 import { telefonoWhatsapp } from './AccesoModal';
 
 const BLOB = process.env.NEXT_PUBLIC_IMG_BASE;
@@ -214,6 +215,8 @@ export default function ClientesGrid({ filas, columnas, permisos, orden, onOrden
             case 'usuario': return fila.usuario ? <Badge color="teal" variant="light" size="sm" tt="none">{fila.usuario}</Badge> : <Badge color="gray" variant="outline" size="sm">Sin acceso</Badge>;
             case 'acciones':
                 return (
+                    <Group gap={2} wrap="nowrap" justify="flex-end" onClick={(e) => e.stopPropagation()}>
+                    {permisos?.editar && <EstadoCuentaAcciones clienteId={fila.id} variante="icono" />}
                     <Menu position="bottom-end" withinPortal shadow="md">
                         <Menu.Target><ActionIcon variant="subtle" color="gray" aria-label="Acciones"><IconDotsVertical size={16} /></ActionIcon></Menu.Target>
                         <Menu.Dropdown>
@@ -222,6 +225,7 @@ export default function ClientesGrid({ filas, columnas, permisos, orden, onOrden
                             {telefonoWhatsapp(fila.telefono) && <Menu.Item component="a" href={`https://wa.me/${telefonoWhatsapp(fila.telefono)}`} target="_blank" leftSection={<IconBrandWhatsapp size={14} />}>WhatsApp</Menu.Item>}
                         </Menu.Dropdown>
                     </Menu>
+                    </Group>
                 );
             default: {
                 const v = fila[col.campo];
