@@ -6,7 +6,7 @@ import { useForm } from '@mantine/form';
 import {
     Box, Button, Group, Title, TextInput, NumberInput,
     Select, Paper, Stack, Grid, Modal, ActionIcon,
-    Text, Divider, Badge, TagsInput, Checkbox, Center, Loader
+    Text, Divider, Badge, TagsInput, Checkbox, Center, Loader, Textarea
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
@@ -15,6 +15,7 @@ import ImageDropzone from '@/app/components/ImageDropzone';
 import FotoProducto from '@/app/components/admin/FotoProducto';
 import { capitalizarPalabras } from '@/app/handlers/formatters';
 import { PRESENTACIONES } from '@/app/constants/inventarioCampos';
+import { adicionalATexto, fichaATexto, puntosATexto, textoAAdicional, textoAFicha, textoAPuntos } from '@/app/lib/fichaTexto';
 
 
 // onGuardado / onCancelar: para usarlo dentro de otra pantalla (p. ej. crear un producto al vuelo en una compra, en una ventana):
@@ -65,7 +66,9 @@ export default function ProductoForm({ productId = null, onGuardado = null, onCa
             nombre: '', codigo: '', codigoBarras: '', codigoBarrasCaja: '', codigoBarrasBulto: '', categoriaId: '', marcaId: '', grupoEquivalenciaId: '',
             tags: [], costoUsd: '', precio6: '', precio7: '', porcentajeDescuento: '',
             conIva: true, presentacion: 'unidad', unidadesPorCaja: '', cajasPorBulto: '', unidadesPorBulto: '',
-            stockAlmacen: '', stockMinimo: '', imagen: null
+            stockAlmacen: '', stockMinimo: '', imagen: null,
+            // Ficha de la tienda (se editan como texto; ver app/lib/fichaTexto.js)
+            descripcion: '', fichaPuntos: '', fichaTecnicaTxt: '', fichaAdicional: ''
         },
         validate: {
             nombre: (value) => (!value || value.trim().length < 3 ? 'Mínimo 3 caracteres' : null),
@@ -118,7 +121,11 @@ export default function ProductoForm({ productId = null, onGuardado = null, onCa
                 unidadesPorBulto: productoDB.unidadesPorCaja ? '' : (productoDB.unidadesPorBulto || ''),
                 stockAlmacen: Number(productoDB.stockAlmacen),
                 stockMinimo: Number(productoDB.stockMinimo),
-                imagen: productoDB.imagen || null
+                imagen: productoDB.imagen || null,
+                descripcion: productoDB.descripcion || '',
+                fichaPuntos: puntosATexto(productoDB.puntosClave),
+                fichaTecnicaTxt: fichaATexto(productoDB.fichaTecnica),
+                fichaAdicional: adicionalATexto(productoDB.infoAdicional)
             });
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -179,6 +186,14 @@ export default function ProductoForm({ productId = null, onGuardado = null, onCa
             };
 
             delete payload.conIva;
+
+            // Ficha de la tienda: texto -> listas (vacío = sin ese bloque)
+            payload.descripcion = String(values.descripcion || '').trim() || null;
+            payload.puntosClave = textoAPuntos(values.fichaPuntos);
+            payload.fichaTecnica = textoAFicha(values.fichaTecnicaTxt);
+            payload.infoAdicional = textoAAdicional(values.fichaAdicional);
+            if (payload.descripcion || payload.puntosClave || payload.fichaTecnica || payload.infoAdicional) payload.fichaActualizadaAt = new Date().toISOString();
+            delete payload.fichaPuntos; delete payload.fichaTecnicaTxt; delete payload.fichaAdicional;
 
             // 🔥 AHORA SOLO GUARDAMOS EL PORCENTAJE DIRECTAMENTE 🔥
             if (Number(values.porcentajeDescuento) > 0) {
@@ -482,6 +497,18 @@ export default function ProductoForm({ productId = null, onGuardado = null, onCa
                     <Paper withBorder shadow="sm" p="xl" radius="md" bg="white">
                         <Title order={4} mb="md" c="gray.7">4. Imagen del Insumo</Title>
                         <FotoProducto form={form} nombre={form.values.nombre} marca={marcas?.find((m) => m.id.toString() === form.values.marcaId)?.nombre} />
+                    </Paper>
+
+                    {/* SECCIÓN 5: FICHA PARA LA TIENDA (la página propia del producto) */}
+                    <Paper withBorder shadow="sm" p="xl" radius="md" bg="white">
+                        <Title order={4} mb="xs" c="gray.7">5. Ficha para la tienda</Title>
+                        <Text size="sm" c="dimmed" mb="md">Lo que el cliente lee en la página del producto. Todo es opcional; lo que se deje vacío no se muestra.</Text>
+                        <Stack gap="md">
+                            <Textarea label="Características (descripción)" description="Qué es y para qué sirve. Deja una línea en blanco entre párrafos." autosize minRows={3} maxRows={10} {...form.getInputProps('descripcion')} />
+                            <Textarea label="Información importante" description="Una viñeta por línea." autosize minRows={3} maxRows={10} {...form.getInputProps('fichaPuntos')} />
+                            <Textarea label="Ficha técnica" description="Una fila por línea, así: Material: Nitrilo. (La marca, la categoría, la presentación y el código ya salen solos.)" autosize minRows={3} maxRows={12} {...form.getInputProps('fichaTecnicaTxt')} />
+                            <Textarea label="Información adicional (secciones que se despliegan)" description="Una sección por línea, así: Modo de uso: texto de la sección." autosize minRows={3} maxRows={12} {...form.getInputProps('fichaAdicional')} />
+                        </Stack>
                     </Paper>
 
                     {/* BOTONES DE ACCIÓN */}
