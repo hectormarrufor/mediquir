@@ -19,7 +19,7 @@ export default function BrandLogo() {
             display="block"
             h={{ base: 42, sm: 50 }}
             w="auto"
-            style={{ filter: 'contrast(1.15) saturate(1.2)' }}
+            style={{ filter: 'contrast(1.35) saturate(1.35) brightness(0.88) drop-shadow(0 0 0.4px rgba(11, 27, 61, 0.55))' }}
         />
     );
 }

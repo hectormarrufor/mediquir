@@ -17,7 +17,8 @@
     height: 52px;
     margin: 8px 10px 0;
     border-radius: 16px;
-    background: rgba(255, 255, 255, 0.74);
+    /* Blanco casi sólido del lado del logo (para que el azul marino resalte) y vidrio esmerilado hacia la derecha */
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.96) 22%, rgba(255, 255, 255, 0.74) 42%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
     backdrop-filter: blur(20px) saturate(180%);
     border: 1px solid rgba(11, 27, 61, 0.07);
@@ -51,7 +52,7 @@
 
 /* Al hacer scroll: más opaca y con más sombra para separarse del contenido */
 .barra[data-scrolled] {
-    background: rgba(255, 255, 255, 0.9);
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.99) 0%, rgba(255, 255, 255, 0.98) 22%, rgba(255, 255, 255, 0.9) 42%);
     border-color: rgba(11, 27, 61, 0.09);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 1),
