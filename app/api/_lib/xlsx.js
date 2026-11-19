@@ -19,7 +19,7 @@ const crc32 = (buf) => {
     return (c ^ 0xffffffff) >>> 0;
 };
 
-function zip(archivos) {
+export function zip(archivos) {
     const partes = [];
     const central = [];
     let offset = 0;
@@ -70,11 +70,11 @@ function zip(archivos) {
 }
 
 // ---------- Hoja ----------
-const xml = (s) => String(s)
+export const xml = (s) => String(s)
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, '') // caracteres que el XML no admite
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-const letra = (i) => { // 0 -> A, 25 -> Z, 26 -> AA
+export const letra = (i) => { // 0 -> A, 25 -> Z, 26 -> AA
     let s = '';
     for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
     return s;

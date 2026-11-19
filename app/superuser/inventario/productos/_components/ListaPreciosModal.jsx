@@ -3,8 +3,8 @@
 import React, { useState } from 'react';
 import { Alert, Box, Button, Group, Modal, Progress, SegmentedControl, Stack, Switch, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconFileTypePdf, IconInfoCircle } from '@tabler/icons-react';
-import { descargarListaPrecios } from '../_lib/listaPreciosPdf';
+import { IconFileSpreadsheet, IconFileTypePdf, IconInfoCircle } from '@tabler/icons-react';
+import { descargarListaPrecios, descargarListaPreciosExcel } from '../_lib/listaPreciosPdf';
 import { aQueryString } from '../_hooks/useInventarioParams';
 
 const FRASE = {
@@ -21,17 +21,32 @@ export default function ListaPreciosModal({ opened, onClose, params, hayFiltros 
     const [incluirSinPrecio, setIncluirSinPrecio] = useState(false);
     const [usarFiltros, setUsarFiltros] = useState(false);
     const [progreso, setProgreso] = useState(null); // { fase, hecho, total }
-    const generando = progreso !== null;
+    const [generandoExcel, setGenerandoExcel] = useState(false);
+    const generando = progreso !== null || generandoExcel;
+
+    const opcionesActuales = () => {
+        // Los filtros de la hoja (búsqueda, categoría, marca, grupo, etiqueta, ofertas); sin paginación
+        const { page: _p, pageSize: _s, sort: _o, dir: _d, stock: _e, ...filtros } = params;
+        return { precio: Number(precio), incluirPrecioCaja, soloConStock, incluirSinPrecio, filtros: usarFiltros ? aQueryString(filtros) : null };
+    };
+
+    const generarExcel = async () => {
+        setGenerandoExcel(true);
+        try {
+            const nombre = await descargarListaPreciosExcel(opcionesActuales());
+            notifications.show({ color: 'teal', title: 'Excel descargado', message: nombre });
+            onClose();
+        } catch (e) {
+            notifications.show({ color: 'red', title: 'No se pudo generar el Excel', message: e.message });
+        } finally {
+            setGenerandoExcel(false);
+        }
+    };
 
     const generar = async () => {
         setProgreso({ fase: 'datos' });
         try {
-            // Los filtros de la hoja (búsqueda, categoría, marca, grupo, etiqueta, ofertas); sin paginación
-            const { page: _p, pageSize: _s, sort: _o, dir: _d, stock: _e, ...filtros } = params;
-            const r = await descargarListaPrecios({
-                precio: Number(precio), incluirPrecioCaja, soloConStock, incluirSinPrecio,
-                filtros: usarFiltros ? aQueryString(filtros) : null,
-            }, setProgreso);
+            const r = await descargarListaPrecios(opcionesActuales(), setProgreso);
 
             const { producto, grupo, marca, sin } = r.imagenes;
             notifications.show({
@@ -51,7 +66,7 @@ export default function ListaPreciosModal({ opened, onClose, params, hayFiltros 
 
     return (
         <Modal opened={opened} onClose={generando ? () => {} : onClose} closeOnClickOutside={!generando} withCloseButton={!generando} centered size="md"
-            title={<Group gap="xs"><IconFileTypePdf size={20} /><Text fw={800}>Lista de precios (PDF)</Text></Group>}>
+            title={<Group gap="xs"><IconFileTypePdf size={20} /><Text fw={800}>Lista de precios</Text></Group>}>
             <Stack gap="md">
                 <Box>
                     <Text size="sm" fw={600} mb={6}>¿Con cuál precio?</Text>
@@ -74,7 +89,7 @@ export default function ListaPreciosModal({ opened, onClose, params, hayFiltros 
                     <Text size="xs">Cada producto lleva su propia foto; si no tiene, la de su grupo de equivalencia; y si tampoco, la de su marca. Los precios se muestran exactos, sin redondear.</Text>
                 </Alert>
 
-                {generando && (
+                {progreso && (
                     <Box>
                         <Text size="sm" c="dimmed" mb={4}>
                             {progreso.fase === 'imagenes' ? `Descargando fotos… ${progreso.hecho} de ${progreso.total}` : FRASE[progreso.fase]}
@@ -83,9 +98,15 @@ export default function ListaPreciosModal({ opened, onClose, params, hayFiltros 
                     </Box>
                 )}
 
-                <Button fullWidth size="md" color="navy.9" leftSection={<IconFileTypePdf size={18} />} loading={generando} onClick={generar} tt="none">
-                    Descargar lista de precio {precio}
-                </Button>
+                <Group grow gap="sm">
+                    <Button size="md" color="navy.9" leftSection={<IconFileTypePdf size={18} />} loading={progreso !== null} disabled={generandoExcel} onClick={generar} tt="none">
+                        PDF con fotos
+                    </Button>
+                    <Button size="md" color="teal" leftSection={<IconFileSpreadsheet size={18} />} loading={generandoExcel} disabled={progreso !== null} onClick={generarExcel} tt="none">
+                        Excel
+                    </Button>
+                </Group>
+                <Text size="xs" c="dimmed" ta="center" mt={-6}>Lista de precio {precio}: los dos llevan el membrete de Mediquir y los productos agrupados por categoría. El Excel va sin fotos.</Text>
             </Stack>
         </Modal>
     );

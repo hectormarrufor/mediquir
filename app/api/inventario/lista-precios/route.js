@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { Producto, Categoria, Marca, GrupoEquivalencia } from '@/models';
 import { requerirStaff } from '../_lib';
 import { leerParametros, construirWhere } from '../productos/_consulta';
+import { crearXlsxListaPrecios } from '@/app/api/_lib/xlsxListaPrecios';
+import { NOTA_IVA, presentacionDe } from '@/app/superuser/inventario/productos/_lib/listaPreciosPdf';
+import { montoRenglon } from '@/app/constants/facturacion';
 
 const ETIQUETAS = { 6: 'Precio 6 (Mayor)', 7: 'Precio 7 (Detal)' };
 const num = (v) => (v === null || v === undefined ? null : Number(v));
@@ -69,6 +72,26 @@ export async function GET(request) {
         filas.sort((a, b) => a.categoria.localeCompare(b.categoria, 'es')
             || texto(a.grupo || a.nombre).localeCompare(texto(b.grupo || b.nombre), 'es')
             || texto(a.nombre).localeCompare(texto(b.nombre), 'es'));
+
+        // ?formato=xlsx: la misma lista en Excel (membrete, título y un bloque por categoría; sin fotos). &caja=1 agrega el precio por caja.
+        if (params.get('formato') === 'xlsx') {
+            const conCaja = params.get('caja') === '1';
+            const buffer = crearXlsxListaPrecios({
+                etiqueta: ETIQUETAS[precio], fecha: new Date().toISOString(), conCaja, notaIva: NOTA_IVA,
+                filas: filas.map((f) => ({
+                    codigo: f.codigo, nombre: f.nombre, marca: f.marca, categoria: f.categoria, presentacion: presentacionDe(f),
+                    precio: f.precio, exento: !(f.porcentajeIva > 0),
+                    precioCaja: conCaja && f.unidadesPorCaja > 0 && f.precio > 0 ? montoRenglon(f.precio, f.unidadesPorCaja) : null,
+                })),
+            });
+            const nombre = `lista-de-precios-${precio}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+            return new NextResponse(buffer, {
+                headers: {
+                    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'Content-Disposition': `attachment; filename="${nombre}"`,
+                },
+            });
+        }
 
         return NextResponse.json({
             precio,

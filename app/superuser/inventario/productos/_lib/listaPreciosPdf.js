@@ -1,5 +1,6 @@
 import { montoRenglon, REGLAS } from '@/app/constants/facturacion';
 import { PAQUETES } from '@/app/constants/presentaciones';
+import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 // Lista de precios en PDF.
 //
 //   construirPdf(...)  -> parte pura: dibuja el documento (se puede probar en Node)
@@ -10,16 +11,18 @@ import { PAQUETES } from '@/app/constants/presentaciones';
 const AZUL_OSCURO = [11, 27, 61];
 const AZUL = [0, 90, 170];
 const AZUL_CLARO = [230, 241, 252];
+const FONDO_MEMBRETE = [240, 246, 253]; // membrete CLARO: el logo (azul marino) contrasta y las letras van en azul marino
+const AZUL_TEXTO = [53, 77, 133];
 const GRIS = [110, 120, 135];
 const GRIS_LINEA = [222, 228, 236];
 
 const PRESENTACION = { unidad: 'Unidad', par: 'Par', ...Object.fromEntries(PAQUETES.map((n) => [`paqx${n}`, `Paquete x${n}`])), cx100: 'Caja x100', cx200: 'Caja x200', metro: 'Metro', rollo: 'Rollo' };
 const FORMATO = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
 
-const NOTA_IVA = `Precios en USD, sin IVA. A los productos gravados se les añade IVA (${REGLAS.alicuotaGeneral}%) al facturar; los marcados (E) son exentos. Monto de cada renglón = precio unitario x cantidad, redondeado a 2 decimales.`;
+export const NOTA_IVA = `Precios en USD, sin IVA. A los productos gravados se les añade IVA (${REGLAS.alicuotaGeneral}%) al facturar; los marcados (E) son exentos. Monto de cada renglón = precio unitario x cantidad, redondeado a 2 decimales.`;
 export const dinero = (v) => `$${FORMATO.format(Number(v) || 0)}`;
 
-const presentacionDe = (f) => PRESENTACION[f.presentacion] || 'Unidad';
+export const presentacionDe = (f) => PRESENTACION[f.presentacion] || 'Unidad';
 
 const fechaLarga = (iso) => new Date(iso).toLocaleDateString('es-VE', { day: '2-digit', month: 'long', year: 'numeric' });
 
@@ -37,7 +40,7 @@ export function construirPdf({ jsPDF, autoTable, datos, imagenes, logo, incluirP
     const ANCHO = doc.internal.pageSize.getWidth();
     const ALTO = doc.internal.pageSize.getHeight();
     const MARGEN = 10;
-    const ALTO_CABECERA = 20;
+    const ALTO_CABECERA = 24;
     const CAJA_FOTO = 11;
 
     const mostrarCaja = Boolean(incluirPrecioCaja);
@@ -87,7 +90,7 @@ export function construirPdf({ jsPDF, autoTable, datos, imagenes, logo, incluirP
         margin: { top: ALTO_CABECERA + 6, right: MARGEN, bottom: 22, left: MARGEN },
         theme: 'plain',
         styles: { font: 'helvetica', fontSize: 8.5, cellPadding: { top: 1.6, bottom: 1.6, left: 2, right: 2 }, textColor: [35, 45, 60], valign: 'middle', lineColor: GRIS_LINEA, lineWidth: { bottom: 0.15 }, overflow: 'linebreak' },
-        headStyles: { fillColor: AZUL_OSCURO, textColor: 255, fontStyle: 'bold', fontSize: 7.5, halign: 'left', lineWidth: 0, cellPadding: { top: 2.2, bottom: 2.2, left: 2, right: 2 } },
+        headStyles: { fillColor: AZUL, textColor: 255, fontStyle: 'bold', fontSize: 7.5, halign: 'left', lineWidth: 0, cellPadding: { top: 2.2, bottom: 2.2, left: 2, right: 2 } },
         columnStyles: {
             0: { cellWidth: anchos.foto, minCellHeight: 13 },
             1: { cellWidth: anchos.codigo, textColor: GRIS },
@@ -121,22 +124,25 @@ export function construirPdf({ jsPDF, autoTable, datos, imagenes, logo, incluirP
     const paginas = doc.getNumberOfPages();
     for (let i = 1; i <= paginas; i += 1) {
         doc.setPage(i);
-        doc.setFillColor(...AZUL_OSCURO);
+        // Membrete claro (como el del Excel): fondo azul muy suave, filo azul de la marca abajo, letras en azul marino
+        doc.setFillColor(...FONDO_MEMBRETE);
         doc.rect(0, 0, ANCHO, ALTO_CABECERA, 'F');
         doc.setFillColor(...AZUL);
         doc.rect(0, ALTO_CABECERA, ANCHO, 0.9, 'F');
 
         if (logo) {
-            const alto = 13;
+            const alto = 16;
             doc.addImage(logo.data, 'PNG', MARGEN, (ALTO_CABECERA - alto) / 2, alto * (logo.w / logo.h), alto, undefined, 'FAST');
         } else {
-            doc.setTextColor(255); doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(16);
-            doc.text('MEDIQUIR', MARGEN, 12.5);
+            doc.setTextColor(...AZUL_OSCURO); doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(16);
+            doc.text('MEDIQUIR', MARGEN, 14);
         }
-        doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
-        doc.text('Lista de precios', ANCHO - MARGEN, 9.5, { align: 'right' });
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(170, 205, 240);
-        doc.text(`${datos.etiqueta} · USD`, ANCHO - MARGEN, 15, { align: 'right' });
+        doc.setTextColor(...AZUL_OSCURO); doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
+        doc.text('LISTA DE PRECIOS', ANCHO - MARGEN, 9.5, { align: 'right' });
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...AZUL);
+        doc.text(`${datos.etiqueta} · USD`, ANCHO - MARGEN, 14.5, { align: 'right' });
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.2); doc.setTextColor(...AZUL_TEXTO);
+        doc.text(`RIF ${MEMBRETE_MEDIQUIR.rif}  ·  Tel. ${MEMBRETE_MEDIQUIR.telefonos}  ·  ${MEMBRETE_MEDIQUIR.email}`, ANCHO - MARGEN, 19.5, { align: 'right' });
 
         if (i === 1) {
             doc.setTextColor(...GRIS); doc.setFontSize(8.5); doc.setFont('helvetica', 'normal');
@@ -246,12 +252,33 @@ async function prepararImagenes(rutas, onProgreso) {
 }
 
 // opciones: { precio: 6|7, incluirPrecioCaja, soloConStock, incluirSinPrecio, filtros: 'q=..&categoriaId=..' | null }
-export async function descargarListaPrecios(opciones, onProgreso) {
-    onProgreso?.({ fase: 'datos' });
+function parametrosLista(opciones) {
     const qs = new URLSearchParams({ precio: String(opciones.precio) });
     if (opciones.soloConStock) qs.set('conStock', '1');
     if (opciones.incluirSinPrecio) qs.set('sinPrecio', '1');
     if (opciones.filtros) { qs.set('filtros', '1'); new URLSearchParams(opciones.filtros).forEach((v, k) => qs.set(k, v)); }
+    return qs;
+}
+
+// La misma lista en Excel (la arma el servidor: membrete, título y un bloque por categoría, sin fotos). Devuelve el nombre del archivo.
+export async function descargarListaPreciosExcel(opciones) {
+    const qs = parametrosLista(opciones);
+    qs.set('formato', 'xlsx');
+    if (opciones.incluirPrecioCaja) qs.set('caja', '1');
+    const res = await fetch(`/api/inventario/lista-precios?${qs}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'No se pudo preparar el Excel');
+    const nombre = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'lista-de-precios.xlsx';
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url; a.download = nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    return nombre;
+}
+
+export async function descargarListaPrecios(opciones, onProgreso) {
+    onProgreso?.({ fase: 'datos' });
+    const qs = parametrosLista(opciones);
 
     const res = await fetch(`/api/inventario/lista-precios?${qs}`);
     const datos = await res.json().catch(() => ({}));
