@@ -6,6 +6,7 @@ import {
     IconAdjustmentsHorizontal, IconBrandWhatsapp, IconChevronDown, IconMoodEmpty, IconRefresh, IconSearch, IconX,
 } from '@tabler/icons-react';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
+import { estadoRestaurable, guardarEstadoTienda } from './tiendaEstado';
 import { SITIO } from '@/app/lib/seo';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import ProductCard from './ProductCard';
@@ -36,10 +37,13 @@ export default function CatalogoSection({ searchQuery, onSearchChange, selectedC
     const { data: categorias } = useCategorias();
     const { tasa } = useTasaBcv();
 
-    const [marca, setMarca] = useState('');
-    const [orden, setOrden] = useState('auto');
-    const [soloDisponibles, setSoloDisponibles] = useState(false);
-    const [visible, setVisible] = useState(PAGINA);
+    // Al volver de la página de un producto, los filtros y cuántos productos se habían desplegado quedan como estaban
+    const [restaurada] = useState(() => estadoRestaurable());
+    const [marca, setMarca] = useState(() => restaurada?.marca ?? '');
+    const [orden, setOrden] = useState(() => restaurada?.orden ?? 'auto');
+    const [soloDisponibles, setSoloDisponibles] = useState(() => restaurada?.soloDisponibles ?? false);
+    const [visible, setVisible] = useState(() => restaurada?.visible ?? PAGINA);
+    useEffect(() => { guardarEstadoTienda({ marca, orden, soloDisponibles, visible }); }, [marca, orden, soloDisponibles, visible]);
     const [pegada, setPegada] = useState(false);
     const [hojaAbierta, setHojaAbierta] = useState(false);
 
@@ -109,8 +113,8 @@ export default function CatalogoSection({ searchQuery, onSearchChange, selectedC
     const firma = `${searchQuery}|${selectedCategory?.id ?? ''}|${marca}|${orden}|${soloDisponibles}`;
     const primera = useRef(true);
     useEffect(() => {
+        if (primera.current) { primera.current = false; return; } // al montar (o al volver de un producto) no se toca lo desplegado
         setVisible(PAGINA);
-        if (primera.current) { primera.current = false; return; }
         const el = centinela.current;
         if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: 'start', behavior: 'instant' });
     }, [firma]);

@@ -13,7 +13,7 @@ import classes from './landing.module.css';
 
 // Tarjeta del catálogo. Sus seis partes (foto, marca, nombre, precio, caja y botón) van siempre en ese orden y siempre presentes,
 // porque comparten las filas de la cuadrícula (subgrid): así en una fila todos los precios y botones quedan a la misma altura.
-// Toda la tarjeta abre la vista rápida (el enlace del nombre la cubre entera); los botones quedan por encima.
+// Toda la tarjeta abre la página del producto (el enlace del nombre la cubre entera); los botones quedan por encima.
 function ProductCard({ product, tasa }) {
     const { unidadesEnCarrito } = useCart();
     const { abrirDetalle, pedirCantidad } = useTienda();
@@ -30,7 +30,7 @@ function ProductCard({ product, tasa }) {
     const caja = presentacionesTienda(product).find((p) => p.clave === 'CAJA') || null;
     const puedeCaja = Boolean(caja) && !isOutOfStock && enCarrito + caja.unidades <= stock;
 
-    // Clic normal: vista rápida. Con Ctrl/Cmd o botón central el enlace abre la ficha completa en otra pestaña, como cualquier enlace.
+    // Clic normal: página del producto (guardando cómo está la lista para dejarla igual al volver). Con Ctrl/Cmd o botón central el enlace se abre en otra pestaña, como cualquier enlace.
     const abrir = (e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         e.preventDefault();
@@ -49,7 +49,7 @@ function ProductCard({ product, tasa }) {
                         </span>
                     )}
                 </div>
-                <span className={classes.cardVista} aria-hidden="true"><IconEye size={15} stroke={2} /> Vista rápida</span>
+                <span className={classes.cardVista} aria-hidden="true"><IconEye size={15} stroke={2} /> Ver producto</span>
             </div>
 
             <div className={classes.cardMeta}>

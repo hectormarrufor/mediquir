@@ -97,7 +97,14 @@ const Producto = sequelize.define('Producto', {
         type: DataTypes.INTEGER,
         allowNull: true,
         defaultValue: 1 // TOTAL de unidades del bulto (si hay cajas: cajasPorBulto x unidadesPorCaja)
-    }
+    },
+
+    // --- FICHA PARA LA TIENDA (página propia del producto) ---
+    descripcion: { type: DataTypes.TEXT, allowNull: true }, // «Características de …»
+    puntosClave: { type: DataTypes.JSONB, allowNull: true }, // «Información importante»: ["viñeta", …]
+    fichaTecnica: { type: DataTypes.JSONB, allowNull: true }, // «Ficha técnica»: [{ etiqueta, valor }, …]
+    infoAdicional: { type: DataTypes.JSONB, allowNull: true }, // «Información adicional» plegable: [{ titulo, texto }, …]
+    fichaActualizadaAt: { type: DataTypes.DATE, allowNull: true },
 
 }, { 
     tableName: 'Productos', 

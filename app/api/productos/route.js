@@ -25,6 +25,7 @@ export async function GET(request) {
         }
 
         const productos = await Producto.findAll({
+            attributes: { exclude: ['descripcion', 'puntosClave', 'fichaTecnica', 'infoAdicional'] }, // los textos largos de la ficha solo se cargan en la página de cada producto
             include: [
                 { model: Categoria, as: 'categoria', attributes: ['id', 'nombre'] },
                 { model: Marca, as: 'marca', attributes: ['id', 'nombre', 'imagen'] },

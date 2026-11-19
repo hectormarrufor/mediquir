@@ -11,7 +11,7 @@ import classes from './landing.module.css';
 const MAX_SUGERENCIAS = 6;
 
 // Buscador principal de la tienda: mientras se escribe muestra los productos que coinciden (foto, marca, existencia y precio).
-// Tocar uno abre su vista rápida; Enter o «Ver los N resultados» lleva al catálogo con esa búsqueda aplicada.
+// Tocar uno abre la página del producto; Enter o «Ver los N resultados» lleva al catálogo con esa búsqueda aplicada.
 // Usa el mismo buscador tolerante del sistema (tildes, plurales y errores de tipeo) sobre el catálogo ya descargado.
 export default function BuscadorTienda({ valor = '', productos, onBuscar, placeholder = 'Busca guantes, jeringas, catéteres…' }) {
     const { abrirDetalle } = useTienda();
