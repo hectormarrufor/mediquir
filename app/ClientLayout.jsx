@@ -80,8 +80,7 @@ export default function ClientLayout({ children }) {
             <Suspense fallback={<LoadingFallback />}>
               <AuthGuard>
                 <Notifications zIndex={5000} />
-                <AuthProvider>
-                  <AppShell
+                <AppShell
                     header={{ height: { base: 60, sm: 70 }, collapsed: !pinned }}
                     navbar={{
                       width: 320,
@@ -116,7 +115,6 @@ export default function ClientLayout({ children }) {
                       {children}
                     </AppShell.Main>
                   </AppShell>
-                </AuthProvider>
               </AuthGuard>
             </Suspense>
           </AuthProvider>
