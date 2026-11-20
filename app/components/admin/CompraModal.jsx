@@ -23,6 +23,8 @@ import { retencionCompra } from '@/app/constants/facturacion';
 import PrecioVisual from '../ui/PrecioVisual';
 import { useAuth } from '@/hooks/useAuth';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
+
+const BORRADOR_COMPRA = 'mediquir:borrador-compra';
 import { fechaCaracas } from '@/app/constants/hora';
 import { exacto, formatoExacto } from '@/app/helpers/sinRedondeo';
 import { OPCIONES_PAGO_PROVEEDOR } from '@/app/constants/metodosPago';
@@ -179,6 +181,67 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
         formCompra.setFieldValue('porcentajeRetencion', Number(prov?.retencionIvaPorDefecto) || CONFIG_FISCAL.porcentajeRetencionCompras);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formCompra.values.proveedorId, proveedores]);
+
+    // ---- Borrador automático en localStorage (como en PosModal): recupera la compra si se recarga la página ----
+    const [borradorListo, setBorradorListo] = useState(false);
+    useEffect(() => {
+        if (!opened) { setBorradorListo(false); return; }
+        try {
+            const b = JSON.parse(localStorage.getItem(BORRADOR_COMPRA) || 'null');
+            if (b) {
+                if (typeof b.esGasto === 'boolean') setEsGasto(b.esGasto);
+                if (b.form) formCompra.setValues({ ...formCompra.values, ...b.form });
+                if (Array.isArray(b.carritoCompra)) setCarritoCompra(b.carritoCompra);
+                if (b.descuentoPct !== undefined) setDescuentoPct(b.descuentoPct);
+                if (b.gasto) setGasto(b.gasto);
+                if (b.tasaFactura !== undefined) setTasaFactura(b.tasaFactura);
+                if (b.ivaAjustado !== undefined) setIvaAjustado(b.ivaAjustado);
+                if (b.carritoCompra?.length || b.form?.numeroDocumento || b.form?.proveedorId || b.gasto?.descripcion || Number(b.gasto?.base) > 0) {
+                    notifications.show({
+                        title: 'Compra recuperada',
+                        message: 'Seguías llenando esta compra: sus datos se recuperaron. Para borrarlos usa «Empezar de cero».',
+                        color: 'blue',
+                        autoClose: 8000,
+                    });
+                }
+            }
+        } catch { /* sin borrador legible: se empieza en blanco */ }
+        setBorradorListo(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [opened]);
+
+    useEffect(() => {
+        if (!opened || !borradorListo) return;
+        try {
+            const vacio = carritoCompra.length === 0
+                && !formCompra.values.proveedorId
+                && !formCompra.values.numeroDocumento
+                && !formCompra.values.numeroControl
+                && !descuentoPct
+                && !gasto.descripcion
+                && !(Number(gasto.base) > 0)
+                && !(Number(gasto.exento) > 0);
+            if (vacio) localStorage.removeItem(BORRADOR_COMPRA);
+            else localStorage.setItem(BORRADOR_COMPRA, JSON.stringify({ esGasto, form: formCompra.values, carritoCompra, descuentoPct, gasto, tasaFactura, ivaAjustado }));
+        } catch { /* almacenamiento lleno o bloqueado */ }
+    }, [opened, borradorListo, esGasto, formCompra.values, carritoCompra, descuentoPct, gasto, tasaFactura, ivaAjustado]);
+
+    const hayAlgoQueBorrar = carritoCompra.length > 0 || Boolean(formCompra.values.proveedorId) || Boolean(formCompra.values.numeroDocumento) || Boolean(formCompra.values.numeroControl) || Boolean(descuentoPct) || Boolean(gasto.descripcion) || Number(gasto.base) > 0 || Number(gasto.exento) > 0;
+    const empezarDeCero = () => {
+        if (!window.confirm('¿Empezar de cero? Se borran los renglones y los datos de esta compra (no se puede deshacer).')) return;
+        try { localStorage.removeItem(BORRADOR_COMPRA); } catch { /* sin almacenamiento */ }
+        setCarritoCompra([]);
+        setGasto({ descripcion: '', categoriaId: null, base: 0, exento: 0 });
+        setDescuentoPct('');
+        setTasaFactura(null);
+        setIvaAjustado(null);
+        setLectura(null);
+        formCompra.reset();
+        setEsGasto(iniciarComoGasto);
+    };
+    const botonCero = hayAlgoQueBorrar && (
+        <Button size="compact-sm" variant="light" color="red" tt="none" leftSection={<IconTrash size={14} />} onClick={empezarDeCero}>Empezar de cero</Button>
+    );
 
     // ---- Compra por BULTO, por CAJAS o por UNIDADES ----
     // El costo del producto es POR UNIDAD y el stock está en unidades. Lo que se recibe (un bulto, N cajas
@@ -672,9 +735,14 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             notifications.show({ title: 'Éxito', message: `${esGasto ? 'Gasto registrado (no afecta el inventario).' : 'Factura registrada, inventario y costos actualizados.'}${data.comprobanteRetencion ? ` Comprobante de retención de IVA: ${data.comprobanteRetencion}` : ''}`, color: 'green', autoClose: 9000 });
             queryClient.invalidateQueries({ queryKey: ['productos-compra'] });
             queryClient.invalidateQueries({ queryKey: ['productos-pos'] }); // el POS ve el stock y el costo nuevos
+            try { localStorage.removeItem(BORRADOR_COMPRA); } catch { /* sin almacenamiento */ }
             setCarritoCompra([]);
             setGasto({ descripcion: '', categoriaId: null, base: 0, exento: 0 });
             setDescuentoPct('');
+            setTasaFactura(null);
+            setIvaAjustado(null);
+            setLectura(null);
+            formCompra.reset();
             setModalSimulacionAbierto(false);
             onClose();
 
@@ -1092,7 +1160,12 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
 
     return (
         <>
-            <Modal opened={opened} onClose={onClose} fullScreen title={<Title order={isMobile ? 5 : 3} c="blue.9" tt={isMobile ? 'none' : undefined}>{esGasto ? 'Registrar gasto' : (isMobile ? 'Registrar compra' : 'Registrar factura / nota de compra (proveedor)')}</Title>}
+            <Modal opened={opened} onClose={onClose} fullScreen title={
+                <Group gap="sm" align="center">
+                    <Title order={isMobile ? 5 : 3} c="blue.9" tt={isMobile ? 'none' : undefined}>{esGasto ? 'Registrar gasto' : (isMobile ? 'Registrar compra' : 'Registrar factura / nota de compra (proveedor)')}</Title>
+                    {botonCero}
+                </Group>
+            }
                 styles={isMobile
                     ? { content: { padding: 0 }, header: { padding: '8px 12px', minHeight: 44, background: '#fff', zIndex: 30 }, body: { padding: '0 4px' } }
                     : { content: { display: 'flex', flexDirection: 'column', overflow: 'hidden' }, header: { padding: '10px 20px' }, body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '0 20px 16px', overflow: 'hidden' } }}>
