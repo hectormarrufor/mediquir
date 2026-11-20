@@ -3,6 +3,7 @@ import { Op } from 'sequelize';
 import db from '@/models';
 import { fechaCaracas } from '@/app/constants/hora';
 import { TIPOS_PAGO, FORMAS_PAGO_ACTIVAS, totalesPago } from '@/app/constants/pagosEmpleados';
+import { sanitizarCuentaDestino } from '@/app/constants/datosPagoEmpleado';
 import { requerirAdministracion, nombreDe, FECHA } from './_lib';
 
 export const dynamic = 'force-dynamic';
@@ -77,11 +78,12 @@ export async function POST(request) {
             conceptos = [{ concepto: conceptoTexto, asignacion: t.totalCobrar, deduccion: 0 }];
         }
 
+        const cuentaDestino = sanitizarCuentaDestino(b.cuentaDestino);
         const cargo = (empleado.puestos || []).map((x) => x.nombre).join(' / ').slice(0, 120) || null;
         const pago = await PagoEmpleado.create({
             tipo, empleadoId: empleado.id, empleadoNombre: `${empleado.nombre} ${empleado.apellido}`.trim().slice(0, 160), cedula: String(empleado.cedula).slice(0, 20),
             cargo, fechaIngreso: empleado.fechaIngreso || null, fecha, periodoDesde, periodoHasta, dias, conceptos,
-            ...totalesPago(conceptos), formaPago, referencia, conceptoTexto, creadoPorId: acceso.usuarioId, creadoPorNombre: nombreDe(acceso.sesion),
+            ...totalesPago(conceptos), formaPago, referencia, cuentaDestino, conceptoTexto, creadoPorId: acceso.usuarioId, creadoPorNombre: nombreDe(acceso.sesion),
         });
 
         return NextResponse.json({ pago }, { status: 201 });

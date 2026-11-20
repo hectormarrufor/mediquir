@@ -11,7 +11,7 @@ export async function GET() {
     try {
         const empleados = await db.Empleado.findAll({
             where: { estado: 'Activo' },
-            attributes: ['id', 'nombre', 'apellido', 'cedula'],
+            attributes: ['id', 'nombre', 'apellido', 'cedula', 'datosPago'],
             include: [
                 { model: db.Puesto, as: 'puestos', attributes: ['nombre'], through: { attributes: [] } },
                 { model: db.User, as: 'usuario', attributes: ['id'], required: false },
@@ -21,6 +21,7 @@ export async function GET() {
         return NextResponse.json(empleados.map((e) => ({
             id: e.id, nombre: `${e.nombre} ${e.apellido}`.trim(), cedula: e.cedula,
             cargo: (e.puestos || []).map((p) => p.nombre).join(' / '), tieneUsuario: Boolean(e.usuario),
+            datosPago: Array.isArray(e.datosPago) ? e.datosPago : [],
         })));
     } catch (error) {
         console.error('Empleados para recibos:', error);

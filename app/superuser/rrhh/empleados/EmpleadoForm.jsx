@@ -11,6 +11,7 @@ import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
 import '@mantine/dates/styles.css';
 import ImageDropzone from '@/app/components/ImageDropzone';
+import DatosPagoEmpleadoCard from './_components/DatosPagoEmpleadoCard';
 
 export function EmpleadoForm({ initialData = null }) {
   const [puestos, setPuestos] = useState(null)
@@ -40,6 +41,9 @@ export function EmpleadoForm({ initialData = null }) {
       tallaPantalon: initialData?.tallaPantalon || null,
       tallaCalzado: initialData?.tallaCalzado || null,
       tallaBraga: initialData?.tallaBraga || null,
+
+      // --- DATOS BANCARIOS Y PAGOS MÓVILES ---
+      datosPago: Array.isArray(initialData?.datosPago) ? initialData.datosPago : [],
     },
     validate: {
       cedula: (value) => value ? null : 'La cédula es requerida',
@@ -251,6 +255,20 @@ export function EmpleadoForm({ initialData = null }) {
                   </Grid.Col>
                 </Grid>
               </Fieldset>
+            </Grid.Col>
+
+            {/* --- DATOS BANCARIOS Y PAGOS MÓVILES --- */}
+            <Grid.Col span={12}>
+              <DatosPagoEmpleadoCard
+                empleado={{
+                  nombre: form.values.nombre,
+                  apellido: form.values.apellido,
+                  cedula: form.values.cedula,
+                  telefono: form.values.telefono,
+                }}
+                datosPago={form.values.datosPago}
+                onChange={(lista) => form.setFieldValue('datosPago', lista)}
+              />
             </Grid.Col>
 
           </Grid>

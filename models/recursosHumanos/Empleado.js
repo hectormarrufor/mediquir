@@ -68,6 +68,12 @@ const Empleado = sequelize.define('Empleado', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  // Cuentas bancarias y pagos móviles registrados para pagos de nómina
+  datosPago: {
+    type: DataTypes.JSONB,
+    allowNull: false,
+    defaultValue: [],
+  },
 
 }, {
   tableName: 'Empleados',

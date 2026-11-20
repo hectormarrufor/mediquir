@@ -1,6 +1,7 @@
 import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 import { numeroALetras } from '@/app/utils/numeroALetras';
 import { TIPOS_PAGO, FORMAS_PAGO, fechaCorta, textoPeriodo } from '@/app/constants/pagosEmpleados';
+import { resumenDatoPago } from '@/app/constants/datosPagoEmpleado';
 // Recibo de pago a empleado en PDF (carta vertical) con el membrete de Mediquir: beneficio de alimentación, de transporte y quincena.
 //   construirPdf(...)  -> parte pura: dibuja el documento
 //   abrirReciboPdf(...) -> parte del navegador: baja el logo y la firma, arma el PDF y lo abre en una pestaña (descargar o imprimir)
@@ -110,9 +111,19 @@ export function construirPdf({ jsPDF, autoTable, pago, logo, generado }) {
         });
         // Recibos viejos pagados en efectivo o cheque: ya no hay casilla para eso, se deja escrito
         const antigua = pago.formaPago && !['TRANSFERENCIA', 'PAGO_MOVIL'].includes(pago.formaPago);
-        const detalle = [antigua && `Forma de pago: ${FORMAS_PAGO[pago.formaPago] || pago.formaPago}`, pago.referencia && `Referencia: ${pago.referencia}${pago.formaPago && !antigua ? ` (${FORMAS_PAGO[pago.formaPago]})` : ''}`].filter(Boolean).join('   ·   ');
-        if (detalle) { doc.setFontSize(9); doc.setTextColor(...GRIS); doc.text(detalle, M, y + 7); }
-        y += 18;
+        const detalle = [
+            antigua && `Forma de pago: ${FORMAS_PAGO[pago.formaPago] || pago.formaPago}`,
+            pago.referencia && `Referencia: ${pago.referencia}${pago.formaPago && !antigua ? ` (${FORMAS_PAGO[pago.formaPago]})` : ''}`,
+            pago.cuentaDestino && `Destino: ${resumenDatoPago(pago.cuentaDestino)}`,
+        ].filter(Boolean).join('   ·   ');
+        if (detalle) {
+            doc.setFontSize(8.5); doc.setTextColor(...GRIS);
+            const lineasDetalle = doc.splitTextToSize(detalle, ANCHO - 2 * M);
+            doc.text(lineasDetalle, M, y + 7);
+            y += 16 + Math.max(0, lineasDetalle.length - 1) * 4.5;
+        } else {
+            y += 18;
+        }
         bloqueFirma(y);
     } else {
         // ---- Formato de beneficio (alimentación / transporte)
@@ -144,7 +155,15 @@ export function construirPdf({ jsPDF, autoTable, pago, logo, generado }) {
             columnStyles: { 0: { cellWidth: 18, halign: 'center' }, 2: { cellWidth: 38, halign: 'right' }, 3: { cellWidth: 38, halign: 'right' } },
             bodyStyles: { minCellHeight: 9 },
         });
-        y = doc.lastAutoTable.finalY + 14;
+        y = doc.lastAutoTable.finalY + 8;
+        if (pago.cuentaDestino) {
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...GRIS);
+            const lineasDestino = doc.splitTextToSize(`Pagado a: ${resumenDatoPago(pago.cuentaDestino)}`, ANCHO - 2 * M);
+            doc.text(lineasDestino, M, y);
+            y += lineasDestino.length * 4.5 + 6;
+        } else {
+            y += 6;
+        }
         bloqueFirma(y);
         y += 48;
         // Nota legal, tal cual

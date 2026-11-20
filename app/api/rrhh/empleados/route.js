@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '../../../../models';
+import { sanitizarDatosPago } from '@/app/constants/datosPagoEmpleado';
 
 import { Op } from 'sequelize'; // Útil si quieres búsquedas avanzadas en el futuro
 
@@ -109,6 +110,9 @@ export async function POST(request) {
     const body = await request.json();
     // 1. Separamos los IDs de los puestos del resto de los datos del empleado.
     const { puestos, ...empleadoData } = body;
+    if (empleadoData.datosPago !== undefined) {
+      empleadoData.datosPago = sanitizarDatosPago(empleadoData.datosPago);
+    }
 
     // 2. Creamos el empleado dentro de la transacción.
     const nuevoEmpleado = await db.Empleado.create(empleadoData, { transaction });

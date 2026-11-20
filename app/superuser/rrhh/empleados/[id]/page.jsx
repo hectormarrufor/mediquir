@@ -22,6 +22,7 @@ import calcularEdad from "@/app/helpers/calcularEdad";
 
 // Modales
 import DocumentosManager from "../../components/DocumentosManager";
+import DatosPagoEmpleadoCard from "../_components/DatosPagoEmpleadoCard";
 import { formatDateLong } from "@/app/helpers/dateUtils";
 
 
@@ -202,15 +203,18 @@ export default function Page({ params }) {
                 <Grid.Col span={{ base: 12, md: 8, lg: 9 }}>
                     <Stack gap="lg">
 
-
+                        <DatosPagoEmpleadoCard
+                            empleado={empleado}
+                            empleadoId={empleado.id}
+                            datosPago={empleado.datosPago || []}
+                            onActualizado={(datosPago) => setEmpleado((prev) => ({ ...prev, datosPago }))}
+                        />
 
                         <DocumentosManager
                             empleadoId={empleado.id}
                             documentos={empleado.documentos || []}
                             puestos={empleado.puestos || []}
                         />
-
-
 
                     </Stack>
                 </Grid.Col>

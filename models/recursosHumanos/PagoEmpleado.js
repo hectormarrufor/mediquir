@@ -22,6 +22,7 @@ const PagoEmpleado = sequelize.define('PagoEmpleado', {
     totalCobrar: { type: DataTypes.DECIMAL(14, 2), allowNull: false, defaultValue: 0 },
     formaPago: { type: DataTypes.STRING(15), allowNull: true },
     referencia: { type: DataTypes.STRING(100), allowNull: true },
+    cuentaDestino: { type: DataTypes.JSONB, allowNull: true }, // copia de la cuenta bancaria o pago móvil usado al pagar
     conceptoTexto: { type: DataTypes.STRING(250), allowNull: true },
     estado: { type: DataTypes.STRING(12), allowNull: false, defaultValue: 'PENDIENTE' }, // PENDIENTE | CONFIRMADO | ANULADO
     confirmadoAt: { type: DataTypes.DATE, allowNull: true },

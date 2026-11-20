@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ActionIcon, Alert, Badge, Box, Button, Group, Loader, Modal, NumberInput, Paper, Select, SegmentedControl, Stack, Table, Text, Textarea, TextInput, Title, Tooltip } from '@mantine/core';
+import { ActionIcon, Alert, Anchor, Badge, Box, Button, Group, Loader, Modal, NumberInput, Paper, Select, SegmentedControl, Stack, Table, Text, Textarea, TextInput, Title, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { IconArrowLeft, IconBan, IconCheck, IconFileTypePdf, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconArrowLeft, IconBan, IconBuildingBank, IconCheck, IconCopy, IconDeviceMobile, IconFileTypePdf, IconPlus, IconTrash } from '@tabler/icons-react';
 import { fechaCaracas } from '@/app/constants/hora';
 import { TIPOS_PAGO, FORMAS_PAGO_ACTIVAS, ESTADOS_PAGO, totalesPago, fechaCorta, textoPeriodo } from '@/app/constants/pagosEmpleados';
+import { resumenDatoPago, textoParaCopiarDatoPago } from '@/app/constants/datosPagoEmpleado';
 import { abrirReciboPdf, montoEnLetras } from './_lib/reciboPdf';
 import { useVolver } from '@/app/helpers/useVolver';
 
@@ -26,7 +28,7 @@ function reciboNuevo(tipo, anteriores) {
     const cfg = TIPOS_PAGO[tipo];
     const previo = (anteriores || []).find((p) => p.tipo === tipo && p.estado !== 'ANULADO');
     return {
-        tipo, empleadoId: null, fecha: fechaCaracas(), periodoDesde: '', periodoHasta: '', dias: previo?.dias || 7,
+        tipo, empleadoId: null, cuentaDestinoId: null, fecha: fechaCaracas(), periodoDesde: '', periodoHasta: '', dias: previo?.dias || 7,
         filas: cfg.conceptos.map((concepto, i) => ({ concepto, asignacion: previo?.conceptos?.[i]?.asignacion || '', deduccion: previo?.conceptos?.[i]?.deduccion || '' })),
         monto: '', formaPago: 'TRANSFERENCIA', referencia: '', conceptoTexto: '',
     };
@@ -42,10 +44,42 @@ function FormularioRecibo({ opened, onClose, empleados, historial }) {
     const cfg = TIPOS_PAGO[f.tipo];
     const esQuincena = f.tipo === 'QUINCENA';
     const empleado = (empleados || []).find((e) => String(e.id) === String(f.empleadoId));
+    const cuentasEmpleado = useMemo(() => (Array.isArray(empleado?.datosPago) ? empleado.datosPago : []), [empleado]);
+    const cuentaSeleccionada = cuentasEmpleado.find((c) => c.id === f.cuentaDestinoId) || null;
     const t = esQuincena ? { totalAsignaciones: Number(f.monto) || 0, totalDeducciones: 0, totalCobrar: Number(f.monto) || 0 } : totalesPago(f.filas);
     const conceptoQuincena = f.conceptoTexto || (f.periodoDesde && f.periodoHasta ? `Quincena del ${fechaCorta(f.periodoDesde).replace(/\//g, '-')} al ${fechaCorta(f.periodoHasta).replace(/\//g, '-')}` : 'Quincena');
     const set = (parche) => setF((x) => ({ ...x, ...parche }));
     const setFila = (i, parche) => setF((x) => ({ ...x, filas: x.filas.map((fila, j) => (j === i ? { ...fila, ...parche } : fila)) }));
+
+    const elegirEmpleado = (nuevoId) => {
+        const emp = (empleados || []).find((e) => String(e.id) === String(nuevoId));
+        const lista = Array.isArray(emp?.datosPago) ? emp.datosPago : [];
+        const principal = lista.find((c) => c.principal) || lista[0] || null;
+        set({
+            empleadoId: nuevoId,
+            cuentaDestinoId: principal?.id || null,
+            formaPago: principal ? (principal.tipo === 'PAGO_MOVIL' ? 'PAGO_MOVIL' : 'TRANSFERENCIA') : f.formaPago,
+        });
+    };
+
+    const elegirCuenta = (cuentaId) => {
+        const c = cuentasEmpleado.find((x) => x.id === cuentaId) || null;
+        set({
+            cuentaDestinoId: cuentaId || null,
+            formaPago: c ? (c.tipo === 'PAGO_MOVIL' ? 'PAGO_MOVIL' : 'TRANSFERENCIA') : f.formaPago,
+        });
+    };
+
+    const copiarCuenta = async () => {
+        if (!cuentaSeleccionada) return;
+        const txt = textoParaCopiarDatoPago(cuentaSeleccionada, empleado?.nombre, empleado?.cedula);
+        try {
+            await navigator.clipboard.writeText(txt);
+            notifications.show({ color: 'teal', message: 'Datos bancarios copiados al portapapeles' });
+        } catch {
+            notifications.show({ color: 'orange', message: 'No se pudo copiar automáticamente' });
+        }
+    };
 
     const valido = f.empleadoId && t.totalCobrar > 0 && (esQuincena || (f.periodoDesde && f.periodoHasta && Number(f.dias) > 0));
 
@@ -56,6 +90,7 @@ function FormularioRecibo({ opened, onClose, empleados, historial }) {
                 tipo: f.tipo, empleadoId: Number(f.empleadoId), fecha: f.fecha, periodoDesde: f.periodoDesde || undefined, periodoHasta: f.periodoHasta || undefined, dias: Number(f.dias) || undefined,
                 conceptos: esQuincena ? [{ concepto: conceptoQuincena, asignacion: Number(f.monto) || 0, deduccion: 0 }] : f.filas.map((x) => ({ concepto: x.concepto, asignacion: Number(x.asignacion) || 0, deduccion: Number(x.deduccion) || 0 })),
                 formaPago: esQuincena ? f.formaPago : undefined, referencia: f.referencia || undefined, conceptoTexto: esQuincena ? conceptoQuincena : undefined,
+                cuentaDestino: cuentaSeleccionada || undefined,
             };
             const r = await enviar('/api/rrhh/pagos', cuerpo);
             notifications.show({ color: 'teal', title: 'Recibo registrado', message: `Imprímelo para que ${empleado?.nombre} lo firme y márcalo como firmado al archivarlo.` });
@@ -69,8 +104,56 @@ function FormularioRecibo({ opened, onClose, empleados, historial }) {
         <Modal opened={opened} onClose={onClose} size="lg" title={<Text fw={800}>Nuevo recibo de pago</Text>} centered>
             <Stack gap="sm">
                 <SegmentedControl fullWidth value={f.tipo} onChange={(v) => setF(reciboNuevo(v, historial))} data={Object.entries(TIPOS_PAGO).map(([value, c]) => ({ value, label: c.etiqueta }))} />
-                <Select label="Empleado" withAsterisk searchable value={f.empleadoId ? String(f.empleadoId) : null} onChange={(v) => set({ empleadoId: v })} placeholder="Elige al empleado"
+                <Select label="Empleado" withAsterisk searchable value={f.empleadoId ? String(f.empleadoId) : null} onChange={elegirEmpleado} placeholder="Elige al empleado"
                     data={(empleados || []).map((e) => ({ value: String(e.id), label: `${e.nombre} · C.I. ${e.cedula}` }))} />
+
+                {empleado && (
+                    <Paper withBorder radius="md" p="xs" bg="gray.0">
+                        {cuentasEmpleado.length > 0 ? (
+                            <Stack gap={6}>
+                                <Select
+                                    size="xs"
+                                    label="Cuenta bancaria / Pago móvil destino"
+                                    clearable
+                                    placeholder="Selecciona dónde realizar el pago"
+                                    value={f.cuentaDestinoId}
+                                    onChange={elegirCuenta}
+                                    data={cuentasEmpleado.map((c) => ({
+                                        value: c.id,
+                                        label: `${resumenDatoPago(c)}${c.principal ? ' (Principal)' : ''}`,
+                                    }))}
+                                />
+                                {cuentaSeleccionada && (
+                                    <Group justify="space-between" align="center" wrap="nowrap" gap="xs" px={4}>
+                                        <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+                                            {cuentaSeleccionada.tipo === 'PAGO_MOVIL' ? <IconDeviceMobile size={16} color="var(--mantine-color-teal-7)" /> : <IconBuildingBank size={16} color="var(--mantine-color-blue-7)" />}
+                                            <Box style={{ minWidth: 0 }}>
+                                                <Text size="xs" fw={700} lineClamp={1}>
+                                                    {cuentaSeleccionada.banco} · {cuentaSeleccionada.tipo === 'PAGO_MOVIL' ? cuentaSeleccionada.telefono : cuentaSeleccionada.numeroCuenta}
+                                                </Text>
+                                                <Text size="xs" c="dimmed" lineClamp={1}>
+                                                    C.I. {cuentaSeleccionada.cedula || empleado.cedula}
+                                                    {cuentaSeleccionada.titular ? ` · ${cuentaSeleccionada.titular}` : ''}
+                                                    {cuentaSeleccionada.tipo === 'CUENTA_BANCARIA' && cuentaSeleccionada.tipoCuenta ? ` · ${cuentaSeleccionada.tipoCuenta}` : ''}
+                                                </Text>
+                                            </Box>
+                                        </Group>
+                                        <Button size="compact-xs" variant="light" color="teal" leftSection={<IconCopy size={13} />} onClick={copiarCuenta}>
+                                            Copiar
+                                        </Button>
+                                    </Group>
+                                )}
+                            </Stack>
+                        ) : (
+                            <Group justify="space-between" wrap="wrap" gap="xs">
+                                <Text size="xs" c="dimmed">Este empleado aún no tiene cuenta bancaria ni pago móvil registrado.</Text>
+                                <Anchor component={Link} href={`/superuser/rrhh/empleados/${empleado.id}`} size="xs" fw={700} target="_blank">
+                                    Agregar en su ficha
+                                </Anchor>
+                            </Group>
+                        )}
+                    </Paper>
+                )}
                 <Group grow align="flex-start">
                     <TextInput type="date" label="Fecha del recibo" value={f.fecha} onChange={(e) => set({ fecha: e.currentTarget.value })} />
                     <TextInput type="date" label={esQuincena ? 'Quincena desde' : 'Desde'} withAsterisk={!esQuincena} value={f.periodoDesde} onChange={(e) => set({ periodoDesde: e.currentTarget.value })} />
@@ -197,7 +280,11 @@ export default function PagosEmpleadosPage() {
                                     <Table.Tr key={p.id}>
                                         <Table.Td>{fechaCorta(p.fecha)}</Table.Td>
                                         <Table.Td><Badge variant="light" color={TIPOS_PAGO[p.tipo]?.color}>{TIPOS_PAGO[p.tipo]?.etiqueta}</Badge></Table.Td>
-                                        <Table.Td><Text size="sm" fw={600}>{p.empleadoNombre}</Text><Text size="xs" c="dimmed">C.I. {p.cedula}</Text></Table.Td>
+                                        <Table.Td>
+                                            <Text size="sm" fw={600}>{p.empleadoNombre}</Text>
+                                            <Text size="xs" c="dimmed">C.I. {p.cedula}</Text>
+                                            {p.cuentaDestino && <Text size="xs" c="blue.7" lineClamp={1}>{resumenDatoPago(p.cuentaDestino)}</Text>}
+                                        </Table.Td>
                                         <Table.Td><Text size="xs">{p.periodoDesde && p.periodoHasta ? `${fechaCorta(p.periodoDesde)} al ${fechaCorta(p.periodoHasta)}` : '—'}</Text></Table.Td>
                                         <Table.Td ta="right" fw={700}>{nf(p.totalCobrar)}</Table.Td>
                                         <Table.Td>

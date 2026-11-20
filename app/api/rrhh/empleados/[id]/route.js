@@ -3,6 +3,7 @@ import db from '../../../../../models';
 import sequelize from '@/sequelize';
 import { requerirAdmin, limpiar } from '../../_lib';
 import { borrarBlob, borrarSiReemplazado } from '@/app/lib/blob';
+import { sanitizarDatosPago } from '@/app/constants/datosPagoEmpleado';
 
 
 export async function GET(request, { params }) {
@@ -35,24 +36,25 @@ export async function PUT(request, { params }) {
   try {
     // 1. Actualizar datos básicos del empleado
     const imagenAnterior = (await db.Empleado.findByPk(id, { attributes: ['imagen'], transaction: t }))?.imagen;
-    await db.Empleado.update(
-      {
-        nombre: body.nombre,
-        apellido: body.apellido,
-        cedula: body.cedula,
-        fechaNacimiento: body.fechaNacimiento,
-        fechaIngreso: body.fechaIngreso,
-        telefono: body.telefono,
-        direccion: body.direccion,
-        estado: body.estado,
-        imagen: body.imagen,
-        tallaCamisa: body.tallaCamisa,
-        tallaPantalon: body.tallaPantalon,
-        tallaCalzado: body.tallaCalzado,
-        tallaBraga: body.tallaBraga,
-      },
-      { where: { id }, transaction: t }
-    );
+    const datosActualizar = {
+      nombre: body.nombre,
+      apellido: body.apellido,
+      cedula: body.cedula,
+      fechaNacimiento: body.fechaNacimiento,
+      fechaIngreso: body.fechaIngreso,
+      telefono: body.telefono,
+      direccion: body.direccion,
+      estado: body.estado,
+      imagen: body.imagen,
+      tallaCamisa: body.tallaCamisa,
+      tallaPantalon: body.tallaPantalon,
+      tallaCalzado: body.tallaCalzado,
+      tallaBraga: body.tallaBraga,
+    };
+    if (body.datosPago !== undefined) {
+      datosActualizar.datosPago = sanitizarDatosPago(body.datosPago);
+    }
+    await db.Empleado.update(datosActualizar, { where: { id }, transaction: t });
 
     // 2. Borrar relaciones actuales de puestos
     await db.EmpleadoPuesto.destroy({
@@ -103,6 +105,9 @@ export async function PATCH(request, { params }) {
   try {
     const body = await request.json();
     const cambios = {};
+    if (body && Object.prototype.hasOwnProperty.call(body, 'datosPago')) {
+      cambios.datosPago = sanitizarDatosPago(body.datosPago);
+    }
     for (const [campo, valor] of Object.entries(body || {})) {
       const regla = CAMPOS_HOJA[campo];
       if (!regla) continue; // campos ajenos: se ignoran
