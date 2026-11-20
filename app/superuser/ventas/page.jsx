@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
-    ActionIcon, Alert, Badge, Box, Button, Card, Center, Grid, Group, Modal, Pagination, Paper, Progress, SegmentedControl, Select, SimpleGrid,
+    ActionIcon, Alert, Badge, Box, Button, Card, Center, CloseButton, Collapse, Drawer, Grid, Group, Modal, Pagination, Paper, Progress, SegmentedControl, Select, SimpleGrid,
     Skeleton, Stack, Table, Text, TextInput, ThemeIcon, Title, Tooltip, UnstyledButton,
 } from '@mantine/core';
 import { LineChart, DonutChart } from '@mantine/charts';
@@ -14,7 +14,7 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
 import {
-    IconAlertTriangle, IconCash, IconChevronDown, IconChevronUp, IconCircleCheck, IconClockHour4, IconPackage, IconPlus, IconPrinter,
+    IconAdjustmentsHorizontal, IconAlertTriangle, IconCash, IconChartBar, IconChevronDown, IconChevronUp, IconCircleCheck, IconClockHour4, IconPackage, IconPlus, IconPrinter,
     IconReceipt2, IconSearch, IconShoppingBag, IconTrash, IconTruckDelivery, IconFileInvoice, IconListNumbers, IconCashRegister,
 } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -80,58 +80,85 @@ const urlImprimir = (v) => (esNota(v) ? `/superuser/notas/${v.id}/imprimir` : `/
 const sePuedeImprimir = (v, esVendedor) => !v.porAprobar && (esNota(v) ? !esVendedor && v.estado === 'Emitida' : true);
 const COLOR_NOTA = { Emitida: 'teal', Anulada: 'gray' };
 
-function Indicador({ icono: Icono, color, titulo, valor, detalle, cargando }) {
+function Indicador({ icono: Icono, color, titulo, valor, detalle, cargando, spanFull = false }) {
     return (
-        <Card withBorder radius="lg" p={{ base: 'sm', sm: 'md' }} style={{ boxShadow: 'var(--mm-shadow-card)' }}>
-            <Group wrap="nowrap" align="flex-start" gap="sm">
-                {/* En el teléfono van dos por fila: sin ícono para que la cifra quepa */}
-                <ThemeIcon size={44} radius="md" variant="light" color={color} visibleFrom="sm" style={{ flexShrink: 0 }}><Icono size={24} /></ThemeIcon>
-                <Box style={{ minWidth: 0 }}>
-                    <Tooltip label={titulo} multiline maw={340} withArrow openDelay={250}><Text size="xs" c="dimmed" fw={700} tt="uppercase" lineClamp={1}>{titulo}</Text></Tooltip>
-                    {cargando ? <Skeleton h={28} w={110} mt={4} /> : <Text fz={{ base: 19, sm: 24 }} fw={800} lh={1.2} c="navy.9" style={{ whiteSpace: 'nowrap' }}>{valor}</Text>}
-                    {detalle && !cargando && <Tooltip label={detalle} multiline maw={340} withArrow openDelay={250}><Text size="xs" c="dimmed" lineClamp={1}>{detalle}</Text></Tooltip>}
+        <Card withBorder radius="lg" p={{ base: 'xs', sm: 'md' }} style={{ boxShadow: 'var(--mm-shadow-card)', gridColumn: spanFull ? '1 / -1' : undefined }}>
+            <Group wrap="nowrap" align="flex-start" gap={{ base: 8, sm: 'sm' }}>
+                <ThemeIcon size={32} radius="md" variant="light" color={color} style={{ flexShrink: 0 }}><Icono size={18} /></ThemeIcon>
+                <Box style={{ minWidth: 0, flex: 1 }}>
+                    <Tooltip label={titulo} multiline maw={340} withArrow openDelay={250}><Text fz={{ base: 10.5, sm: 'xs' }} c="dimmed" fw={700} tt="uppercase" lineClamp={1}>{titulo}</Text></Tooltip>
+                    {cargando ? <Skeleton h={26} w={90} mt={4} /> : <Text fz={{ base: 17, sm: 23 }} fw={800} lh={1.2} c="navy.9" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{valor}</Text>}
+                    {detalle && !cargando && <Tooltip label={detalle} multiline maw={340} withArrow openDelay={250}><Text fz={11.5} c="dimmed" lineClamp={1}>{detalle}</Text></Tooltip>}
                 </Box>
             </Group>
         </Card>
     );
 }
 
-// Una venta en el teléfono: lo mismo que la fila de la tabla, en una tarjeta que se toca para abrirla
+// Color de acento lateral en la tarjeta móvil según prioridad visual del estado
+function acentoTarjeta(v) {
+    if (v.tipoDocumento === 'NOTA_CREDITO' || v.pago === 'Vencido') return '#e03131';
+    if (v.porAprobar) return '#e8590c';
+    if (v.porImprimir) return '#1971c2';
+    if (v.estado === 'Cancelado' || v.estado === 'Anulada') return '#868e96';
+    if (v.pago === 'Pagado' || v.estado === 'Completado' || v.estado === 'Emitida') return '#0ca678';
+    return '#1c3d6e';
+}
+
+// Una venta en el teléfono: tarjeta limpia con borde de estado, badges sin desbordarse y pie de acciones táctil
 function TarjetaVenta({ v, esVendedor, isAdmin, onAbrir, onEliminar }) {
+    const borde = acentoTarjeta(v);
     return (
-        <Paper withBorder radius="md" p="sm" bg="white" role="button" tabIndex={0} onClick={onAbrir} onKeyDown={(e) => { if (e.key === 'Enter') onAbrir(); }} style={{ cursor: 'pointer' }}>
+        <Paper
+            withBorder radius="md" p="sm" bg="white" role="button" tabIndex={0}
+            onClick={onAbrir} onKeyDown={(e) => { if (e.key === 'Enter') onAbrir(); }}
+            style={{ cursor: 'pointer', borderLeft: `4px solid ${borde}`, boxShadow: '0 2px 6px -4px rgba(11,27,61,0.16)' }}
+        >
             <Group justify="space-between" wrap="nowrap" align="flex-start" gap="xs">
-                <Box style={{ minWidth: 0 }}>
-                    <Group gap={6} wrap="nowrap">
-                        <Text fw={800} size="sm">{v.numero}</Text>
+                <Box style={{ minWidth: 0, flex: 1 }}>
+                    <Group gap={5} wrap="wrap" align="center">
+                        <Text fw={800} size="sm" style={{ fontVariantNumeric: 'tabular-nums' }}>{v.numero}</Text>
                         <Badge size="xs" variant="light" color={DOC[v.tipoDocumento]?.color}>{DOC[v.tipoDocumento]?.etiqueta}</Badge>
-                        {v.tipo && <Badge size="xs" variant="light" color={TIPOS[v.tipo]?.color}>{TIPOS[v.tipo]?.etiqueta}</Badge>}{v.porAprobar && <Badge size="xs" variant="filled" color="orange">Por aprobar</Badge>}{v.porImprimir && !v.porAprobar && <Badge size="xs" variant="filled" color="blue.8">Falta imprimir</Badge>}
+                        {v.tipo && <Badge size="xs" variant="light" color={TIPOS[v.tipo]?.color}>{TIPOS[v.tipo]?.etiqueta}</Badge>}
+                        {v.porAprobar && <Badge size="xs" variant="filled" color="orange">Por aprobar</Badge>}
+                        {v.porImprimir && !v.porAprobar && <Badge size="xs" variant="filled" color="blue.8">Falta imprimir</Badge>}
                     </Group>
-                    <Tooltip label={v.cliente} multiline maw={340} withArrow openDelay={250}><Text size="sm" fw={600} lineClamp={1}>{v.cliente}</Text></Tooltip>
-                    <Tooltip label={`${fmtFecha(v.fecha)}${esNota(v) ? '' : ` · ${v.articulos} art.`}${!esVendedor && v.vendedor ? ` · ${v.vendedor}` : ''}`} multiline maw={340} withArrow openDelay={250}><Text size="xs" c="dimmed" lineClamp={1}>{fmtFecha(v.fecha)}{esNota(v) ? '' : ` · ${v.articulos} art.`}{!esVendedor && v.vendedor ? ` · ${v.vendedor}` : ''}</Text></Tooltip>
+                    <Text size="sm" fw={700} c="navy.9" lineClamp={1} mt={4}>{v.cliente}</Text>
+                    <Text fz={11.5} c="dimmed" lineClamp={1} mt={1}>
+                        {fmtFecha(v.fecha)}{esNota(v) ? '' : ` · ${v.articulos} art.`}{!esVendedor && v.vendedor ? ` · ${v.vendedor}` : ''}
+                    </Text>
                 </Box>
                 <Box ta="right" style={{ flexShrink: 0 }}>
-                    <Text fw={800} size="md" c={v.tipoDocumento === 'NOTA_CREDITO' ? 'red.7' : undefined} style={{ whiteSpace: 'nowrap' }}>{fmtUsd(v.totalUsd)}</Text>
-                    {v.moneda === 'BS' && <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>{fmtBs(v.total)}</Text>}
+                    <Text fw={800} fz={17} lh={1.15} c={v.tipoDocumento === 'NOTA_CREDITO' ? 'red.7' : 'navy.9'} style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{fmtUsd(v.totalUsd)}</Text>
+                    {v.moneda === 'BS' && <Text fz={11} c="dimmed" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{fmtBs(v.total)}</Text>}
                 </Box>
             </Group>
-            <Group justify="space-between" wrap="nowrap" mt={8} gap="xs">
-                <Group gap={6} wrap="wrap" style={{ minWidth: 0 }}>
-                    <Badge variant="light" color={(esNota(v) ? COLOR_NOTA : COLOR_DESPACHO)[v.estado] || 'gray'}>{v.estado}</Badge>
+
+            <Group justify="space-between" wrap="nowrap" mt={8} pt={8} gap="xs" style={{ borderTop: '1px solid #eef1f6' }}>
+                <Group gap={5} wrap="wrap" style={{ minWidth: 0, flex: 1 }}>
+                    <Badge size="sm" variant="light" color={(esNota(v) ? COLOR_NOTA : COLOR_DESPACHO)[v.estado] || 'gray'}>{v.estado}</Badge>
                     <BadgeCondicion condicion={v.condicionPago} />
-                    {v.pago && <Badge variant="light" color={COLOR_PAGO[v.pago] || 'gray'}>{v.pago}</Badge>}
+                    {v.pago && <Badge size="sm" variant="light" color={COLOR_PAGO[v.pago] || 'gray'}>{v.pago}</Badge>}
                     <BadgeRetencion estado={v.retencion} />
                     {v.tipo === 'MAYOR' && v.empacadorId && (
                         <Group gap={2} wrap="nowrap" aria-label={`Empaque ${v.empacadoAt ? 'firmado' : 'pendiente'} · Etiquetado ${v.etiquetadoAt ? 'firmado' : 'pendiente'}`}>
-                            <IconPackage size={16} color={v.empacadoAt ? 'var(--mantine-color-teal-6)' : 'var(--mantine-color-gray-5)'} />
-                            <IconCircleCheck size={16} color={v.etiquetadoAt ? 'var(--mantine-color-teal-6)' : 'var(--mantine-color-gray-5)'} />
+                            <IconPackage size={15} color={v.empacadoAt ? 'var(--mantine-color-teal-6)' : 'var(--mantine-color-gray-5)'} />
+                            <IconCircleCheck size={15} color={v.etiquetadoAt ? 'var(--mantine-color-teal-6)' : 'var(--mantine-color-gray-5)'} />
                         </Group>
                     )}
                 </Group>
                 {(!esNota(v) || sePuedeImprimir(v, esVendedor)) && (
-                    <Group gap={2} wrap="nowrap" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                        {sePuedeImprimir(v, esVendedor) && <ActionIcon size="lg" variant="subtle" color="gray" aria-label="Imprimir" onClick={() => window.open(urlImprimir(v), '_blank')}><IconPrinter size={18} /></ActionIcon>}
-                        {isAdmin && !esNota(v) && <ActionIcon size="lg" variant="subtle" color="red" aria-label="Eliminar" onClick={onEliminar}><IconTrash size={18} /></ActionIcon>}
+                    <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                        {sePuedeImprimir(v, esVendedor) && (
+                            <ActionIcon size={36} radius="md" variant="light" color="navy" aria-label="Imprimir" onClick={() => window.open(urlImprimir(v), '_blank')}>
+                                <IconPrinter size={18} />
+                            </ActionIcon>
+                        )}
+                        {isAdmin && !esNota(v) && (
+                            <ActionIcon size={36} radius="md" variant="light" color="red" aria-label="Eliminar" onClick={onEliminar}>
+                                <IconTrash size={18} />
+                            </ActionIcon>
+                        )}
                     </Group>
                 )}
             </Group>
@@ -212,6 +239,8 @@ export default function VentasDashboard() {
     const [posAbierto, setPosAbierto] = useState(false);
     const [porEliminar, setPorEliminar] = useState(null);
     const [eliminando, setEliminando] = useState(false);
+    const [verGraficosMovil, setVerGraficosMovil] = useState(false);
+    const [filtrosMovil, setFiltrosMovil] = useState(false);
 
     useEffect(() => { if (periodo !== 'RANGO') setRango(rangoDe(periodo)); }, [periodo]);
     // Enlaces antiguos a "nuevo pedido" llegan con ?nueva=1: se abre el POS
@@ -280,23 +309,110 @@ export default function VentasDashboard() {
         }
     };
 
+    const filtrosActivos = (doc ? 1 : 0) + (estado ? 1 : 0) + (pago ? 1 : 0) + (orden.sort !== 'fecha' || orden.dir !== 'desc' ? 1 : 0);
+    const limpiarFiltros = () => { setDoc(null); setEstado(null); setPago(null); setOrden({ sort: 'fecha', dir: 'desc' }); };
+    const alertasMovil = [porImprimir.data, porAprobar.data].filter(Boolean).length;
+
+    const seccionGraficos = (
+        <>
+            <Grid gutter={telefono ? 'sm' : 'lg'}>
+                <Grid.Col span={{ base: 12, lg: 6 }}>
+                    <Paper withBorder radius="lg" p="md" h="100%" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+                        <Title order={5} c="navy.9" mb="sm">Ventas por día (USD)</Title>
+                        {resumen.isLoading ? <Skeleton h={230} /> : (
+                            <LineChart h={230} data={serie} dataKey="dia" series={[{ name: 'total', label: 'Vendido', color: 'brand.6' }]}
+                                curveType="monotone" withDots={serie.length <= 31} valueFormatter={(v) => fmtUsd(v)} gridAxis="xy" tickLine="none" />
+                        )}
+                    </Paper>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
+                    <Paper withBorder radius="lg" p="md" h="100%" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+                        <Title order={5} c="navy.9" mb="sm">Por tipo de venta</Title>
+                        {resumen.isLoading ? <Skeleton h={230} /> : !dona.length ? <Center h={230}><Text size="sm" c="dimmed">Sin ventas en este periodo.</Text></Center> : (
+                            <Stack align="center" gap="md">
+                                <DonutChart data={dona} size={170} thickness={26} withTooltip tooltipDataSource="segment" chartLabel={fmtUsd(r?.total)} valueFormatter={(v) => fmtUsd(v)} />
+                                <Stack gap={6}>{dona.map((d) => (
+                                    <Group key={d.name} gap={8} wrap="nowrap"><Box w={12} h={12} bg={d.color} style={{ borderRadius: 4 }} /><Text size="sm">{d.name}</Text><Text size="sm" fw={700}>{fmtUsd(d.value)}</Text></Group>
+                                ))}</Stack>
+                            </Stack>
+                        )}
+                    </Paper>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
+                    <Ranking titulo="Productos más vendidos" cargando={resumen.isLoading} filas={(r?.topProductos || []).map((p) => ({ nombre: p.nombre, valor: p.cantidad, cantidad: p.cantidad }))} formato={(f) => `${f.cantidad} und.`} />
+                </Grid.Col>
+            </Grid>
+
+            {!esVendedor && (r?.topVendedores?.length > 0 || resumen.isLoading) && (
+                <Ranking titulo="Ventas por vendedor" cargando={resumen.isLoading} filas={(r?.topVendedores || []).map((v) => ({ nombre: v.nombre, valor: v.total, total: v.total, ventas: v.ventas }))} formato={(f) => `${fmtUsd(f.total)} · ${f.ventas} ventas`} />
+            )}
+        </>
+    );
+
     return (
-        <Box w="100%" px={{ base: 'xs', sm: 'md' }} py="md">
-            <Stack gap={telefono ? 'md' : 'lg'}>
-                <Group justify="space-between" align="flex-end" wrap="wrap">
+        <Box w="100%" px={{ base: 'xs', sm: 'md' }} py={{ base: 'sm', sm: 'md' }}>
+            <Stack gap={telefono ? 'sm' : 'lg'}>
+                <Group justify="space-between" align="flex-end" wrap="wrap" gap="sm">
                     <Box>
                         <Title order={telefono ? 3 : 2} c="white">Ventas y pedidos</Title>
                         <Text size="sm" c="gray.4">{esVendedor ? 'Tus ventas y los pedidos que te asignaron.' : 'Todo lo vendido: al detal, al mayor y online.'}{tasa ? ` · BCV ${tasa} Bs/$` : ''}</Text>
                     </Box>
-                    {/* En el teléfono la venta nueva va primero y a todo el ancho */}
-                    <Group gap="xs" w={telefono ? '100%' : undefined} wrap={telefono ? 'nowrap' : 'wrap'}>
-                        {porImprimir.data && <Button size="lg" variant="filled" color={porImprimir.data.total ? "blue.8" : "teal"} fw={800} leftSection={<IconPrinter size={18} />} onClick={() => router.push('/superuser/ventas/por-imprimir')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 0, flexShrink: 0 } : undefined}>{telefono ? 'Por imprimir' : 'Documentos por imprimir'}{porImprimir.data.total ? ` (${porImprimir.data.total})` : ''}</Button>}
-                        {porAprobar.data && <Button size="md" variant="filled" color={porAprobar.data.total ? 'orange' : 'gray'} leftSection={<IconFileInvoice size={18} />} onClick={() => router.push('/superuser/ventas/por-aprobar')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 1, flexShrink: 0 } : undefined}>{telefono ? 'Por aprobar' : 'Facturas por aprobar'}{porAprobar.data.total ? ` (${porAprobar.data.total})` : ''}</Button>}
-                        {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconCashRegister size={18} />} onClick={() => router.push('/superuser/ventas/cierre')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 3, flexShrink: 0 } : undefined}>{telefono ? 'Cierre' : 'Cierre de caja'}</Button>}
-                        {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconListNumbers size={18} />} onClick={() => router.push('/superuser/ventas/controles')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 3, flexShrink: 0 } : undefined}>{telefono ? 'Controles' : 'Números de control'}</Button>}
-                        <Button size="md" variant="light" color="teal" leftSection={<IconFileInvoice size={18} />} onClick={() => router.push('/superuser/presupuestos')} px={telefono ? 'sm' : undefined} style={telefono ? { order: 2, flexShrink: 0 } : undefined}>Presupuestos</Button>
-                        <Button size="md" color="accent.6" leftSection={<IconPlus size={18} />} onClick={() => setPosAbierto(true)} style={telefono ? { flex: 1, minWidth: 0 } : undefined}>{telefono ? 'Nueva venta' : 'Nueva venta o pedido'}</Button>
-                    </Group>
+
+                    {telefono ? (
+                        <Stack gap={8} w="100%">
+                            <Button fullWidth size="md" radius="md" color="accent.6" leftSection={<IconPlus size={18} />} onClick={() => setPosAbierto(true)}>
+                                Nueva venta o pedido
+                            </Button>
+
+                            {alertasMovil > 0 && (
+                                <SimpleGrid cols={alertasMovil} spacing={8}>
+                                    {porImprimir.data && (
+                                        <Button
+                                            size="sm" radius="md" variant="filled" color={porImprimir.data.total ? 'blue.8' : 'teal'} fw={700}
+                                            leftSection={<IconPrinter size={16} />} px="xs"
+                                            onClick={() => router.push('/superuser/ventas/por-imprimir')}
+                                        >
+                                            Imprimir{porImprimir.data.total ? ` (${porImprimir.data.total})` : ''}
+                                        </Button>
+                                    )}
+                                    {porAprobar.data && (
+                                        <Button
+                                            size="sm" radius="md" variant="filled" color={porAprobar.data.total ? 'orange' : 'gray'} fw={700}
+                                            leftSection={<IconFileInvoice size={16} />} px="xs"
+                                            onClick={() => router.push('/superuser/ventas/por-aprobar')}
+                                        >
+                                            Aprobar{porAprobar.data.total ? ` (${porAprobar.data.total})` : ''}
+                                        </Button>
+                                    )}
+                                </SimpleGrid>
+                            )}
+
+                            <SimpleGrid cols={esVendedor ? 1 : 3} spacing={8}>
+                                <Button size="xs" h={38} radius="md" variant="light" color="teal" leftSection={<IconFileInvoice size={15} />} px={8} onClick={() => router.push('/superuser/presupuestos')}>
+                                    Presupuestos
+                                </Button>
+                                {!esVendedor && (
+                                    <Button size="xs" h={38} radius="md" variant="light" color="gray" leftSection={<IconCashRegister size={15} />} px={8} onClick={() => router.push('/superuser/ventas/cierre')}>
+                                        Cierre
+                                    </Button>
+                                )}
+                                {!esVendedor && (
+                                    <Button size="xs" h={38} radius="md" variant="light" color="gray" leftSection={<IconListNumbers size={15} />} px={8} onClick={() => router.push('/superuser/ventas/controles')}>
+                                        Controles
+                                    </Button>
+                                )}
+                            </SimpleGrid>
+                        </Stack>
+                    ) : (
+                        <Group gap="xs" wrap="wrap">
+                            {porImprimir.data && <Button size="lg" variant="filled" color={porImprimir.data.total ? 'blue.8' : 'teal'} fw={800} leftSection={<IconPrinter size={18} />} onClick={() => router.push('/superuser/ventas/por-imprimir')}>Documentos por imprimir{porImprimir.data.total ? ` (${porImprimir.data.total})` : ''}</Button>}
+                            {porAprobar.data && <Button size="md" variant="filled" color={porAprobar.data.total ? 'orange' : 'gray'} leftSection={<IconFileInvoice size={18} />} onClick={() => router.push('/superuser/ventas/por-aprobar')}>Facturas por aprobar{porAprobar.data.total ? ` (${porAprobar.data.total})` : ''}</Button>}
+                            {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconCashRegister size={18} />} onClick={() => router.push('/superuser/ventas/cierre')}>Cierre de caja</Button>}
+                            {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconListNumbers size={18} />} onClick={() => router.push('/superuser/ventas/controles')}>Números de control</Button>}
+                            <Button size="md" variant="light" color="teal" leftSection={<IconFileInvoice size={18} />} onClick={() => router.push('/superuser/presupuestos')}>Presupuestos</Button>
+                            <Button size="md" color="accent.6" leftSection={<IconPlus size={18} />} onClick={() => setPosAbierto(true)}>Nueva venta o pedido</Button>
+                        </Group>
+                    )}
                 </Group>
 
                 <Group gap="sm" wrap="wrap">
@@ -311,58 +427,64 @@ export default function VentasDashboard() {
 
                 {(resumen.error || lista.error) && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{(resumen.error || lista.error).message}</Alert>}
 
-                <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing={{ base: 'xs', sm: 'md' }}>
+                <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing={{ base: 8, sm: 'md' }}>
+                    <Indicador icono={IconCash} color="teal" titulo="Total vendido" cargando={resumen.isLoading} valor={fmtUsd(r?.total)} detalle={tasa ? fmtBs((r?.total || 0) * tasa) : undefined} spanFull={telefono} />
                     <Indicador icono={IconShoppingBag} color="blue" titulo="Ventas" cargando={resumen.isLoading} valor={r?.ventas ?? 0} detalle={r?.anuladas ? `${r.anuladas} anulada(s)` : 'Sin anuladas'} />
-                    <Indicador icono={IconCash} color="teal" titulo="Total vendido" cargando={resumen.isLoading} valor={fmtUsd(r?.total)} detalle={tasa ? fmtBs((r?.total || 0) * tasa) : undefined} />
                     <Indicador icono={IconReceipt2} color="grape" titulo="Ticket promedio" cargando={resumen.isLoading} valor={fmtUsd(r?.ticketPromedio)} />
                     <Indicador icono={IconClockHour4} color="orange" titulo="Por cobrar" cargando={resumen.isLoading} valor={fmtUsd(r?.porCobrar)} detalle="Ventas sin pagar" />
                     <Indicador icono={IconTruckDelivery} color="violet" titulo="Por despachar" cargando={resumen.isLoading} valor={r?.porDespachar ?? 0} detalle="Pendientes de entrega" />
                 </SimpleGrid>
 
-                <Grid gutter="lg">
-                    <Grid.Col span={{ base: 12, lg: 6 }}>
-                    <Paper withBorder radius="lg" p="md" h="100%" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
-                        <Title order={5} c="navy.9" mb="sm">Ventas por día (USD)</Title>
-                        {resumen.isLoading ? <Skeleton h={230} /> : (
-                            <LineChart h={230} data={serie} dataKey="dia" series={[{ name: 'total', label: 'Vendido', color: 'brand.6' }]}
-                                curveType="monotone" withDots={serie.length <= 31} valueFormatter={(v) => fmtUsd(v)} gridAxis="xy" tickLine="none" />
-                        )}
-                    </Paper>
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
-                    <Paper withBorder radius="lg" p="md" h="100%" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
-                        <Title order={5} c="navy.9" mb="sm">Por tipo de venta</Title>
-                        {resumen.isLoading ? <Skeleton h={230} /> : !dona.length ? <Center h={230}><Text size="sm" c="dimmed">Sin ventas en este periodo.</Text></Center> : (
-                            <Stack align="center" gap="md">
-                                <DonutChart data={dona} size={170} thickness={26} withTooltip tooltipDataSource="segment" chartLabel={fmtUsd(r?.total)} valueFormatter={(v) => fmtUsd(v)} />
-                                <Stack gap={6}>{dona.map((d) => (
-                                    <Group key={d.name} gap={8} wrap="nowrap"><Box w={12} h={12} bg={d.color} style={{ borderRadius: 4 }} /><Text size="sm">{d.name}</Text><Text size="sm" fw={700}>{fmtUsd(d.value)}</Text></Group>
-                                ))}</Stack>
-                            </Stack>
-                        )}
-                    </Paper>
-                    </Grid.Col>
-                    <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
-                    <Ranking titulo="Productos más vendidos" cargando={resumen.isLoading} filas={(r?.topProductos || []).map((p) => ({ nombre: p.nombre, valor: p.cantidad, cantidad: p.cantidad }))} formato={(f) => `${f.cantidad} und.`} />
-                    </Grid.Col>
-                </Grid>
+                {telefono ? (
+                    <Box>
+                        <Button
+                            fullWidth size="sm" radius="md" variant="white" color="navy.9"
+                            leftSection={<IconChartBar size={16} />}
+                            rightSection={verGraficosMovil ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
+                            onClick={() => setVerGraficosMovil((v) => !v)}
+                        >
+                            {verGraficosMovil ? 'Ocultar gráficos y rankings' : 'Ver gráficos y rankings'}
+                        </Button>
+                        <Collapse in={verGraficosMovil}>
+                            <Stack gap="sm" mt="sm">{seccionGraficos}</Stack>
+                        </Collapse>
+                    </Box>
+                ) : seccionGraficos}
 
-                {!esVendedor && (r?.topVendedores?.length > 0 || resumen.isLoading) && (
-                    <Ranking titulo="Ventas por vendedor" cargando={resumen.isLoading} filas={(r?.topVendedores || []).map((v) => ({ nombre: v.nombre, valor: v.total, total: v.total, ventas: v.ventas }))} formato={(f) => `${fmtUsd(f.total)} · ${f.ventas} ventas`} />
-                )}
-
-                <Paper withBorder radius="lg" p={{ base: 'sm', sm: 'md' }} style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+                <Paper withBorder radius="lg" p={{ base: 'xs', sm: 'md' }} style={{ boxShadow: 'var(--mm-shadow-card)' }}>
                     {telefono ? (
                         <Stack gap="xs" mb="sm">
-                            <SegmentedControl fullWidth color="navy.9" value={tipo} onChange={setTipo} data={[{ value: 'todos', label: 'Todas' }, { value: 'DETAL', label: 'Detal' }, { value: 'MAYOR', label: 'Mayor' }, { value: 'ONLINE', label: 'Online' }]} />
-                            <TextInput placeholder="Documento, cliente o RIF…" leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)} inputMode="search" enterKeyHint="search" />
-                            <SimpleGrid cols={2} spacing="xs">
-                                <Select placeholder="Documento" clearable data={DOCUMENTOS} value={doc} onChange={setDoc} />
-                                <Select placeholder="Despacho" clearable data={['Pendiente', 'Empacado', 'Parcial', 'Completado', 'Cancelado']} value={estado} onChange={setEstado} />
-                                <Select placeholder="Pago" clearable data={['Pagado', 'Pendiente', 'Vencido']} value={pago} onChange={setPago} />
-                            </SimpleGrid>
-                            <Select aria-label="Ordenar" leftSection={<IconChevronDown size={16} />} allowDeselect={false} data={ORDENES_TELEFONO}
-                                value={`${orden.sort}:${orden.dir}`} onChange={(v) => { if (v) { const [sort, dir] = v.split(':'); setOrden({ sort, dir }); } }} />
+                            <SegmentedControl fullWidth size="xs" color="navy.9" value={tipo} onChange={setTipo} data={[{ value: 'todos', label: 'Todas' }, { value: 'DETAL', label: 'Detal' }, { value: 'MAYOR', label: 'Mayor' }, { value: 'ONLINE', label: 'Online' }]} />
+                            <Group gap={6} wrap="nowrap">
+                                <TextInput
+                                    flex={1} miw={0} placeholder="Documento, cliente o RIF…"
+                                    leftSection={<IconSearch size={16} />}
+                                    rightSection={busqueda ? <CloseButton size="sm" aria-label="Borrar búsqueda" onClick={() => setBusqueda('')} /> : null}
+                                    value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)}
+                                    inputMode="search" enterKeyHint="search"
+                                />
+                                <Button
+                                    size="sm" radius="md" variant={filtrosActivos > 0 ? 'filled' : 'default'} color="navy.9"
+                                    leftSection={<IconAdjustmentsHorizontal size={16} />}
+                                    rightSection={filtrosActivos > 0 ? <Badge size="xs" circle color="sky.3" c="navy.9">{filtrosActivos}</Badge> : null}
+                                    onClick={() => setFiltrosMovil(true)}
+                                    style={{ flexShrink: 0 }}
+                                >
+                                    Filtros
+                                </Button>
+                            </Group>
+                            {filtrosActivos > 0 && (
+                                <Group gap={6} wrap="wrap">
+                                    {doc && <Badge size="sm" variant="light" color="navy" rightSection={<CloseButton size="xs" onClick={() => setDoc(null)} />}>{DOC[doc]?.etiqueta || doc}</Badge>}
+                                    {estado && <Badge size="sm" variant="light" color="blue" rightSection={<CloseButton size="xs" onClick={() => setEstado(null)} />}>{estado}</Badge>}
+                                    {pago && <Badge size="sm" variant="light" color="orange" rightSection={<CloseButton size="xs" onClick={() => setPago(null)} />}>{pago}</Badge>}
+                                    {(orden.sort !== 'fecha' || orden.dir !== 'desc') && (
+                                        <Badge size="sm" variant="light" color="gray" rightSection={<CloseButton size="xs" onClick={() => setOrden({ sort: 'fecha', dir: 'desc' })} />}>
+                                            {ORDENES_TELEFONO.find((o) => o.value === `${orden.sort}:${orden.dir}`)?.label || 'Ordenado'}
+                                        </Badge>
+                                    )}
+                                </Group>
+                            )}
                         </Stack>
                     ) : (
                         <Group gap="sm" mb="md" wrap="wrap" align="flex-end">
@@ -453,6 +575,35 @@ export default function VentasDashboard() {
                     )}
                 </Paper>
             </Stack>
+
+            <Drawer
+                opened={filtrosMovil}
+                onClose={() => setFiltrosMovil(false)}
+                position="bottom"
+                title={<Text fw={800} c="navy.9">Filtros y orden</Text>}
+                styles={{
+                    content: { height: 'auto', maxHeight: '85dvh', borderTopLeftRadius: 18, borderTopRightRadius: 18 },
+                    body: { paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' },
+                }}
+                overlayProps={{ backgroundOpacity: 0.45, blur: 2 }}
+            >
+                <Stack gap="sm">
+                    <Select label="Tipo de documento" placeholder="Todos" clearable data={DOCUMENTOS} value={doc} onChange={setDoc} />
+                    <SimpleGrid cols={2} spacing="xs">
+                        <Select label="Despacho" placeholder="Todos" clearable data={['Pendiente', 'Empacado', 'Parcial', 'Completado', 'Cancelado']} value={estado} onChange={setEstado} />
+                        <Select label="Pago" placeholder="Todos" clearable data={['Pagado', 'Pendiente', 'Vencido']} value={pago} onChange={setPago} />
+                    </SimpleGrid>
+                    <Select
+                        label="Ordenar por" allowDeselect={false} data={ORDENES_TELEFONO}
+                        value={`${orden.sort}:${orden.dir}`}
+                        onChange={(v) => { if (v) { const [sort, dir] = v.split(':'); setOrden({ sort, dir }); } }}
+                    />
+                    <Group grow gap="xs" mt="xs">
+                        {filtrosActivos > 0 && <Button variant="default" onClick={limpiarFiltros}>Limpiar</Button>}
+                        <Button color="navy.9" onClick={() => setFiltrosMovil(false)}>Aplicar</Button>
+                    </Group>
+                </Stack>
+            </Drawer>
 
             <Modal opened={Boolean(porEliminar)} onClose={() => setPorEliminar(null)} centered title={<Text fw={800}>Eliminar venta</Text>}>
                 <Stack gap="md">
