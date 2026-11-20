@@ -38,7 +38,7 @@ export async function GET(request) {
         const enRango = `m."fecha" BETWEEN :desde AND :hasta`;
         const desdeMov = `FROM "MovimientosFinancieros" m LEFT JOIN "CategoriasFinancieras" c ON c."id" = m."categoriaId"`;
 
-        const [[kpi], porDia, porCategoria, porMetodo, mensual, [posicion], [iva]] = await Promise.all([
+        const [[kpi], porDia, porCategoria, porMetodo, mensual, [posicion], [iva], detalleCompras, detalleVentas] = await Promise.all([
             q(`SELECT
                 COALESCE(SUM(m."montoUsd") FILTER (WHERE m."tipo" = 'INGRESO' AND COALESCE(c."nombre", '') <> :catIva), 0)::float AS ingresos,
                 COALESCE(SUM(m."montoUsd") FILTER (WHERE m."tipo" = 'INGRESO' AND c."nombre" = :catIva), 0)::float AS "ivaRecaudado",
@@ -78,6 +78,30 @@ export async function GET(request) {
                 -- IVA que retuvieron los clientes (comprobante confirmado): ya lo pagaron ellos al SENIAT, se descuenta como en el libro
                 (SELECT COALESCE(SUM(r."ivaRetenido" / NULLIF(r."tasaCambio", 0)), 0)::float FROM "RetencionesIva" r WHERE r."tipo" = 'VENTA' AND r."estado" = 'REGISTRADA' AND r."fecha" BETWEEN :desde AND :hasta) AS "retenidoClientes",
                 (SELECT COALESCE(SUM(${VENTA_USD}), 0)::float FROM "Ventas" v WHERE v."tipoDocumento" = 'FACTURA' AND (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta AND v."statusDespacho" <> 'Cancelado') + ${NOTAS_USD('totalFinal', 'VENTA')} AS facturado`),
+            // Detalle de gastos de compra del periodo (monto completo, sin restar retención) con proveedor enlazable
+            q(`SELECT m."id", to_char(m."fecha", 'YYYY-MM-DD') AS fecha, m."facturaCompraId",
+                f."numeroDocumento", COALESCE(p."nombre", 'Proveedor') AS proveedor,
+                m."montoUsd"::float AS "montoUsd", m."montoVes"::float AS "montoVes",
+                m."metodoPago", m."descripcion"
+                FROM "MovimientosFinancieros" m
+                JOIN "FacturasCompras" f ON f."id" = m."facturaCompraId"
+                LEFT JOIN "Proveedores" p ON p."id" = f."proveedorId"
+                WHERE ${enRango} AND m."tipo" = 'GASTO' AND m."facturaCompraId" IS NOT NULL
+                ORDER BY m."fecha" DESC, m."createdAt" DESC`),
+            // Detalle de ingresos por ventas y cobros de facturas del periodo con cliente enlazable
+            q(`SELECT m."id", to_char(m."fecha", 'YYYY-MM-DD') AS fecha,
+                COALESCE(m."ventaId", a."ventaId") AS "ventaId",
+                v."numeroDocumento", COALESCE(cl."nombre", 'Cliente eventual') AS cliente,
+                m."montoUsd"::float AS "montoUsd", m."montoVes"::float AS "montoVes",
+                m."metodoPago", m."descripcion"
+                FROM "MovimientosFinancieros" m
+                LEFT JOIN "CategoriasFinancieras" c ON c."id" = m."categoriaId"
+                LEFT JOIN "Abonos" a ON a."id" = m."abonoId"
+                JOIN "Ventas" v ON v."id" = COALESCE(m."ventaId", a."ventaId")
+                LEFT JOIN "Clientes" cl ON cl."id" = v."clienteId"
+                WHERE ${enRango} AND m."tipo" = 'INGRESO' AND COALESCE(c."nombre", '') <> :catIva
+                  AND (m."ventaId" IS NOT NULL OR m."abonoId" IS NOT NULL)
+                ORDER BY m."fecha" DESC, m."createdAt" DESC`),
         ]);
 
         const utilidad = Number((kpi.ingresos - kpi.gastos).toFixed(2));
@@ -88,6 +112,8 @@ export async function GET(request) {
             gastosPorCategoria: porCategoria.filter((c) => c.tipo === 'GASTO'),
             ingresosPorCategoria: porCategoria.filter((c) => c.tipo === 'INGRESO'),
             porMetodo,
+            detalleCompras,
+            detalleVentas,
             posicion: { ...posicion, patrimonio: Number((posicion.inventario + posicion.porCobrar - posicion.porPagar).toFixed(2)) },
             iva: { ...iva, aPagar: Number((iva.debito - iva.credito - iva.retenidoClientes).toFixed(2)) },
         });

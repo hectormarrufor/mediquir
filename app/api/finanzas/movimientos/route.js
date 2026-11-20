@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Op } from 'sequelize';
-import { MovimientoFinanciero, CategoriaFinanciera, BcvPrecioHistorico } from '@/models';
+import { MovimientoFinanciero, CategoriaFinanciera, BcvPrecioHistorico, FacturaCompra, Proveedor, Venta, Cliente, Abono } from '@/models';
 import sequelize from '@/sequelize';
 import { requerirNoVendedor } from '../../_lib/acceso';
 
@@ -24,7 +24,30 @@ export async function GET(request) {
         const movimientos = await MovimientoFinanciero.findAll({
             where,
             include: [
-                { model: CategoriaFinanciera, as: 'categoria', attributes: ['nombre', 'tipo'] }
+                { model: CategoriaFinanciera, as: 'categoria', attributes: ['nombre', 'tipo'] },
+                {
+                    model: FacturaCompra,
+                    as: 'facturaCompra',
+                    attributes: ['id', 'numeroDocumento'],
+                    include: [{ model: Proveedor, as: 'proveedor', attributes: ['id', 'nombre'] }],
+                },
+                {
+                    model: Venta,
+                    as: 'venta',
+                    attributes: ['id', 'numeroDocumento'],
+                    include: [{ model: Cliente, as: 'cliente', attributes: ['id', 'nombre'] }],
+                },
+                {
+                    model: Abono,
+                    as: 'abono',
+                    attributes: ['id', 'ventaId'],
+                    include: [{
+                        model: Venta,
+                        as: 'venta',
+                        attributes: ['id', 'numeroDocumento'],
+                        include: [{ model: Cliente, as: 'cliente', attributes: ['id', 'nombre'] }],
+                    }],
+                },
             ],
             order: [['fecha', 'DESC'], ['createdAt', 'DESC']]
         });

@@ -12,13 +12,12 @@ const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const iso = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 const TIPOS = { FACTURA: 'FAC', NOTA_ENTREGA: 'N/E', VENTA_RAPIDA: 'V/R' };
 
-// «Pago móvil», «Transferencia»… del abono → la forma de pago del recibo
+// «Pago móvil», «Transferencia», «Efectivo» del abono → la forma de pago del recibo
 const formaDe = (metodos) => {
     const t = metodos.join(' ').toLowerCase();
-    if (/cheque/.test(t)) return 'CHEQUE';
-    if (/transfer|pago m[oó]vil|zelle|dep[oó]sito/.test(t)) return 'TRANSFERENCIA';
-    if (/efectivo|divisa|cash/.test(t)) return 'EFECTIVO';
-    return 'OTRO';
+    if (/pago m[oó]vil/.test(t)) return 'PAGO_MOVIL';
+    if (/transfer|zelle|dep[oó]sito/.test(t)) return 'TRANSFERENCIA';
+    return 'EFECTIVO';
 };
 const unicos = (lista) => [...new Set(lista.map((x) => String(x ?? '').trim()).filter(Boolean))];
 

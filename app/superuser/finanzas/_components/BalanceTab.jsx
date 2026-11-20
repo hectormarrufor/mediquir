@@ -2,13 +2,14 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Alert, Box, Card, Center, Grid, Group, Paper, SegmentedControl, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, UnstyledButton } from '@mantine/core';
+import { Alert, Badge, Box, Card, Center, Divider, Grid, Group, Paper, ScrollArea, SegmentedControl, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, UnstyledButton } from '@mantine/core';
 import { LineChart, BarChart, DonutChart } from '@mantine/charts';
 import { DatePickerInput } from '@mantine/dates';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { IconInfoCircle, IconAlertTriangle, IconArrowDownRight, IconArrowUpRight, IconBuildingWarehouse, IconChevronRight, IconPercentage, IconReceiptTax, IconScale, IconUsers, IconWallet } from '@tabler/icons-react';
 import { aBolivares } from '@/app/constants/facturacion';
+import { formatearFecha } from '@/app/constants/hora';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -173,6 +174,106 @@ export default function BalanceTab() {
                 </Grid.Col>
                 <Grid.Col span={{ base: 12, md: 6 }}>
                     <Tarjeta titulo="Ingresos por método de pago" cargando={isLoading} vacio={!data?.porMetodo?.length}><Dona filas={data?.porMetodo || []} /></Tarjeta>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, md: 6 }}>
+                    <Paper withBorder radius="lg" p="md" h="100%" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+                        <Group justify="space-between" mb="sm" wrap="nowrap">
+                            <Title order={5} c="navy.9">Gastos de compra</Title>
+                            {!isLoading && (
+                                <Badge color="red" variant="light">
+                                    {(data?.detalleCompras || []).length} · {fmtUsd((data?.detalleCompras || []).reduce((a, x) => a + (Number(x.montoUsd) || 0), 0))}
+                                </Badge>
+                            )}
+                        </Group>
+                        {isLoading ? <Skeleton h={220} /> : !(data?.detalleCompras || []).length ? (
+                            <Center h={160}><Text size="sm" c="dimmed">Sin compras registradas en caja en este periodo.</Text></Center>
+                        ) : (
+                            <ScrollArea.Autosize mah={360} offsetScrollbars>
+                                <Stack gap={0}>
+                                    {(data?.detalleCompras || []).map((c, idx) => (
+                                        <React.Fragment key={c.id}>
+                                            {idx > 0 && <Divider color="gray.2" />}
+                                            <UnstyledButton
+                                                component={Link}
+                                                href={`/superuser/compras/${c.facturaCompraId}`}
+                                                py={8}
+                                                px={6}
+                                                style={{ display: 'block', borderRadius: 8 }}
+                                                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--mantine-color-gray-0)'; }}
+                                                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                                            >
+                                                <Group justify="space-between" wrap="nowrap" gap="sm">
+                                                    <Box style={{ minWidth: 0 }}>
+                                                        <Text size="sm" fw={700} c="navy.9" lineClamp={1}>{c.proveedor}</Text>
+                                                        <Text size="xs" c="dimmed" lineClamp={1}>
+                                                            {formatearFecha(c.fecha)} · Doc. {c.numeroDocumento} · {c.metodoPago}
+                                                        </Text>
+                                                    </Box>
+                                                    <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
+                                                        <Box ta="right">
+                                                            <Text size="sm" fw={800} c="red.7">−{fmtUsd(c.montoUsd)}</Text>
+                                                            <Text size="xs" c="dimmed">{fmtBs(c.montoVes)}</Text>
+                                                        </Box>
+                                                        <IconChevronRight size={16} color="var(--mantine-color-gray-5)" />
+                                                    </Group>
+                                                </Group>
+                                            </UnstyledButton>
+                                        </React.Fragment>
+                                    ))}
+                                </Stack>
+                            </ScrollArea.Autosize>
+                        )}
+                    </Paper>
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, md: 6 }}>
+                    <Paper withBorder radius="lg" p="md" h="100%" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+                        <Group justify="space-between" mb="sm" wrap="nowrap">
+                            <Title order={5} c="navy.9">Ventas y cobros del periodo</Title>
+                            {!isLoading && (
+                                <Badge color="teal" variant="light">
+                                    {(data?.detalleVentas || []).length} · {fmtUsd((data?.detalleVentas || []).reduce((a, x) => a + (Number(x.montoUsd) || 0), 0))}
+                                </Badge>
+                            )}
+                        </Group>
+                        {isLoading ? <Skeleton h={220} /> : !(data?.detalleVentas || []).length ? (
+                            <Center h={160}><Text size="sm" c="dimmed">Sin cobros de ventas en este periodo.</Text></Center>
+                        ) : (
+                            <ScrollArea.Autosize mah={360} offsetScrollbars>
+                                <Stack gap={0}>
+                                    {(data?.detalleVentas || []).map((v, idx) => (
+                                        <React.Fragment key={v.id}>
+                                            {idx > 0 && <Divider color="gray.2" />}
+                                            <UnstyledButton
+                                                component={Link}
+                                                href={`/superuser/ventas/${v.ventaId}`}
+                                                py={8}
+                                                px={6}
+                                                style={{ display: 'block', borderRadius: 8 }}
+                                                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--mantine-color-gray-0)'; }}
+                                                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                                            >
+                                                <Group justify="space-between" wrap="nowrap" gap="sm">
+                                                    <Box style={{ minWidth: 0 }}>
+                                                        <Text size="sm" fw={700} c="navy.9" lineClamp={1}>{v.cliente}</Text>
+                                                        <Text size="xs" c="dimmed" lineClamp={1}>
+                                                            {formatearFecha(v.fecha)} · {v.numeroDocumento} · {v.metodoPago}
+                                                        </Text>
+                                                    </Box>
+                                                    <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
+                                                        <Box ta="right">
+                                                            <Text size="sm" fw={800} c="teal.7">+{fmtUsd(v.montoUsd)}</Text>
+                                                            <Text size="xs" c="dimmed">{fmtBs(v.montoVes)}</Text>
+                                                        </Box>
+                                                        <IconChevronRight size={16} color="var(--mantine-color-gray-5)" />
+                                                    </Group>
+                                                </Group>
+                                            </UnstyledButton>
+                                        </React.Fragment>
+                                    ))}
+                                </Stack>
+                            </ScrollArea.Autosize>
+                        )}
+                    </Paper>
                 </Grid.Col>
             </Grid>
             )}

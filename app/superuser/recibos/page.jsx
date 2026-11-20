@@ -11,7 +11,8 @@ import { useVolver } from '@/app/helpers/useVolver';
 const fetchJson = async (url) => { const r = await fetch(url); const c = await r.json().catch(() => ({})); if (!r.ok) throw new Error(c.error || 'No se pudo cargar'); return c; };
 const monto = (r) => `${r.moneda === 'USD' ? '$' : 'Bs'} ${Number(r.monto).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fecha = (f) => String(f).slice(0, 10).split('-').reverse().join('/');
-const FORMAS = { EFECTIVO: 'Efectivo', CHEQUE: 'Cheque', TRANSFERENCIA: 'Transferencia', OTRO: 'Otro' };
+const FORMAS = { PAGO_MOVIL: 'Pago móvil', TRANSFERENCIA: 'Transferencia', EFECTIVO: 'Efectivo', CHEQUE: 'Cheque', OTRO: 'Otro' };
+const fmtNum = (n) => `00-${String(n ?? '').replace(/\D/g, '').padStart(5, '0')}`;
 
 export default function RecibosPage() {
     const router = useRouter();
@@ -22,7 +23,7 @@ export default function RecibosPage() {
             <Button variant="subtle" color="gray.3" size="compact-sm" leftSection={<IconChevronLeft size={16} />} onClick={volver}>Panel</Button>
             <Group justify="space-between" mb="sm" wrap="wrap">
                 <Title order={2} c="white">Recibos</Title>
-                <Button component={Link} href="/superuser/recibos/nuevo" leftSection={<IconPlus size={16} />}>Nuevo recibo{data?.siguiente ? ` (N.º ${data.siguiente})` : ''}</Button>
+                <Button component={Link} href="/superuser/recibos/nuevo" leftSection={<IconPlus size={16} />}>Nuevo recibo{data?.siguiente ? ` (N.º ${fmtNum(data.siguiente)})` : ''}</Button>
             </Group>
             <Text size="sm" c="gray.4" mb="sm">Constancia de lo que se le paga a una persona («Hemos pagado a») o de lo que se recibe («He recibido de»): monto, concepto y forma de pago. No es un documento fiscal.</Text>
             <Paper withBorder radius="md" bg="white" p="xs">
@@ -35,7 +36,7 @@ export default function RecibosPage() {
                             <Table.Tbody>
                                 {data.recibos.map((r) => (
                                     <Table.Tr key={r.id} style={{ cursor: 'pointer', opacity: r.anulado ? 0.5 : 1 }} onClick={() => router.push(`/superuser/recibos/${r.id}`)}>
-                                        <Table.Td><Text fw={700} size="sm">{r.numero}</Text></Table.Td>
+                                        <Table.Td><Text fw={700} size="sm">{fmtNum(r.numero)}</Text></Table.Td>
                                         <Table.Td>{fecha(r.fecha)}</Table.Td>
                                         <Table.Td><Text size="sm">{r.personaNombre}</Text><Text size="xs" c="dimmed">{r.tipo === 'PAGADO_A' ? 'Pagado a' : 'Recibido de'}</Text></Table.Td>
                                         <Table.Td><Text size="sm" lineClamp={1} maw={260}>{r.concepto || '—'}</Text></Table.Td>

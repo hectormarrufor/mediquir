@@ -59,6 +59,20 @@ export default function ImprimirRecibo() {
         return () => clearTimeout(temporizador);
     }, [venta, cargando, guia, pendiente, necesitaControl, ctl.estado, ctl.control, confirmado, listoVisto]);
 
+    // Título del navegador/PDF acorde al documento
+    useEffect(() => {
+        if (!venta) return;
+        const esFac = venta.tipoDocumento === 'FACTURA';
+        const esNE = venta.tipoDocumento === 'NOTA_ENTREGA' || /^NE-/i.test(String(venta.numeroDocumento || ''));
+        const tit = esFac ? 'Factura' : (esNE ? 'Nota de Entrega' : 'Recibo de Venta');
+        const num = esNE
+            ? (/^NE-\d{2}-/i.test(String(venta.numeroDocumento || ''))
+                ? String(venta.numeroDocumento).toUpperCase()
+                : `NE-00-${String(venta.numeroDocumento || '').replace(/^NE-/i, '').replace(/\D/g, '').padStart(5, '0')}`)
+            : venta.numeroDocumento;
+        document.title = `${tit} ${num || ''}`.trim();
+    }, [venta]);
+
     if (cargando) return <div style={{ padding: '2rem', textAlign: 'center' }}>Cargando documento para imprimir...</div>;
     if (!venta || venta.error) return <div style={{ padding: '2rem', textAlign: 'center' }}>Venta no encontrada.</div>;
 
@@ -74,9 +88,14 @@ export default function ImprimirRecibo() {
             : null;
         return <FacturaFormaLibre venta={ctl.control ? { ...venta, numeroControl: ctl.control } : venta} guia={guia} onReasignarControl={reasignar} />;
     }
-    const esNotaEntrega = venta.tipoDocumento === 'NOTA_ENTREGA';
-    
+    const esNotaEntrega = venta.tipoDocumento === 'NOTA_ENTREGA' || /^NE-/i.test(String(venta.numeroDocumento || ''));
     const tituloDocumento = esFactura ? 'Factura' : (esNotaEntrega ? 'Nota de Entrega' : 'Recibo de Venta');
+    // Correlativo de Nota de Entrega en PDF: NE-00-00010 (5 dígitos con serie 00-)
+    const numeroImpreso = esNotaEntrega
+        ? (/^NE-\d{2}-/i.test(String(venta.numeroDocumento || ''))
+            ? String(venta.numeroDocumento).toUpperCase()
+            : `NE-00-${String(venta.numeroDocumento || '').replace(/^NE-/i, '').replace(/\D/g, '').padStart(5, '0')}`)
+        : venta.numeroDocumento;
     
     let totalBs = venta.moneda === 'BS' ? Number(venta.totalFinal) : Number(venta.totalFinal) * Number(venta.tasaCambio);
     let totalUsd = venta.moneda === 'USD' ? Number(venta.totalFinal) : Number(venta.totalFinal) / Number(venta.tasaCambio);
@@ -115,7 +134,7 @@ export default function ImprimirRecibo() {
         <div className="print-wrapper">
             {/* Si se cerró el diálogo de impresión (o en el teléfono no salió solo), se vuelve a abrir desde aquí. No se imprime. */}
             <div className="print-barra">
-                <span>{tituloDocumento} {venta.numeroDocumento}</span>
+                <span>{tituloDocumento} {numeroImpreso}</span>
                 <button type="button" onClick={() => window.print()}>Imprimir</button>
             </div>
             <div id="print-section" className="print-container" style={{ zoom }}>
@@ -153,7 +172,7 @@ export default function ImprimirRecibo() {
                     <div className="doc-box">
                         <h2 className="doc-title">{tituloDocumento}</h2>
                         {noFiscal && <div className="label-red text-center" style={{ fontSize: '0.7rem', fontWeight: 700 }}>{esNotaEntrega ? 'DOCUMENTO NO FISCAL' : 'COMPROBANTE NO FISCAL'}</div>}
-                        <h1 className="doc-number">{venta.numeroDocumento}</h1>
+                        <h1 className="doc-number">{numeroImpreso}</h1>
                         <table className="doc-meta">
                             <tbody>
                                 <tr>

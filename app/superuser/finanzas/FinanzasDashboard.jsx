@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from '@mantine/form';
 import { useDebouncedValue, useDisclosure, useMediaQuery } from '@mantine/hooks';
 import {
-    Alert, Badge, Box, Button, Card, Center, Grid, Group, Modal, NumberInput, Pagination, Paper, SegmentedControl, Select,
+    Alert, Anchor, Badge, Box, Button, Card, Center, Grid, Group, Modal, NumberInput, Pagination, Paper, SegmentedControl, Select,
     SimpleGrid, Skeleton, Stack, Table, Text, TextInput, Textarea, Title,
 } from '@mantine/core';
 import { DonutChart } from '@mantine/charts';
@@ -41,6 +42,25 @@ function Tarjeta({ titulo, valor, color, icono: Icono, detalle, cargando }) {
             {detalle && !cargando && <Text size="xs" c="dimmed">{detalle}</Text>}
         </Card>
     );
+}
+
+function origenDe(m) {
+    if (m.facturaCompra) {
+        return {
+            nombre: m.facturaCompra.proveedor?.nombre || 'Proveedor',
+            doc: m.facturaCompra.numeroDocumento,
+            href: `/superuser/compras/${m.facturaCompra.id}`,
+        };
+    }
+    const v = m.venta || m.abono?.venta;
+    if (v) {
+        return {
+            nombre: v.cliente?.nombre || 'Cliente eventual',
+            doc: v.numeroDocumento,
+            href: `/superuser/ventas/${v.id}`,
+        };
+    }
+    return null;
 }
 
 // Movimientos de caja de un mes: ingresos y gastos asentados (ventas de contado, abonos, compras, pagos, manuales)
@@ -81,7 +101,8 @@ export default function FinanzasDashboard() {
 
     const filtrados = useMemo(() => movimientos.filter((m) => {
         if (tipo !== 'TODOS' && m.tipo !== tipo) return false;
-        return !q || [m.descripcion, m.referencia, m.metodoPago, m.categoria?.nombre].some((x) => String(x || '').toLowerCase().includes(q));
+        const o = origenDe(m);
+        return !q || [m.descripcion, m.referencia, m.metodoPago, m.categoria?.nombre, o?.nombre, o?.doc].some((x) => String(x || '').toLowerCase().includes(q));
     }), [movimientos, tipo, q]);
     const paginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA));
     const paginaActual = Math.min(pagina, paginas);
@@ -178,49 +199,72 @@ export default function FinanzasDashboard() {
             <Paper withBorder p="md" radius="md">
                 <Group gap="sm" mb="md" wrap="wrap" align="flex-end">
                     <SegmentedControl value={tipo} onChange={(v) => { setTipo(v); setPagina(1); }} data={[{ value: 'TODOS', label: 'Todos' }, { value: 'INGRESO', label: 'Ingresos' }, { value: 'GASTO', label: 'Egresos' }]} />
-                    <TextInput flex="1 1 220px" placeholder="Buscar descripción, referencia o categoría…" leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => { setBusqueda(e.currentTarget.value); setPagina(1); }} />
+                    <TextInput flex="1 1 220px" placeholder="Buscar cliente, proveedor, descripción, referencia…" leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => { setBusqueda(e.currentTarget.value); setPagina(1); }} />
                 </Group>
 
                 {isLoading ? <Stack gap="xs">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} h={40} />)}</Stack>
                     : !visibles.length ? <Center py={40}><Text c="dimmed">No hay movimientos con esos filtros.</Text></Center>
                     : isMobile ? (
                         <Stack gap="xs">
-                            {visibles.map((m) => (
-                                <Paper key={m.id} withBorder radius="md" p="xs" style={{ borderLeft: `4px solid var(--mantine-color-${m.tipo === 'INGRESO' ? 'green' : 'red'}-6)` }}>
-                                    <Group justify="space-between" wrap="nowrap" align="flex-start">
-                                        <Box style={{ minWidth: 0 }}>
-                                            <Text size="sm" fw={600} lineClamp={2}>{m.descripcion || m.categoria?.nombre || 'Movimiento'}</Text>
-                                            <Text size="xs" c="dimmed">{formatearFecha(m.fecha)} · {m.categoria?.nombre || 'Sin categoría'} · {m.metodoPago}</Text>
-                                        </Box>
-                                        <Box ta="right" style={{ flexShrink: 0 }}>
-                                            <Text fw={800} size="sm" c={m.tipo === 'INGRESO' ? 'green.7' : 'red.7'}>{m.tipo === 'INGRESO' ? '+' : '−'}{fmtUsd(m.montoUsd)}</Text>
-                                            <Text size="xs" c="dimmed">{fmtBs(m.montoVes)}</Text>
-                                        </Box>
-                                    </Group>
-                                </Paper>
-                            ))}
+                            {visibles.map((m) => {
+                                const o = origenDe(m);
+                                return (
+                                    <Paper key={m.id} withBorder radius="md" p="xs" style={{ borderLeft: `4px solid var(--mantine-color-${m.tipo === 'INGRESO' ? 'green' : 'red'}-6)` }}>
+                                        <Group justify="space-between" wrap="nowrap" align="flex-start">
+                                            <Box style={{ minWidth: 0 }}>
+                                                {o ? (
+                                                    <>
+                                                        <Anchor component={Link} href={o.href} size="sm" fw={700} c="navy.9" lineClamp={1} display="block">
+                                                            {o.nombre}
+                                                        </Anchor>
+                                                        {m.descripcion && <Text size="xs" c="dimmed" lineClamp={1}>{m.descripcion}</Text>}
+                                                    </>
+                                                ) : (
+                                                    <Text size="sm" fw={600} lineClamp={2}>{m.descripcion || m.categoria?.nombre || 'Movimiento'}</Text>
+                                                )}
+                                                <Text size="xs" c="dimmed">{formatearFecha(m.fecha)} · {m.categoria?.nombre || 'Sin categoría'} · {m.metodoPago}</Text>
+                                            </Box>
+                                            <Box ta="right" style={{ flexShrink: 0 }}>
+                                                <Text fw={800} size="sm" c={m.tipo === 'INGRESO' ? 'green.7' : 'red.7'}>{m.tipo === 'INGRESO' ? '+' : '−'}{fmtUsd(m.montoUsd)}</Text>
+                                                <Text size="xs" c="dimmed">{fmtBs(m.montoVes)}</Text>
+                                            </Box>
+                                        </Group>
+                                    </Paper>
+                                );
+                            })}
                         </Stack>
                     ) : (
                         <Table.ScrollContainer minWidth={820}>
                             <Table striped highlightOnHover verticalSpacing="xs">
                                 <Table.Thead>
                                     <Table.Tr>
-                                        <Table.Th>Fecha</Table.Th><Table.Th>Tipo</Table.Th><Table.Th>Categoría</Table.Th><Table.Th>Descripción</Table.Th><Table.Th>Método</Table.Th>
+                                        <Table.Th>Fecha</Table.Th><Table.Th>Tipo</Table.Th><Table.Th>Categoría</Table.Th><Table.Th>Cliente / Proveedor · Descripción</Table.Th><Table.Th>Método</Table.Th>
                                         <Table.Th ta="right">Monto ($)</Table.Th><Table.Th ta="right">Monto (Bs)</Table.Th>
                                     </Table.Tr>
                                 </Table.Thead>
                                 <Table.Tbody>
-                                    {visibles.map((m) => (
-                                        <Table.Tr key={m.id}>
-                                            <Table.Td style={{ whiteSpace: 'nowrap' }}>{formatearFecha(m.fecha)}</Table.Td>
-                                            <Table.Td><Badge color={m.tipo === 'INGRESO' ? 'green' : 'red'} variant="light">{m.tipo === 'INGRESO' ? 'Ingreso' : 'Egreso'}</Badge></Table.Td>
-                                            <Table.Td>{m.categoria?.nombre || 'Sin categoría'}</Table.Td>
-                                            <Table.Td><Text size="sm" lineClamp={2}>{m.descripcion}</Text>{m.referencia && <Text size="xs" c="dimmed">Ref: {m.referencia}</Text>}</Table.Td>
-                                            <Table.Td>{m.metodoPago}</Table.Td>
-                                            <Table.Td ta="right"><Text fw={700} size="sm" c={m.tipo === 'INGRESO' ? 'green.7' : 'red.7'}>{m.tipo === 'INGRESO' ? '+' : '−'}{fmtUsd(m.montoUsd)}</Text></Table.Td>
-                                            <Table.Td ta="right"><Text size="sm" c="dimmed">{fmtBs(m.montoVes)}</Text></Table.Td>
-                                        </Table.Tr>
-                                    ))}
+                                    {visibles.map((m) => {
+                                        const o = origenDe(m);
+                                        return (
+                                            <Table.Tr key={m.id}>
+                                                <Table.Td style={{ whiteSpace: 'nowrap' }}>{formatearFecha(m.fecha)}</Table.Td>
+                                                <Table.Td><Badge color={m.tipo === 'INGRESO' ? 'green' : 'red'} variant="light">{m.tipo === 'INGRESO' ? 'Ingreso' : 'Egreso'}</Badge></Table.Td>
+                                                <Table.Td>{m.categoria?.nombre || 'Sin categoría'}</Table.Td>
+                                                <Table.Td>
+                                                    {o && (
+                                                        <Anchor component={Link} href={o.href} size="sm" fw={700} c="navy.9" display="block">
+                                                            {o.nombre}
+                                                        </Anchor>
+                                                    )}
+                                                    <Text size={o ? 'xs' : 'sm'} c={o ? 'dimmed' : undefined} lineClamp={2}>{m.descripcion}</Text>
+                                                    {m.referencia && <Text size="xs" c="dimmed">Ref: {m.referencia}</Text>}
+                                                </Table.Td>
+                                                <Table.Td>{m.metodoPago}</Table.Td>
+                                                <Table.Td ta="right"><Text fw={700} size="sm" c={m.tipo === 'INGRESO' ? 'green.7' : 'red.7'}>{m.tipo === 'INGRESO' ? '+' : '−'}{fmtUsd(m.montoUsd)}</Text></Table.Td>
+                                                <Table.Td ta="right"><Text size="sm" c="dimmed">{fmtBs(m.montoVes)}</Text></Table.Td>
+                                            </Table.Tr>
+                                        );
+                                    })}
                                 </Table.Tbody>
                             </Table>
                         </Table.ScrollContainer>

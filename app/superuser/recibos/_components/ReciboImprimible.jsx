@@ -15,7 +15,8 @@ const fechaLarga = (f) => {
     const [a, m, d] = String(f).slice(0, 10).split('-');
     return { dia: d, mes: m, anio: a };
 };
-const FORMAS = { EFECTIVO: 'Efectivo', CHEQUE: 'Cheque', TRANSFERENCIA: 'Transferencia', OTRO: 'Otro' };
+const FORMAS = { PAGO_MOVIL: 'Pago móvil', TRANSFERENCIA: 'Transferencia', EFECTIVO: 'Efectivo', CHEQUE: 'Cheque', OTRO: 'Otro' };
+const formatoNumRecibo = (n) => `00-${String(n ?? '').replace(/\D/g, '').padStart(5, '0')}`;
 
 function Pulso() {
     return (
@@ -48,7 +49,7 @@ function CopiaCobranza({ recibo, etiqueta }) {
                 <div className="rc-titular">
                     <div className="rc-ceja">{etiqueta} · Constancia de pago</div>
                     <h1 className="rc-titulo">Recibo de cobro</h1>
-                    <div className="rc-numero">N.º <b>{recibo.numero}</b> · {fmtDia(recibo.fecha)}</div>
+                    <div className="rc-numero">N.º <b>{formatoNumRecibo(recibo.numero)}</b> · {fmtDia(recibo.fecha)}</div>
                 </div>
             </header>
             <Pulso />
@@ -81,9 +82,10 @@ function CopiaCobranza({ recibo, etiqueta }) {
             </table>
 
             <div className="rc-pago rc-pago-cobro">
-                <span className="rc-chk">{marcas('EFECTIVO')} Efectivo</span>
-                <span className="rc-chk">{marcas('CHEQUE')} Cheque</span>
+                <span className="rc-chk">{marcas('PAGO_MOVIL')} Pago móvil</span>
                 <span className="rc-chk">{marcas('TRANSFERENCIA')} Transferencia</span>
+                <span className="rc-chk">{marcas('EFECTIVO')} Efectivo</span>
+                {recibo.formaPago === 'CHEQUE' && <span className="rc-chk">{marcas('CHEQUE')} Cheque</span>}
                 {recibo.formaPago === 'OTRO' && <span className="rc-chk">{marcas('OTRO')} Otro</span>}
             </div>
 
@@ -120,7 +122,7 @@ function Copia({ recibo, etiqueta }) {
                 <div className="rc-titular">
                     <div className="rc-ceja">{etiqueta}</div>
                     <h1 className="rc-titulo">Recibo</h1>
-                    <div className="rc-numero">N.º <b>{recibo.numero}</b></div>
+                    <div className="rc-numero">N.º <b>{formatoNumRecibo(recibo.numero)}</b></div>
                 </div>
             </header>
             <Pulso />
@@ -140,9 +142,10 @@ function Copia({ recibo, etiqueta }) {
                 <div className="rc-campo rc-alto"><span>La cantidad de</span><b>{recibo.montoLetras || ''}</b></div>
                 <div className="rc-campo rc-alto"><span>Por concepto de</span><b className="rc-concepto">{recibo.concepto || ''}</b></div>
                 <div className="rc-pago">
-                    <span className="rc-chk">{marcas('EFECTIVO')} Efectivo</span>
-                    <span className="rc-chk">{marcas('CHEQUE')} Cheque</span>
+                    <span className="rc-chk">{marcas('PAGO_MOVIL')} Pago móvil</span>
                     <span className="rc-chk">{marcas('TRANSFERENCIA')} Transferencia</span>
+                    <span className="rc-chk">{marcas('EFECTIVO')} Efectivo</span>
+                    {recibo.formaPago === 'CHEQUE' && <span className="rc-chk">{marcas('CHEQUE')} Cheque</span>}
                     {recibo.formaPago === 'OTRO' && <span className="rc-chk">{marcas('OTRO')} Otro</span>}
                     {recibo.referencia && <span className="rc-ref">N° <b>{recibo.referencia}</b></span>}
                     {recibo.banco && <span className="rc-ref">Banco <b>{recibo.banco}</b></span>}
@@ -166,11 +169,15 @@ export default function ReciboImprimible({ recibo, accionesExtra = null }) {
         window.addEventListener('resize', ajustar);
         return () => window.removeEventListener('resize', ajustar);
     }, []);
+    useEffect(() => {
+        if (recibo) document.title = `Recibo ${formatoNumRecibo(recibo.numero)}`;
+    }, [recibo]);
     if (!recibo) return null;
+    const numFmt = formatoNumRecibo(recibo.numero);
     return (
         <div className="rc-envoltura">
             <Group className="rc-barra" justify="space-between" gap="xs">
-                <Text c="white" fw={700} size="sm">Recibo N.º {recibo.numero}{recibo.anulado ? ' · ANULADO' : ''}</Text>
+                <Text c="white" fw={700} size="sm">Recibo N.º {numFmt}{recibo.anulado ? ' · ANULADO' : ''}</Text>
                 <Group gap="xs">
                     {accionesExtra}
                     <Button size="sm" color="teal" leftSection={<IconPrinter size={16} />} onClick={() => window.print()}>Imprimir</Button>

@@ -5,8 +5,11 @@ import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
 
 const AZUL_OSCURO = [11, 27, 61];
 const AZUL = [0, 90, 170];
+const FONDO_MEMBRETE = [236, 244, 252];
+const TEXTO_MEMBRETE = [40, 55, 80];
 const GRIS = [110, 120, 135];
 const LINEA = [200, 208, 220];
+const fmtCorrelativo = (id) => `00-${String(id ?? '').replace(/\D/g, '').padStart(5, '0')}`;
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 const usd = (v) => `$ ${nf(v)}`;
@@ -63,20 +66,20 @@ async function armarPdf(pago) {
     const M = 10;
     const tasa = Number(pago.tasaBcv) > 0 ? Number(pago.tasaBcv) : null;
 
-    // Membrete
-    doc.setFillColor(...AZUL_OSCURO); doc.rect(0, 0, ANCHO, 24, 'F');
+    // Membrete claro para que contraste con el logo azul de Mediquir
+    doc.setFillColor(...FONDO_MEMBRETE); doc.rect(0, 0, ANCHO, 24, 'F');
     doc.setFillColor(...AZUL); doc.rect(0, 24, ANCHO, 0.8, 'F');
     if (logo) { const alto = 12; const ancho = Math.min(40, (logo.w / logo.h) * alto); doc.addImage(logo.data, 'PNG', M, 6, ancho, alto); }
-    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+    doc.setTextColor(...AZUL_OSCURO); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
     doc.text(MEMBRETE_MEDIQUIR.nombre, ANCHO - M, 10, { align: 'right' });
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...TEXTO_MEMBRETE);
     doc.text(`RIF ${MEMBRETE_MEDIQUIR.rif}`, ANCHO - M, 14.5, { align: 'right' });
 
     // Título
     doc.setTextColor(...AZUL_OSCURO); doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
     doc.text('Recibo de pago de comisión', M, 35);
     doc.setFontSize(10); doc.setTextColor(...GRIS);
-    doc.text(`N° ${pago.id} · ${fechaLinda(pago.fecha)}`, ANCHO - M, 35, { align: 'right' });
+    doc.text(`N° ${fmtCorrelativo(pago.id)} · ${fechaLinda(pago.fecha)}`, ANCHO - M, 35, { align: 'right' });
     doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 30, 30); doc.setFontSize(10);
     doc.text(`Vendedor: ${pago.vendedorNombre}`, M, 42);
     if (tasa) doc.text(`Tasa BCV: ${nf(tasa)} Bs/$`, ANCHO - M, 42, { align: 'right' });

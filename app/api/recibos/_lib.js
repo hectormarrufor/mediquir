@@ -2,7 +2,7 @@
 import db from '@/models';
 
 export const RECIBO_INICIO = 1; // el correlativo de recibos arranca en 1; se cambia desde la pantalla «Numeración» (fila REC de correlativos)
-export const FORMAS = ['EFECTIVO', 'CHEQUE', 'TRANSFERENCIA', 'OTRO'];
+export const FORMAS = ['PAGO_MOVIL', 'TRANSFERENCIA', 'EFECTIVO'];
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
