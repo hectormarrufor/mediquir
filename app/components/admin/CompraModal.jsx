@@ -530,14 +530,20 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
     // El IVA impreso en la factura, si la persona eligió usarlo (cuando el proveedor lo imprimió redondeado a céntimos)
     if (!esGasto && esFactura && ivaAjustado !== null) montoIva = exacto(ivaAjustado);
 
-    // Descuento del proveedor: se aplica a la base imponible (lo que lleva IVA; en una nota de entrega, a todo el monto).
-    // El IVA se calcula sobre la base ya descontada y lo exento no se toca.
+    // Descuento del proveedor: si hay base gravada (IVA > 0), se aplica sobre esa base imponible y su IVA;
+    // en notas de entrega o facturas 100% exentas, se aplica sobre todo el subtotal.
     const pctDescuento = esGasto ? 0 : Math.min(100, Math.max(0, Number(descuentoPct) || 0));
     let montoDescuento = 0;
     if (pctDescuento > 0) {
-        montoDescuento = exacto((subtotal - montoExento) * pctDescuento / 100);
+        const baseGravada = esFactura ? exacto(subtotal - montoExento) : 0;
+        const baseDescuento = baseGravada > 0 ? baseGravada : subtotal;
+        montoDescuento = exacto(baseDescuento * pctDescuento / 100);
         subtotal = exacto(subtotal - montoDescuento);
-        montoIva = exacto(montoIvaCalculado * (1 - pctDescuento / 100));
+        if (baseGravada > 0) {
+            montoIva = exacto(montoIvaCalculado * (1 - pctDescuento / 100));
+        } else if (esFactura) {
+            montoExento = subtotal;
+        }
     }
 
     if (esGasto) {
