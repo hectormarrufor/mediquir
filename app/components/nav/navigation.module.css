@@ -14,15 +14,17 @@
 .barra {
     position: relative;
     pointer-events: auto;
-    height: 52px;
+    overflow: hidden;
+    height: 54px;
     margin: 8px 10px 0;
     border-radius: 16px;
-    /* Blanco puro para máximo contraste del logo azul de Mediquir */
-    background: #ffffff;
-    border: 1px solid rgba(11, 27, 61, 0.08);
+    /* Blanco puro en el área del logo azul (100% contraste) y degradado hielo sutil hacia la derecha */
+    background: linear-gradient(90deg, #ffffff 0%, #ffffff 34%, #f2f7ff 100%);
+    border: 1px solid rgba(11, 27, 61, 0.09);
     box-shadow:
-        0 1px 2px rgba(11, 27, 61, 0.04),
-        0 8px 24px -12px rgba(11, 27, 61, 0.16);
+        inset 0 1px 0 rgba(255, 255, 255, 0.95),
+        0 4px 12px -4px rgba(11, 27, 61, 0.08),
+        0 14px 32px -14px rgba(21, 94, 239, 0.16);
     transition: box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
@@ -34,30 +36,25 @@
     }
 }
 
-/* Filo de marca sutil en el borde inferior */
-.barra::after {
+/* Cinta superior de marca: navy → azul → cian → acento naranja */
+.barra::before {
     content: '';
     position: absolute;
-    left: 16%;
-    right: 16%;
-    bottom: -1px;
-    height: 2px;
-    border-radius: 2px;
-    background: linear-gradient(90deg, transparent, alpha(var(--mantine-color-brand-5), 0.6) 25%, alpha(var(--mantine-color-sky-4), 0.75) 55%, alpha(var(--mantine-color-accent-5), 0.55) 80%, transparent);
-    opacity: 0.45;
-    transition: opacity 0.25s ease;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--mantine-color-navy-9) 0%, var(--mantine-color-brand-6) 45%, var(--mantine-color-sky-4) 75%, var(--mantine-color-accent-5) 100%);
+    pointer-events: none;
 }
 
 /* Al hacer scroll: más definición para separarse del contenido */
 .barra[data-scrolled] {
-    border-color: rgba(11, 27, 61, 0.12);
+    border-color: rgba(11, 27, 61, 0.14);
     box-shadow:
-        0 2px 4px rgba(11, 27, 61, 0.05),
-        0 16px 36px -14px rgba(11, 27, 61, 0.24);
-}
-
-.barra[data-scrolled]::after {
-    opacity: 1;
+        inset 0 1px 0 #ffffff,
+        0 6px 16px -4px rgba(11, 27, 61, 0.1),
+        0 18px 38px -14px rgba(21, 94, 239, 0.22);
 }
 
 .logoBtn {
@@ -75,6 +72,21 @@
     transform: scale(0.98);
 }
 
+.contextBadge {
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-transform: none;
+    border: 1px solid alpha(var(--mantine-color-brand-5), 0.22);
+}
+
+.contextDot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--mantine-color-brand-6);
+    box-shadow: 0 0 0 3px alpha(var(--mantine-color-brand-5), 0.22);
+}
+
 /* ---------- LINKS CENTRALES (escritorio): control segmentado con indicador que se desliza sin solaparse con el logo ---------- */
 .nav {
     position: relative;
@@ -84,13 +96,14 @@
     padding: 4px;
     border-radius: 12px;
     background: rgba(11, 27, 61, 0.045);
-    border: 1px solid rgba(11, 27, 61, 0.06);
+    border: 1px solid rgba(11, 27, 61, 0.07);
 }
 
 .navIndicator {
     border-radius: 9px;
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(11, 27, 61, 0.08), 0 4px 12px -4px rgba(11, 27, 61, 0.18);
+    background: #ffffff;
+    border: 1px solid alpha(var(--mantine-color-brand-5), 0.2);
+    box-shadow: 0 1px 2px rgba(11, 27, 61, 0.06), 0 4px 12px -4px rgba(21, 94, 239, 0.18);
 }
 
 .navLink {
@@ -98,13 +111,13 @@
     z-index: 1;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 7px 14px;
+    gap: 6px;
+    padding: 6px 13px;
     border: 0;
     border-radius: 9px;
     background: transparent;
-    color: rgba(11, 27, 61, 0.62);
-    font-size: 14px;
+    color: rgba(11, 27, 61, 0.65);
+    font-size: 13.5px;
     font-weight: 600;
     letter-spacing: -0.01em;
     white-space: nowrap;
@@ -112,12 +125,26 @@
     transition: color 0.2s ease;
 }
 
+.navIcon {
+    opacity: 0.72;
+    transition: opacity 0.2s ease, color 0.2s ease;
+}
+
 .navLink:hover {
     color: var(--mantine-color-navy-9);
 }
 
+.navLink:hover .navIcon {
+    opacity: 1;
+}
+
 .navLink[data-active] {
-    color: var(--mantine-color-navy-9);
+    color: var(--mantine-color-brand-7);
+}
+
+.navLink[data-active] .navIcon {
+    opacity: 1;
+    color: var(--mantine-color-brand-6);
 }
 
 /* ---------- BOTONES ---------- */
@@ -151,8 +178,11 @@
 /* Chip de la cuenta: avatar con anillo y punto «en línea», nombre y rol; la flecha gira al abrir */
 .pillUser {
     height: 42px;
-    padding: 0 10px 0 4px;
+    padding: 0 12px 0 5px;
     gap: 10px;
+    background: #ffffff;
+    border-color: rgba(11, 27, 61, 0.11);
+    box-shadow: 0 2px 6px -2px rgba(11, 27, 61, 0.08);
 }
 
 .avatarWrap {

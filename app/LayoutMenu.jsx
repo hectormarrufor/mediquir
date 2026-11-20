@@ -21,11 +21,11 @@ const LayoutMenu = ({ router }) => {
         return (
             <Group gap="xs" wrap="nowrap">
                 <Button
-                    variant="subtle"
+                    variant="light"
                     color="navy"
                     radius="md"
                     size="sm"
-                    leftSection={<IconLogin size={17} stroke={1.9} />}
+                    leftSection={<IconLogin size={16} stroke={2} />}
                     onClick={() => router.push('/login')}
                     aria-label="Iniciar sesión"
                 >
@@ -57,6 +57,20 @@ const LayoutMenu = ({ router }) => {
     return (
         <>
             <Group gap="xs" wrap="nowrap">
+                {!clienteId && pathname !== '/' && (
+                    <Button
+                        variant="subtle"
+                        color="navy"
+                        radius="md"
+                        size="sm"
+                        visibleFrom="lg"
+                        leftSection={<IconBuildingStore size={16} stroke={1.8} />}
+                        onClick={() => router.push('/?tienda=1')}
+                    >
+                        Tienda
+                    </Button>
+                )}
+
                 <Button
                     variant={enPanelPrincipal ? 'light' : 'filled'}
                     color="brand"
