@@ -16,6 +16,7 @@ import IconCollarin from './icons/IconCollarin'; // Tabler no trae iconos de sop
 import IconMunequera from './icons/IconMunequera';
 import IconRodillera from './icons/IconRodillera';
 import IconTobillera from './icons/IconTobillera';
+import IconUniformeMedico from './icons/IconUniformeMedico';
 
 // Diccionario de iconos por categoría. Las claves van en minúsculas y SIN acentos
 // (el nombre de la categoría se normaliza igual, así "Ginecología" y "Ginecologia" coinciden).
@@ -34,6 +35,7 @@ const iconMap = {
     'munequera': IconMunequera,
     'rodillera': IconRodillera,
     'tobillera': IconTobillera,
+    'uniformes medicos': IconUniformeMedico,
 };
 
 const normalizar = (nombre) =>

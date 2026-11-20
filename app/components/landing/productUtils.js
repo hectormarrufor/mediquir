@@ -90,6 +90,7 @@ const CATEGORIAS_BIEN_ESCRITAS = {
     'insumos medicos': 'Insumos Médicos',
     'equipos medicos': 'Equipos Médicos',
     'productos farmaceuticos': 'Productos Farmacéuticos',
+    'uniformes medicos': 'Uniformes Médicos',
 };
 const sinTildes = (s) => String(s ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 export const nombreCategoria = (nombre) => CATEGORIAS_BIEN_ESCRITAS[sinTildes(nombre)] || nombre || '';
