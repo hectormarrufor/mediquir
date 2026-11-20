@@ -81,7 +81,7 @@ export default function ClientLayout({ children }) {
               <AuthGuard>
                 <Notifications zIndex={5000} />
                 <AppShell
-                    header={{ height: { base: 60, sm: 70 }, collapsed: !pinned }}
+                    header={{ height: { base: 60, sm: 70 }, collapsed: sinReserva ? !pinned : false }}
                     navbar={{
                       width: 320,
                       breakpoint: 'sm',

@@ -2,53 +2,75 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { Avatar, Group, Menu, Text, UnstyledButton, rem, Box } from '@mantine/core';
-import { IconKey, IconLogout, IconChevronDown, IconLayoutGrid, IconBrandWhatsapp, IconLogin } from '@tabler/icons-react';
+import { usePathname } from 'next/navigation';
+import { Avatar, Button, Group, Menu, Text, UnstyledButton, rem, Box } from '@mantine/core';
+import { IconKey, IconLogout, IconChevronDown, IconLayoutGrid, IconBrandWhatsapp, IconLogin, IconBuildingStore } from '@tabler/icons-react';
 import ChangePasswordForm from './ChangePasswordForm';
 import classes from './components/nav/navigation.module.css';
 
 const LayoutMenu = ({ router }) => {
+    const pathname = usePathname();
     const { isAuthenticated, logout, nombre, imagen, rol, changePassword, userId, loading, clienteId } = useAuth();
     const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+    const [menuOpened, setMenuOpened] = useState(false);
 
     if (loading) return null;
 
     // ESTADO: NO AUTENTICADO
     if (!isAuthenticated) {
         return (
-            <Group gap="sm" wrap="nowrap">
-                <UnstyledButton className={classes.pill} onClick={() => router.push('/login')} aria-label="Iniciar sesión">
-                    <IconLogin size={18} stroke={1.8} />
+            <Group gap="xs" wrap="nowrap">
+                <Button
+                    variant="subtle"
+                    color="navy"
+                    radius="md"
+                    size="sm"
+                    leftSection={<IconLogin size={17} stroke={1.9} />}
+                    onClick={() => router.push('/login')}
+                    aria-label="Iniciar sesión"
+                >
                     Ingresar
-                </UnstyledButton>
+                </Button>
 
-                <UnstyledButton
+                <Button
                     component="a"
                     href="https://wa.me/584146501059"
                     target="_blank"
                     rel="noopener noreferrer"
+                    radius="md"
+                    size="sm"
                     className={classes.cta}
+                    leftSection={<IconBrandWhatsapp size={17} />}
                 >
-                    <IconBrandWhatsapp size={18} />
                     Contáctanos
-                </UnstyledButton>
+                </Button>
             </Group>
         );
     }
 
     // ESTADO: AUTENTICADO
-    const handleMainMenuClick = () => router.push(clienteId ? '/b2b' : '/superuser');
+    const destinoPrincipal = clienteId ? '/b2b' : '/superuser';
+    const enPanelPrincipal = pathname === destinoPrincipal;
+    const handleMainMenuClick = () => router.push(destinoPrincipal);
     const rolTexto = rol ? rol.charAt(0).toUpperCase() + rol.slice(1) : '';
 
     return (
         <>
-            <Group gap={10} wrap="nowrap">
-                <UnstyledButton className={classes.pill} onClick={handleMainMenuClick}>
-                    <IconLayoutGrid size={17} stroke={1.8} />
+            <Group gap="xs" wrap="nowrap">
+                <Button
+                    variant={enPanelPrincipal ? 'light' : 'filled'}
+                    color="brand"
+                    radius="md"
+                    size="sm"
+                    leftSection={<IconLayoutGrid size={16} stroke={1.9} />}
+                    onClick={handleMainMenuClick}
+                >
                     {clienteId ? 'Mi portal' : 'Menú Principal'}
-                </UnstyledButton>
+                </Button>
 
                 <Menu
+                    opened={menuOpened}
+                    onChange={setMenuOpened}
                     shadow="xl"
                     width={240}
                     position="bottom-end"
@@ -57,7 +79,7 @@ const LayoutMenu = ({ router }) => {
                     classNames={{ dropdown: classes.menuDropdown, item: classes.menuItem }}
                 >
                     <Menu.Target>
-                        <UnstyledButton className={`${classes.pill} ${classes.pillUser}`} aria-label="Menú de cuenta">
+                        <UnstyledButton className={`${classes.pill} ${classes.pillUser}`} data-expanded={menuOpened || undefined} aria-label="Menú de cuenta">
                             <span className={classes.avatarWrap}>
                                 <Avatar src={imagen || null} alt={nombre} radius="xl" size={32} variant="gradient" gradient={{ from: 'brand.5', to: 'sky.5', deg: 135 }} className={classes.avatar}>
                                     {nombre?.charAt(0)}
@@ -77,6 +99,15 @@ const LayoutMenu = ({ router }) => {
                             {rolTexto && <Text size="xs" c="dimmed" lineClamp={1}>{rolTexto}</Text>}
                         </Box>
                         <Menu.Divider />
+
+                        {!clienteId && (
+                            <Menu.Item
+                                leftSection={<IconBuildingStore style={{ width: rem(16), height: rem(16) }} stroke={1.6} />}
+                                onClick={() => router.push('/?tienda=1')}
+                            >
+                                Ver tienda pública
+                            </Menu.Item>
+                        )}
 
                         <Menu.Item
                             leftSection={<IconKey style={{ width: rem(16), height: rem(16) }} stroke={1.5} />}

@@ -36,14 +36,14 @@ export default function SiteHeader({ opened, toggle }) {
 
     return (
         <AppShell.Header className={classes.header}>
-            <Group className={classes.barra} data-scrolled={scrolled || undefined} px={{ base: 'sm', sm: 'lg' }} justify="space-between" wrap="nowrap">
+            <Group className={classes.barra} data-scrolled={scrolled || undefined} px={{ base: 'sm', sm: 'lg' }} justify="space-between" align="center" wrap="nowrap" gap="md">
                 <UnstyledButton className={classes.logoBtn} onClick={() => router.push(isAuthenticated && !clienteId ? '/?tienda=1' : '/')} aria-label={`Ir al inicio de ${tenant.name}`}>
                     <BrandLogo />
                 </UnstyledButton>
 
                 {showPublicLinks && (
                     <Box component="nav" aria-label="Principal" className={classes.nav} visibleFrom="md" ref={setNavRef}>
-                        <FloatingIndicator target={activeKey ? linkRefs[activeKey] : null} parent={navRef} className={classes.navIndicator} transitionDuration={260} />
+                        <FloatingIndicator target={activeKey ? linkRefs[activeKey] : null} parent={navRef} className={classes.navIndicator} transitionDuration={240} />
                         {PUBLIC_LINKS.map((link) => {
                             const isActive = activeKey === link.key;
                             return (
@@ -62,7 +62,7 @@ export default function SiteHeader({ opened, toggle }) {
                     </Box>
                 )}
 
-                <Group wrap="nowrap" gap={10}>
+                <Group wrap="nowrap" gap={8} align="center">
                     <NotificationBell />
 
                     {!showPublicLinks && <Box className={classes.separador} visibleFrom="sm" />}

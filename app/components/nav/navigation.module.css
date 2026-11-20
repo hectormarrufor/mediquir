@@ -17,14 +17,13 @@
     height: 52px;
     margin: 8px 10px 0;
     border-radius: 16px;
-    /* Blanco casi sólido del lado del logo (para que el azul marino resalte) y translúcido suave hacia la derecha */
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.97) 22%, rgba(255, 255, 255, 0.93) 42%);
-    border: 1px solid rgba(11, 27, 61, 0.07);
+    /* Blanco puro para máximo contraste del logo azul de Mediquir */
+    background: #ffffff;
+    border: 1px solid rgba(11, 27, 61, 0.08);
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.9),
-        0 1px 2px rgba(11, 27, 61, 0.05),
-        0 10px 30px -14px rgba(11, 27, 61, 0.22);
-    transition: background 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+        0 1px 2px rgba(11, 27, 61, 0.04),
+        0 8px 24px -12px rgba(11, 27, 61, 0.16);
+    transition: box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
 @media (min-width: 48em) {
@@ -35,27 +34,26 @@
     }
 }
 
-/* Filo de marca: una línea finísima azul → cian → naranja, apenas visible, en el borde inferior */
+/* Filo de marca sutil en el borde inferior */
 .barra::after {
     content: '';
     position: absolute;
-    left: 18%;
-    right: 18%;
+    left: 16%;
+    right: 16%;
     bottom: -1px;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, alpha(var(--mantine-color-brand-5), 0.55) 25%, alpha(var(--mantine-color-sky-4), 0.7) 55%, alpha(var(--mantine-color-accent-5), 0.5) 80%, transparent);
-    opacity: 0.7;
-    transition: opacity 0.3s ease;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, alpha(var(--mantine-color-brand-5), 0.6) 25%, alpha(var(--mantine-color-sky-4), 0.75) 55%, alpha(var(--mantine-color-accent-5), 0.55) 80%, transparent);
+    opacity: 0.45;
+    transition: opacity 0.25s ease;
 }
 
-/* Al hacer scroll: más opaca y con más sombra para separarse del contenido */
+/* Al hacer scroll: más definición para separarse del contenido */
 .barra[data-scrolled] {
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0.99) 0%, rgba(255, 255, 255, 0.98) 22%, rgba(255, 255, 255, 0.9) 42%);
-    border-color: rgba(11, 27, 61, 0.09);
+    border-color: rgba(11, 27, 61, 0.12);
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 1),
-        0 1px 2px rgba(11, 27, 61, 0.06),
-        0 18px 40px -18px rgba(11, 27, 61, 0.35);
+        0 2px 4px rgba(11, 27, 61, 0.05),
+        0 16px 36px -14px rgba(11, 27, 61, 0.24);
 }
 
 .barra[data-scrolled]::after {
@@ -77,11 +75,9 @@
     transform: scale(0.98);
 }
 
-/* ---------- LINKS CENTRALES (escritorio): control segmentado con indicador que se desliza ---------- */
+/* ---------- LINKS CENTRALES (escritorio): control segmentado con indicador que se desliza sin solaparse con el logo ---------- */
 .nav {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
+    position: relative;
     display: flex;
     align-items: center;
     gap: 2px;
@@ -251,9 +247,7 @@
 .menuDropdown {
     border-radius: 14px;
     border: 1px solid rgba(11, 27, 61, 0.08);
-    background: rgba(255, 255, 255, 0.96);
-    -webkit-backdrop-filter: blur(16px) saturate(160%);
-    backdrop-filter: blur(16px) saturate(160%);
+    background: #ffffff;
     box-shadow: 0 20px 50px alpha(var(--mantine-color-navy-9), 0.22);
     padding: 8px;
 }
