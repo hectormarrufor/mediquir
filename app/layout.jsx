@@ -1,6 +1,5 @@
 import { tenant } from '@/config/tenant';
 import ClientLayout from './ClientLayout';
-import Script from 'next/script';
 import { DESCRIPCION_HOME, SITIO, TITULO_HOME } from '@/app/lib/seo';
 
 // 1. Exportamos el viewport correctamente para Next.js 15
@@ -37,15 +36,6 @@ export default function RootLayout({ children }) {
         <ClientLayout>
           {children}
         </ClientLayout>
-        {/* Sin clave no se carga el script (antes se pedía con key=undefined y Google devolvía InvalidKeyMapError). Mapas, rutas y geocodificación son librerías base: no hace falta "places". */}
-        {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ? (
-          <Script
-            src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`}
-            strategy="afterInteractive"
-          />
-        ) : (
-          console.error('Falta NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: el mapa del checkout no cargará')
-        )}
       </body>
     </html>
   );

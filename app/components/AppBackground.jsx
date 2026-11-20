@@ -28,7 +28,6 @@ export default function AppBackground() {
             <Box className="app-bg__blob app-bg__blob--b" />
             <Box className="app-bg__blob app-bg__blob--c" />
             <Box className="app-bg__grid" />
-            <Box className="app-bg__noise" />
         </Box>
     );
 }

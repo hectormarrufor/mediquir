@@ -45,6 +45,25 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
     const mapContainerRef = useRef(null);
     const mapInstanceRef = useRef(null);
     const markerInstanceRef = useRef(null);
+    const [mapsListo, setMapsListo] = useState(() => typeof window !== 'undefined' && Boolean(window.google?.maps));
+
+    // Carga Google Maps bajo demanda solo al abrir el checkout (evita descargarlo en toda la app)
+    useEffect(() => {
+        if (window.google?.maps) { setMapsListo(true); return undefined; }
+        const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+        if (!key) { console.error('Falta NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: el mapa del checkout no cargará'); return undefined; }
+        let script = document.querySelector('script[data-google-maps]');
+        const onLoad = () => setMapsListo(true);
+        if (!script) {
+            script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${key}`;
+            script.async = true;
+            script.dataset.googleMaps = '1';
+            document.head.appendChild(script);
+        }
+        script.addEventListener('load', onLoad);
+        return () => script.removeEventListener('load', onLoad);
+    }, []);
 
     // Pago State
     const [referencia, setReferencia] = useState('');
@@ -120,7 +139,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
 
     // El contenedor del mapa se vuelve a crear al cambiar de paso o de modalidad: si el mapa no está armado en el contenedor actual, se arma de nuevo
     useEffect(() => {
-        if (activeStep !== 1 || metodoEntrega !== 'delivery') return;
+        if (!mapsListo || activeStep !== 1 || metodoEntrega !== 'delivery') return;
         const el = mapContainerRef.current;
         if (!el || !window.google?.maps) return;
         if (mapInstanceRef.current?.getDiv() === el) return;
@@ -135,7 +154,7 @@ export default function CheckoutProcess({ onCancel, onSuccess, tasaBcv: tasaProp
         markerInstanceRef.current = null;
         mapInstanceRef.current.addListener('click', (e) => colocarPin({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
         if (coordenadasGPS) ponerMarcador(coordenadasGPS);
-    }, [activeStep, metodoEntrega]);
+    }, [mapsListo, activeStep, metodoEntrega]);
 
     const obtenerUbicacionGPS = () => {
         if (!navigator.geolocation) {
