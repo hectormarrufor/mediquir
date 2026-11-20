@@ -67,6 +67,12 @@
   border-color: alpha(var(--mantine-color-sky-3), 0.3);
 }
 
+/* Los inputs dentro de tarjetas oscuras tienen fondo claro: restaurar texto oscuro legible */
+.superficie[data-variant='oscura'] :global(.mantine-Input-input),
+.superficie[data-variant='oscura'] :global(.mantine-PasswordInput-innerInput) {
+  color: #000;
+}
+
 /* ---------- Plano: Paper anidados, modales, drawers, impresión ---------- */
 .superficie[data-variant='plano'],
 .superficie .superficie,

@@ -103,6 +103,7 @@ const page = () => {
               required
               size="md"
               autoCapitalize="none"
+              styles={{ input: { color: '#000' } }}
               {...form.getInputProps('user')}
             />
 
@@ -112,6 +113,7 @@ const page = () => {
               required
               mt="md"
               size="md"
+              styles={{ input: { color: '#000' }, innerInput: { color: '#000' } }}
               {...form.getInputProps('password')}
             />
 
