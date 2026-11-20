@@ -9,8 +9,9 @@ import classes from './landing.module.css';
 const NO_SON_MARCA = new Set(['GENERICA', 'GENERICO', 'IMPORTADO', 'NACIONAL', 'SIN MARCA']);
 const MAXIMO = 22;
 
-// Cinta con las marcas que más productos tienen hoy en existencia. Sale del catálogo: no hay lista que mantener a mano.
-export default function MarcasCinta() {
+// Cinta interactiva con las marcas que más productos tienen hoy en existencia.
+// Tocar una marca filtra directamente el catálogo por ella.
+export default function MarcasCinta({ marcaActiva = '', onSelectMarca }) {
     const { data: productos } = useCatalogo();
 
     const marcas = useMemo(() => {
@@ -25,14 +26,28 @@ export default function MarcasCinta() {
 
     if (marcas.length < 6) return null;
 
+    const renderItem = (m, key, oculto) => (
+        <li key={key} aria-hidden={oculto || undefined}>
+            <button
+                type="button"
+                tabIndex={oculto ? -1 : undefined}
+                className={classes.marcaPill}
+                data-activa={marcaActiva === m || undefined}
+                onClick={() => onSelectMarca?.(m)}
+            >
+                {m}
+            </button>
+        </li>
+    );
+
     return (
         <div className={`${classes.wrap} ${classes.marcas}`}>
             <span className={classes.marcasTitulo}>Marcas que distribuimos</span>
             <div className={classes.marcasCinta}>
                 {/* La lista va dos veces seguidas para que la cinta gire sin corte; la copia no se lee en voz alta */}
                 <ul className={classes.marcasPista}>
-                    {marcas.map((m) => <li key={m}>{m}</li>)}
-                    {marcas.map((m) => <li key={`copia-${m}`} aria-hidden="true">{m}</li>)}
+                    {marcas.map((m) => renderItem(m, m, false))}
+                    {marcas.map((m) => renderItem(m, `copia-${m}`, true))}
                 </ul>
             </div>
         </div>

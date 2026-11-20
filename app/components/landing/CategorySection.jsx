@@ -11,7 +11,7 @@ import classes from './landing.module.css';
 const iniciales = (nombre) => nombre.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
 
 // Especialidades: una ficha por categoría, ordenadas de la que más productos tiene a la que menos.
-// En el teléfono son dos filas que se deslizan de lado; en escritorio, una cuadrícula completa. Todo por CSS.
+// En el teléfono son dos filas que se deslizan de lado; en escritorio, una cuadrícula Bento completa. Todo por CSS.
 export default function CategorySection({ selectedCategory, onSelectCategory, onVerTodo }) {
     const { data: categorias, isLoading } = useCategorias();
     const { data: productos } = useCatalogo();
@@ -35,10 +35,10 @@ export default function CategorySection({ selectedCategory, onSelectCategory, on
                 <header className={classes.seccionCab}>
                     <div>
                         <p className={classes.eyebrow}><Pulso /> Especialidades</p>
-                        <h2 id="titulo-especialidades" className={classes.h2}>Compra por especialidad</h2>
+                        <h2 id="titulo-especialidades" className={classes.h2}>Compra por <em>especialidad</em></h2>
                     </div>
                     <button type="button" className={classes.verTodo} onClick={onVerTodo}>
-                        Ver todo el catálogo <IconArrowRight size={18} stroke={2} aria-hidden="true" />
+                        Ver todo el catálogo <IconArrowRight size={17} stroke={2.1} aria-hidden="true" />
                     </button>
                 </header>
 
@@ -54,14 +54,16 @@ export default function CategorySection({ selectedCategory, onSelectCategory, on
                                     data-selected={seleccionada || undefined} aria-pressed={seleccionada}
                                     onClick={() => onSelectCategory(seleccionada ? null : cat)}
                                 >
-                                    <span className={classes.catIcono}>
-                                        {Icono ? <Icono size={26} stroke={1.6} aria-hidden="true" /> : <span className={classes.catIniciales}>{iniciales(cat.etiqueta)}</span>}
+                                    <span className={classes.catTop}>
+                                        <span className={classes.catIcono}>
+                                            {Icono ? <Icono size={24} stroke={1.65} aria-hidden="true" /> : <span className={classes.catIniciales}>{iniciales(cat.etiqueta)}</span>}
+                                        </span>
+                                        <IconArrowUpRight className={classes.catFlecha} size={17} stroke={2} aria-hidden="true" />
                                     </span>
-                                    <span>
+                                    <span className={classes.catTexto}>
                                         <span className={classes.catNombre}>{cat.etiqueta}</span>
                                         {cat.total > 0 && <span className={classes.catCuenta}>{cat.total} {cat.total === 1 ? 'producto' : 'productos'}</span>}
                                     </span>
-                                    <IconArrowUpRight className={classes.catFlecha} size={18} stroke={2} aria-hidden="true" />
                                 </button>
                             );
                         })}

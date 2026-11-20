@@ -5,7 +5,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Drawer } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconBox, IconBrandWhatsapp, IconMinus, IconPackage, IconPlus, IconShoppingBag, IconTrash } from '@tabler/icons-react';
+import { IconArrowRight, IconBox, IconBrandWhatsapp, IconMinus, IconPackage, IconPlus, IconShoppingBag, IconTrash } from '@tabler/icons-react';
 import { useCart } from './CartContext';
 import CheckoutProcess from '@/app/CheckoutProcess';
 import { PLACEHOLDER_IMG, enlaceWhatsApp, formatearBs, formatearPrecio, getMainImage } from './productUtils';
@@ -205,7 +205,7 @@ export function FlotantesTienda({ onAbrirCarrito }) {
                     </span>
                     {totalItems > 0 && (
                         <span className={classes.carritoTexto}>
-                            <span>Ver carrito</span>
+                            <span className={classes.carritoAccion}>Ver carrito <IconArrowRight size={15} stroke={2.3} aria-hidden="true" /></span>
                             <span className={classes.carritoTotal}>
                                 Ref ${totalConIva.toFixed(2)}
                                 {bcv && <small>Bs {formatearBs(aBolivares(totalConIva, bcv))}</small>}

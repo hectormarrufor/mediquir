@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Drawer } from '@mantine/core';
 import {
-    IconAdjustmentsHorizontal, IconBrandWhatsapp, IconChevronDown, IconMoodEmpty, IconRefresh, IconSearch, IconX,
+    IconAdjustmentsHorizontal, IconBrandWhatsapp, IconChevronDown, IconLayoutGrid, IconLayoutList, IconMoodEmpty, IconRefresh, IconSearch, IconX,
 } from '@tabler/icons-react';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
 import { estadoRestaurable, guardarEstadoTienda } from './tiendaEstado';
@@ -32,17 +32,31 @@ const deCategoria = (p, cat) => p.categoriaId === cat.id || p.categoria?.id === 
 // Catálogo de la tienda: una sola lista con búsqueda al escribir, especialidad, marca, orden y «solo disponibles».
 // La barra queda pegada arriba mientras se recorre la lista, así se puede afinar la búsqueda sin volver al inicio.
 // Los disponibles van siempre primero, sea cual sea el orden elegido.
-export default function CatalogoSection({ searchQuery, onSearchChange, selectedCategory, onSelectCategory, onClearFilters }) {
+export default function CatalogoSection({
+    searchQuery,
+    onSearchChange,
+    selectedCategory,
+    onSelectCategory,
+    selectedBrand = '',
+    onSelectBrand,
+    onClearFilters,
+}) {
     const { data: productos, isLoading, isError, refetch } = useCatalogo();
     const { data: categorias } = useCategorias();
     const { tasa } = useTasaBcv();
 
     // Al volver de la página de un producto, los filtros y cuántos productos se habían desplegado quedan como estaban
     const [restaurada] = useState(() => estadoRestaurable());
-    const [marca, setMarca] = useState(() => restaurada?.marca ?? '');
+    const [marcaLocal, setMarcaLocal] = useState(() => restaurada?.marca ?? '');
+    const marca = onSelectBrand ? selectedBrand : marcaLocal;
+    const setMarca = onSelectBrand || setMarcaLocal;
+
     const [orden, setOrden] = useState(() => restaurada?.orden ?? 'auto');
     const [soloDisponibles, setSoloDisponibles] = useState(() => restaurada?.soloDisponibles ?? false);
     const [visible, setVisible] = useState(() => restaurada?.visible ?? PAGINA);
+    // Teléfono: 3 columnas por defecto (vista compacta) con botón rápido para pasar a 2 columnas amplias
+    const [densidadMovil, setDensidadMovil] = useState('compacta');
+
     useEffect(() => { guardarEstadoTienda({ marca, orden, soloDisponibles, visible }); }, [marca, orden, soloDisponibles, visible]);
     const [pegada, setPegada] = useState(false);
     const [hojaAbierta, setHojaAbierta] = useState(false);
@@ -85,7 +99,7 @@ export default function CatalogoSection({ searchQuery, onSearchChange, selectedC
     // Si la marca elegida no existe en la especialidad nueva, se suelta
     useEffect(() => {
         if (marca && productos && !marcas.some(([n]) => n === marca)) setMarca('');
-    }, [marca, marcas, productos]);
+    }, [marca, marcas, productos, setMarca]);
 
     const lista = useMemo(() => {
         let l = enCategoria;
@@ -142,7 +156,9 @@ export default function CatalogoSection({ searchQuery, onSearchChange, selectedC
 
     const titulo = searchQuery
         ? <>Resultados para <em>«{searchQuery}»</em></>
-        : selectedCategory ? nombreCategoria(selectedCategory.nombre) : <>Insumos para tu clínica <em>y tu hogar</em></>;
+        : selectedCategory ? nombreCategoria(selectedCategory.nombre)
+            : marca ? <>Marca <em>{marca}</em></>
+                : <>Insumos para tu clínica <em>y tu hogar</em></>;
 
     const selectorMarca = (
         <label className={classes.selector} data-activo={marca || undefined}>
@@ -179,11 +195,14 @@ export default function CatalogoSection({ searchQuery, onSearchChange, selectedC
             <div className={classes.wrap}>
                 <header className={classes.seccionCab}>
                     <div>
-                        <p className={classes.eyebrow}><Pulso /> Catálogo</p>
+                        <p className={classes.eyebrow}><Pulso /> Catálogo completo</p>
                         <h2 id="titulo-catalogo" className={classes.h2}>{titulo}</h2>
                     </div>
                     {disponiblesHoy > 0 && (
-                        <p className={classes.seccionNota}><strong>{MILES.format(disponiblesHoy)}</strong> productos disponibles hoy</p>
+                        <p className={classes.seccionNota}>
+                            <span className={classes.notaDot} aria-hidden="true" />
+                            <strong>{MILES.format(disponiblesHoy)}</strong> disponibles hoy
+                        </p>
                     )}
                 </header>
 
@@ -211,6 +230,16 @@ export default function CatalogoSection({ searchQuery, onSearchChange, selectedC
                             {interruptor}
                         </div>
 
+                        <button
+                            type="button"
+                            className={classes.densidadBtn}
+                            onClick={() => setDensidadMovil((d) => (d === 'compacta' ? 'amplia' : 'compacta'))}
+                            aria-label={densidadMovil === 'compacta' ? 'Cambiar a vista amplia de 2 columnas' : 'Cambiar a vista compacta de 3 columnas'}
+                            title={densidadMovil === 'compacta' ? 'Ver en 2 columnas amplias' : 'Ver en 3 columnas compactas'}
+                        >
+                            {densidadMovil === 'compacta' ? <IconLayoutList size={19} stroke={1.9} aria-hidden="true" /> : <IconLayoutGrid size={19} stroke={1.9} aria-hidden="true" />}
+                        </button>
+
                         <button type="button" className={classes.barraFiltros} data-activo={extras > 0 || undefined} onClick={() => setHojaAbierta(true)}>
                             <IconAdjustmentsHorizontal size={19} stroke={1.9} aria-hidden="true" />
                             Filtros
@@ -234,7 +263,7 @@ export default function CatalogoSection({ searchQuery, onSearchChange, selectedC
                 </div>
 
                 {isLoading ? (
-                    <div className={classes.grid} style={{ marginTop: 20 }} aria-busy="true" aria-label="Cargando el catálogo">
+                    <div className={classes.grid} data-densidad={densidadMovil} style={{ marginTop: 20 }} aria-busy="true" aria-label="Cargando el catálogo">
                         {Array.from({ length: 12 }).map((_, i) => (
                             <div key={i} className={classes.cardSkel}>
                                 <div className={classes.skel} />
@@ -282,7 +311,7 @@ export default function CatalogoSection({ searchQuery, onSearchChange, selectedC
 
                         {mostrados.length > 0 ? (
                             <>
-                                <div className={classes.grid}>
+                                <div className={classes.grid} data-densidad={densidadMovil}>
                                     {mostrados.map((p) => <ProductCard key={p.id} product={p} tasa={tasa} />)}
                                 </div>
 

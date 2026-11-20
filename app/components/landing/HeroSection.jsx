@@ -1,14 +1,19 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { IconMapPin } from '@tabler/icons-react';
+import {
+    IconArrowDown, IconBrandWhatsapp, IconChevronLeft, IconChevronRight, IconFlame, IconMapPin, IconPlus, IconTruckDelivery,
+} from '@tabler/icons-react';
 import { ahoraCaracas, avisoDespacho } from '@/app/constants/horario';
+import { aBolivares, calcularFactura } from '@/app/constants/facturacion';
+import { SITIO } from '@/app/lib/seo';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import BuscadorTienda from './BuscadorTienda';
 import { TRAZA_ECG } from './Pulso';
 import { useTienda } from './TiendaContext';
+import { useCart } from './CartContext';
 import { useCatalogo } from './useCatalogo';
-import { enStock, formatearBs, formatearPrecio, getMainImage, getPricing } from './productUtils';
+import { enStock, enlaceWhatsApp, formatearBs, formatearPrecio, getMainImage, getPricing } from './productUtils';
 import classes from './landing.module.css';
 
 // Fotos reales de la tienda (versiones livianas): solo se usan si el video no puede reproducirse
@@ -52,15 +57,17 @@ function Cifra({ valor, mas, etiqueta }) {
     );
 }
 
-export default function HeroSection({ searchQuery, onSearch }) {
+export default function HeroSection({ searchQuery, onSearch, onVerCatalogo }) {
     const { data: productos } = useCatalogo();
     const { tasa } = useTasaBcv();
-    const { abrirDetalle } = useTienda();
+    const { abrirDetalle, pedirCantidad } = useTienda();
+    const { unidadesEnCarrito } = useCart();
     const videoRef = useRef(null);
     const [sinVideo, setSinVideo] = useState(false);
     const [foto, setFoto] = useState(0);
     const [despacho, setDespacho] = useState(null); // depende de la hora: se calcula ya en el navegador
     const [turno, setTurno] = useState(0);
+    const [pausado, setPausado] = useState(false);
 
     useEffect(() => {
         setDespacho(estadoDespacho());
@@ -96,7 +103,7 @@ export default function HeroSection({ searchQuery, onSearch }) {
         };
     }, [productos]);
 
-    // Los más pedidos que hay en existencia y tienen foto: rotan en la tarjeta que monta sobre el video
+    // Los más pedidos que hay en existencia y tienen foto: rotan en la vitrina flotante de vidrio
     const destacados = useMemo(
         () => (productos || [])
             .filter((p) => enStock(p) && (p.imagen || p.grupoEquivalencia?.imagen))
@@ -104,12 +111,28 @@ export default function HeroSection({ searchQuery, onSearch }) {
             .slice(0, 5),
         [productos]
     );
+
     useEffect(() => {
-        if (destacados.length < 2) return undefined;
-        const timer = setInterval(() => setTurno((i) => i + 1), 4800);
+        if (destacados.length < 2 || pausado) return undefined;
+        const timer = setInterval(() => setTurno((i) => (i + 1) % destacados.length), 5200);
         return () => clearInterval(timer);
-    }, [destacados.length]);
-    const destacado = destacados.length ? destacados[turno % destacados.length] : null;
+    }, [destacados.length, pausado]);
+
+    const indice = destacados.length ? turno % destacados.length : 0;
+    const destacado = destacados.length ? destacados[indice] : null;
+    const precioDest = destacado ? getPricing(destacado) : null;
+    const totalDestUsd = useMemo(() => {
+        if (!destacado || !precioDest) return 0;
+        const iva = Number(destacado.porcentajeIva) || 0;
+        const { montoIva, subtotal } = calcularFactura({ renglones: [{ precioUnitario: precioDest.precioFinal, cantidad: 1, aplicaIva: iva > 0, porcentajeIva: iva }] });
+        return Math.round((subtotal + montoIva) * 100) / 100;
+    }, [destacado, precioDest]);
+    const puedeAgregarDest = destacado ? unidadesEnCarrito(destacado.id) < (Number(destacado.stockAlmacen) || 0) : false;
+
+    const moverTurno = (delta) => {
+        if (destacados.length < 2) return;
+        setTurno((i) => (i + delta + destacados.length) % destacados.length);
+    };
 
     return (
         <section className={classes.hero} aria-labelledby="titulo-tienda">
@@ -126,6 +149,7 @@ export default function HeroSection({ searchQuery, onSearch }) {
                 />
             )}
             <div className={classes.heroFondo} aria-hidden="true">
+                <div className={classes.heroAura} />
                 <div className={classes.heroPapel} />
                 <svg className={classes.heroTraza} viewBox="0 0 1440 200" preserveAspectRatio="none">
                     <path className={classes.trazaBase} d={TRAZA_ECG} pathLength="1" />
@@ -135,10 +159,18 @@ export default function HeroSection({ searchQuery, onSearch }) {
 
             <div className={`${classes.wrap} ${classes.heroGrid}`}>
                 <div className={classes.heroTexto}>
-                    <p className={classes.estado}>
-                        <span className={classes.punto} data-tono={despacho?.tono} />
-                        <span>{despacho?.texto || 'Despachos de lunes a sábado'}</span>
-                    </p>
+                    <div className={classes.estadoFila}>
+                        <p className={classes.estado}>
+                            <span className={classes.punto} data-tono={despacho?.tono} />
+                            <span>{despacho?.texto || 'Despachos de lunes a sábado'}</span>
+                        </p>
+                        {tasa && (
+                            <p className={classes.bcvMovil} aria-label={`Tasa BCV de hoy: Bs ${formatearBs(tasa)} por dólar`}>
+                                <span>BCV</span>
+                                <b>Bs {formatearBs(tasa)}</b>
+                            </p>
+                        )}
+                    </div>
 
                     <h1 id="titulo-tienda" className={classes.heroTitulo}>
                         Insumos médicos, <em>del mostrador a tu puerta.</em>
@@ -146,16 +178,29 @@ export default function HeroSection({ searchQuery, onSearch }) {
 
                     <p className={classes.heroBajada}>
                         Material médico-quirúrgico <strong>al mayor y al detal</strong> para clínicas, consultorios y tu hogar.
-                        Precios en dólares y en bolívares a tasa BCV.
+                        Precios transparentes en dólares y bolívares a tasa BCV.
                     </p>
 
                     <BuscadorTienda valor={searchQuery} productos={productos} onBuscar={onSearch} />
 
                     <div className={classes.populares}>
-                        <span className={classes.popularesTitulo}>Lo más buscado</span>
+                        <span className={classes.popularesTitulo}>Tendencias</span>
                         {POPULARES.map((termino) => (
                             <button key={termino} type="button" className={classes.popular} onClick={() => onSearch(termino)}>{termino}</button>
                         ))}
+                    </div>
+
+                    <div className={classes.heroAcciones}>
+                        <button type="button" className={classes.heroCtaPrimario} onClick={onVerCatalogo}>
+                            Explorar catálogo <IconArrowDown size={16} stroke={2.2} aria-hidden="true" />
+                        </button>
+                        <a
+                            className={classes.heroCtaSecundario}
+                            href={enlaceWhatsApp(SITIO.whatsapp, 'Hola, quisiera cotizar insumos médicos al mayor.')}
+                            target="_blank" rel="noopener noreferrer"
+                        >
+                            <IconBrandWhatsapp size={17} stroke={1.9} aria-hidden="true" /> Cotizar al mayor
+                        </a>
                     </div>
 
                     <dl className={classes.cifras}>
@@ -165,27 +210,94 @@ export default function HeroSection({ searchQuery, onSearch }) {
                     </dl>
                 </div>
 
-                <div className={classes.escena}>
-                    <div className={classes.escenaMarco} />
+                {/* Escritorio: vitrina Bento de vidrio sobre el video real de la tienda */}
+                <aside className={classes.heroBento} aria-label="Resumen en vivo de la tienda" onMouseEnter={() => setPausado(true)} onMouseLeave={() => setPausado(false)}>
+                    <div className={classes.bentoFila}>
+                        <div className={classes.bentoTile}>
+                            <span className={classes.bentoLabel}>
+                                <span className={classes.puntoChico} /> Tasa BCV hoy
+                            </span>
+                            <strong className={classes.bentoValor}>
+                                {tasa ? <>Bs {formatearBs(tasa)} <small>/ $</small></> : 'Actualizando…'}
+                            </strong>
+                        </div>
 
-                    {tasa && (
-                        <div className={`${classes.flot} ${classes.flotTasa}`}>
-                            <span className={classes.flotEtiqueta}>Tasa BCV de hoy</span>
-                            <span className={classes.flotValor}>Bs {formatearBs(tasa)} <small>por $</small></span>
+                        <div className={classes.bentoTile}>
+                            <span className={classes.bentoLabel}>
+                                <IconTruckDelivery size={13} stroke={2.2} aria-hidden="true" /> Cobertura
+                            </span>
+                            <strong className={classes.bentoCiudad}>
+                                <IconMapPin size={14} stroke={2.2} aria-hidden="true" /> {SITIO.ciudad} → Toda Venezuela
+                            </strong>
+                        </div>
+                    </div>
+
+                    {destacado && precioDest && (
+                        <div className={classes.spotlight}>
+                            <div className={classes.spotlightCab}>
+                                <span className={classes.spotlightTag}>
+                                    <IconFlame size={14} stroke={2.2} aria-hidden="true" /> De lo más pedido
+                                </span>
+                                {destacados.length > 1 && (
+                                    <div className={classes.spotlightNav}>
+                                        <button type="button" onClick={() => moverTurno(-1)} aria-label="Producto anterior">
+                                            <IconChevronLeft size={15} stroke={2.2} />
+                                        </button>
+                                        <button type="button" onClick={() => moverTurno(1)} aria-label="Siguiente producto">
+                                            <IconChevronRight size={15} stroke={2.2} />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className={classes.spotlightCuerpo}>
+                                <button type="button" className={classes.spotlightFoto} onClick={() => abrirDetalle(destacado)} aria-label={`Ver ${destacado.nombre}`}>
+                                    <img key={destacado.id} src={getMainImage(destacado)} alt="" />
+                                    {precioDest.hasDiscount && <span className={classes.spotlightOferta}>-{precioDest.porcentajeAhorro}%</span>}
+                                </button>
+
+                                <div className={classes.spotlightInfo}>
+                                    <span className={classes.spotlightMarca}>{destacado.marca?.nombre || 'Insumo médico'}</span>
+                                    <button type="button" className={classes.spotlightNombre} onClick={() => abrirDetalle(destacado)}>
+                                        {destacado.nombre}
+                                    </button>
+                                    <div className={classes.spotlightPrecioFila}>
+                                        <div>
+                                            <span className={classes.spotlightUsd}>Ref ${formatearPrecio(precioDest.precioFinal)}</span>
+                                            {tasa && <span className={classes.spotlightBs}>Bs {formatearBs(aBolivares(totalDestUsd, tasa))}</span>}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className={classes.spotlightAdd}
+                                            disabled={!puedeAgregarDest}
+                                            onClick={() => pedirCantidad(destacado, 'UNIDAD')}
+                                            aria-label={`Agregar ${destacado.nombre} al carrito`}
+                                        >
+                                            <IconPlus size={15} stroke={2.5} aria-hidden="true" /> Agregar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {destacados.length > 1 && (
+                                <div className={classes.spotlightPuntos} role="tablist" aria-label="Elegir producto destacado">
+                                    {destacados.map((item, i) => (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            role="tab"
+                                            aria-selected={i === indice}
+                                            aria-label={item.nombre}
+                                            className={classes.spotlightPunto}
+                                            data-activo={i === indice || undefined}
+                                            onClick={() => setTurno(i)}
+                                        />
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
-
-                    {destacado && (
-                        <button type="button" className={`${classes.flot} ${classes.flotTop}`} onClick={() => abrirDetalle(destacado)} aria-label={`Ver ${destacado.nombre}`}>
-                            <span className={classes.flotFoto}><img key={destacado.id} src={getMainImage(destacado)} alt="" /></span>
-                            <span className={classes.flotTexto}>
-                                <span className={classes.flotEtiqueta}>De lo más pedido</span>
-                                <span className={classes.flotNombre}>{destacado.nombre}</span>
-                                <span className={classes.flotPrecio}>Ref ${formatearPrecio(getPricing(destacado).precioFinal)}</span>
-                            </span>
-                        </button>
-                    )}
-                </div>
+                </aside>
             </div>
         </section>
     );

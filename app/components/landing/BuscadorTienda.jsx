@@ -4,17 +4,20 @@ import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'r
 import { Combobox, useCombobox } from '@mantine/core';
 import { IconArrowRight, IconSearch, IconX } from '@tabler/icons-react';
 import { buscarProductos } from '@/app/helpers/busquedaProductos';
+import { aBolivares, calcularFactura } from '@/app/constants/facturacion';
+import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { useTienda } from './TiendaContext';
-import { enStock, estadoStock, formatearPrecio, getMainImage, getPricing } from './productUtils';
+import { enStock, estadoStock, formatearBs, formatearPrecio, getMainImage, getPricing } from './productUtils';
 import classes from './landing.module.css';
 
 const MAX_SUGERENCIAS = 6;
 
-// Buscador principal de la tienda: mientras se escribe muestra los productos que coinciden (foto, marca, existencia y precio).
+// Buscador principal de la tienda: mientras se escribe muestra los productos que coinciden (foto, marca, existencia y precio en $ y Bs).
 // Tocar uno abre la página del producto; Enter o «Ver los N resultados» lleva al catálogo con esa búsqueda aplicada.
 // Usa el mismo buscador tolerante del sistema (tildes, plurales y errores de tipeo) sobre el catálogo ya descargado.
 export default function BuscadorTienda({ valor = '', productos, onBuscar, placeholder = 'Busca guantes, jeringas, catéteres…' }) {
     const { abrirDetalle } = useTienda();
+    const { tasa } = useTasaBcv();
     const inputRef = useRef(null);
     const [texto, setTexto] = useState(valor);
     useEffect(() => { setTexto(valor || ''); }, [valor]);
@@ -49,7 +52,7 @@ export default function BuscadorTienda({ valor = '', productos, onBuscar, placeh
         <Combobox store={combobox} onOptionSubmit={elegir} offset={10} position="bottom-start" middlewares={{ flip: false, shift: false }} transitionProps={{ transition: 'pop-top-left', duration: 160 }}>
             <Combobox.DropdownTarget>
                 <form className={classes.buscador} role="search" onSubmit={(e) => { e.preventDefault(); buscar(); }}>
-                    <IconSearch className={classes.buscadorIcono} size={22} stroke={1.8} aria-hidden="true" />
+                    <IconSearch className={classes.buscadorIcono} size={21} stroke={1.9} aria-hidden="true" />
                     <Combobox.EventsTarget>
                         <input
                             ref={inputRef}
@@ -78,28 +81,37 @@ export default function BuscadorTienda({ valor = '', productos, onBuscar, placeh
                         </button>
                     )}
                     <button type="submit" className={classes.buscadorBtn} aria-label="Buscar">
-                        <IconSearch size={20} stroke={2.2} aria-hidden="true" />
+                        <IconSearch size={19} stroke={2.2} aria-hidden="true" />
                         <span>Buscar</span>
                     </button>
                 </form>
             </Combobox.DropdownTarget>
 
             <Combobox.Dropdown className={classes.sugerencias} hidden={!hayConsulta}>
-                <Combobox.Options mah="min(430px, 52vh)" style={{ overflowY: 'auto' }}>
+                <Combobox.Options mah="min(440px, 54vh)" style={{ overflowY: 'auto' }}>
                     {visibles.length > 0 ? (
                         <>
-                            <div className={classes.sugTitulo}>Productos</div>
+                            <div className={classes.sugTitulo}>Productos sugeridos</div>
                             {visibles.map((p) => {
                                 const { precioFinal } = getPricing(p);
                                 const stock = estadoStock(p);
+                                const iva = Number(p?.porcentajeIva) || 0;
+                                const { montoIva, subtotal } = calcularFactura({ renglones: [{ precioUnitario: precioFinal, cantidad: 1, aplicaIva: iva > 0, porcentajeIva: iva }] });
+                                const totalUsd = Math.round((subtotal + montoIva) * 100) / 100;
                                 return (
                                     <Combobox.Option key={p.id} value={String(p.id)} className={classes.sug}>
                                         <span className={classes.sugFoto}><img src={getMainImage(p)} alt="" loading="lazy" decoding="async" /></span>
                                         <span className={classes.sugTexto}>
                                             <span className={classes.sugNombre}>{p.nombre}</span>
-                                            <span className={classes.sugMeta}>{[p.marca?.nombre, stock.texto].filter(Boolean).join(' · ')}</span>
+                                            <span className={classes.sugMeta}>
+                                                <span className={classes.sugDot} data-estado={stock.clave} aria-hidden="true" />
+                                                {[p.marca?.nombre, stock.texto].filter(Boolean).join(' · ')}
+                                            </span>
                                         </span>
-                                        <span className={classes.sugPrecio}>${formatearPrecio(precioFinal)}</span>
+                                        <span className={classes.sugPrecios}>
+                                            <span className={classes.sugPrecio}>${formatearPrecio(precioFinal)}</span>
+                                            {tasa && <span className={classes.sugBs}>Bs {formatearBs(aBolivares(totalUsd, tasa))}</span>}
+                                        </span>
                                     </Combobox.Option>
                                 );
                             })}

@@ -10,6 +10,7 @@ import HeroSection from './components/landing/HeroSection';
 import InfoEnvios from './components/landing/InfoEnvios';
 import MarcasCinta from './components/landing/MarcasCinta';
 import CategorySection from './components/landing/CategorySection';
+import DestacadosSection from './components/landing/DestacadosSection';
 import CatalogoSection from './components/landing/CatalogoSection';
 import FooterSection from './components/landing/FooterSection';
 import { CarritoDrawer, FlotantesTienda } from './components/landing/CarritoTienda';
@@ -40,13 +41,14 @@ export default function LandingMediquir({ seo = null }) {
     const [cartOpened, setCartOpened] = useState(false);
     const { addToCart, unidadesEnCarrito } = useCart();
 
-    // --- FILTROS DE LA TIENDA (los comparten el buscador del encabezado, las especialidades y el catálogo) ---
-    // Al volver de la página de un producto la lista queda como estaba (búsqueda, especialidad, filtros y posición)
+    // --- FILTROS DE LA TIENDA (los comparten el buscador del encabezado, las marcas, las especialidades y el catálogo) ---
+    // Al volver de la página de un producto la lista queda como estaba (búsqueda, especialidad, marca, filtros y posición)
     const [restaurada] = useState(() => estadoRestaurable());
     const [searchQuery, setSearchQuery] = useState(() => restaurada?.searchQuery ?? '');
     const [selectedCategory, setSelectedCategory] = useState(() => restaurada?.selectedCategory ?? null);
-    const posicion = useRef({ searchQuery, selectedCategory });
-    posicion.current = { searchQuery, selectedCategory };
+    const [selectedBrand, setSelectedBrand] = useState(() => restaurada?.marca ?? '');
+    const posicion = useRef({ searchQuery, selectedCategory, marca: selectedBrand });
+    posicion.current = { searchQuery, selectedCategory, marca: selectedBrand };
 
     useEffect(() => {
         if (!restaurada) return undefined;
@@ -74,10 +76,11 @@ export default function LandingMediquir({ seo = null }) {
         document.getElementById('productos-section')?.scrollIntoView({ behavior: 'smooth' });
     }, []);
 
-    // Búsqueda desde el encabezado: es global, así que suelta la especialidad
+    // Búsqueda desde el encabezado: es global, así que suelta la especialidad y la marca
     const handleSearch = (query) => {
         setSearchQuery(query);
         setSelectedCategory(null);
+        setSelectedBrand('');
         scrollToProducts();
     };
 
@@ -88,9 +91,18 @@ export default function LandingMediquir({ seo = null }) {
         scrollToProducts();
     };
 
+    // Elegir una marca desde la cinta: filtra el catálogo por esa marca y baja al catálogo
+    const handleSelectBrandFromRibbon = (brand) => {
+        setSelectedBrand((actual) => (actual === brand ? '' : brand));
+        setSelectedCategory(null);
+        setSearchQuery('');
+        scrollToProducts();
+    };
+
     const handleClearFilters = () => {
         setSearchQuery('');
         setSelectedCategory(null);
+        setSelectedBrand('');
     };
 
     // --- PÁGINA DEL PRODUCTO Y «¿CUÁNTO VAS A AGREGAR?»: la pregunta es una sola para toda la página ---
@@ -118,11 +130,18 @@ export default function LandingMediquir({ seo = null }) {
                 <div className={`${classes.tienda} ${fuenteTienda.className}`}>
                     <style dangerouslySetInnerHTML={{ __html: VARIABLES_TIENDA }} />
 
-                    <HeroSection searchQuery={searchQuery} onSearch={handleSearch} />
+                    <HeroSection
+                        searchQuery={searchQuery}
+                        onSearch={handleSearch}
+                        onVerCatalogo={scrollToProducts}
+                    />
 
                     <InfoEnvios />
 
-                    <MarcasCinta />
+                    <MarcasCinta
+                        marcaActiva={selectedBrand}
+                        onSelectMarca={handleSelectBrandFromRibbon}
+                    />
 
                     <CategorySection
                         selectedCategory={selectedCategory}
@@ -130,11 +149,15 @@ export default function LandingMediquir({ seo = null }) {
                         onVerTodo={() => { handleClearFilters(); scrollToProducts(); }}
                     />
 
+                    <DestacadosSection />
+
                     <CatalogoSection
                         searchQuery={searchQuery}
                         onSearchChange={setSearchQuery}
                         selectedCategory={selectedCategory}
                         onSelectCategory={setSelectedCategory}
+                        selectedBrand={selectedBrand}
+                        onSelectBrand={setSelectedBrand}
                         onClearFilters={handleClearFilters}
                     />
 

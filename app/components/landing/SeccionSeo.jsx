@@ -1,5 +1,7 @@
 import Link from 'next/link';
-import { IconArrowRight, IconBrandWhatsapp, IconBuildingStore, IconMapPin, IconTruckDelivery } from '@tabler/icons-react';
+import {
+    IconArrowRight, IconArrowUpRight, IconBrandWhatsapp, IconBuildingHospital, IconBuildingStore, IconMapPin, IconTruckDelivery,
+} from '@tabler/icons-react';
 import { SITIO } from '@/app/lib/seo';
 import Pulso, { TRAZA_ECG } from './Pulso';
 import classes from './landing.module.css';
@@ -34,7 +36,7 @@ export default function SeccionSeo() {
                         <ul className={classes.ventajas}>
                             {VENTAJAS.map((v) => (
                                 <li key={v.titulo} className={classes.ventaja}>
-                                    <span className={classes.ventajaIcono}><v.icono size={23} stroke={1.6} aria-hidden="true" /></span>
+                                    <span className={classes.ventajaIcono}><v.icono size={22} stroke={1.7} aria-hidden="true" /></span>
                                     <div>
                                         <h3>{v.titulo}</h3>
                                         <p>{v.texto}</p>
@@ -52,11 +54,12 @@ export default function SeccionSeo() {
                             />
                         </div>
                         <a className={classes.retratoPie} href={MAPA} target="_blank" rel="noopener noreferrer">
-                            <span><IconMapPin size={21} stroke={1.8} aria-hidden="true" /></span>
-                            <span>
+                            <span className={classes.retratoIcono}><IconMapPin size={20} stroke={1.9} aria-hidden="true" /></span>
+                            <span className={classes.retratoTextos}>
                                 <strong>Visítanos en {SITIO.ciudad}</strong>
-                                <small>Calle Venezuela, entre Av. Bolívar y Av. Alonso · Casco Central. Ver en el mapa</small>
+                                <small>Calle Venezuela, entre Av. Bolívar y Av. Alonso · Casco Central</small>
                             </span>
+                            <IconArrowUpRight size={19} stroke={2} className={classes.retratoFlecha} aria-hidden="true" />
                         </a>
                     </figure>
                 </div>
@@ -65,9 +68,12 @@ export default function SeccionSeo() {
                     <svg className={classes.llamadoTraza} viewBox="0 0 1440 200" preserveAspectRatio="none" aria-hidden="true">
                         <path d={TRAZA_ECG} />
                     </svg>
-                    <div>
+                    <div className={classes.llamadoTexto}>
+                        <span className={classes.llamadoBadge}>
+                            <IconBuildingHospital size={15} stroke={1.9} aria-hidden="true" /> Clínicas · Farmacias · Consultorios
+                        </span>
                         <h3>¿Buscas algo en especial o necesitas cotizar al mayor?</h3>
-                        <p>Escríbenos y te respondemos con disponibilidad, precios y tiempos de envío.</p>
+                        <p>Escríbenos y te respondemos con disponibilidad, precios por volumen y tiempos de envío.</p>
                     </div>
                     <div className={classes.llamadoAcciones}>
                         <a className={`${classes.btn} ${classes.btnWa}`} href={`https://wa.me/${SITIO.whatsapp}`} target="_blank" rel="noopener noreferrer">
