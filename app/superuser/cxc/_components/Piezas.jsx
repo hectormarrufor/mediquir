@@ -37,11 +37,11 @@ export function Kpi({ titulo, valor, detalle, color = 'navy.9', icono: Icono, co
             }}
         >
             <Group gap={8} wrap="nowrap" align="flex-start">
-                {Icono && <ThemeIcon size={30} radius="md" variant="light" color={colorIcono} visibleFrom="sm" style={{ flexShrink: 0 }}><Icono size={18} /></ThemeIcon>}
+                {Icono && <ThemeIcon size={28} radius="md" variant="light" color={colorIcono} style={{ flexShrink: 0 }}><Icono size={16} /></ThemeIcon>}
                 <Box style={{ minWidth: 0, flex: 1 }}>
                     <Text fz={10.5} c="#5c6675" fw={700} tt="uppercase" lh={1.25} lineClamp={2}>{titulo}</Text>
-                    {cargando ? <Skeleton h={22} w="70%" mt={4} /> : <Text fz={{ base: 17, sm: 20 }} fw={800} c={color} lh={1.2} style={{ whiteSpace: 'nowrap' }}>{valor}</Text>}
-                    {detalle && !cargando && <Text fz={11.5} c="#5c6675" fw={600} lh={1.3}>{detalle}</Text>}
+                    {cargando ? <Skeleton h={22} w="70%" mt={4} /> : <Text fz={{ base: 16.5, sm: 20 }} fw={800} c={color} lh={1.2} style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{valor}</Text>}
+                    {detalle && !cargando && <Text fz={11} c="#5c6675" fw={600} lh={1.3} lineClamp={2}>{detalle}</Text>}
                 </Box>
             </Group>
         </Box>

@@ -100,6 +100,9 @@ export default function LibroCobranza() {
                                     <Menu.Label>Ordenar clientes</Menu.Label>
                                     {ORDENES_LIBRO.map((o) => <Menu.Item key={o.value} leftSection={<IconArrowsSort size={16} />} fw={libro.orden === o.value ? 800 : 400} onClick={() => libro.setOrden(o.value)}>{o.label}{libro.orden === o.value ? ' ✓' : ''}</Menu.Item>)}
                                     <Menu.Divider />
+                                    <Menu.Item leftSection={<IconFold size={16} />} onClick={libro.desplegarTodo}>Desplegar todos los clientes</Menu.Item>
+                                    <Menu.Item leftSection={<IconFold size={16} style={{ transform: 'rotate(180deg)' }} />} onClick={libro.plegarTodo}>Plegar todos los clientes</Menu.Item>
+                                    <Menu.Divider />
                                     <Menu.Item leftSection={<IconPlus size={16} />} onClick={nuevaManual}>Nueva cuenta manual</Menu.Item>
                                     <Menu.Item leftSection={<IconDownload size={16} />} onClick={libro.exportarCsv}>Descargar para Excel (CSV)</Menu.Item>
                                 </Menu.Dropdown>
@@ -137,7 +140,7 @@ export default function LibroCobranza() {
                             ? <Button size="xs" variant="light" onClick={() => libro.setBusqueda('')}>Borrar búsqueda</Button>
                             : <Button size="xs" color="grape" leftSection={<IconPlus size={14} />} onClick={nuevaManual}>Nueva cuenta manual</Button>}
                     />
-                ) : tarjetas ? <LibroTarjetas grupos={libro.grupos} acc={acc} buscando={libro.buscando} /> : <LibroTabla grupos={libro.grupos} totales={libro.totales} acc={acc} libro={libro} />}
+                ) : tarjetas ? <LibroTarjetas grupos={libro.grupos} acc={acc} buscando={libro.buscando} libro={libro} /> : <LibroTabla grupos={libro.grupos} totales={libro.totales} acc={acc} libro={libro} />}
             </Box>
 
             <DialogoCuentaManual abierto={dialogo?.tipo === 'manual'} onCerrar={cerrar} onCrear={libro.crearManual} />
