@@ -19,8 +19,10 @@ export async function GET() {
         const [retenciones, dicen] = await Promise.all([
             q(`SELECT r.id, r."ventaId", r."facturaAfectada" AS documento, r.fecha, r.estado, r."ivaRetenido"::float AS "ivaRetenidoBs", r."porcentajeRetencion"::float AS pct,
                       r.comprobante, r."montoDeclarado"::float AS "montoDeclarado", v."numeroControl",
-                      cl.id AS "clienteId", cl.nombre AS cliente, cl.identificacion AS rif, cl.telefono
+                      cl.id AS "clienteId", cl.nombre AS cliente, cl.identificacion AS rif, cl.telefono,
+                      vc.id AS "vendedorComisionId", vc.nombre AS "vendedorComision"
                  FROM "RetencionesIva" r JOIN "Ventas" v ON v.id = r."ventaId" LEFT JOIN "Clientes" cl ON cl.id = v."clienteId"
+                 LEFT JOIN "VendedoresComision" vc ON vc.id = cl."vendedorComisionId"
                 WHERE r.tipo = 'VENTA' AND r.estado IN ('PENDIENTE', 'POR_REVISAR') AND r.fecha >= :desde AND v."statusDespacho" <> 'Cancelado'
                 ORDER BY r.fecha, r.id`, { desde: RETENCIONES_DESDE }),
             q(`SELECT c.id, c."ventaId", v."numeroDocumento" AS documento, c."saldoPendiente"::float AS saldo, c."montoTotal"::float AS monto, c.moneda::text AS moneda, c."tasaCambio"::float AS tasa,

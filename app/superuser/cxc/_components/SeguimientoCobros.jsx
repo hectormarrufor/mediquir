@@ -5,12 +5,12 @@
 // 2. Facturas que el cliente dijo haber cerrado completas pero aún tienen saldo.
 import React, { useMemo, useState } from 'react';
 import {
-    ActionIcon, Alert, Badge, Box, Button, CloseButton, Group, Paper,
-    SimpleGrid, Stack, Text, TextInput, Tooltip, UnstyledButton,
+    Accordion, ActionIcon, Alert, Badge, Box, Button, CloseButton, Group, Paper,
+    SimpleGrid, Stack, Text, TextInput, ThemeIcon, Tooltip, UnstyledButton,
 } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-    IconAlertTriangle, IconCircleCheck, IconExternalLink, IconReceiptTax, IconSearch, IconUserQuestion,
+    IconAlertTriangle, IconCircleCheck, IconExternalLink, IconReceiptTax, IconSearch, IconUserDollar, IconUserOff, IconUserQuestion,
 } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { EstadoVacio, Esqueleto } from './Piezas';
@@ -63,6 +63,94 @@ function FilaCompacta({
                 </Group>
             </Group>
         </Paper>
+    );
+}
+
+function claveVendedor(r) {
+    return r.vendedorComisionId ? `v${r.vendedorComisionId}` : 'sin';
+}
+
+// Retenciones agrupadas: acordeón por vendedor a comisión (y «Sin vendedor a comisión») y, dentro, un acordeón por cliente
+function RetencionesAgrupadas({ lista, abrir, onCompletar }) {
+    const vendedores = useMemo(() => {
+        const m = new Map();
+        for (const r of lista) {
+            const k = claveVendedor(r);
+            if (!m.has(k)) m.set(k, { k, nombre: r.vendedorComision || 'Sin vendedor a comisión', clientes: new Map(), total: 0, cantidad: 0 });
+            const v = m.get(k);
+            const kc = r.clienteId ?? `n${r.cliente}`;
+            if (!v.clientes.has(kc)) v.clientes.set(kc, { k: String(kc), nombre: r.cliente || 'Sin cliente', rif: r.rif, items: [], total: 0 });
+            const c = v.clientes.get(kc);
+            c.items.push(r);
+            c.total += Number(r.ivaRetenidoBs) || 0;
+            v.total += Number(r.ivaRetenidoBs) || 0;
+            v.cantidad += 1;
+        }
+        // los vendedores con nombre primero (A-Z) y «Sin vendedor» al final
+        return [...m.values()]
+            .map((v) => ({ ...v, clientes: [...v.clientes.values()].sort((a, b) => a.nombre.localeCompare(b.nombre)) }))
+            .sort((a, b) => (a.k === 'sin') - (b.k === 'sin') || a.nombre.localeCompare(b.nombre));
+    }, [lista]);
+
+    return (
+        <Accordion multiple variant="separated" radius="md" defaultValue={vendedores.map((v) => v.k)} chevronPosition="left">
+            {vendedores.map((v) => (
+                <Accordion.Item key={v.k} value={v.k}>
+                    <Accordion.Control>
+                        <Group justify="space-between" wrap="nowrap" gap="xs" pr={4}>
+                            <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+                                <ThemeIcon size={24} radius="md" variant="light" color={v.k === 'sin' ? 'gray' : 'teal'}>
+                                    {v.k === 'sin' ? <IconUserOff size={14} /> : <IconUserDollar size={14} />}
+                                </ThemeIcon>
+                                <Text fw={800} fz={13} truncate="end">{v.nombre}</Text>
+                                <Badge size="xs" variant="light" color="gray" style={{ flexShrink: 0 }}>{v.cantidad}</Badge>
+                            </Group>
+                            <Text fw={800} fz={12.5} c="grape.9" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{bolivares(v.total)}</Text>
+                        </Group>
+                    </Accordion.Control>
+                    <Accordion.Panel>
+                        <Accordion multiple variant="contained" radius="md" chevronPosition="left" defaultValue={v.clientes.length <= 3 ? v.clientes.map((c) => c.k) : []}>
+                            {v.clientes.map((c) => (
+                                <Accordion.Item key={c.k} value={c.k}>
+                                    <Accordion.Control>
+                                        <Group justify="space-between" wrap="nowrap" gap="xs" pr={4}>
+                                            <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+                                                <Text fw={700} fz={12.5} truncate="end">{c.nombre}</Text>
+                                                {c.rif && <Text fz={11} c="dimmed" visibleFrom="sm" style={{ whiteSpace: 'nowrap' }}>{c.rif}</Text>}
+                                                <Badge size="xs" variant="light" color="gray" style={{ flexShrink: 0 }}>{c.items.length}</Badge>
+                                            </Group>
+                                            <Text fw={700} fz={12} c="grape.9" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{bolivares(c.total)}</Text>
+                                        </Group>
+                                    </Accordion.Control>
+                                    <Accordion.Panel>
+                                        <Stack gap={5}>
+                                            {c.items.map((r) => (
+                                                <FilaCompacta
+                                                    key={r.id}
+                                                    titulo={r.documento}
+                                                    cliente=""
+                                                    subtitulo={[r.telefono, `${r.pct}% IVA`, `Decl. ${fmtFecha(r.fecha)}`].filter(Boolean).join(' · ')}
+                                                    cifra={bolivares(r.ivaRetenidoBs)}
+                                                    colorCifra="grape.9"
+                                                    dias={r.dias}
+                                                    badgeEstado={r.estado === 'POR_REVISAR' ? <Badge size="xs" color="yellow" variant="filled">Por revisar</Badge> : null}
+                                                    accionFactura={() => abrir(r.ventaId)}
+                                                    accionPrincipal={
+                                                        <Button size="compact-xs" color="grape" variant={r.estado === 'POR_REVISAR' ? 'filled' : 'light'} onClick={() => onCompletar(r)}>
+                                                            {r.estado === 'POR_REVISAR' ? 'Confirmar' : 'Cargar comprobante'}
+                                                        </Button>
+                                                    }
+                                                />
+                                            ))}
+                                        </Stack>
+                                    </Accordion.Panel>
+                                </Accordion.Item>
+                            ))}
+                        </Accordion>
+                    </Accordion.Panel>
+                </Accordion.Item>
+            ))}
+        </Accordion>
     );
 }
 
@@ -143,31 +231,7 @@ export default function SeguimientoCobros() {
                             texto={q ? 'Prueba con otro criterio o borra el filtro.' : 'No hay comprobantes pendientes por cargar.'}
                         />
                     ) : (
-                        <Stack gap={5}>
-                            {retFiltradas.map((r) => (
-                                <FilaCompacta
-                                    key={r.id}
-                                    titulo={r.documento}
-                                    cliente={r.cliente}
-                                    subtitulo={[r.rif, r.telefono, `${r.pct}% IVA`, `Decl. ${fmtFecha(r.fecha)}`].filter(Boolean).join(' · ')}
-                                    cifra={bolivares(r.ivaRetenidoBs)}
-                                    colorCifra="grape.9"
-                                    dias={r.dias}
-                                    badgeEstado={r.estado === 'POR_REVISAR' ? <Badge size="xs" color="yellow" variant="filled">Por revisar</Badge> : null}
-                                    accionFactura={() => abrir(r.ventaId)}
-                                    accionPrincipal={
-                                        <Button
-                                            size="compact-xs"
-                                            color="grape"
-                                            variant={r.estado === 'POR_REVISAR' ? 'filled' : 'light'}
-                                            onClick={() => setCompletando(r)}
-                                        >
-                                            {r.estado === 'POR_REVISAR' ? 'Confirmar' : 'Cargar comprobante'}
-                                        </Button>
-                                    }
-                                />
-                            ))}
-                        </Stack>
+                        <RetencionesAgrupadas key={q} lista={retFiltradas} abrir={abrir} onCompletar={setCompletando} />
                     )}
                 </Paper>
 
