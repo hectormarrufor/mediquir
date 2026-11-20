@@ -91,8 +91,16 @@
 }
 
 .tabla tbody td {
-  height: 30px;
+  height: 35px;
+  padding-top: 3px;
+  padding-bottom: 3px;
   overflow: hidden;
+}
+
+@media (max-width: 48em) {
+  .barra {
+    padding: 5px 6px;
+  }
 }
 
 .tabla tbody tr:hover > td {
@@ -156,6 +164,14 @@
 
 .filaAbonos > td {
   background: #f8f9fb;
+}
+
+.cajaAbonos {
+  margin: 4px 0 6px 8px;
+  padding: 6px 8px 6px 10px;
+  background: #f8fafd;
+  border-left: 3px solid #74a3e0;
+  border-radius: 6px;
 }
 
 /* Línea de la hoja de un vendedor: factura (principal) o abono (hijo) */

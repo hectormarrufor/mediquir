@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ActionIcon, Affix, Alert, Box, Button, CloseButton, Group, Menu, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Tooltip, Transition } from '@mantine/core';
 import {
-    IconAlertTriangle, IconArrowBackUp, IconBuildingBank, IconChecks, IconCircleCheck, IconCoin, IconDotsVertical, IconFold, IconHourglass,
+    IconAlertTriangle, IconArrowBackUp, IconChecks, IconCircleCheck, IconCoin, IconDotsVertical, IconFold, IconHourglass,
     IconBrandWhatsapp, IconCash, IconInbox, IconPencil, IconPercentage, IconPlus, IconSearch, IconSelectAll, IconUserPlus, IconUsers, IconX,
 } from '@tabler/icons-react';
 import HojaTabla from './HojaTabla';
@@ -110,19 +110,19 @@ export default function HojasVendedores() {
         <Box className={classes.superficie} p={8}>
             <Group gap={8} wrap="wrap" justify="space-between">
                 {hayVendedores ? selectorVendedor : <Text fw={700} size="sm">Todavía no hay vendedores a comisión.</Text>}
-                <Group gap={8} wrap="nowrap" style={tarjetas ? { width: '100%' } : undefined}>
+                <Group gap={6} wrap={tarjetas ? 'wrap' : 'nowrap'} style={tarjetas ? { width: '100%' } : undefined}>
                     {actual && (
                         <Tooltip label="Se propone al agregar sus facturas; cada factura puede tener el suyo">
                             <Select
-                                size={tarjetas ? 'sm' : 'xs'} w={tarjetas ? undefined : 150} flex={tarjetas ? 1 : undefined} aria-label="% de comisión por defecto"
+                                size={tarjetas ? 'sm' : 'xs'} w={tarjetas ? '100%' : 150} aria-label="% de comisión por defecto"
                                 leftSection={<IconPercentage size={14} />} data={opcionesPct(actual.porcentaje).map((o) => ({ ...o, label: `${o.label} por defecto` }))}
                                 value={String(Number(actual.porcentaje))} onChange={(v) => v && hoja.cambiarPctVendedor(Number(v)).catch(() => {})} allowDeselect={false} comboboxProps={{ withinPortal: true }}
                             />
                         </Tooltip>
                     )}
-                    {actual && <Button size={tarjetas ? 'sm' : 'compact-sm'} variant="light" color="teal" leftSection={<IconUsers size={16} />} onClick={() => setDialogo({ tipo: 'clientes' })}>Clientes ({actual.nClientes ?? 0})</Button>}
+                    {actual && <Button size={tarjetas ? 'sm' : 'compact-sm'} flex={tarjetas ? 1 : undefined} variant="light" color="teal" leftSection={<IconUsers size={16} />} onClick={() => setDialogo({ tipo: 'clientes' })}>Clientes ({actual.nClientes ?? 0})</Button>}
                     {actual && <Button size={tarjetas ? 'sm' : 'compact-sm'} variant="default" leftSection={<IconPencil size={16} />} onClick={() => setDialogo({ tipo: 'datos' })}>Datos</Button>}
-                    <Button size={tarjetas ? 'sm' : 'compact-sm'} variant="light" leftSection={<IconUserPlus size={16} />} onClick={() => setDialogo({ tipo: 'vendedor' })}>Nuevo vendedor</Button>
+                    <Button size={tarjetas ? 'sm' : 'compact-sm'} variant="light" leftSection={<IconUserPlus size={16} />} onClick={() => setDialogo({ tipo: 'vendedor' })}>{tarjetas ? 'Nuevo' : 'Nuevo vendedor'}</Button>
                 </Group>
             </Group>
             {actual && (
@@ -183,28 +183,34 @@ export default function HojasVendedores() {
             {encabezado}
 
             <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} spacing={8}>
-                <Box style={{ gridColumn: tarjetas ? 'span 2' : undefined }}>
-                    <Kpi
-                        titulo="Comisión por pagar" valor={dolares(acumulado)} color={acumulado > 0 ? '#8a4b00' : 'teal.8'} destacado="#e0b400" icono={IconCoin} colorIcono="yellow"
-                        detalle={tasa ? `${bolivares(tv.porPagar * tasa)} · el cliente ya pagó` : 'El cliente ya pagó'}
-                        onClick={todasPorPagar.length ? abrirPago : undefined} ayuda="Toca para pagarle (todo o una parte). Las líneas amarillas se ven en el filtro «Por pagar»"
-                    />
-                </Box>
-                <Box style={{ gridColumn: tarjetas ? 'span 2' : undefined }}>
-                    <Kpi
-                        titulo="Préstamos" valor={dolares(actual.prestamo?.saldo || 0)} color={(actual.prestamo?.saldo || 0) > 0.004 ? 'red.8' : 'teal.8'} icono={IconCash} colorIcono="red"
-                        detalle={(actual.prestamo?.saldo || 0) > 0.004 ? (tasa ? `${bolivares(actual.prestamo.saldo * tasa)} · debe el vendedor` : 'Lo que debe el vendedor') : 'No tiene préstamos · toca para añadir'}
-                        onClick={() => setDialogo({ tipo: 'prestamo' })} ayuda="Toca para ver sus préstamos y añadir uno nuevo"
-                    />
-                </Box>
-                <Kpi titulo="Por generar (sin cobrar)" valor={dolares(tv.futura)} color="#5c6675" icono={IconHourglass} colorIcono="gray" detalle={tasa ? bolivares(tv.futura * tasa) : 'Facturas que el cliente aún no paga'} ayuda="Lo que dejarán las facturas que el cliente todavía no paga" />
-                <Kpi titulo="Comisión pagada" valor={dolares(actual.resumen.comisionPagada)} color="teal.8" icono={IconCircleCheck} colorIcono="teal" detalle={tasa ? bolivares(actual.resumen.comisionPagada * tasa) : undefined} onClick={() => hoja.setFiltro('pagadas')} activo={hoja.filtro === 'pagadas'} ayuda="Toca para ver las pagadas" />
                 <Kpi
-                    titulo="Los clientes deben" valor={hoja.hayEnlazadas ? dolares(hoja.deudaTotal) : '—'} color={hoja.deudaTotal > 0 ? 'red.8' : 'teal.8'} icono={IconAlertTriangle} colorIcono="red"
-                    detalle={hoja.hayEnlazadas ? 'De las facturas enlazadas de esta hoja' : 'Ninguna factura enlazada con el sistema'}
+                    titulo="Falta por pagar (acumulado)" valor={dolares(acumulado)} color={acumulado > 0 ? '#8a4b00' : 'teal.8'} destacado="#e0b400" icono={IconCoin} colorIcono="yellow"
+                    detalle={tasa ? `${bolivares(acumulado * tasa)} · cliente ya pagó` : 'El cliente ya pagó'}
+                    onClick={todasPorPagar.length ? abrirPago : undefined} ayuda="Toca para pagarle al vendedor (todo o una parte). Las líneas amarillas se ven en «Por pagar»"
                 />
-                <Kpi titulo="A comisionar sin IVA" valor={dolares(tv.base)} icono={IconChecks} colorIcono="blue" detalle={`Facturas con IVA ${dolares(tv.facturas)}`} />
-                <Kpi titulo="Tasa BCV de hoy" valor={tasa ? `Bs ${usd(tasa)}` : 'Sin tasa'} color={tasa ? 'navy.9' : 'orange.9'} icono={IconBuildingBank} colorIcono="indigo" detalle={tasa ? 'Las comisiones en Bs se calculan con ella' : 'Las comisiones se ven solo en $'} />
+                <Kpi
+                    titulo="Comisión ya pagada" valor={dolares(actual.resumen.comisionPagada)} color="teal.8" icono={IconCircleCheck} colorIcono="teal"
+                    detalle={tasa ? bolivares(actual.resumen.comisionPagada * tasa) : 'Ya liquidado al vendedor'}
+                    onClick={() => hoja.setFiltro('pagadas')} activo={hoja.filtro === 'pagadas'} ayuda="Toca para ver las comisiones pagadas"
+                />
+                <Kpi
+                    titulo="Por generar (sin cobrar)" valor={dolares(tv.futura)} color="#5c6675" icono={IconHourglass} colorIcono="gray"
+                    detalle={tasa ? bolivares(tv.futura * tasa) : 'Facturas que el cliente aún no paga'}
+                    ayuda="Comisión que generarán las facturas cuando el cliente las pague"
+                />
+                <Kpi
+                    titulo="Préstamos al vendedor" valor={dolares(actual.prestamo?.saldo || 0)} color={(actual.prestamo?.saldo || 0) > 0.004 ? 'red.8' : 'teal.8'} icono={IconCash} colorIcono="red"
+                    detalle={(actual.prestamo?.saldo || 0) > 0.004 ? (tasa ? `${bolivares(actual.prestamo.saldo * tasa)} · por descontar` : 'Saldo por descontar') : 'Sin préstamos · toca para ver'}
+                    onClick={() => setDialogo({ tipo: 'prestamo' })} ayuda="Toca para ver sus préstamos y añadir uno nuevo"
+                />
+                <Kpi
+                    titulo="Deuda de sus clientes" valor={hoja.hayEnlazadas ? dolares(hoja.deudaTotal) : '—'} color={hoja.deudaTotal > 0 ? 'red.8' : 'teal.8'} icono={IconAlertTriangle} colorIcono="red"
+                    detalle={hoja.hayEnlazadas ? 'Saldo pendiente en sistema' : 'Sin facturas enlazadas'}
+                />
+                <Kpi
+                    titulo="Base sin IVA" valor={dolares(tv.base)} icono={IconChecks} colorIcono="blue"
+                    detalle={`Facturado ${dolares(tv.facturas)}${tasa ? ` · BCV Bs ${usd(tasa)}` : ''}`}
+                />
             </SimpleGrid>
 
             <Box className={classes.superficie} px={10} py={6}><LeyendaColores compacta={tarjetas} /></Box>

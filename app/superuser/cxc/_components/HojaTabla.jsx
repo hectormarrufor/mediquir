@@ -9,7 +9,7 @@ import { IconChevronDown, IconChevronRight, IconLinkOff } from '@tabler/icons-re
 import CeldaEditable from './CeldaEditable';
 import { Cifra } from './Piezas';
 import { CobroFactura, EstadoComision, MenuLinea, cifrasDe } from './PiezasVendedores';
-import { baseAbonadaDe, esPago, estadoLinea, opcionesPct, porPagar } from './comisiones';
+import { esPago, estadoLinea, opcionesPct, porPagar, resumenComisionFactura } from './comisiones';
 import { DESPLAZAMIENTO_CABECERA, fmtFecha, useAnchoGrande, useAnchoMuyGrande, usd } from './utilidades';
 import classes from './cxc.module.css';
 import NumeroFactura from './NumeroFactura';
@@ -17,7 +17,7 @@ import NotaProrrateo, { MarcasFactura } from './ExplicacionSinIva';
 
 const pctTexto = (v) => (v === null || v === undefined || v === '' ? '' : `${Number(v)}%`);
 
-function FilaLinea({ l, hijo, d, hoja, acc, tasa, cols }) {
+function FilaLinea({ l, hijo, d, rc, hoja, acc, tasa, cols }) {
     const pago = esPago(l);
     const estado = estadoLinea(l);
     const plegada = hoja.plegadas.has(d.k);
@@ -68,7 +68,16 @@ function FilaLinea({ l, hijo, d, hoja, acc, tasa, cols }) {
                 <CeldaEditable tipo="numero" valor={l.comisionUsd} align="right" formato={usd} negrita={!hijo && estado !== 'enabonos'} color={estado === 'enabonos' ? '#868e96' : undefined} etiqueta={`Comisión de ${etiqueta}`} onGuardar={(v) => hoja.editar(l, { comisionUsd: v })} />
             </Table.Td>
             {cols.bs && <Table.Td><Text fz={hijo ? 12 : 13} ta="right" px={6} c={estado === 'pagada' || estado === 'enabonos' ? '#868e96' : '#1a1b1e'}>{l.comisionUsd !== null && l.comisionUsd !== undefined ? usd(Number(l.comisionUsd) * tasa) : ''}</Text></Table.Td>}
-            <Table.Td px={4}><EstadoComision l={l} onMarcar={hoja.marcarUna} /></Table.Td>
+            <Table.Td px={4}>
+                <Stack gap={2} py={2}>
+                    <EstadoComision l={l} onMarcar={hoja.marcarUna} />
+                    {!hijo && !pago && rc && (
+                        <Text fz={10.5} lh={1.2} c="#495057" style={{ whiteSpace: 'nowrap' }}>
+                            Acum. <b>${usd(rc.acumulada)}</b> · Pag. <Text span c="teal.8" fw={700}>${usd(rc.pagada)}</Text> · Falta <Text span c={rc.porPagar > 0.005 ? 'orange.9' : 'teal.8'} fw={800}>${usd(rc.porPagar)}</Text>
+                        </Text>
+                    )}
+                </Stack>
+            </Table.Td>
             {cols.estatus && <Table.Td>{!hijo && <CeldaEditable valor={l.estatusCliente} placeholder="Estatus del cliente" etiqueta={`Estatus del cliente de ${etiqueta}`} onGuardar={(v) => hoja.editar(l, { estatusCliente: v })} />}</Table.Td>}
             {cols.obs && <Table.Td><CeldaEditable valor={l.observacion} placeholder={hijo ? '' : 'Observación'} etiqueta={`Observación de ${etiqueta}`} onGuardar={(v) => hoja.editar(l, { observacion: v })} /></Table.Td>}
             <Table.Td ta="center" p={0}><MenuLinea l={l} acc={acc} /></Table.Td>
@@ -76,37 +85,40 @@ function FilaLinea({ l, hijo, d, hoja, acc, tasa, cols }) {
     );
 }
 
-// Cierre del bloque de una factura con abonos: los abonos van DENTRO del monto de la factura; aquí se ve cuánto de la factura (y de su sin IVA) ya se abonó y cuánto falta
-function ResumenAbonos({ d, cols, tasa }) {
-    const abonos = d.pagos.filter((x) => x.concepto !== 'NOTA' && esPago(x));
-    if (!d.padre || !abonos.length) return null;
-    const suma = (campo) => abonos.reduce((t, x) => t + Math.abs(Number(x[campo]) || 0), 0);
-    const abonado = suma('montoUsd');
-    const baseAbonada = baseAbonadaDe(d); // nunca más que el sin IVA de la factura
-    const comision = suma('comisionUsd');
-    const yaPagada = abonos.filter((x) => x.estatusComision === 'PAGADA').reduce((t, x) => t + (Number(x.comisionUsd) || 0), 0);
-    const debida = abonos.filter((x) => porPagar(x)).reduce((t, x) => t + (Number(x.comisionUsd) || 0), 0); // la sumatoria de las amarillas: lo que se le debe al vendedor
+// Cierre del bloque de una factura con abonos: muestra cuánto se cobró al cliente y el desglose exacto de la comisión de la factura (acumulada, ya pagada y falta por pagar)
+function ResumenAbonos({ d, rc, cols, tasa }) {
+    if (!d.padre || !rc.cantAbonos) return null;
     const explicable = Number(d.padre.retenidoUsd) > 0.005 || Number(d.padre.exentoUsd) > 0.005 || d.padre.baseUsd !== null;
-    const saldo = d.padre.saldoCxc !== null && d.padre.saldoCxc !== undefined ? Number(d.padre.saldoCxc) : Math.max(0, Number(d.padre.montoUsd) - abonado);
     const nCols = 11 + (cols.vence ? 1 : 0) + (cols.bs ? 1 : 0) + (cols.estatus ? 1 : 0) + (cols.obs ? 1 : 0);
     return (
         <>
         <Table.Tr className={classes.resumenAbonos}>
             <Table.Td colSpan={2} />
-            <Table.Td colSpan={2 + (cols.vence ? 1 : 0)}><Text fz={11.5} fw={700} pl={10} c="#1c4f8f" truncate="end">Abonado a la factura {d.padre.documentoTexto} ({abonos.length})</Text></Table.Td>
-            <Table.Td ta="right"><Text fz={11.5} fw={700} pr={6} c={saldo > 0.005 ? 'orange.9' : 'teal.8'} title="Lo que el cliente todavía debe de esta factura">{saldo > 0.005 ? `Falta ${usd(saldo)}` : 'Cobrada'}</Text></Table.Td>
-            <Table.Td ta="right"><Text fz={12} fw={800} pr={6} c="#1971c2">{usd(abonado)}</Text></Table.Td>
-            <Table.Td ta="right"><Text fz={12} fw={800} pr={6} c="#1971c2" title={`Sin IVA de lo abonado (de ${usd(d.padre.baseUsd)} de la factura)`}>{usd(baseAbonada)}</Text></Table.Td>
+            <Table.Td colSpan={2 + (cols.vence ? 1 : 0)}><Text fz={11.5} fw={700} pl={10} c="#1c4f8f" truncate="end">Resumen {d.padre.documentoTexto} ({rc.cantAbonos} abono{rc.cantAbonos === 1 ? '' : 's'})</Text></Table.Td>
+            <Table.Td ta="right"><Text fz={11.5} fw={700} pr={6} c={rc.saldoCliente > 0.005 ? 'orange.9' : 'teal.8'} title="Lo que el cliente todavía debe de esta factura">{rc.saldoCliente > 0.005 ? `Debe $${usd(rc.saldoCliente)}` : 'Cobrada'}</Text></Table.Td>
+            <Table.Td ta="right"><Text fz={12} fw={800} pr={6} c="#1971c2">${usd(rc.abonado)}</Text></Table.Td>
+            <Table.Td ta="right"><Text fz={12} fw={800} pr={6} c="#1971c2" title={`Sin IVA de lo abonado (de $${usd(d.padre.baseUsd)} de la factura)`}>${usd(rc.baseAbonada)}</Text></Table.Td>
             <Table.Td />
-            <Table.Td ta="right" title="Comisión que generaron todos los abonos (la ya pagada más la por pagar). NO es lo que se le debe al vendedor.">
-                <Text fz={9.5} fw={700} c="#868e96" pr={6} lh={1} tt="uppercase">Generada</Text>
-                <Text fz={12} fw={700} pr={6} c="#5c6675" lh={1.2}>{usd(comision)}</Text>
+            <Table.Td ta="right" title="Comisión acumulada por los cobros recibidos en esta factura">
+                <Text fz={9.5} fw={700} c="#1c4f8f" pr={6} lh={1} tt="uppercase">Acumulado</Text>
+                <Text fz={12} fw={800} pr={6} c="#1c4f8f" lh={1.2}>${usd(rc.acumulada)}</Text>
+                {rc.porGenerar > 0.005 && <Text fz={9.5} c="#5c6675" pr={6} lh={1.1}>de ${usd(rc.comisionFactura)}</Text>}
             </Table.Td>
-            {cols.bs && <Table.Td ta="right"><Text fz={12} fw={600} pr={6} c="#868e96">{usd(comision * tasa)}</Text></Table.Td>}
+            {cols.bs && <Table.Td ta="right"><Text fz={12} fw={600} pr={6} c="#5c6675">{usd(rc.acumulada * tasa)}</Text></Table.Td>}
             <Table.Td colSpan={2 + (cols.estatus ? 1 : 0) + (cols.obs ? 1 : 0)}>
-                <Group gap={6} px={4} wrap="wrap">
-                    <Badge size="sm" variant="light" color="teal" style={{ textTransform: 'none' }} title="Comisión de abonos que ya se le pagó al vendedor">Ya pagada {usd(yaPagada)}</Badge>
-                    <Badge size="md" variant={debida > 0.005 ? 'filled' : 'light'} color={debida > 0.005 ? 'orange' : 'gray'} style={{ textTransform: 'none' }} title="Suma de las filas amarillas: lo que se le debe al vendedor por esta factura">{debida > 0.005 ? `Por pagar ${usd(debida)}` : 'Nada por pagar'}</Badge>
+                <Group gap={6} px={4} py={3} wrap="wrap">
+                    <Badge size="sm" variant="light" color="blue" style={{ textTransform: 'none' }} title="Comisión ya generada por cobros de esta factura">
+                        Acumulado: ${usd(rc.acumulada)}
+                    </Badge>
+                    <Badge size="sm" variant="light" color="teal" style={{ textTransform: 'none' }} title="Comisión que ya se le pagó al vendedor en esta factura">
+                        Ya pagado: ${usd(rc.pagada)}
+                    </Badge>
+                    <Badge size="sm" variant={rc.porPagar > 0.005 ? 'filled' : 'light'} color={rc.porPagar > 0.005 ? 'orange' : 'gray'} style={{ textTransform: 'none' }} title="Lo que falta por pagarle al vendedor de lo acumulado">
+                        {rc.porPagar > 0.005 ? `Falta por pagar: $${usd(rc.porPagar)}` : 'Al día ($0.00)'}
+                    </Badge>
+                    {rc.porGenerar > 0.005 && (
+                        <Text fz={10.5} c="#5c6675" fw={600}>+${usd(rc.porGenerar)} al cobrar saldo</Text>
+                    )}
                 </Group>
             </Table.Td>
         </Table.Tr>
@@ -143,21 +155,24 @@ function TablaCliente({ g, hoja, acc, tasa, cols, grande }) {
                     <Table.Th w={100} ta="right" title="Monto a comisionar, sin IVA">Sin IVA</Table.Th>
                     <Table.Th w={60} ta="right">%</Table.Th>
                     <Table.Th w={88} ta="right">Comisión $</Table.Th>
-                    {cols.bs && <Table.Th w={116} ta="right" title="Comisión en bolívares a la tasa BCV de hoy">Comisión Bs</Table.Th>}
-                    <Table.Th w={138}>Comisión</Table.Th>
+                    {cols.bs && <Table.Th w={110} ta="right" title="Comisión en bolívares a la tasa BCV de hoy">Comisión Bs</Table.Th>}
+                    <Table.Th w={215}>Estado / Desglose</Table.Th>
                     {cols.estatus && <Table.Th>Estatus cliente</Table.Th>}
                     {cols.obs && <Table.Th>Observación</Table.Th>}
                     <Table.Th w={30} p={0} />
                 </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-                {g.items.map((d) => (
-                    <React.Fragment key={d.k}>
-                        {d.padre && <FilaLinea l={d.padre} hijo={false} d={d} hoja={hoja} acc={acc} tasa={tasa} cols={cols} />}
-                        {(!d.padre || !hoja.plegadas.has(d.k)) && d.pagos.map((pg) => <FilaLinea key={pg.id} l={pg} hijo={Boolean(d.padre)} d={d} hoja={hoja} acc={acc} tasa={tasa} cols={cols} />)}
-                        <ResumenAbonos d={d} cols={cols} tasa={tasa} />
-                    </React.Fragment>
-                ))}
+                {g.items.map((d) => {
+                    const rc = resumenComisionFactura(d);
+                    return (
+                        <React.Fragment key={d.k}>
+                            {d.padre && <FilaLinea l={d.padre} hijo={false} d={d} rc={rc} hoja={hoja} acc={acc} tasa={tasa} cols={cols} />}
+                            {(!d.padre || !hoja.plegadas.has(d.k)) && d.pagos.map((pg) => <FilaLinea key={pg.id} l={pg} hijo={Boolean(d.padre)} d={d} rc={rc} hoja={hoja} acc={acc} tasa={tasa} cols={cols} />)}
+                            <ResumenAbonos d={d} rc={rc} cols={cols} tasa={tasa} />
+                        </React.Fragment>
+                    );
+                })}
             </Table.Tbody>
             <Table.Tfoot>
                 <Table.Tr style={{ background: '#e8edf5' }}>
@@ -171,14 +186,18 @@ function TablaCliente({ g, hoja, acc, tasa, cols, grande }) {
                     <Table.Td />
                     <Table.Td ta="right"><Text fw={800} fz={12} pr={6}>{usd(g.t.comision)}</Text></Table.Td>
                     {cols.bs && <Table.Td ta="right"><Text fw={800} fz={12} pr={6}>{usd(g.t.comision * tasa)}</Text></Table.Td>}
-                    <Table.Td><Text fz={11.5} fw={800} px={4} c={g.t.porPagar > 0 ? '#b35900' : 'teal.8'}>{g.t.porPagar > 0 ? `Por pagar $${usd(g.t.porPagar)}` : 'Nada por pagar'}</Text></Table.Td>
+                    <Table.Td>
+                        <Text fz={11} fw={700} px={4} lh={1.25} c="#495057">
+                            Acum. <b>${usd(g.t.acumulada)}</b> · Pag. <Text span c="teal.8" fw={700}>${usd(g.t.pagada)}</Text> · <Text span c={g.t.porPagar > 0 ? '#b35900' : 'teal.8'} fw={800}>{g.t.porPagar > 0 ? `Falta $${usd(g.t.porPagar)}` : 'Al día'}</Text>
+                        </Text>
+                    </Table.Td>
                     <Table.Td colSpan={n - (cols.vence ? 5 : 4) - 6 - (cols.bs ? 1 : 0)} />
                 </Table.Tr>
             </Table.Tfoot>
         </Table>
     );
     // más angosto que 75em no cabe: se desplaza de lado (sin encabezado pegajoso, que no funciona dentro de un desplazamiento)
-    return grande ? tabla : <Box className={classes.desborde} style={{ '--min-tabla': '1040px' }}>{tabla}</Box>;
+    return grande ? tabla : <Box className={classes.desborde} style={{ '--min-tabla': '1120px' }}>{tabla}</Box>;
 }
 
 export default function HojaTabla({ hoja, acc }) {

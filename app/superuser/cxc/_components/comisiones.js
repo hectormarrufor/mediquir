@@ -102,6 +102,52 @@ export const FILTROS = [
 ];
 export const cumpleFiltro = (l, filtro) => filtro === 'todas' || (filtro === 'porpagar' ? porPagar(l) : filtro === 'pendientes' ? l.estatusComision !== 'PAGADA' : l.estatusComision === 'PAGADA');
 
+export function resumenComisionFactura(d) {
+    const abonos = d.pagos.filter((x) => x.concepto !== 'NOTA' && esPago(x));
+    const abonado = r2(abonos.reduce((t, x) => t + Math.abs(Number(x.montoUsd) || 0), 0));
+    const baseAbonada = baseAbonadaDe(d);
+    const comisionFactura = d.padre
+        ? r2(Number(d.padre.comisionUsd) || 0)
+        : r2(abonos.reduce((t, x) => t + (Number(x.comisionUsd) || 0), 0));
+
+    let acumulada = 0;
+    let pagada = 0;
+    let porPagarFactura = 0;
+
+    if (abonos.length > 0) {
+        acumulada = r2(abonos.reduce((t, x) => t + (Number(x.comisionUsd) || 0), 0));
+        pagada = r2(abonos.filter((x) => x.estatusComision === 'PAGADA').reduce((t, x) => t + (Number(x.comisionUsd) || 0), 0));
+        porPagarFactura = r2(abonos.filter((x) => porPagar(x)).reduce((t, x) => t + (Number(x.comisionUsd) || 0), 0));
+    } else if (d.padre) {
+        const esPagada = d.padre.estatusComision === 'PAGADA';
+        const esPorPagar = porPagar(d.padre);
+        acumulada = esPagada || esPorPagar ? comisionFactura : 0;
+        pagada = esPagada ? comisionFactura : 0;
+        porPagarFactura = esPorPagar ? comisionFactura : 0;
+    }
+
+    const faltaTotalFactura = Math.max(0, r2(comisionFactura - pagada));
+    const porGenerar = Math.max(0, r2(comisionFactura - acumulada));
+    const saldoCliente = d.padre
+        ? (d.padre.saldoCxc !== null && d.padre.saldoCxc !== undefined
+            ? Number(d.padre.saldoCxc)
+            : Math.max(0, r2((Number(d.padre.montoUsd) || 0) - abonado)))
+        : 0;
+
+    return {
+        comisionFactura,
+        acumulada,
+        pagada,
+        porPagar: porPagarFactura,
+        faltaTotalFactura,
+        porGenerar,
+        abonado,
+        baseAbonada,
+        saldoCliente,
+        cantAbonos: abonos.length,
+    };
+}
+
 export function totales(filas) {
     // comisión POR GENERAR: la que dejarán las facturas aún sin cobrar del todo (lo que ya generaron sus abonos no se cuenta dos veces)
     let futura = 0;
@@ -113,12 +159,18 @@ export function totales(filas) {
     // Base y comisión de cada factura se cuentan UNA sola vez: con los de la factura. Los abonos son parte de esa misma factura (su comisión es un pedazo de la de la
     // factura), así que no se vuelven a sumar a «sin IVA» ni a «comisión»; si no, al cobrar completo el vendedor veía duplicada su comisión.
     // Un abono sin factura en la hoja (huérfano) sí cuenta por sí mismo.
-    let base = 0, comision = 0, pendiente = 0;
+    let base = 0, comision = 0, pendiente = 0, pagada = 0;
     for (const d of agruparFacturas(filas)) {
         const pa = d.padre;
         const abonos = d.pagos.filter((x) => x.concepto !== 'NOTA' && Number(x.comisionUsd) > 0 && esPago(x));
         if (!pa) {
-            for (const x of d.pagos) { base += Number(x.baseUsd) || 0; comision += Number(x.comisionUsd) || 0; if (x.estatusComision !== 'PAGADA') pendiente += Number(x.comisionUsd) || 0; }
+            for (const x of d.pagos) {
+                const c = Number(x.comisionUsd) || 0;
+                base += Number(x.baseUsd) || 0;
+                comision += c;
+                if (x.estatusComision === 'PAGADA') pagada += c;
+                else pendiente += c;
+            }
             continue;
         }
         base += Number(pa.baseUsd) || 0;
@@ -126,10 +178,16 @@ export function totales(filas) {
         // pendiente de pago: con abonos, lo de sus abonos aún no pagados + lo que falta por generar; sin abonos, la de la factura si no se ha pagado
         if (abonos.length) {
             const generada = abonos.reduce((t, x) => t + (Number(x.comisionUsd) || 0), 0);
+            pagada += abonos.filter((x) => x.estatusComision === 'PAGADA').reduce((t, x) => t + (Number(x.comisionUsd) || 0), 0);
             pendiente += abonos.filter((x) => x.estatusComision !== 'PAGADA').reduce((t, x) => t + (Number(x.comisionUsd) || 0), 0);
             if (pa.estatusComision !== 'PAGADA') pendiente += Math.max(0, (Number(pa.comisionUsd) || 0) - generada);
-        } else if (pa.estatusComision !== 'PAGADA') pendiente += Number(pa.comisionUsd) || 0;
+        } else {
+            if (pa.estatusComision === 'PAGADA') pagada += Number(pa.comisionUsd) || 0;
+            else pendiente += Number(pa.comisionUsd) || 0;
+        }
     }
+    const porPagarTotal = sumar(filas.filter((x) => porPagar(x)), 'comisionUsd');
+    const pagadaTotal = r2(pagada);
     return {
         monto: sumar(filas, 'montoUsd'), // la columna tal cual (las facturas suman, los abonos y notas de crédito restan)
         abonos: r2(filas.filter((x) => esPago(x) && x.concepto !== 'NOTA').reduce((t, x) => t + Math.abs(Number(x.montoUsd) || 0), 0)), // lo abonado, en positivo
@@ -137,8 +195,10 @@ export function totales(filas) {
         baseAbonada: r2(agruparFacturas(filas).reduce((t, d) => t + baseAbonadaDe(d), 0)), // SIN IVA de lo abonado (prorrateado): va DENTRO del sin IVA de las facturas y nunca lo supera
         base: r2(base), // SIN IVA: sobre esto se calcula la comisión (una vez por factura)
         comision: r2(comision),
+        pagada: pagadaTotal,
+        acumulada: r2(pagadaTotal + porPagarTotal),
         pendiente: r2(pendiente),
-        porPagar: sumar(filas.filter((x) => porPagar(x)), 'comisionUsd'), // la que ya se puede pagar: el cliente ya cobró
+        porPagar: porPagarTotal, // la que ya se puede pagar: el cliente ya cobró
         futura: r2(futura),
     };
 }

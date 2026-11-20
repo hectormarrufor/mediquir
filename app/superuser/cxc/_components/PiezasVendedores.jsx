@@ -88,14 +88,14 @@ export function LeyendaColores({ compacta = false }) {
 export function cifrasDe(t, deuda, tasa) {
     return [
         deuda === null
-            ? { clave: 'debe', titulo: 'Debe', valor: null, color: '#5c6675', ayuda: 'Ninguna factura de este cliente está enlazada con el sistema: lo que debe se lleva a mano (Estatus cliente)' }
-            : { clave: 'debe', titulo: 'Debe', valor: deuda, color: deuda > 0 ? '#c92a2a' : '#2b8a3e', ayuda: 'Lo que el cliente todavía debe de sus facturas (enlazadas con el sistema)' },
-        { clave: 'facturas', titulo: 'Facturas (con IVA)', valor: t.facturas, ayuda: 'Total de las facturas, con IVA, tal como se facturaron' },
-        { clave: 'abonado', titulo: 'Abonado', valor: t.abonos, color: '#1971c2', ayuda: 'Lo que el cliente ha pagado en abonos' },
-        { clave: 'base', titulo: 'A comisionar sin IVA', valor: t.base, ayuda: 'La base sin IVA sobre la que se calcula la comisión' },
-        { clave: 'comision', titulo: 'Comisión', valor: t.comision, tasa, ayuda: 'Suma de las comisiones de estas líneas' },
-        { clave: 'porpagar', titulo: 'Por pagar', valor: t.porPagar, color: t.porPagar > 0 ? '#b35900' : '#2b8a3e', tasa, ayuda: 'Ya se le puede pagar al vendedor: el cliente ya pagó (renglones amarillos)' },
-        { clave: 'futura', titulo: 'Por generar (sin cobrar)', valor: t.futura, color: '#5c6675', tasa, ayuda: 'Lo que dejarán las facturas que el cliente aún no paga' },
+            ? { clave: 'debe', titulo: 'Debe cliente', valor: null, color: '#5c6675', ayuda: 'Ninguna factura de este cliente está enlazada con el sistema: lo que debe se lleva a mano (Estatus cliente)' }
+            : { clave: 'debe', titulo: 'Debe cliente', valor: deuda, color: deuda > 0 ? '#c92a2a' : '#2b8a3e', ayuda: 'Lo que el cliente todavía debe de sus facturas (enlazadas con el sistema)' },
+        { clave: 'facturas', titulo: 'Facturado', valor: t.facturas, ayuda: 'Total de las facturas, con IVA, tal como se facturaron' },
+        { clave: 'base', titulo: 'Sin IVA', valor: t.base, ayuda: 'La base sin IVA sobre la que se calcula la comisión total' },
+        { clave: 'acumulada', titulo: 'Acumulado', valor: t.acumulada ?? 0, color: '#1c4f8f', ayuda: 'Comisión ya generada por cobros reales de estas facturas' },
+        { clave: 'pagada', titulo: 'Ya pagado', valor: t.pagada ?? 0, color: '#2b8a3e', tasa, ayuda: 'Comisión que ya se le pagó al vendedor' },
+        { clave: 'porpagar', titulo: 'Falta por pagar', valor: t.porPagar, color: t.porPagar > 0 ? '#b35900' : '#2b8a3e', tasa, ayuda: 'Comisión acumulada pendiente por pagarle al vendedor (renglones amarillos)' },
+        { clave: 'futura', titulo: 'Por generar', valor: t.futura, color: '#5c6675', ayuda: 'Comisión que se generará cuando el cliente pague el saldo pendiente' },
     ];
 }
 

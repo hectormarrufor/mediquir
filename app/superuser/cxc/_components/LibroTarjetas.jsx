@@ -20,8 +20,8 @@ function DatoTarjeta({ titulo, valor, color = '#1a1b1e' }) {
     );
 }
 
-function TarjetaDocumento({ f, g, acc }) {
-    const [verAbonos, setVerAbonos] = useState(f.abonos.length > 0);
+function TarjetaDocumento({ f, g, acc, iniciarPlegada }) {
+    const [verAbonos, setVerAbonos] = useState(() => f.abonos.length > 0 && !iniciarPlegada);
     const venc = vencimientoEnPalabras(f.vence, f.saldo, f.dias);
     const colorVenc = venc.tono === 'vencida' ? 'red.8' : venc.tono === 'pronto' ? 'orange.9' : venc.tono === 'pagada' ? 'teal.8' : '#5c6675';
     return (
@@ -68,7 +68,7 @@ function TarjetaDocumento({ f, g, acc }) {
                     flex={f.pagada ? 1 : undefined} size="sm" variant="default" onClick={() => setVerAbonos((v) => !v)} aria-expanded={verAbonos}
                     rightSection={<IconChevronDown size={14} style={{ transform: verAbonos ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />}
                 >
-                    {f.abonos.length} abono{f.abonos.length === 1 ? '' : 's'}
+                    {f.abonos.length} abono{f.abonos.length === 1 ? '' : 's'}{f.abonos.length > 0 ? ` · ${dolares(f.abonado)}` : ''}
                 </Button>
                 <MenuDocumento f={f} acc={acc} tamano="lg" />
             </Group>
@@ -172,7 +172,7 @@ export default function LibroTarjetas({ grupos, acc, buscando, libro }) {
                                     )}
                                 </Group>
 
-                                {g.filas.map((f) => <TarjetaDocumento key={f.id} f={f} g={g} acc={acc} />)}
+                                {g.filas.map((f) => <TarjetaDocumento key={f.id} f={f} g={g} acc={acc} iniciarPlegada={g.filas.length > 2} />)}
                             </Stack>
                         )}
                     </section>

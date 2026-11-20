@@ -3,7 +3,7 @@
 // Libro de cobranza en la computadora: una tabla densa como el Excel, con el encabezado y los totales siempre a la vista.
 // Cada celda con fondo al pasar el mouse se edita ahí mismo; el saldo y el monto abren su registro (abono/ajuste o corrección con motivo).
 import React from 'react';
-import { ActionIcon, Badge, Box, Button, Group, Table, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Badge, Box, Button, Group, Stack, Table, Text, Tooltip } from '@mantine/core';
 import { IconChevronDown, IconChevronRight, IconCoin, IconReceipt, IconTrash } from '@tabler/icons-react';
 import CeldaEditable from './CeldaEditable';
 import { EstadoDocumento, MenuDocumento } from './PiezasLibro';
@@ -54,8 +54,10 @@ function Abonos({ f, g, acc }) {
 // Como la hoja de los vendedores: cada cliente es un renglón que se despliega con sus facturas, y cada factura trae sus abonos debajo (se pueden esconder con su flecha).
 export default function LibroTabla({ grupos, totales, acc, libro }) {
     const grande = useAnchoGrande(); // la columna del vendedor solo cuando cabe sin apretar las demás
-    const { abierto, alternarCliente, desplegarTodo, plegarTodo, plegadas, alternarPlegada } = libro;
-    const columnas = grande ? 14 : 13;
+    const { abierto, alternarCliente, desplegarTodo, plegarTodo, plegadas, alternarPlegada, verDetalleBs } = libro;
+    const detalle = Boolean(verDetalleBs);
+    const colsTrailing = grande ? 3 : 2; // Vendedor? + Observación + Acciones
+    const columnas = (detalle ? 11 : 8) + colsTrailing;
     // Retención de IVA, siempre en las facturas: la que hizo el cliente (morado, negrita) o la calculada, 75 % del IVA (gris, cursiva),
     // para confirmar si pagó reteniendo o no. La factura con y sin ella, en dólares y en bolívares.
     const conRet = (v) => (v === null || v === undefined ? <Text span c="dimmed">—</Text> : usd(v));
@@ -80,11 +82,11 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
                     <Table.Th>Documento</Table.Th>
                     <Table.Th w={80}>Emisión</Table.Th>
                     <Table.Th w={122}>Vence</Table.Th>
-                    <Table.Th w={106} ta="right">Monto USD</Table.Th>
-                    <Table.Th w={92} ta="right"><Tooltip label="IVA que retuvo el cliente (lo paga al SENIAT), en dólares"><span>Retención</span></Tooltip></Table.Th>
-                    <Table.Th w={104} ta="right"><Tooltip label="Monto de la factura con la retención aplicada (lo que paga en dinero)"><span>Monto − ret.</span></Tooltip></Table.Th>
-                    <Table.Th w={118} ta="right">Total Bs</Table.Th>
-                    <Table.Th w={118} ta="right"><Tooltip label="Total en bolívares con la retención aplicada"><span>Bs − ret.</span></Tooltip></Table.Th>
+                    <Table.Th w={detalle ? 106 : 124} ta="right">Monto USD</Table.Th>
+                    <Table.Th w={detalle ? 92 : 114} ta="right"><Tooltip label="IVA que retuvo el cliente (lo paga al SENIAT), en dólares"><span>Retención</span></Tooltip></Table.Th>
+                    {detalle && <Table.Th w={104} ta="right"><Tooltip label="Monto de la factura con la retención aplicada (lo que paga en dinero)"><span>Monto − ret.</span></Tooltip></Table.Th>}
+                    {detalle && <Table.Th w={118} ta="right">Total Bs</Table.Th>}
+                    {detalle && <Table.Th w={118} ta="right"><Tooltip label="Total en bolívares con la retención aplicada"><span>Bs − ret.</span></Tooltip></Table.Th>}
                     <Table.Th w={100} ta="right">Abonado</Table.Th>
                     <Table.Th w={112} ta="right">Saldo</Table.Th>
                     {grande && <Table.Th w={130}>Vendedor</Table.Th>}
@@ -107,10 +109,10 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
                             </Table.Td>
                             <Table.Td ta="right"><Text fz={12} fw={700} pr={6}>{usd(g.monto)}</Text></Table.Td>
                             <Table.Td ta="right"><Text fz={12} fw={700} pr={6} c="grape.8">{g.retUsd > 0 ? usd(g.retUsd) : ''}</Text></Table.Td>
-                            <Table.Td colSpan={3} />
+                            {detalle && <Table.Td colSpan={3} />}
                             <Table.Td ta="right"><Text fz={12} fw={700} pr={6} c="#1971c2">{usd(g.abonado)}</Text></Table.Td>
                             <Table.Td ta="right"><Text size="sm" fw={800} pr={6} c={g.vencido > 0 ? 'red.8' : 'navy.9'}>{usd(g.saldo)}</Text></Table.Td>
-                            <Table.Td colSpan={columnas - 11} ta="right">
+                            <Table.Td colSpan={colsTrailing} ta="right">
                                 <Group gap={4} wrap="nowrap" justify="flex-end">
                                     <EstadoCuentaAcciones clienteId={g.id} variante="icono" />
                                     {g.filas.some((f) => !f.manual && f.abonos.some((a) => a.monto > 0)) && <Button size="compact-xs" variant="light" color="teal" leftSection={<IconReceipt size={13} />} onClick={(e) => { e.stopPropagation(); acc.recibo(g); }} aria-label={`Recibo de cobro de ${g.nombre}`}>Recibo</Button>}
@@ -135,15 +137,29 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
                                     </Table.Td>
                                     <Table.Td><Text fz={12} px={6}>{fmtFecha(f.emision)}</Text></Table.Td>
                                     <Table.Td><CeldaEditable tipo="fecha" valor={f.vence} formato={formatoVence(f)} etiqueta={`Vencimiento de ${f.documento}`} onGuardar={(v) => acc.guardar(f, { fechaVencimiento: v })} color={f.vencida ? '#c92a2a' : undefined} /></Table.Td>
-                                    <Table.Td><CeldaEditable tipo="numero" valor={f.monto} align="right" formato={usd} etiqueta={`Monto de ${f.documento}`} onGuardar={(v) => { acc.corregirMonto(f, v); return Promise.resolve(); }} /></Table.Td>
+                                    <Table.Td>
+                                        <Stack gap={0} py={2}>
+                                            <CeldaEditable tipo="numero" valor={f.monto} align="right" formato={usd} etiqueta={`Monto de ${f.documento}`} onGuardar={(v) => { acc.corregirMonto(f, v); return Promise.resolve(); }} />
+                                            {!detalle && f.totalBs !== null && f.totalBs !== undefined && (
+                                                <Text fz={10.5} c="#5c6675" ta="right" px={6} lh={1.1}>Bs {usd(f.totalBs)}</Text>
+                                            )}
+                                        </Stack>
+                                    </Table.Td>
                                     <Table.Td>
                                         <Tooltip label={f.retReal ? 'El cliente retuvo (declarada en el abono o con comprobante)' : 'Calculada: 75 % del IVA. El cliente no ha declarado retención'} disabled={f.retUsd === null || f.retUsd === undefined}>
-                                            <Text fz={12.5} ta="right" px={6} {...estiloRet(f)}>{conRet(f.retUsd)}</Text>
+                                            <Stack gap={0} ta="right" px={6} py={2}>
+                                                <Text fz={12.5} {...estiloRet(f)}>{conRet(f.retUsd)}</Text>
+                                                {!detalle && f.montoMenosRet !== null && f.montoMenosRet !== undefined && (
+                                                    <Text fz={10.5} c={f.retReal ? 'grape.8' : 'dimmed'} fs={f.retReal ? undefined : 'italic'} lh={1.1}>
+                                                        Neto: ${usd(f.montoMenosRet)}
+                                                    </Text>
+                                                )}
+                                            </Stack>
                                         </Tooltip>
                                     </Table.Td>
-                                    <Table.Td><Text fz={12.5} ta="right" px={6} {...estiloRet(f)} c={f.retReal ? undefined : 'dimmed'}>{conRet(f.montoMenosRet)}</Text></Table.Td>
-                                    <Table.Td><Text fz={12.5} ta="right" px={6}>{f.totalBs !== null && f.totalBs !== undefined ? usd(f.totalBs) : ''}</Text></Table.Td>
-                                    <Table.Td><Text fz={12.5} ta="right" px={6} c={f.retReal ? undefined : 'dimmed'} fs={f.retReal ? undefined : 'italic'}>{conRet(f.totalBsMenosRet)}</Text></Table.Td>
+                                    {detalle && <Table.Td><Text fz={12.5} ta="right" px={6} {...estiloRet(f)} c={f.retReal ? undefined : 'dimmed'}>{conRet(f.montoMenosRet)}</Text></Table.Td>}
+                                    {detalle && <Table.Td><Text fz={12.5} ta="right" px={6}>{f.totalBs !== null && f.totalBs !== undefined ? usd(f.totalBs) : ''}</Text></Table.Td>}
+                                    {detalle && <Table.Td><Text fz={12.5} ta="right" px={6} c={f.retReal ? undefined : 'dimmed'} fs={f.retReal ? undefined : 'italic'}>{conRet(f.totalBsMenosRet)}</Text></Table.Td>}
                                     <Table.Td><Text size="sm" ta="right" px={6} c="#1971c2">{usd(f.abonado)}</Text></Table.Td>
                                     <Table.Td><CeldaEditable tipo="numero" valor={f.saldo} align="right" formato={usd} negrita color={f.vencida ? '#c92a2a' : undefined} etiqueta={`Saldo de ${f.documento}`} onGuardar={(v) => { acc.abonar(f, v); return Promise.resolve(); }} /></Table.Td>
                                     {grande && <Table.Td><Text fz={12} px={6} truncate="end">{f.vendedor || ''}</Text></Table.Td>}
@@ -158,7 +174,7 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
                                 {abonosVisibles(f) && (
                                     <Table.Tr className={classes.filaAbonos}>
                                         <Table.Td />
-                                        <Table.Td colSpan={columnas - 1} style={{ height: 'auto' }}><Box pr={6}><Abonos f={f} g={g} acc={acc} /></Box></Table.Td>
+                                        <Table.Td colSpan={columnas - 1} style={{ height: 'auto' }}><Box className={classes.cajaAbonos} pr={6}><Abonos f={f} g={g} acc={acc} /></Box></Table.Td>
                                     </Table.Tr>
                                 )}
                             </React.Fragment>
@@ -171,10 +187,10 @@ export default function LibroTabla({ grupos, totales, acc, libro }) {
                     <Table.Td colSpan={4}><Text fw={800} fz={12} pl={4}>TOTAL · {totales.documentos} documento(s) de {totales.clientes} cliente(s)</Text></Table.Td>
                     <Table.Td ta="right"><Text fw={800} fz={12} pr={6}>{usd(totales.monto)}</Text></Table.Td>
                     <Table.Td ta="right"><Text fw={800} fz={12} pr={6} c="grape.8">{totales.retUsd > 0 ? usd(totales.retUsd) : ''}</Text></Table.Td>
-                    <Table.Td colSpan={3} />
+                    {detalle && <Table.Td colSpan={3} />}
                     <Table.Td ta="right"><Text fw={800} fz={12} pr={6} c="#1971c2">{usd(totales.abonado)}</Text></Table.Td>
                     <Table.Td ta="right"><Text fw={800} size="sm" pr={6} c="navy.9">{usd(totales.saldo)}</Text></Table.Td>
-                    <Table.Td colSpan={columnas - 11} />
+                    <Table.Td colSpan={colsTrailing} />
                 </Table.Tr>
             </Table.Tfoot>
         </Table>

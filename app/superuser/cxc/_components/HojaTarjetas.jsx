@@ -3,12 +3,12 @@
 // Hoja de un vendedor en el teléfono: cada cliente se despliega (con lo que debe y lo que hay por pagar a la vista),
 // cada factura es una tarjeta y sus abonos van dentro, sangrados (└) y plegables. Los colores son los del Excel:
 // amarillo = por pagar, gris = pagada, blanco = sin cobrar (además del texto del estado).
-import React from 'react';
+import React, { useState } from 'react';
 import { ActionIcon, Badge, Box, Button, Checkbox, Collapse, Group, SimpleGrid, Stack, Text, UnstyledButton } from '@mantine/core';
 import { IconChevronDown, IconLinkOff, IconPencil, IconPlus } from '@tabler/icons-react';
 import { Cifra } from './Piezas';
 import { CobroFactura, EstadoComision, MenuLinea, cifrasDe } from './PiezasVendedores';
-import { baseAbonadaDe, esPago, estadoLinea, porPagar } from './comisiones';
+import { esPago, estadoLinea, resumenComisionFactura } from './comisiones';
 import { bolivares, dolares, fmtFecha } from './utilidades';
 import classes from './cxc.module.css';
 import NumeroFactura from './NumeroFactura';
@@ -61,18 +61,14 @@ function TarjetaPago({ l, hijo, hoja, acc, tasa }) {
     );
 }
 
-function TarjetaFactura({ d, hoja, acc, tasa }) {
+function TarjetaFactura({ d, hoja, acc, tasa, iniciarPlegada }) {
+    const [abiertos, setAbiertos] = useState(() => !iniciarPlegada);
     const pa = d.padre;
     if (!pa) return <Stack gap={6}>{d.pagos.map((p) => <TarjetaPago key={p.id} l={p} hijo={false} hoja={hoja} acc={acc} tasa={tasa} />)}</Stack>;
     const e = estadoLinea(pa);
-    const plegada = hoja.plegadas.has(d.k);
     const pctTxt = pa.porcentaje === null || pa.porcentaje === undefined ? '—' : `${Number(pa.porcentaje)} %`;
-    const porPagarAbonos = d.pagos.filter((p) => estadoLinea(p) === 'porpagar').reduce((t, p) => t + (Number(p.comisionUsd) || 0), 0);
-    // lo abonado va DENTRO de la factura: cuánto de su monto y de su sin IVA ya se abonó, la comisión que generó y cuánto falta
-    const abonos = d.pagos.filter((p) => p.concepto !== 'NOTA' && esPago(p));
-    const suma = (campo) => abonos.reduce((t, p) => t + Math.abs(Number(p[campo]) || 0), 0);
-    const abonado = suma('montoUsd');
-    const saldo = pa.saldoCxc !== null && pa.saldoCxc !== undefined ? Number(pa.saldoCxc) : Math.max(0, Number(pa.montoUsd) - abonado);
+    const rc = resumenComisionFactura(d);
+
     return (
         <Box className={classes.tarjeta} data-estado={marcaTarjeta(e)}>
             <Group justify="space-between" wrap="nowrap" align="flex-start" gap={8}>
@@ -94,16 +90,36 @@ function TarjetaFactura({ d, hoja, acc, tasa }) {
                 <Dato titulo="Sin IVA" valor={dolares(pa.baseUsd)} />
                 <Dato titulo="% comisión" valor={pctTxt} />
             </SimpleGrid>
-            <Group justify="space-between" wrap="nowrap" mt={6} px={8} py={4} style={{ background: 'rgba(11,27,61,0.05)', borderRadius: 8 }}>
-                <Box>
-                    <Text fz={12} fw={700}>{e === 'enabonos' ? 'Comisión posible' : 'Comisión'}</Text>
-                    {e === 'enabonos' && <Text fz={11} c="#5c6675">La real la generan sus abonos</Text>}
-                </Box>
-                <Box ta="right">
-                    <Text fz={16} fw={800} c={e === 'enabonos' ? '#868e96' : '#1a1b1e'}>{dolares(pa.comisionUsd)}</Text>
-                    {tasa && <Text fz={11.5} c="#5c6675" fw={600}>{bolivares((Number(pa.comisionUsd) || 0) * tasa)}</Text>}
-                </Box>
-            </Group>
+
+            {/* Desglose explícito de comisión por factura: acumulado, ya pagado y falta por pagar */}
+            <Box mt={8} p={8} style={{ background: 'rgba(11,27,61,0.045)', borderRadius: 8, border: '1px solid rgba(11,27,61,0.08)' }}>
+                <SimpleGrid cols={3} spacing={6}>
+                    <Box style={{ minWidth: 0 }}>
+                        <Text fz={10} c="#5c6675" fw={700} tt="uppercase" lh={1.15}>Acumulado</Text>
+                        <Text fz={14} fw={800} c="#1c4f8f" style={{ fontVariantNumeric: 'tabular-nums' }}>{dolares(rc.acumulada)}</Text>
+                        {rc.porGenerar > 0.005 && (
+                            <Text fz={10.5} c="#5c6675" lh={1.15}>de {dolares(rc.comisionFactura)}</Text>
+                        )}
+                    </Box>
+                    <Box style={{ minWidth: 0 }}>
+                        <Text fz={10} c="#5c6675" fw={700} tt="uppercase" lh={1.15}>Ya pagado</Text>
+                        <Text fz={14} fw={800} c="teal.8" style={{ fontVariantNumeric: 'tabular-nums' }}>{dolares(rc.pagada)}</Text>
+                    </Box>
+                    <Box style={{ minWidth: 0 }}>
+                        <Text fz={10} c="#5c6675" fw={700} tt="uppercase" lh={1.15}>Falta pagar</Text>
+                        <Text fz={14} fw={900} c={rc.porPagar > 0.005 ? '#b35900' : 'teal.8'} style={{ fontVariantNumeric: 'tabular-nums' }}>{dolares(rc.porPagar)}</Text>
+                        {tasa && rc.porPagar > 0.005 && (
+                            <Text fz={10.5} c="#5c6675" fw={600} lh={1.15}>{bolivares(rc.porPagar * tasa)}</Text>
+                        )}
+                    </Box>
+                </SimpleGrid>
+                {rc.porGenerar > 0.005 && (
+                    <Text fz={11} c="#5c6675" mt={4}>
+                        + {dolares(rc.porGenerar)} por generar cuando el cliente pague su saldo
+                    </Text>
+                )}
+            </Box>
+
             {(pa.ventaId || pa.estatusCliente) && (
                 <Group gap={8} mt={6} wrap="wrap">
                     {pa.ventaId && <Text fz={12.5}>Cliente: <CobroFactura l={pa} fz={12.5} /></Text>}
@@ -121,32 +137,31 @@ function TarjetaFactura({ d, hoja, acc, tasa }) {
 
             {d.pagos.length > 0 && (
                 <>
-                    <UnstyledButton mt={8} w="100%" px={8} py={8} onClick={() => hoja.alternarPlegada(d.k)} aria-expanded={!plegada} style={{ borderRadius: 8, background: 'rgba(11,27,61,0.05)', minHeight: 40 }}>
+                    <UnstyledButton mt={8} w="100%" px={8} py={7} onClick={() => setAbiertos((v) => !v)} aria-expanded={abiertos} style={{ borderRadius: 8, background: 'rgba(11,27,61,0.05)', minHeight: 38 }}>
                         <Group justify="space-between" wrap="nowrap">
-                            <Text fz={12.5} fw={700}>{d.pagos.length} abono{d.pagos.length === 1 ? '' : 's'}{porPagarAbonos > 0 ? ` · por pagar ${dolares(porPagarAbonos)}` : ''}</Text>
-                            <IconChevronDown size={16} style={{ transform: plegada ? undefined : 'rotate(180deg)', transition: 'transform .15s' }} />
+                            <Text fz={12.5} fw={700}>
+                                {d.pagos.length} abono{d.pagos.length === 1 ? '' : 's'} · abonado {dolares(rc.abonado)}
+                            </Text>
+                            <IconChevronDown size={16} style={{ transform: abiertos ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />
                         </Group>
                     </UnstyledButton>
-                    <Box mt={6} ml={10} p={6} className={classes.abonosDentro}>
-                        <Collapse in={!plegada}>
-                            <Stack gap={6} mb={6}>
+                    <Collapse in={abiertos}>
+                        <Box mt={6} ml={8} p={6} className={classes.abonosDentro}>
+                            <Stack gap={6} mb={rc.cantAbonos > 0 ? 6 : 0}>
                                 {d.pagos.map((p) => <TarjetaPago key={p.id} l={p} hijo hoja={hoja} acc={acc} tasa={tasa} />)}
                             </Stack>
-                        </Collapse>
-                        {abonos.length > 0 && (
-                            <SimpleGrid cols={2} spacing={6} px={4} py={2}>
-                                <Dato titulo="Abonado a la factura" valor={dolares(abonado)} color="#1971c2" />
-                                <Dato titulo={saldo > 0.005 ? 'Falta por cobrar' : 'Estado'} valor={saldo > 0.005 ? dolares(saldo) : 'Cobrada'} color={saldo > 0.005 ? 'orange.9' : 'teal.8'} />
-                                <Dato titulo="Sin IVA abonado" valor={dolares(baseAbonadaDe(d))} color="#1971c2" />
-                                <Dato titulo="Comisión generada (total)" valor={dolares(suma('comisionUsd'))} />
-                                <Dato titulo="Ya pagada al vendedor" valor={dolares(abonos.filter((p) => p.estatusComision === 'PAGADA').reduce((t, p) => t + (Number(p.comisionUsd) || 0), 0))} color="teal.8" />
-                                <Dato titulo="Por pagar al vendedor" valor={dolares(abonos.filter((p) => porPagar(p)).reduce((t, p) => t + (Number(p.comisionUsd) || 0), 0))} color="orange.9" />
-                            </SimpleGrid>
-                        )}
-                        {abonos.length > 0 && (
-                            <Box px={6} pb={4}><NotaProrrateo pa={pa} fz={11.5} /></Box>
-                        )}
-                    </Box>
+                            {rc.cantAbonos > 0 && (
+                                <SimpleGrid cols={3} spacing={6} px={4} py={4}>
+                                    <Dato titulo="Abonado" valor={dolares(rc.abonado)} color="#1971c2" />
+                                    <Dato titulo="Sin IVA ab." valor={dolares(rc.baseAbonada)} color="#1971c2" />
+                                    <Dato titulo={rc.saldoCliente > 0.005 ? 'Saldo cli.' : 'Estado'} valor={rc.saldoCliente > 0.005 ? dolares(rc.saldoCliente) : 'Cobrada'} color={rc.saldoCliente > 0.005 ? 'orange.9' : 'teal.8'} />
+                                </SimpleGrid>
+                            )}
+                            {rc.cantAbonos > 0 && (
+                                <Box px={4} pb={2}><NotaProrrateo pa={pa} fz={11.5} /></Box>
+                            )}
+                        </Box>
+                    </Collapse>
                 </>
             )}
         </Box>
@@ -182,7 +197,7 @@ export default function HojaTarjetas({ hoja, acc }) {
                                     {cifrasDe(g.t, g.deuda, tasa).filter((c) => c.clave !== 'porpagar').map((c) => <Cifra key={c.clave} titulo={c.titulo} valor={c.valor} color={c.color} tasa={c.tasa} alinear="left" ayuda={c.ayuda} />)}
                                 </SimpleGrid>
                                 <Stack gap={8}>
-                                    {g.items.map((d) => <TarjetaFactura key={d.k} d={d} hoja={hoja} acc={acc} tasa={tasa} />)}
+                                    {g.items.map((d) => <TarjetaFactura key={d.k} d={d} hoja={hoja} acc={acc} tasa={tasa} iniciarPlegada={g.items.length > 2 || d.pagos.length > 1} />)}
                                 </Stack>
                             </Box>
                         )}

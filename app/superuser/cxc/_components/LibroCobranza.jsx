@@ -115,7 +115,24 @@ export default function LibroCobranza() {
                         {buscador}
                         {vistas}
                         <Select size="xs" w={190} aria-label="Ordenar clientes" leftSection={<IconArrowsSort size={14} />} data={ORDENES_LIBRO} value={libro.orden} onChange={(v) => libro.setOrden(v || 'cliente')} allowDeselect={false} comboboxProps={{ withinPortal: true }} />
-                        <Group gap={6} ml="auto" wrap="nowrap">
+                        <Group gap={6} ml="auto" wrap="wrap">
+                            <Button
+                                size="compact-sm"
+                                variant={libro.verDetalleBs ? 'filled' : 'default'}
+                                color="navy.9"
+                                onClick={() => libro.setVerDetalleBs((v) => !v)}
+                                title="Mostrar u ocultar columnas separadas para Bolívares y monto neto menos retención"
+                            >
+                                Columnas Bs / Ret.
+                            </Button>
+                            <Button
+                                size="compact-sm"
+                                variant="default"
+                                onClick={libro.hayAbonosVisibles ? libro.plegarTodosAbonos : libro.desplegarTodosAbonos}
+                                title={libro.hayAbonosVisibles ? 'Ocultar el desglose de abonos debajo de cada factura' : 'Mostrar el desglose de abonos debajo de cada factura'}
+                            >
+                                {libro.hayAbonosVisibles ? 'Ocultar abonos' : 'Ver abonos'}
+                            </Button>
                             <Button size="compact-sm" variant="default" leftSection={<IconFold size={15} />} onClick={libro.desplegarTodo}>Desplegar todo</Button>
                             <Button size="compact-sm" variant="default" onClick={libro.plegarTodo}>Plegar todo</Button>
                             <Button size="compact-sm" variant="default" leftSection={<IconDownload size={15} />} onClick={libro.exportarCsv}>Excel (CSV)</Button>

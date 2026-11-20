@@ -30,6 +30,7 @@ export function useLibroCobranza() {
     const [pestana, setPestana] = useState('todos'); // 'todos' | 'sin' (clientes sin grupo) | id de un grupo (los Excel de la administradora: Vendedores, Maraplus…)
     const [abiertos, setAbiertos] = useState(() => new Set()); // clientes desplegados (con sus facturas y abonos)
     const [plegadas, setPlegadas] = useState(() => new Set()); // facturas cuyos abonos se esconden (por defecto se ven, como en la hoja de los vendedores)
+    const [verDetalleBs, setVerDetalleBs] = useState(false);
     const pagadas = vista === 'todas';
 
     // al cambiar de vista se queda la tabla anterior (atenuada) mientras llega la nueva: sin parpadeos
@@ -146,6 +147,9 @@ export function useLibroCobranza() {
     const desplegarTodo = () => setAbiertos(new Set(grupos.map((g) => g.id)));
     const plegarTodo = () => setAbiertos(new Set());
     const alternarPlegada = (id) => setPlegadas((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+    const hayAbonosVisibles = filas.some((f) => f.abonos.length > 0 && !plegadas.has(f.id));
+    const plegarTodosAbonos = () => setPlegadas(new Set(filas.filter((f) => f.abonos.length > 0).map((f) => f.id)));
+    const desplegarTodosAbonos = () => setPlegadas(new Set());
 
     // Descarga lo que se está viendo (con filtros y búsqueda) para abrirlo en Excel
     const exportarCsv = () => {
@@ -169,6 +173,7 @@ export function useLibroCobranza() {
         filas, grupos, totales, resumen,
         pestanas, pestana: pestanaActiva, setPestana, gruposCobranza, crearGrupo, renombrarGrupo, borrarGrupo, cambiarClientes,
         abierto, alternarCliente, desplegarTodo, plegarTodo, plegadas, alternarPlegada,
+        verDetalleBs, setVerDetalleBs, hayAbonosVisibles, plegarTodosAbonos, desplegarTodosAbonos,
         editarCuenta, editarAbono, borrarAbono, crearManual, borrarManual, exportarCsv,
     };
 }
