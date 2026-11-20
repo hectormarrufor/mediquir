@@ -124,7 +124,7 @@ const NavBar = ({ router, close, opened }) => {
             {isAuthenticated && !clienteId && (
                 <>
                     <Text className={classes.drawerSection}>Navegación</Text>
-                    <DrawerItem icon={IconHome} label="Inicio" index={i++} active={pathname === '/'} onClick={() => go('/')} />
+                    <DrawerItem icon={IconHome} label="Inicio" index={i++} active={pathname === '/'} onClick={() => go('/?tienda=1')} />
                     <DrawerItem icon={IconDashboard} label="Panel admin" index={i++} active={pathname === '/superuser'} onClick={() => go('/superuser')} />
                     {!esVendedor && <DrawerItem icon={IconEyeDollar} label="Gráfico BCV" index={i++} active={pathname.startsWith('/superuser/bcv')} onClick={() => go('/superuser/bcv')} />}
                     {puedePedirNotificaciones && (

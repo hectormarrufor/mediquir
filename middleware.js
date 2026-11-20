@@ -125,8 +125,8 @@ export async function middleware(request) {
 
     // Clientes: su casa es /b2b (no ven la landing ni el panel del personal)
     if (esCliente && !pathname.startsWith('/b2b')) return NextResponse.redirect(new URL('/b2b', request.url));
-    // El personal no entra al portal de clientes y, al abrir la raíz, va directo a su panel (evita cargar la landing)
-    if (!esCliente && (pathname === '/' || pathname.startsWith('/b2b'))) {
+    // El personal no entra al portal de clientes y, al abrir la raíz por defecto, va directo a su panel (evita cargar la landing; ?tienda=1 permite verla al pulsar el logo)
+    if (!esCliente && (pathname.startsWith('/b2b') || (pathname === '/' && !request.nextUrl.searchParams.has('tienda')))) {
         return NextResponse.redirect(new URL('/superuser', request.url));
     }
     // El vendedor solo entra a sus pantallas; cualquier otra lo devuelve a su panel

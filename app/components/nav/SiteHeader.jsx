@@ -14,7 +14,7 @@ import classes from './navigation.module.css';
 export default function SiteHeader({ opened, toggle }) {
     const router = useRouter();
     const pathname = usePathname();
-    const { isAuthenticated, loading } = useAuth();
+    const { isAuthenticated, loading, clienteId } = useAuth();
     const [scrolled, setScrolled] = useState(false);
 
     // Solo cambia el estado cuando cruza el umbral, así que no re-renderiza en cada evento de scroll
@@ -37,7 +37,7 @@ export default function SiteHeader({ opened, toggle }) {
     return (
         <AppShell.Header className={classes.header}>
             <Group className={classes.barra} data-scrolled={scrolled || undefined} px={{ base: 'sm', sm: 'lg' }} justify="space-between" wrap="nowrap">
-                <UnstyledButton className={classes.logoBtn} onClick={() => router.push('/')} aria-label={`Ir al inicio de ${tenant.name}`}>
+                <UnstyledButton className={classes.logoBtn} onClick={() => router.push(isAuthenticated && !clienteId ? '/?tienda=1' : '/')} aria-label={`Ir al inicio de ${tenant.name}`}>
                     <BrandLogo />
                 </UnstyledButton>
 
