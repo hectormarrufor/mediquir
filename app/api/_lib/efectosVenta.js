@@ -39,15 +39,15 @@ export async function aplicarEfectosVenta({ ventaId, transaction: t }) {
         }, { transaction: t });
     }
 
-    // ---- Inventario: el detal descuenta de inmediato (solo productos auditados); el mayor deja la salida pendiente y descuenta al empacar
+    // ---- Inventario: entrega en sitio descuenta de inmediato; si requiere empaque (pickup o chofer) deja la salida pendiente y descuenta al empacar
     const detalles = await VentaDetalle.findAll({ where: { ventaId: venta.id }, transaction: t });
-    const detal = venta.tipoVenta === 'DETAL';
+    const entregaInmediata = venta.tipoEntrega === 'sitio' || venta.tipoDocumento === 'VENTA_RAPIDA';
     for (const d of detalles) {
         if (d.isFicticio || d.afectaInventario === false || !d.productoId) continue;
         const producto = await Producto.findByPk(d.productoId, { transaction: t, lock: t.LOCK.UPDATE });
         if (!producto) continue;
         const cantidad = Number(d.cantidad);
-        if (detal) {
+        if (entregaInmediata) {
             const stock = Number(producto.stockAlmacen) || 0;
             if (producto.inventarioAuditado) {
                 if (stock < cantidad) throw new ErrorEfectos(`Inventario insuficiente para aprobar: ${producto.nombre} (disponible ${stock}, la factura pide ${cantidad})`);
@@ -58,7 +58,7 @@ export async function aplicarEfectosVenta({ ventaId, transaction: t }) {
         await producto.save({ transaction: t });
         await SalidaInventario.create({
             ventaId: venta.id, productoId: producto.id, cantidad, costoAlMomento: Number(producto.costoUsd) || 0, justificacion: `Venta ${numero}`,
-            estado: detal ? 'Entregada' : 'Pendiente', solicitadoPorId: efectos.solicitadoPorId || venta.vendedorId || null,
+            estado: entregaInmediata ? 'Entregada' : 'Pendiente', solicitadoPorId: efectos.solicitadoPorId || venta.vendedorId || null,
         }, { transaction: t });
     }
 

@@ -119,20 +119,39 @@ function TarjetaTarea({ tarea, tipo, onFirmar }) {
     );
 }
 
-// Pedido ya empacado y etiquetado que espera al chofer o agencia: «Entregar» abre el formulario con los datos del chofer, su firma y la confirmación de la factura
-function TarjetaEntrega({ tarea, onEntregar }) {
+// Pedido ya empacado y etiquetado: si lo busca el cliente en tienda (pickup), un clic lo pasa a despachado sin pedir datos;
+// si lo busca un chofer o agencia, abre el formulario con la lista de choferes frecuentes, firma y confirmación de factura.
+function TarjetaEntrega({ tarea, onEntregar, onDespacharCliente, despachandoId }) {
+    const esPickup = tarea.tipoEntrega === 'pickup';
     return (
         <Paper withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
             <Group justify="space-between" wrap="nowrap" align="flex-start">
                 <Box style={{ minWidth: 0 }}>
-                    <Group gap={8}>
+                    <Group gap={8} wrap="wrap">
                         <Text fw={800} c="navy.9">{tarea.numero}</Text>
-                        <Badge variant="light" color="teal" size="sm">Listo para entregar</Badge>
+                        <Badge variant="light" color={esPickup ? 'teal' : 'grape'} size="sm">
+                            {esPickup ? 'Cliente lo busca en tienda' : 'Lo busca chofer / agencia'}
+                        </Badge>
                     </Group>
                     <Text size="sm" c="dimmed" truncate>{tarea.cliente} · {tarea.articulos} artículos</Text>
                     {tarea.transporte && <Text size="xs" c="dimmed" truncate>Lo retira: {tarea.transporte}</Text>}
                 </Box>
-                <Button size="sm" color="grape.6" leftSection={<IconTruckDelivery size={16} />} onClick={() => onEntregar(tarea)}>Entregar</Button>
+                {esPickup ? (
+                    <Button
+                        size="sm"
+                        color="teal.7"
+                        loading={despachandoId === tarea.id}
+                        disabled={Boolean(despachandoId) && despachandoId !== tarea.id}
+                        leftSection={<IconCircleCheck size={16} />}
+                        onClick={() => onDespacharCliente(tarea)}
+                    >
+                        Despachar
+                    </Button>
+                ) : (
+                    <Button size="sm" color="grape.6" leftSection={<IconTruckDelivery size={16} />} onClick={() => onEntregar(tarea)}>
+                        Entregar a chofer
+                    </Button>
+                )}
             </Group>
         </Paper>
     );
@@ -151,6 +170,7 @@ export default function DashboardVendedor() {
     const [firmando, setFirmando] = useState(false);
     const [porEntregar, setPorEntregar] = useState(null); // tarea que se va a entregar al chofer
     const [entregando, setEntregando] = useState(false);
+    const [despachandoId, setDespachandoId] = useState(null);
     const [disponiblesAbierto, { toggle: toggleDisponibles }] = useDisclosure(false);
     const [tomandoId, setTomandoId] = useState(null);
 
@@ -202,6 +222,23 @@ export default function DashboardVendedor() {
             notifications.show({ color: 'red', title: 'No se pudo registrar la entrega', message: e.message });
         } finally {
             setEntregando(false);
+        }
+    };
+
+    const despacharCliente = async (tarea) => {
+        setDespachandoId(tarea.id);
+        try {
+            await pedirJson(`/api/ventas/${tarea.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accion: 'DESPACHAR', quienRetira: 'Retirado por el cliente en tienda', costoFlete: 0 }),
+            });
+            notifications.show({ color: 'teal', title: 'Pedido despachado', message: `El pedido ${tarea.numero} quedó marcado como despachado.` });
+            queryClient.invalidateQueries({ queryKey: ['vendedor'] });
+        } catch (e) {
+            notifications.show({ color: 'red', title: 'No se pudo despachar', message: e.message });
+        } finally {
+            setDespachandoId(null);
         }
     };
 
@@ -418,10 +455,10 @@ export default function DashboardVendedor() {
                                 : data.porEtiquetar.map((t) => <TarjetaTarea key={t.id} tarea={t} tipo="etiquetado" onFirmar={(tarea, tipo) => setPorFirmar({ tarea, tipo })} />)}
                     </Stack>
                     <Stack gap="sm">
-                        <Group gap={8}><IconTruckDelivery size={20} color="var(--mantine-color-grape-6)" /><Title order={4} c="white">Mis entregas al chofer</Title></Group>
+                        <Group gap={8}><IconTruckDelivery size={20} color="var(--mantine-color-grape-6)" /><Title order={4} c="white">Mis entregas / Por despachar</Title></Group>
                         {isLoading ? <Skeleton h={120} radius="lg" />
                             : nEntregar === 0 ? <Paper withBorder radius="lg" p="lg"><Group gap="xs"><IconCircleCheck color="var(--mantine-color-teal-6)" /><Text c="dimmed">No tienes pedidos listos para entregar.</Text></Group></Paper>
-                                : data.porEntregar.map((t) => <TarjetaEntrega key={t.id} tarea={t} onEntregar={setPorEntregar} />)}
+                                : data.porEntregar.map((t) => <TarjetaEntrega key={t.id} tarea={t} onEntregar={setPorEntregar} onDespacharCliente={despacharCliente} despachandoId={despachandoId} />)}
                     </Stack>
                 </SimpleGrid>
 

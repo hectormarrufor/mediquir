@@ -124,7 +124,7 @@ const Venta = sequelize.define('Venta', {
     // Cuándo se borraron las fotos definitivas por vencer el plazo de retención (queda la nota en la evidencia)
     fotosVencidasAt: { type: DataTypes.DATE, allowNull: true },
     tipoEntrega: {
-        type: DataTypes.ENUM('pickup', 'delivery', 'flete'),
+        type: DataTypes.ENUM('sitio', 'pickup', 'delivery', 'flete'),
         allowNull: false,
         defaultValue: 'pickup'
     },

@@ -72,8 +72,8 @@ export async function GET() {
                 order: [['createdAt', 'ASC']],
             }),
             Venta.findAll({ where: { etiquetadorId: yo, etiquetadoAt: null, ...abiertas }, include: INCLUDE_TAREA, order: [['createdAt', 'ASC']] }),
-            // Ya empacados y etiquetados, con envío: esperan que el chofer o la agencia los retire
-            Venta.findAll({ where: { [Op.or]: [{ empacadorId: yo }, { etiquetadorId: yo }, { vendedorId: yo }], empacadoAt: { [Op.ne]: null }, etiquetadoAt: { [Op.ne]: null }, tipoEntrega: { [Op.ne]: 'pickup' }, ...abiertas }, include: INCLUDE_TAREA, order: [['createdAt', 'ASC']] }),
+            // Ya empacados y etiquetados (retiro por cliente o por chofer/agencia): esperan ser entregados / despachados
+            Venta.findAll({ where: { [Op.or]: [{ empacadorId: yo }, { etiquetadorId: yo }, { vendedorId: yo }], empacadoAt: { [Op.ne]: null }, etiquetadoAt: { [Op.ne]: null }, tipoEntrega: { [Op.ne]: 'sitio' }, ...abiertas }, include: INCLUDE_TAREA, order: [['createdAt', 'ASC']] }),
             Venta.findAll({
                 where: { [Op.or]: [{ empacadorId: yo, empacadoAt: { [Op.ne]: null } }, { etiquetadorId: yo, etiquetadoAt: { [Op.ne]: null } }] },
                 include: [{ model: Cliente, as: 'cliente', attributes: ['nombre'] }],

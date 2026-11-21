@@ -293,7 +293,9 @@ export default function DetallePedidoMayorPage() {
 
     const renglonTarjeta = { border: '1px solid #e9ecef', borderRadius: 10, background: '#fff' };
     const mostrarTabCuenta = (esCredito || cuentaPorCobrar || cobrableSinCuenta) && !esVendedor;
-    const textoEntrega = pedido.tipoEntrega === 'pickup' ? 'Retiro en tienda' : (esNacional ? 'Envío nacional (Zoom)' : 'Delivery / Agencia');
+    const textoEntrega = pedido.tipoEntrega === 'sitio'
+        ? 'Entregado en el momento (en sitio)'
+        : (pedido.tipoEntrega === 'pickup' ? 'Cliente lo busca en tienda' : (esNacional ? 'Envío nacional (Zoom)' : 'Lo busca chofer / agencia'));
 
     const accionesDoc = [
         !pedido.aprobacionPendiente && (
@@ -759,16 +761,29 @@ export default function DetallePedidoMayorPage() {
                                         {pedido.empacadorId ? 'Cambiar personal asignado' : 'Asignar personal'}
                                     </Button>
                                 )}
-                                {!esVendedor && pasoActual === 1 && (
-                                    <Button
-                                        size="md"
-                                        fullWidth={isMobile}
-                                        color="grape"
-                                        leftSection={<IconTruck size={18} />}
-                                        onClick={() => { formDespacho.setFieldValue('quienRetira', pedido.quienRetira || ''); setModalDespacho(true); }}
-                                    >
-                                        {pedido.tipoEntrega === 'pickup' ? 'Marcar como retirado' : 'Registrar despacho'}
-                                    </Button>
+                                {pasoActual === 1 && (!esVendedor || soyEmpacador || soyEtiquetador || Number(pedido.vendedorId) === Number(userId)) && (
+                                    pedido.tipoEntrega === 'pickup' ? (
+                                        <Button
+                                            size="md"
+                                            fullWidth={isMobile}
+                                            color="teal.7"
+                                            loading={isSubmitting}
+                                            leftSection={<IconCheck size={18} />}
+                                            onClick={() => handleAction('DESPACHAR', { quienRetira: 'Retirado por el cliente en tienda', costoFlete: 0 }, null, 'Pedido marcado como despachado.')}
+                                        >
+                                            Marcar como despachado (cliente retiró)
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            size="md"
+                                            fullWidth={isMobile}
+                                            color="grape"
+                                            leftSection={<IconTruck size={18} />}
+                                            onClick={() => { formDespacho.setFieldValue('quienRetira', pedido.quienRetira || ''); setModalDespacho(true); }}
+                                        >
+                                            Entregar al chofer / Registrar despacho
+                                        </Button>
+                                    )
                                 )}
                             </Group>
                         </Paper>

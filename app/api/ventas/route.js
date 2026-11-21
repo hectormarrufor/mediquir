@@ -279,16 +279,25 @@ export async function POST(request) {
         const fechaVencimiento = condicionPago === 'Credito' ? new Date((momentoDoc ? momentoDoc.getTime() : Date.now()) + diasCredito * 86400000) : null;
         // La factura nace con su número de control (el de la forma si se escribió, o el siguiente del correlativo)
         const controlFactura = esTalonario ? controlTalonario : (tipoDocumento === 'FACTURA' ? await controlAlNacer(numeroControl, t, !esVend && body.huecoControl === true).catch((e) => { throw e instanceof ErrorNumeracion ? new ErrorNegocio(e.message, e.status) : e; }) : null); // el vendedor nunca elige el control: lo asigna el servidor
+        const tipoEntregaFinal = tipoDocumento === 'VENTA_RAPIDA'
+            ? 'sitio'
+            : (['sitio', 'pickup', 'delivery', 'flete'].includes(body.tipoEntrega)
+                ? body.tipoEntrega
+                : (tipoVenta === 'DETAL' ? 'sitio' : 'pickup'));
+        const entregaInmediata = tipoEntregaFinal === 'sitio' || tipoDocumento === 'VENTA_RAPIDA';
+        const ahoraEntrega = momentoDoc || new Date();
         const nuevaVenta = await Venta.create({
             clienteId: clienteId || null,
             vendedorId: esVend ? Number(acceso.sesion.id) : (vendedorId || null),
             tipoVenta, tipoDocumento, numeroDocumento,
             numeroControl: controlFactura,
             facturaTalonario: esTalonario,
-            statusDespacho: tipoVenta === 'DETAL' ? 'Completado' : 'Pendiente',
+            tipoEntrega: tipoEntregaFinal,
+            statusDespacho: entregaInmediata ? 'Completado' : 'Pendiente',
+            ...(entregaInmediata ? { empacadoAt: ahoraEntrega, etiquetadoAt: ahoraEntrega, fechaHoraRetiro: ahoraEntrega } : {}),
             moneda, tasaCambio,
             condicionPago, statusPago: condicionPago === 'Contado' ? 'Pagado' : 'Pendiente',
-            fechaVencimiento, quienRetira: quienRetira || null,
+            fechaVencimiento, quienRetira: quienRetira || (entregaInmediata ? 'Entregado en el momento (Cliente en sitio)' : null),
             costoFlete: factura.flete,
             subtotal: factura.subtotal, montoIva: factura.montoIva, totalFinal: factura.totalFinal,
             ...(momentoDoc ? { createdAt: momentoDoc, fechaEmision: momentoDoc } : {}),
@@ -330,14 +339,13 @@ export async function POST(request) {
             const productoDB = productos.get(Number(item.productoId));
             const stock = Number(productoDB.stockAlmacen) || 0;
 
-            // Detal descuenta el stock de inmediato (solo si el producto ya fue auditado: si no, su stock no es confiable y no se mueve);
-            // el mayor lo descuenta al armar la caja.
-            if (tipoVenta === 'DETAL') {
+            // Si la entrega es en el momento (cliente en sitio / venta rápida), descuenta el stock de inmediato;
+            // si el cliente o un chofer lo va a buscar después, pasa por empaque y descuenta al armar la caja.
+            if (entregaInmediata) {
                 if (productoDB.inventarioAuditado) {
                     if (stock < renglon.cantidad) throw new ErrorNegocio(`Inventario insuficiente: ${productoDB.nombre} (disponible ${stock})`);
                     productoDB.stockAlmacen = stock - renglon.cantidad;
                 }
-                // Lo vendido se suma al venderse; el mayor lo suma al empacar (antes se sumaba dos veces: aquí y al empacar)
                 productoDB.nroVentas = (Number(productoDB.nroVentas) || 0) + renglon.cantidad;
             }
             await productoDB.save({ transaction: t });
@@ -348,7 +356,7 @@ export async function POST(request) {
                 cantidad: renglon.cantidad,
                 costoAlMomento: Number(productoDB.costoUsd) || 0,
                 justificacion: `Venta ${numeroDocumento}`,
-                estado: tipoVenta === 'DETAL' ? 'Entregada' : 'Pendiente',
+                estado: entregaInmediata ? 'Entregada' : 'Pendiente',
                 solicitadoPorId: esVend ? Number(acceso.sesion.id) : (vendedorId || null),
             }, { transaction: t });
         }

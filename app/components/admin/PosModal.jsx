@@ -160,6 +160,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             diasCredito: 15, // solo a crédito: arranca con los días del cliente
             metodoPago: '', // sin método predeterminado: el usuario TIENE que elegirlo (cuando la venta es de contado) 
             referencia: '',
+            tipoEntrega: 'sitio', // 'sitio' (entrega en el momento) | 'pickup' (cliente retira, empacar) | 'delivery' (chofer retira, empacar)
             quienRetira: '',
             costoFlete: '',
             numeroDocumento: '',
@@ -329,6 +330,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         if (tipoVenta === 'DETAL') {
             formVenta.setFieldValue('condicionPago', '');
             formVenta.setFieldValue('clienteId', null);
+            formVenta.setFieldValue('tipoEntrega', 'sitio');
+        } else {
+            formVenta.setFieldValue('tipoEntrega', 'pickup');
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tipoVenta]);
@@ -656,6 +660,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 ...(esCredito ? { diasCredito: Math.floor(Number(formVenta.values.diasCredito)), actualizarDiasCliente: alcanceDias?.alcance === 'cliente' && alcanceDias.valor === Math.floor(Number(formVenta.values.diasCredito)) } : {}),
                 metodoPago: formVenta.values.condicionPago === 'Contado' ? formVenta.values.metodoPago : null,
                 referencia: formVenta.values.condicionPago === 'Contado' ? (formVenta.values.referencia || null) : null,
+                tipoEntrega: formVenta.values.tipoEntrega || (tipoVenta === 'DETAL' ? 'sitio' : 'pickup'),
                 quienRetira: formVenta.values.quienRetira || null, 
                 costoFlete: costoFleteNum,                         
                 subtotal, montoIva, totalFinal,
@@ -1148,10 +1153,29 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         </SimpleGrid>
     );
 
-    const filaMayor = !esPresupuesto && tipoVenta === 'MAYOR' && (
-        <SimpleGrid cols={isMobile ? 1 : 2} spacing="sm" mb="sm">
-            <TextInput placeholder="(Opcional)" label="¿Chofer que retira?" size={tamCampo} {...formVenta.getInputProps('quienRetira')} />
-            <NumberInput placeholder="(Opcional)" label={`Flete (${simboloMoneda})`} size={tamCampo} decimalScale={2} min={0} allowNegative={false} inputMode="decimal" hideControls {...formVenta.getInputProps('costoFlete')} />
+    const OPCIONES_ENTREGA_POS = [
+        { value: 'sitio', label: 'Entrega en el momento (cliente en sitio · sin empaque)' },
+        { value: 'pickup', label: 'El cliente lo va a buscar (hay que empacar)' },
+        { value: 'delivery', label: 'Lo va a buscar un chofer o agencia (hay que empacar)' },
+    ];
+    const entregaActual = formVenta.values.tipoEntrega || (tipoVenta === 'DETAL' ? 'sitio' : 'pickup');
+
+    const filaMayor = !esPresupuesto && (
+        <SimpleGrid cols={isMobile ? 1 : (entregaActual === 'delivery' ? 3 : 1)} spacing="sm" mb="sm">
+            <Select
+                label="Método de entrega"
+                size={tamCampo}
+                allowDeselect={false}
+                data={OPCIONES_ENTREGA_POS}
+                value={entregaActual}
+                onChange={(v) => formVenta.setFieldValue('tipoEntrega', v || 'pickup')}
+            />
+            {entregaActual === 'delivery' && (
+                <>
+                    <TextInput placeholder="(Opcional: se confirma al despachar)" label="¿Chofer o agencia que retira?" size={tamCampo} {...formVenta.getInputProps('quienRetira')} />
+                    <NumberInput placeholder="(Opcional)" label={`Flete (${simboloMoneda})`} size={tamCampo} decimalScale={2} min={0} allowNegative={false} inputMode="decimal" hideControls {...formVenta.getInputProps('costoFlete')} />
+                </>
+            )}
         </SimpleGrid>
     );
 

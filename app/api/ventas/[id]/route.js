@@ -26,19 +26,20 @@ import { avisarCliente } from '../../_lib/avisosCliente';
 import { confirmarPagoManual, cancelarPedidoTienda, asentarCobroTienda, ErrorPagoTienda } from '../../_lib/pagoTienda';
 import { fechaCaracas, desdeInputFechaHora } from '@/app/constants/hora';
 import { numerosAnteriores } from '@/app/constants/documentosAnteriores';
+import { guardarChoferFrecuente } from '../choferes/route';
 
 // Error de reglas de logística (permisos, estados) con su código HTTP
 class ErrorLogistica extends Error {
     constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
 }
 
-// El vendedor solo toma empaques libres o firma sus tareas; asignar a terceros, despachar y cobrar es de administración
-const ACCIONES_VENDEDOR = ['TOMAR_EMPAQUE', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'ENTREGAR_CHOFER'];
+// El vendedor solo toma empaques libres, firma sus tareas o marca entregas; asignar a terceros y cobrar es de administración
+const ACCIONES_VENDEDOR = ['TOMAR_EMPAQUE', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'ENTREGAR_CHOFER', 'DESPACHAR'];
 
-// Descuenta el stock y deja las salidas como "Empacada". Solo el MAYOR descuenta aquí: el detal y las ventas web ya
-// descontaron al venderse (antes se descontaba de nuevo al empacar, restando el stock dos veces).
+// Descuenta el stock y deja las salidas como "Empacada". Solo las ventas que requieren empaque (pickup o chofer) descuentan aquí:
+// las entregas en el momento (sitio) y las ventas web (ONLINE) ya descontaron al venderse.
 async function ejecutarEmpaque(venta, t, empacadorId) {
-    if (venta.tipoVenta === 'MAYOR') {
+    if (venta.tipoVenta !== 'ONLINE' && venta.tipoEntrega !== 'sitio') {
         for (const item of venta.detalles) {
             if (item.isFicticio || item.afectaInventario === false) continue;
             const productoDB = await Producto.findByPk(item.productoId, { transaction: t, lock: t.LOCK.UPDATE });
@@ -385,11 +386,6 @@ export async function PUT(request, { params }) {
             if (!venta.empacadoAt) throw new ErrorLogistica('Primero debe firmarse el empaque', 409);
 
             venta.etiquetadoAt = new Date();
-            if (venta.tipoEntrega === 'pickup') {
-                venta.statusDespacho = 'Completado';
-                venta.fechaHoraRetiro = venta.fechaHoraRetiro || venta.etiquetadoAt;
-                await SalidaInventario.update({ estado: 'Entregada' }, { where: { ventaId: venta.id }, transaction: t });
-            }
             await venta.save({ transaction: t });
             await t.commit();
 
@@ -463,8 +459,15 @@ export async function PUT(request, { params }) {
             if (venta.statusDespacho === 'Completado') throw new ErrorLogistica('Este pedido ya fue despachado', 409);
             if (venta.statusDespacho === 'Cancelado') throw new ErrorLogistica('Este pedido está cancelado', 409);
 
+            if (accion === 'DESPACHAR' && rol === 'vendedor') {
+                if (venta.tipoEntrega !== 'pickup') throw new ErrorLogistica('Este pedido lo retira un chofer: usa la entrega al chofer con sus datos y firma', 409);
+                if (![venta.empacadorId, venta.etiquetadorId, venta.vendedorId].some((x) => Number(x) === yo)) throw new ErrorLogistica('Este pedido no es tuyo', 403);
+                if (!venta.empacadoAt || !venta.etiquetadoAt) throw new ErrorLogistica('El pedido debe estar empacado y etiquetado antes de despacharlo', 409);
+                costoFlete = 0;
+            }
+
             if (accion === 'ENTREGAR_CHOFER') {
-                if (venta.tipoEntrega === 'pickup') throw new ErrorLogistica('Este pedido es retiro en tienda: no lo retira un chofer', 409);
+                if (venta.tipoEntrega === 'pickup' || venta.tipoEntrega === 'sitio') throw new ErrorLogistica('Este pedido es retiro del cliente en tienda: no lo retira un chofer', 409);
                 if (rol === 'vendedor') {
                     if (![venta.empacadorId, venta.etiquetadorId, venta.vendedorId].some((x) => Number(x) === yo)) throw new ErrorLogistica('Este pedido no es tuyo', 403);
                     if (!venta.empacadoAt || !venta.etiquetadoAt) throw new ErrorLogistica('El pedido debe estar empacado y etiquetado antes de entregarlo', 409);
@@ -483,6 +486,7 @@ export async function PUT(request, { params }) {
                 if (bytes.length < 200) throw new ErrorLogistica('La firma está en blanco');
                 if (bytes.length > 1024 * 1024) throw new ErrorLogistica('La firma es demasiado grande');
                 const blob = await put(`entregas/${venta.numeroDocumento}/firma-chofer-${Date.now()}.png`, bytes, { access: 'public', contentType: 'image/png', addRandomSuffix: true });
+                await guardarChoferFrecuente({ nombre: choferNombre, cedula: choferCedula, empresa: choferEmpresa }, t).catch(() => null);
                 venta.choferNombre = choferNombre;
                 venta.choferCedula = choferCedula;
                 venta.choferEmpresa = choferEmpresa;
@@ -495,7 +499,7 @@ export async function PUT(request, { params }) {
                 if (rol === 'vendedor') costoFlete = 0; // el gasto del flete lo asienta administración
             }
             venta.statusDespacho = 'Completado';
-            venta.quienRetira = quienRetira;
+            venta.quienRetira = quienRetira || (venta.tipoEntrega === 'pickup' ? 'Retirado por el cliente en tienda' : null);
             venta.fechaHoraRetiro = fechaHoraRetiro ? desdeInputFechaHora(fechaHoraRetiro) : new Date(); // lo escrito en el formulario es hora de Caracas
             // El flete que se le cobra al cliente (venta.costoFlete) se fija en DATOS_ENVIO; aquí solo se asienta lo que pagó la empresa
             // Compra de la tienda: el delivery que pagó el cliente es dinero de la empresa de transporte (no fue ingreso), así que no hay gasto:
