@@ -59,6 +59,10 @@ const Cliente = sequelize.define('Cliente', {
     defaultValue: 5,
     validate: { min: 0, max: 100 },
   },
+  agenciaEnvioHabitual: {
+    type: DataTypes.STRING(120),
+    allowNull: true,
+  },
   // Tarifa de precios que ve y paga en el portal B2B: 'precio6' (mayor) o 'precio7' (detal). Solo la cambia un administrador
   tarifaPrecio: {
     type: DataTypes.STRING(10),

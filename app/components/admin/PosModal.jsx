@@ -349,6 +349,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         const c = clientes?.find((x) => x.id.toString() === formVenta.values.clienteId?.toString());
         setDatosCli({ direccion: c?.direccion || '', telefono: c?.telefono || '', email: c?.email || '', identificacion: esSinRif(c?.identificacion) ? '' : (c?.identificacion || '') });
         setVendExtDecision(null);
+        if (c?.agenciaEnvioHabitual && !formVenta.values.quienRetira) {
+            formVenta.setFieldValue('quienRetira', c.agenciaEnvioHabitual);
+        }
     }, [formVenta.values.clienteId, clientes]); // eslint-disable-line react-hooks/exhaustive-deps
     const clienteDelCredito = clientes?.find((c) => c.id.toString() === formVenta.values.clienteId?.toString());
     const diasDelCliente = Number(clienteDelCredito?.diasCredito) > 0 ? Number(clienteDelCredito.diasCredito) : 15;

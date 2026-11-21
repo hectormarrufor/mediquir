@@ -303,6 +303,13 @@ export async function POST(request) {
             ...(momentoDoc ? { createdAt: momentoDoc, fechaEmision: momentoDoc } : {}),
         }, { transaction: t });
 
+        if (clienteId && tipoEntregaFinal === 'delivery' && quienRetira && String(quienRetira).trim()) {
+            await Cliente.update(
+                { agenciaEnvioHabitual: String(quienRetira).trim().slice(0, 120) },
+                { where: { id: Number(clienteId) }, transaction: t }
+            ).catch(() => null);
+        }
+
         if (condicionPago === 'Credito' && !diferir) {
             await CuentaPorCobrar.create({
                 clienteId,

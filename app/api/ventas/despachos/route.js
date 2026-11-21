@@ -129,6 +129,9 @@ export async function PUT(request) {
         } else {
             if (!agencia) return NextResponse.json({ error: 'Indica la agencia de envíos' }, { status: 400 });
             venta.quienRetira = agencia;
+            if (venta.clienteId) {
+                await db.Cliente.update({ agenciaEnvioHabitual: agencia }, { where: { id: venta.clienteId } }).catch(() => null);
+            }
         }
         await venta.save();
 
