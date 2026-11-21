@@ -412,7 +412,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const [preguntar, setPreguntar] = useState(null); // { producto, clave }
     const pedirProducto = (producto, presentacion = 'UNIDAD') => {
         if (motivoSinAgregar) return notifications.show({ color: 'red', title: 'Antes de agregar productos', message: motivoSinAgregar });
-        if (esPresupuesto || (isMobile && puedeFijarPrecio)) setPreguntar({ producto, clave: presentacion });
+        if (esPresupuesto || isMobile) setPreguntar({ producto, clave: presentacion });
         else agregarAlCarrito(producto, presentacion);
     };
 
@@ -841,9 +841,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     const buscador = (
         <>
-            <Group wrap="nowrap" gap="xs" mb={isMobile ? 0 : 'sm'}>
+            <Group wrap="nowrap" gap={6} mb={isMobile ? 2 : 'sm'}>
                 <TextInput
-                    style={{ flex: 1, minWidth: 0 }} size={tamCampo} placeholder="Buscar producto…" inputMode="search" enterKeyHint="search" autoComplete="off"
+                    style={{ flex: 1, minWidth: 0 }} size={isMobile ? 'sm' : tamCampo} placeholder="Buscar producto…" inputMode="search" enterKeyHint="search" autoComplete="off"
                     leftSection={<IconSearch size={16} />} value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.currentTarget.value)}
                     rightSectionPointerEvents="all"
                     rightSection={busquedaProducto ? <CloseButton size="sm" onClick={() => setBusquedaProducto('')} aria-label="Borrar la búsqueda" /> : null}
@@ -851,7 +851,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     data-autofocus={isMobile ? undefined : true}
                 />
                 {/* El producto genérico (precio escrito a mano): también lo agrega un vendedor; Jolexi lo revisa al aprobar la factura */}
-                <Button color="grape" variant="light" size={tamCampo} px="sm" onClick={() => setModalFicticio(true)} title="Agregar ítem ficticio (1010)" style={{ flexShrink: 0 }}>
+                <Button color="grape" variant="light" size={isMobile ? 'sm' : tamCampo} px={isMobile ? 'xs' : 'sm'} onClick={() => setModalFicticio(true)} title="Agregar ítem ficticio (1010)" style={{ flexShrink: 0 }}>
                     + Ficticio
                 </Button>
             </Group>
@@ -873,40 +873,40 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         ));
         return (
             <Paper
-                key={prod.id} p={isMobile ? 8 : 'sm'} withBorder radius="md" role="button" tabIndex={0}
+                key={prod.id} p={isMobile ? 6 : 'sm'} withBorder radius={isMobile ? 'sm' : 'md'} role="button" tabIndex={0}
                 onClick={() => pedirProducto(prod)} onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) pedirProducto(prod); }}
                 style={{ cursor: motivoSinAgregar ? 'not-allowed' : 'pointer', opacity: motivoSinAgregar ? 0.6 : 1, ...(enCarrito ? { borderColor: 'var(--mantine-color-blue-4)', background: 'var(--mantine-color-blue-0)' } : {}) }}
             >
-                <Group wrap="nowrap" justify="space-between" gap="sm" align="flex-start">
-                    <Group wrap="nowrap" gap="sm" style={{ minWidth: 0, flex: 1 }}>
-                        <Avatar src={imgFinal} size={isMobile ? 44 : 'md'} radius="sm" color="blue">
-                            <IconPackage size={16} />
+                <Group wrap="nowrap" justify="space-between" gap={isMobile ? 8 : 'sm'} align="center">
+                    <Group wrap="nowrap" gap={isMobile ? 8 : 'sm'} style={{ minWidth: 0, flex: 1 }}>
+                        <Avatar src={imgFinal} size={isMobile ? 36 : 'md'} radius="sm" color="blue">
+                            <IconPackage size={isMobile ? 14 : 16} />
                         </Avatar>
                         <Box style={{ minWidth: 0 }}>
                             <Group gap={4} wrap="nowrap" align="flex-start">
-                                <Text fw={600} size="sm" lineClamp={2} lh={1.25}>{prod.nombre}</Text>
-                                {info.tieneDescuento && <IconTag size={14} color="#FF6B6B" style={{ flexShrink: 0, marginTop: 2 }} />}
+                                <Text fw={600} fz={isMobile ? 13 : 'sm'} lineClamp={2} lh={1.2}>{prod.nombre}</Text>
+                                {info.tieneDescuento && <IconTag size={13} color="#FF6B6B" style={{ flexShrink: 0, marginTop: 2 }} />}
                             </Group>
-                            <Text size="xs" c="dimmed" lineClamp={1}>
-                                SKU: {prod.codigo} {prod.marca?.nombre ? `| ${prod.marca.nombre}` : ''}
-                            </Text>
-                            {enCarrito > 0 && <Badge size="xs" color="blue" variant="filled" mt={2} tt="none">{enCarrito} und en el carrito</Badge>}
+                            <Group gap={6} wrap="nowrap" mt={1}>
+                                <Text fz={isMobile ? 11 : 'xs'} c="dimmed" lineClamp={1}>
+                                    {prod.codigo}{prod.marca?.nombre ? ` · ${prod.marca.nombre}` : ''}
+                                </Text>
+                                {enCarrito > 0 && <Badge size="xs" color="blue" variant="filled" tt="none" style={{ flexShrink: 0 }}>{enCarrito} und</Badge>}
+                            </Group>
                         </Box>
                     </Group>
 
                     <Stack gap={4} align="flex-end" style={{ flexShrink: 0 }}>
                         {faltaTarifa ? (
-                            <Badge color="gray" variant="light" size="lg" px={isMobile ? 6 : 8} tt="none">Elige tarifa</Badge>
+                            <Badge color="gray" variant="light" size={isMobile ? 'md' : 'lg'} px={6} tt="none">Elige tarifa</Badge>
                         ) : (
-                            <Badge color={info.simbolo === 'Bs' ? 'teal' : 'blue'} variant="light" size="lg" px={isMobile ? 6 : 8}>
-                                <PrecioVisual valor={info.precio} simbolo={info.simbolo} size="sm" fw={700} />
+                            <Badge color={info.simbolo === 'Bs' ? 'teal' : 'blue'} variant="light" size={isMobile ? 'md' : 'lg'} px={6}>
+                                <PrecioVisual valor={info.precio} simbolo={info.simbolo} size={isMobile ? 'xs' : 'sm'} fw={700} />
                             </Badge>
                         )}
                         {!isMobile && botonesPresentacion}
                     </Stack>
                 </Group>
-                {/* En el teléfono «+ Caja» y «+ Bulto» van en su propia línea: así el nombre del producto no queda cortado */}
-                {isMobile && botonesPresentacion.length > 0 && <Group gap={6} mt={6} justify="flex-end">{botonesPresentacion}</Group>}
             </Paper>
         );
     };
@@ -932,7 +932,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     );
 
     const bloqueDocumento = esPresupuesto ? (
-        <Paper p="sm" mb="sm" bg="teal.0" radius="md" withBorder>
+        <Paper p={isMobile ? 'xs' : 'sm'} mb={isMobile ? 6 : 'sm'} bg="teal.0" radius={isMobile ? 'sm' : 'md'} withBorder>
             <Group justify="space-between" align="center" wrap="nowrap" gap="xs">
                 <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
                     <ThemeIcon size={isMobile ? 'md' : 'lg'} variant="light" color="teal"><IconFileInvoice size={isMobile ? 16 : 20} /></ThemeIcon>
@@ -1166,42 +1166,42 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         </>
     );
 
-    // Carrito del teléfono: una tarjeta por renglón, con botones grandes para la cantidad
+    // Carrito del teléfono: tarjetas compactas con botones táctiles claros
     const tarjetasCarrito = (
-        <Stack gap={8}>
+        <Stack gap={4}>
             {carrito.map((item, idxItem) => (
-                <Paper key={item.clave} withBorder radius="md" p="sm" bg="white" style={{ borderLeft: `4px solid ${!item.isFicticio && item.presentacion !== 'UNIDAD' ? '#7048e8' : '#1971c2'}` }}>
-                    <Group wrap="nowrap" align="flex-start" gap="xs">
-                        {item.isFicticio ? <Avatar color="grape" size={40} radius="sm"><IconEdit size={16} /></Avatar> : <Avatar src={item.imagen || item.marcaImagen} size={40} radius="sm"><IconPackage size={16} /></Avatar>}
+                <Paper key={item.clave} withBorder radius="sm" p={8} bg="white" style={{ borderLeft: `3px solid ${!item.isFicticio && item.presentacion !== 'UNIDAD' ? '#7048e8' : '#1971c2'}` }}>
+                    <Group wrap="nowrap" align="flex-start" gap={6}>
+                        {item.isFicticio ? <Avatar color="grape" size={32} radius="sm"><IconEdit size={14} /></Avatar> : <Avatar src={item.imagen || item.marcaImagen} size={32} radius="sm"><IconPackage size={14} /></Avatar>}
                         <Box style={{ flex: 1, minWidth: 0 }}>
-                            <Text fw={700} size="sm" lineClamp={2} lh={1.25}>{item.nombre}</Text>
+                            <Text fw={700} fz={13} lineClamp={2} lh={1.2}>{item.nombre}</Text>
                             <Group gap={4} mt={2}>
                                 {etiquetasRenglon(item)}
                                 {!item.isFicticio && item.presentacion !== 'UNIDAD' && <Badge size="xs" color="grape.7" variant="filled" tt="none">{item.presentacionEtiqueta} · {item.cantidad} und</Badge>}
                                 {item.isFicticio && <Badge size="xs" color="grape" variant="light">Ficticio 1010</Badge>}
-                                {!item.isFicticio && item.marcaNombre && <Text size="xs" c="dimmed">{item.marcaNombre}</Text>}
+                                {!item.isFicticio && item.marcaNombre && <Text fz={11} c="dimmed">{item.marcaNombre}</Text>}
                             </Group>
                         </Box>
-                        <ActionIcon size="lg" color="red" variant="subtle" onClick={() => eliminarItem(item.clave)} aria-label="Quitar del carrito"><IconTrash size={18} /></ActionIcon>
+                        <ActionIcon size="sm" color="red" variant="subtle" onClick={() => eliminarItem(item.clave)} aria-label="Quitar del carrito"><IconTrash size={16} /></ActionIcon>
                     </Group>
-                    <Group justify="space-between" align="flex-end" mt={8} wrap="nowrap" gap={6}>
+                    <Group justify="space-between" align="center" mt={6} wrap="nowrap" gap={6}>
                         <Group gap={4} wrap="nowrap">
-                            <ActionIcon size={40} radius="md" color="gray" variant="light" onClick={() => cambiarCantidad(item.clave, -1)} aria-label="Uno menos"><IconMinus size={18} /></ActionIcon>
-                            <NumberInput value={item.cantidadPres} onChange={(val) => setCantidadAbsoluta(item.clave, val)} min={1} allowDecimal={false} allowNegative={false} size="md" w={64} hideControls inputMode="numeric"
-                                aria-label="Cantidad" styles={{ input: { textAlign: 'center', fontWeight: 900, color: '#1971c2', backgroundColor: '#f8f9fa', paddingInline: 4 } }} />
-                            <ActionIcon size={40} radius="md" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)} aria-label="Uno más"><IconPlus size={18} /></ActionIcon>
+                            <ActionIcon size={32} radius="sm" color="gray" variant="light" onClick={() => cambiarCantidad(item.clave, -1)} aria-label="Uno menos"><IconMinus size={15} /></ActionIcon>
+                            <NumberInput value={item.cantidadPres} onChange={(val) => setCantidadAbsoluta(item.clave, val)} min={1} allowDecimal={false} allowNegative={false} size="xs" w={52} hideControls inputMode="numeric"
+                                aria-label="Cantidad" styles={{ input: { textAlign: 'center', fontWeight: 900, color: '#1971c2', backgroundColor: '#f8f9fa', paddingInline: 2 } }} />
+                            <ActionIcon size={32} radius="sm" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)} aria-label="Uno más"><IconPlus size={15} /></ActionIcon>
                         </Group>
                         <Box ta="right" style={{ minWidth: 0 }}>
                             {puedeFijarPrecio ? (
-                                <PrecioEditable valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)} size="sm" onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)} />
+                                <PrecioEditable valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)} size="xs" onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)} />
                             ) : (
-                                <Text size="xs" c="dimmed">c/u <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="xs" fw={600} /></Text>
+                                <Text fz={11} c="dimmed">c/u <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="xs" fw={600} /></Text>
                             )}
-                            <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="lg" fw={800} />
+                            <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="md" fw={800} />
                         </Box>
                     </Group>
                     {!item.isFicticio && !esPresupuesto && (
-                        <Checkbox size="sm" mt={8} color="teal" label="Afectar inventario" checked={item.afectaInventario} onChange={(e) => toggleAfectaInventario(item.clave, e.currentTarget.checked)} />
+                        <Checkbox size="xs" mt={6} color="teal" label="Afectar inventario" checked={item.afectaInventario} onChange={(e) => toggleAfectaInventario(item.clave, e.currentTarget.checked)} />
                     )}
                 </Paper>
             ))}
@@ -1475,19 +1475,19 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     const contenidoTelefono = (
         <Box style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: '#f1f3f7' }}>
-            <Box style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', borderBottom: '1px solid #e3e7ee', padding: 'calc(8px + env(safe-area-inset-top, 0px)) 12px 8px', boxShadow: '0 4px 12px -8px rgba(0,0,0,0.25)' }}>
-                <Group justify="space-between" wrap="nowrap" gap="xs" mb={8}>
+            <Box style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', borderBottom: '1px solid #e3e7ee', padding: 'calc(6px + env(safe-area-inset-top, 0px)) 8px 6px', boxShadow: '0 4px 12px -8px rgba(0,0,0,0.25)' }}>
+                <Group justify="space-between" wrap="nowrap" gap="xs" mb={6}>
                     <Box style={{ minWidth: 0 }}>
-                        <Text fw={800} size="lg" c="blue.9" lh={1.2} truncate="end">{esPresupuesto ? (editando ? `Modificar ${editando.numero}` : 'Nuevo presupuesto') : 'Nueva venta'}</Text>
+                        <Text fw={800} size="md" c="blue.9" lh={1.15} truncate="end">{esPresupuesto ? (editando ? `Modificar ${editando.numero}` : 'Nuevo presupuesto') : 'Nueva venta'}</Text>
                         <Group gap={4} wrap="nowrap">
-                            <IconExchange size={14} color="#1971C2" />
-                            <Text size="xs" c="dimmed" lh={1.2}>Tasa BCV: <b>{tasaBcv ? `${tasaBcv} Bs/$` : '…'}</b></Text>
+                            <IconExchange size={13} color="#1971C2" />
+                            <Text size="xs" c="dimmed" lh={1.15}>BCV: <b>{tasaBcv ? `${tasaBcv} Bs/$` : '…'}</b></Text>
                         </Group>
                     </Box>
-                    <Group gap={4} wrap="nowrap">{botonCero}<CloseButton size="xl" onClick={onClose} aria-label="Cerrar" /></Group>
+                    <Group gap={4} wrap="nowrap">{botonCero}<CloseButton size="lg" onClick={onClose} aria-label="Cerrar" /></Group>
                 </Group>
                 <SegmentedControl
-                    fullWidth value={vista} onChange={setVista} color="blue.8"
+                    fullWidth size="xs" value={vista} onChange={setVista} color="blue.8"
                     data={[
                         { value: 'productos', label: 'Productos' },
                         { value: 'carrito', label: carrito.length ? `Carrito (${carrito.length})` : 'Carrito' },
@@ -1496,23 +1496,23 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 />
             </Box>
 
-            <Box p="sm" style={{ flex: 1 }}>
+            <Box p={6} style={{ flex: 1 }}>
                 {vista === 'productos' && (
-                    <Stack gap={8}>
+                    <Stack gap={4}>
                         {/* Qué se va a emitir y para quién: se cambia en «Datos y pago» */}
-                        <UnstyledButton onClick={() => setVista('datos')} p={10} bg="white" style={{ borderRadius: 8, border: `1px solid ${faltaCliente ? 'var(--mantine-color-red-4)' : '#dee2e6'}` }}>
+                        <UnstyledButton onClick={() => setVista('datos')} px={8} py={6} bg="white" style={{ borderRadius: 6, border: `1px solid ${faltaCliente ? 'var(--mantine-color-red-4)' : '#dee2e6'}` }}>
                             <Group justify="space-between" wrap="nowrap" gap="xs">
                                 <Box style={{ minWidth: 0 }}>
-                                    <Text size="sm" fw={700} lh={1.3} truncate="end">
+                                    <Text size="xs" fw={700} lh={1.25} truncate="end">
                                         {esPresupuesto ? 'Presupuesto' : `${tipoDocumentoActual} ${formVenta.values.numeroDocumento}`} · {etiquetaTarifa || 'Falta la tarifa'}
                                     </Text>
-                                    <Text size="xs" lh={1.3} c={faltaCliente ? 'red.7' : 'dimmed'} fw={faltaCliente ? 700 : 400} truncate="end">
+                                    <Text fz={11} lh={1.25} c={faltaCliente ? 'red.7' : 'dimmed'} fw={faltaCliente ? 700 : 400} truncate="end">
                                         {!esPresupuesto && `${tipoVenta === 'MAYOR' ? 'Al mayor' : 'Al detal'} · `}{clienteSeleccionado ? clienteSeleccionado.nombre : (faltaCliente ? 'Falta elegir el cliente' : 'Sin cliente')}
                                     </Text>
                                 </Box>
                                 <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
                                     <Text size="xs" fw={700} c="blue.7">Cambiar</Text>
-                                    <IconChevronRight size={16} color="var(--mantine-color-blue-7)" />
+                                    <IconChevronRight size={15} color="var(--mantine-color-blue-7)" />
                                 </Group>
                             </Group>
                         </UnstyledButton>
@@ -1525,16 +1525,16 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
                 {vista === 'carrito' && (
                     carrito.length === 0 ? (
-                        <Stack align="center" gap="sm" py={48}>
-                            <ThemeIcon size={56} radius="xl" variant="light" color="blue"><IconShoppingCart size={30} /></ThemeIcon>
+                        <Stack align="center" gap="sm" py={40}>
+                            <ThemeIcon size={50} radius="xl" variant="light" color="blue"><IconShoppingCart size={26} /></ThemeIcon>
                             <Text fw={700}>El carrito está vacío</Text>
                             <Button variant="light" onClick={() => setVista('productos')}>Agregar productos</Button>
                         </Stack>
                     ) : (
-                        <Stack gap={8}>
-                            <Group justify="space-between">
-                                <Text size="sm" fw={700} c="blue.9">{carrito.length} {carrito.length === 1 ? 'producto' : 'productos'} · {unidadesCarrito} und</Text>
-                                <Button size="compact-sm" variant="subtle" leftSection={<IconPlus size={14} />} onClick={() => setVista('productos')}>Agregar más</Button>
+                        <Stack gap={6}>
+                            <Group justify="space-between" px={2}>
+                                <Text size="xs" fw={700} c="blue.9">{carrito.length} {carrito.length === 1 ? 'producto' : 'productos'} · {unidadesCarrito} und</Text>
+                                <Button size="compact-xs" variant="subtle" leftSection={<IconPlus size={13} />} onClick={() => setVista('productos')}>Agregar más</Button>
                             </Group>
                             {tarjetasCarrito}
                         </Stack>
@@ -1543,17 +1543,17 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
                 {vista === 'datos' && (
                     <Stack gap={0}>
-                        {selectorTipoVenta && <Box mb="sm">{selectorTipoVenta}</Box>}
+                        {selectorTipoVenta && <Box mb={6}>{selectorTipoVenta}</Box>}
                         {bloqueDocumento}
-                        <Paper withBorder radius="md" p="sm" mb="sm" bg="white">
-                            <Stack gap="sm">
+                        <Paper withBorder radius="sm" p="xs" mb={6} bg="white">
+                            <Stack gap="xs">
                                 {campoCliente}
                                 {campoTarifa}
                             </Stack>
                         </Paper>
                         {!esPresupuesto && (
-                            <Paper withBorder radius="md" p="sm" mb="sm" bg="white">
-                                <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb={6}>Cobro</Text>
+                            <Paper withBorder radius="sm" p="xs" mb={6} bg="white">
+                                <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb={4}>Cobro</Text>
                                 {filaIvaCondicion}
                                 {filaPago}
                                 {filaCredito}
@@ -1561,8 +1561,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                             </Paper>
                         )}
                         {filaMayor && (
-                            <Paper withBorder radius="md" p="sm" mb="sm" bg="white">
-                                <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb={6}>Despacho</Text>
+                            <Paper withBorder radius="sm" p="xs" mb={6} bg="white">
+                                <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb={4}>Despacho</Text>
                                 {filaMayor}
                             </Paper>
                         )}
@@ -1571,28 +1571,28 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 )}
             </Box>
 
-            {/* Total y botones siempre a la vista; los botones a todo el ancho porque en una sola fila no caben */}
-            <Box style={{ position: 'sticky', bottom: 0, zIndex: 15, background: '#fff', padding: '8px 12px calc(10px + env(safe-area-inset-bottom, 0px))', boxShadow: '0 -6px 16px rgba(0,0,0,0.12)', borderTop: '1px solid #e9ecef' }}>
-                <Group justify="space-between" align="flex-end" wrap="nowrap" gap="xs" mb={8}>
+            {/* Total y botones siempre a la vista */}
+            <Box style={{ position: 'sticky', bottom: 0, zIndex: 15, background: '#fff', padding: '6px 8px calc(8px + env(safe-area-inset-bottom, 0px))', boxShadow: '0 -6px 16px rgba(0,0,0,0.12)', borderTop: '1px solid #e9ecef' }}>
+                <Group justify="space-between" align="flex-end" wrap="nowrap" gap="xs" mb={6}>
                     <Box style={{ minWidth: 0 }}>
-                        <Text size="xs" c="dimmed" lh={1.35}>Subtotal <PrecioVisual valor={subtotal} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} /></Text>
-                        <Text size="xs" c="dimmed" lh={1.35}>IVA <PrecioVisual valor={montoIva} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} />{costoFleteNum > 0 && <> · Flete <PrecioVisual valor={costoFleteNum} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} /></>}</Text>
+                        <Text fz={11} c="dimmed" lh={1.25}>Subt. <PrecioVisual valor={subtotal} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} /></Text>
+                        <Text fz={11} c="dimmed" lh={1.25}>IVA <PrecioVisual valor={montoIva} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} />{costoFleteNum > 0 && <> · Flete <PrecioVisual valor={costoFleteNum} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} /></>}</Text>
                     </Box>
                     <Box ta="right" style={{ flexShrink: 0 }}>
-                        <Text size="xs" fw={800} c="blue.9" tt="uppercase" lh={1}>Total</Text>
-                        <PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="xl" fw={900} c="blue.9" />
-                        {equivalenteTotal && <Text size="xs" c="dimmed" lh={1.1}>{equivalenteTotal}</Text>}
+                        <Text fz={10} fw={800} c="blue.9" tt="uppercase" lh={1}>Total</Text>
+                        <PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="lg" fw={900} c="blue.9" />
+                        {equivalenteTotal && <Text fz={11} c="dimmed" lh={1.1}>{equivalenteTotal}</Text>}
                     </Box>
                 </Group>
                 {esPresupuesto ? (
-                    <Button fullWidth size="md" color="teal" leftSection={<IconFileInvoice size={20} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}>{editando ? 'Guardar cambios' : 'Guardar presupuesto'}</Button>
+                    <Button fullWidth size="sm" h={40} color="teal" leftSection={<IconFileInvoice size={18} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}>{editando ? 'Guardar cambios' : 'Guardar presupuesto'}</Button>
                 ) : (
-                    <Group gap={8} wrap="nowrap">
-                        <Button size="sm" h={46} px="sm" variant="light" color="teal" onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}
+                    <Group gap={6} wrap="nowrap">
+                        <Button size="sm" h={40} px="sm" variant="light" color="teal" onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}
                             title="Guarda el carrito como presupuesto (con IVA, cliente opcional) sin registrar la venta" style={{ flexShrink: 0 }}>
                             Presupuesto
                         </Button>
-                        <Button size="sm" h={46} style={{ flex: 1 }} color="blue.8" leftSection={<IconReceiptTax size={18} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>
+                        <Button size="sm" h={40} style={{ flex: 1 }} color="blue.8" leftSection={<IconReceiptTax size={17} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>
                             Revisar venta
                         </Button>
                     </Group>
