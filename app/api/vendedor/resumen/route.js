@@ -56,8 +56,21 @@ export async function GET() {
         const desde = inicioDeHoy();
         const abiertas = { statusDespacho: { [Op.notIn]: CERRADOS } };
 
-        const [porEmpacar, porEtiquetar, porEntregar, firmadas, ventasHoy, pedidosEnCurso, tasa] = await Promise.all([
+        const [porEmpacar, porEmpacarDisponibles, porEtiquetar, porEntregar, firmadas, ventasHoy, pedidosEnCurso, tasa] = await Promise.all([
             Venta.findAll({ where: { empacadorId: yo, empacadoAt: null, ...abiertas }, include: INCLUDE_TAREA, order: [['createdAt', 'ASC']] }),
+            Venta.findAll({
+                where: {
+                    empacadorId: null,
+                    empacadoAt: null,
+                    ...abiertas,
+                    [Op.and]: [
+                        { [Op.or]: [{ revisionStock: null }, { revisionStock: { [Op.ne]: 'PENDIENTE' } }] },
+                        { [Op.or]: [{ verificacionPago: null }, { verificacionPago: { [Op.ne]: 'POR_VERIFICAR' } }] },
+                    ],
+                },
+                include: INCLUDE_TAREA,
+                order: [['createdAt', 'ASC']],
+            }),
             Venta.findAll({ where: { etiquetadorId: yo, etiquetadoAt: null, ...abiertas }, include: INCLUDE_TAREA, order: [['createdAt', 'ASC']] }),
             // Ya empacados y etiquetados, con envío: esperan que el chofer o la agencia los retire
             Venta.findAll({ where: { [Op.or]: [{ empacadorId: yo }, { etiquetadorId: yo }, { vendedorId: yo }], empacadoAt: { [Op.ne]: null }, etiquetadoAt: { [Op.ne]: null }, tipoEntrega: { [Op.ne]: 'pickup' }, ...abiertas }, include: INCLUDE_TAREA, order: [['createdAt', 'ASC']] }),
@@ -89,6 +102,7 @@ export async function GET() {
         return NextResponse.json({
             tasa,
             porEmpacar: porEmpacar.map((v) => ({ ...tarea(v), renglones: v.detalles.length, verificados: verificados.get(v.id) || 0, iniciado: Boolean(v.empaqueIniciadoAt) || verificados.has(v.id) })),
+            porEmpacarDisponibles: porEmpacarDisponibles.map((v) => ({ ...tarea(v), renglones: v.detalles.length })),
             porEtiquetar: porEtiquetar.map(tarea),
             porEntregar: porEntregar.map((v) => ({ ...tarea(v), transporte: v.quienRetira || '' })),
             firmadas: firmadas.map((v) => ({

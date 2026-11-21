@@ -149,6 +149,8 @@ export default function DashboardVendedor() {
     const [firmando, setFirmando] = useState(false);
     const [porEntregar, setPorEntregar] = useState(null); // tarea que se va a entregar al chofer
     const [entregando, setEntregando] = useState(false);
+    const [disponiblesAbierto, { toggle: toggleDisponibles }] = useDisclosure(false);
+    const [tomandoId, setTomandoId] = useState(null);
 
     const porImprimir = useQuery({
         queryKey: ['por-imprimir-conteo'], refetchInterval: 60000, refetchOnWindowFocus: true, retry: false,
@@ -202,8 +204,28 @@ export default function DashboardVendedor() {
     };
 
     const nEmpacar = data?.porEmpacar?.length ?? 0;
+    const nDisponibles = data?.porEmpacarDisponibles?.length ?? 0;
     const nEntregar = data?.porEntregar?.length ?? 0;
     const nEtiquetar = data?.porEtiquetar?.length ?? 0;
+
+    const tomarEmpaque = async (pedido) => {
+        setTomandoId(pedido.id);
+        try {
+            await pedirJson(`/api/ventas/${pedido.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accion: 'TOMAR_EMPAQUE' }),
+            });
+            notifications.show({ color: 'teal', title: 'Pedido asignado', message: `Tomaste el pedido ${pedido.numero} para empacar y etiquetar.` });
+            queryClient.invalidateQueries({ queryKey: ['vendedor'] });
+            router.push(`/superuser/ventas/${pedido.id}/empacar`);
+        } catch (e) {
+            notifications.show({ color: 'red', title: 'No se pudo tomar el pedido', message: e.message });
+            queryClient.invalidateQueries({ queryKey: ['vendedor'] });
+        } finally {
+            setTomandoId(null);
+        }
+    };
 
     return (
         <Box maw={1400} mx="auto" px={{ base: 6, sm: 'md' }} py={{ base: 6, sm: 'md' }}>
@@ -225,6 +247,93 @@ export default function DashboardVendedor() {
                     <Acceso icono={IconArchive} color="brand.6" titulo="Inventario" descripcion="Existencia y precios" onClick={() => router.push('/superuser/inventario/consulta')} />
                     <Acceso icono={IconTruckDelivery} color="grape.6" titulo="Mis ventas y pedidos" descripcion="Historial y seguimiento" onClick={() => router.push('/superuser/ventas')} />
                 </SimpleGrid>
+
+                {!isLoading && nDisponibles > 0 && (
+                    <Paper
+                        radius="lg"
+                        p={0}
+                        style={{
+                            overflow: 'hidden',
+                            border: '2px solid rgba(255, 255, 255, 0.35)',
+                            boxShadow: '0 10px 28px rgba(245, 0, 87, 0.28)',
+                        }}
+                    >
+                        <UnstyledButton
+                            onClick={toggleDisponibles}
+                            w="100%"
+                            p={{ base: 'sm', sm: 'md' }}
+                            style={{
+                                background: 'linear-gradient(135deg, #ff6b00 0%, #f50057 52%, #7c3aed 100%)',
+                                color: 'white',
+                            }}
+                        >
+                            <Group justify="space-between" wrap="nowrap" gap="sm">
+                                <Group wrap="nowrap" gap="sm" style={{ minWidth: 0 }}>
+                                    <ThemeIcon size={48} radius="md" color="white" variant="white" c="pink.7" style={{ flexShrink: 0 }}>
+                                        <IconPackage size={28} />
+                                    </ThemeIcon>
+                                    <Box style={{ minWidth: 0 }}>
+                                        <Group gap={8} wrap="wrap" align="center">
+                                            <Text fw={900} fz={{ base: 'md', sm: 'lg' }} lh={1.2}>
+                                                {nDisponibles === 1 ? '¡1 pedido listo para empacar!' : `¡${nDisponibles} pedidos listos para empacar!`}
+                                            </Text>
+                                            <Badge size="lg" radius="xl" color="yellow" variant="filled" c="dark.9" fw={900}>
+                                                {nDisponibles} {nDisponibles === 1 ? 'PENDIENTE' : 'PENDIENTES'}
+                                            </Badge>
+                                        </Group>
+                                        <Text size="xs" c="white" opacity={0.92} mt={2}>
+                                            {disponiblesAbierto ? 'Toca para ocultar la lista' : 'Toca aquí para ver la lista y presionar «Empacar» (quedarás a cargo del empaque y etiquetado)'}
+                                        </Text>
+                                    </Box>
+                                </Group>
+                                <IconChevronDown
+                                    size={24}
+                                    style={{
+                                        flexShrink: 0,
+                                        transform: disponiblesAbierto ? 'rotate(180deg)' : 'rotate(0deg)',
+                                        transition: 'transform 180ms ease',
+                                    }}
+                                />
+                            </Group>
+                        </UnstyledButton>
+
+                        <Collapse in={disponiblesAbierto}>
+                            <Stack gap="xs" p={{ base: 'xs', sm: 'md' }} bg="white">
+                                {data.porEmpacarDisponibles.map((pedido) => (
+                                    <Paper key={pedido.id} withBorder radius="md" p="sm" bg="gray.0">
+                                        <Group justify="space-between" align="center" gap="sm" wrap="wrap">
+                                            <Box style={{ minWidth: 0, flex: '1 1 220px' }}>
+                                                <Group gap={6} wrap="wrap">
+                                                    <Text fw={800} size="sm" c="navy.9">{pedido.numero}</Text>
+                                                    <Badge size="xs" variant="light" color={pedido.tipoEntrega === 'pickup' ? 'teal' : 'violet'}>
+                                                        {pedido.tipoEntrega === 'pickup' ? 'Retiro en tienda' : 'Envío / delivery'}
+                                                    </Badge>
+                                                    <Badge size="xs" variant="outline" color="orange">
+                                                        {pedido.renglones} prod. · {pedido.articulos} uds.
+                                                    </Badge>
+                                                </Group>
+                                                <Text size="sm" fw={600} c="dark.7" truncate mt={2}>{pedido.cliente}</Text>
+                                                <Text size="xs" c="dimmed">{fmtFechaHora(pedido.fecha)}</Text>
+                                            </Box>
+                                            <Button
+                                                variant="gradient"
+                                                gradient={{ from: 'orange', to: 'pink', deg: 135 }}
+                                                size="sm"
+                                                radius="md"
+                                                leftSection={<IconPackage size={16} />}
+                                                loading={tomandoId === pedido.id}
+                                                disabled={Boolean(tomandoId) && tomandoId !== pedido.id}
+                                                onClick={() => tomarEmpaque(pedido)}
+                                            >
+                                                Empacar
+                                            </Button>
+                                        </Group>
+                                    </Paper>
+                                ))}
+                            </Stack>
+                        </Collapse>
+                    </Paper>
+                )}
 
                 <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }} spacing="md">
                     <Indicador icono={IconPrinter} color={nImprimir ? 'orange' : 'gray'} titulo="Documentos por imprimir" cargando={porImprimir.isLoading} valor={nImprimir} detalle={nImprimir ? 'Facturas y notas ya aprobadas: toca para imprimirlas' : 'Ninguno aprobado pendiente'} onClick={() => router.push('/superuser/ventas/por-imprimir')} />

@@ -32,8 +32,8 @@ class ErrorLogistica extends Error {
     constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
 }
 
-// El vendedor solo firma; asignar, despachar y cobrar es de administración
-const ACCIONES_VENDEDOR = ['FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'ENTREGAR_CHOFER'];
+// El vendedor solo toma empaques libres o firma sus tareas; asignar a terceros, despachar y cobrar es de administración
+const ACCIONES_VENDEDOR = ['TOMAR_EMPAQUE', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'ENTREGAR_CHOFER'];
 
 // Descuenta el stock y deja las salidas como "Empacada". Solo el MAYOR descuenta aquí: el detal y las ventas web ya
 // descontaron al venderse (antes se descontaba de nuevo al empacar, restando el stock dos veces).
@@ -223,12 +223,12 @@ export async function PUT(request, { params }) {
         }
 
         const cerrada = ['Cancelado', 'Completado'].includes(venta.statusDespacho);
-        if (venta.revisionStock === 'PENDIENTE' && ['ASIGNAR', 'EMPACAR', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'DESPACHAR', 'ABONAR', 'COBRAR_TIENDA'].includes(accion)) {
+        if (venta.revisionStock === 'PENDIENTE' && ['TOMAR_EMPAQUE', 'ASIGNAR', 'EMPACAR', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'DESPACHAR', 'ABONAR', 'COBRAR_TIENDA'].includes(accion)) {
             throw new ErrorLogistica('Este pedido está en revisión de existencias: confírmalo (o ajústalo) antes de continuar', 409);
         }
 
         // Compra de la tienda con pago por verificar: no se prepara ni se despacha hasta confirmar que el dinero existe
-        if (venta.verificacionPago === 'POR_VERIFICAR' && ['ASIGNAR', 'EMPACAR', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'DESPACHAR', 'ABONAR', 'COBRAR_TIENDA'].includes(accion)) {
+        if (venta.verificacionPago === 'POR_VERIFICAR' && ['TOMAR_EMPAQUE', 'ASIGNAR', 'EMPACAR', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'DESPACHAR', 'ABONAR', 'COBRAR_TIENDA'].includes(accion)) {
             throw new ErrorLogistica('El pago de este pedido está por verificar: confírmalo en el banco (o recházalo) antes de continuar', 409);
         }
 
@@ -267,6 +267,42 @@ export async function PUT(request, { params }) {
                 : await convertirAFactura({ venta, transaction: t, ...datosCopia });
             await t.commit();
             return NextResponse.json({ success: true, ...r });
+        }
+
+        // ==========================================================
+        // 🙋 TOMAR_EMPAQUE: un empleado de ventas toma un pedido libre y queda como empacador y etiquetador
+        // ==========================================================
+        if (accion === 'TOMAR_EMPAQUE') {
+            const vLock = await Venta.findByPk(venta.id, { transaction: t, lock: t.LOCK.UPDATE });
+            if (['Cancelado', 'Completado'].includes(vLock.statusDespacho)) throw new ErrorLogistica('Este pedido ya está cerrado', 409);
+            if (vLock.empacadoAt) throw new ErrorLogistica('Este pedido ya fue empacado', 409);
+            if (vLock.empacadorId && Number(vLock.empacadorId) !== yo) {
+                throw new ErrorLogistica('Otro compañero ya tomó este pedido para empacarlo', 409);
+            }
+            await validarPersonal([yo, yo], t);
+            const recienTomado = !vLock.empacadorId;
+            vLock.empacadorId = yo;
+            vLock.etiquetadorId = yo;
+            vLock.asignadoAt = vLock.asignadoAt || new Date();
+            await vLock.save({ transaction: t });
+
+            const usuario = await User.findByPk(yo, { include: [{ model: Empleado, as: 'empleado', attributes: ['nombre'] }], transaction: t });
+            const nombreEmpleado = usuario?.empleado?.nombre || usuario?.nombre || 'Un vendedor';
+            await t.commit();
+
+            if (recienTomado) {
+                try {
+                    await notificarCabezas({
+                        title: 'Empaque iniciado 📦',
+                        body: `${nombreEmpleado} empezó a empacar y etiquetar el pedido ${vLock.numeroDocumento}.`,
+                        url: `/superuser/ventas/${vLock.id}`,
+                        tipo: 'Info',
+                    });
+                } catch (e) {
+                    console.error('No se pudo avisar a administración al tomar empaque:', e.message);
+                }
+            }
+            return NextResponse.json({ success: true, id: vLock.id, message: 'Pedido asignado a ti para empacar y etiquetar' });
         }
 
         // ==========================================================
@@ -315,6 +351,8 @@ export async function PUT(request, { params }) {
             venta.empacadoAt = new Date();
             venta.empaqueVerificado = true;
             await venta.save({ transaction: t });
+            const empacador = await User.findByPk(yo, { include: [{ model: Empleado, as: 'empleado', attributes: ['nombre'] }], transaction: t });
+            const nombreEmpacador = empacador?.empleado?.nombre || empacador?.nombre || 'Un vendedor';
             await t.commit();
 
             // Solo quedan las dos fotos definitivas: las repetidas se borran del Blob (si falla, el cron lo reintenta al vencer el plazo)
@@ -324,6 +362,16 @@ export async function PUT(request, { params }) {
                 console.error('No se pudieron borrar las fotos repetidas:', e.message);
             }
             await avisosDeEmpaque(venta);
+            try {
+                await notificarCabezas({
+                    title: 'Empaque culminado 📦✅',
+                    body: `${nombreEmpacador} terminó de empacar el pedido ${venta.numeroDocumento}.`,
+                    url: `/superuser/ventas/${venta.id}`,
+                    tipo: 'Info',
+                });
+            } catch (e) {
+                console.error('No se pudo avisar a administración al culminar empaque:', e.message);
+            }
             return NextResponse.json({ success: true, message: 'Empaque firmado' });
         }
 
