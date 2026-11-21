@@ -11,11 +11,12 @@ import { useAuth } from '@/hooks/useAuth';
 import ErroresEmpaqueCard from './ErroresEmpaqueCard';
 import DeliveryDiferenciasCard from './DeliveryDiferenciasCard';
 import {
-    IconAlertTriangle, IconArrowDownRight, IconArrowRight, IconArrowUpRight, IconBuildingStore, IconCash, IconCheck, IconClockExclamation, IconPackage,
+    IconAlertTriangle, IconArrowDownRight, IconArrowRight, IconArrowUpRight, IconBuildingStore, IconCash, IconCheck, IconClipboardList, IconClockExclamation, IconPackage,
     IconPrinter, IconTags, IconReceipt, IconReceiptTax, IconSettings, IconShoppingCart, IconTruckDelivery, IconWallet,
 } from '@tabler/icons-react';
 
 const ConsultorPrecios = dynamic(() => import('./ConsultorPrecios'), { ssr: false });
+const CardexModal = dynamic(() => import('./CardexModal'), { ssr: false });
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtUsd = (v) => `$${usd.format(Number(v) || 0)}`;
@@ -57,6 +58,7 @@ function Pulso({ icono: Icono, color, titulo, valor, detalle, cambio, href, carg
 export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, modulos, tareas }) {
     const { isAdmin } = useAuth();
     const [consultorAbierto, setConsultorAbierto] = useState(false);
+    const [cardexAbierto, setCardexAbierto] = useState(false);
     const movil = useMediaQuery('(max-width: 48em)');
     const { data, isLoading } = useQuery({ queryKey: ['dashboard', 'resumen'], queryFn: () => pedirJson('/api/dashboard/resumen'), refetchInterval: 120000, refetchOnWindowFocus: true });
     const d = data;
@@ -100,6 +102,7 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
                         <Group gap="xs" w={{ base: '100%', sm: 'auto' }} wrap="wrap">
                             {isAdmin && <Button component={Link} href={`/superuser/notas/vista-previa${tasa ? `?tasa=${tasa}` : ''}`} size="sm" radius="xl" tt="none" variant="white" color="navy.9" leftSection={<IconReceiptTax size={18} />} style={{ flex: '1 1 auto' }}>Vista previa de nota</Button>}
                             <Button size="sm" radius="xl" tt="none" variant="white" color="teal.8" leftSection={<IconTags size={18} />} onClick={() => setConsultorAbierto(true)} style={{ flex: '1 1 auto' }}>Consultor de precios</Button>
+                            <Button size="sm" radius="xl" tt="none" variant="white" color="indigo.8" leftSection={<IconClipboardList size={18} />} onClick={() => setCardexAbierto(true)} style={{ flex: '1 1 auto' }}>Cardex</Button>
                             <Button size="sm" radius="xl" tt="none" variant="white" color="navy.9" leftSection={<IconReceipt size={18} />} onClick={onCompra} style={{ flex: '1 1 auto' }}>Registrar compra</Button>
                             <Button size="sm" radius="xl" tt="none" color="accent.6" leftSection={<IconBuildingStore size={18} />} onClick={onPos} style={{ flex: '1 1 auto' }}>Nueva venta (POS)</Button>
                         </Group>
@@ -112,7 +115,7 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
                     <Pulso icono={IconReceipt} color="blue" titulo="Ventas del mes" cargando={isLoading} valor={fmtUsd(d?.ventas.mesTotal)} detalle={`${d?.ventas.mesVentas ?? 0} venta(s)`} href="/superuser/ventas" />
                     <Pulso icono={IconWallet} color="orange" titulo="Por cobrar" cargando={isLoading} valor={fmtUsd(d?.porCobrar.total)} detalle={d?.porCobrar.vencidas ? `${d.porCobrar.vencidas} vencida(s)` : 'Sin vencidas'} href="/superuser/cxc" />
                     <Pulso icono={IconWallet} color="red" titulo="Por pagar" cargando={isLoading} valor={fmtUsd(d?.porPagar.total)} detalle={d?.porPagar.vencidas ? `${d.porPagar.vencidas} vencida(s)` : 'Sin vencidas'} href="/superuser/cxp" />
-                    <Pulso icono={IconTruckDelivery} color="violet" titulo="Por despachar" cargando={isLoading} valor={d?.pedidos.porDespachar ?? 0} detalle={`${d?.pedidos.sinAsignar ?? 0} sin asignar`} href="/superuser/ventas" />
+                    <Pulso icono={IconTruckDelivery} color="violet" titulo="Por despachar" cargando={isLoading} valor={d?.pedidos.porDespachar ?? 0} detalle={`${d?.pedidos.sinAsignar ?? 0} sin asignar`} href="/superuser/ventas?estado=POR_DESPACHAR" />
                     <Pulso icono={IconShoppingCart} color="cyan" titulo="Tienda online hoy" cargando={isLoading} valor={fmtUsd(d?.tienda?.hoyTotal)} detalle={`${d?.tienda?.hoyCompras ?? 0} compra(s) · ${d?.tienda?.recibosMes ?? 0} recibo(s) sin factura en el mes`} href="/superuser/ventas" />
                     <Pulso icono={IconReceiptTax} color="grape" titulo="IVA facturado del mes" cargando={isLoading} valor={fmtUsd(d?.ivaMes)} detalle="Solo facturas, por fecha de emisión" href="/superuser/finanzas" />
                     <Pulso icono={IconAlertTriangle} color="yellow" titulo="Stock bajo" cargando={isLoading} valor={d?.stockBajo.total ?? 0} detalle={`${d?.stockBajo.agotados ?? 0} agotado(s)`} href="/superuser/inventario/productos" />
@@ -190,6 +193,7 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
                 )}
             </Stack>
             {consultorAbierto && <ConsultorPrecios opened={consultorAbierto} onClose={() => setConsultorAbierto(false)} />}
+            {cardexAbierto && <CardexModal opened={cardexAbierto} onClose={() => setCardexAbierto(false)} />}
         </Box>
     );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Badge, Box, Button, Group, Paper, Skeleton, Text, Title, Tooltip } from '@mantine/core';
+import { Alert, Badge, Box, Button, Group, Paper, SimpleGrid, Skeleton, Text, Title, Tooltip } from '@mantine/core';
 import { useLocalStorage, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useQueryClient } from '@tanstack/react-query';
@@ -143,20 +143,20 @@ export default function InventarioProductosPage() {
             </Group>
 
             {tienePermiso && (
-                <Group gap="xs" mb="sm" grow={isMobile}>
-                    <Button variant="white" leftSection={<IconBarcode size={18} />} onClick={() => router.push('/superuser/inventario/codigos')}>
-                        Cargar códigos de barras
+                <SimpleGrid cols={{ base: 2, sm: 4 }} spacing={isMobile ? 6 : 'xs'} mb="sm">
+                    <Button size={isMobile ? 'xs' : 'sm'} variant="white" leftSection={<IconBarcode size={16} />} onClick={() => router.push('/superuser/inventario/codigos')}>
+                        {isMobile ? 'Códigos barras' : 'Cargar códigos de barras'}
                     </Button>
-                    <Button variant="filled" color="orange" leftSection={<IconClipboardCheck size={18} />} onClick={() => router.push('/superuser/inventario/auditar-stock')}>
-                        Auditar existencias
+                    <Button size={isMobile ? 'xs' : 'sm'} variant="filled" color="orange" leftSection={<IconClipboardCheck size={16} />} onClick={() => router.push('/superuser/inventario/auditar-stock')}>
+                        {isMobile ? 'Auditar stock' : 'Auditar existencias'}
                     </Button>
-                    <Button variant="white" leftSection={<IconPhotoCheck size={18} />} onClick={() => router.push('/superuser/inventario/auditar')}>
-                        Auditar fotos y precios
+                    <Button size={isMobile ? 'xs' : 'sm'} variant="white" leftSection={<IconPhotoCheck size={16} />} onClick={() => router.push('/superuser/inventario/auditar')}>
+                        {isMobile ? 'Auditar fichas' : 'Auditar fotos y precios'}
                     </Button>
-                    <Button variant="white" leftSection={<IconCategory size={18} />} onClick={() => router.push('/superuser/inventario/clasificacion')}>
-                        Marcas, categorías y grupos
+                    <Button size={isMobile ? 'xs' : 'sm'} variant="white" leftSection={<IconCategory size={16} />} onClick={() => router.push('/superuser/inventario/clasificacion')}>
+                        {isMobile ? 'Clasificación' : 'Marcas, categorías y grupos'}
                     </Button>
-                </Group>
+                </SimpleGrid>
             )}
 
             <ResumenKpis resumen={resumen} params={params} setParams={setParams} cargando={cargandoResumen} />

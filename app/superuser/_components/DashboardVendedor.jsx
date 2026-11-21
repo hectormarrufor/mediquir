@@ -8,7 +8,7 @@ import { notifications } from '@mantine/notifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
-    IconAlertTriangle, IconArchive, IconBuildingStore, IconCash, IconChevronDown, IconCircleCheck, IconClock,
+    IconAlertTriangle, IconArchive, IconBuildingStore, IconCash, IconChevronDown, IconCircleCheck, IconClipboardList, IconClock,
     IconFileText, IconPackage, IconPrinter, IconTags, IconShoppingCart, IconTag, IconTruckDelivery,
 } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,6 +16,7 @@ import TareasPanel from '@/app/components/tareas/TareasPanel';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 
 const ConsultorPrecios = dynamic(() => import('./ConsultorPrecios'), { ssr: false });
+const CardexModal = dynamic(() => import('./CardexModal'), { ssr: false });
 const PosModal = dynamic(() => import('../../components/admin/PosModal'), { ssr: false });
 const EntregaChoferForm = dynamic(() => import('../../components/admin/EntregaChoferForm'), { ssr: false });
 
@@ -145,6 +146,7 @@ export default function DashboardVendedor() {
 
     const [posAbierto, setPosAbierto] = useState(false);
     const [consultorAbierto, setConsultorAbierto] = useState(false);
+    const [cardexAbierto, setCardexAbierto] = useState(false);
     const [porFirmar, setPorFirmar] = useState(null); // { tarea, tipo }
     const [firmando, setFirmando] = useState(false);
     const [porEntregar, setPorEntregar] = useState(null); // tarea que se va a entregar al chofer
@@ -240,8 +242,9 @@ export default function DashboardVendedor() {
 
                 {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}
 
-                <SimpleGrid cols={{ base: 2, lg: 5 }} spacing={{ base: 6, sm: 'md' }}>
+                <SimpleGrid cols={{ base: 2, lg: 6 }} spacing={{ base: 6, sm: 'md' }}>
                     <Acceso icono={IconTags} color="teal.7" titulo="Consultor de precios" descripcion="Todos los precios al instante" onClick={() => setConsultorAbierto(true)} />
+                    <Acceso icono={IconClipboardList} color="indigo.7" titulo="Cardex" descripcion="Ventas y movimientos por producto" onClick={() => setCardexAbierto(true)} />
                     <Acceso icono={IconShoppingCart} color="navy.9" titulo="Nueva venta o pedido" descripcion="Al detal o pedido al mayor" onClick={() => setPosAbierto(true)} />
                     <Acceso icono={IconFileText} color="orange.6" titulo="Presupuestos" descripcion="Cotizaciones para tus clientes" onClick={() => router.push('/superuser/presupuestos')} />
                     <Acceso icono={IconArchive} color="brand.6" titulo="Inventario" descripcion="Existencia y precios" onClick={() => router.push('/superuser/inventario/consulta')} />
@@ -424,6 +427,7 @@ export default function DashboardVendedor() {
             </Modal>
 
             {consultorAbierto && <ConsultorPrecios opened={consultorAbierto} onClose={() => setConsultorAbierto(false)} />}
+            {cardexAbierto && <CardexModal opened={cardexAbierto} onClose={() => setCardexAbierto(false)} />}
             {posAbierto && <PosModal opened={posAbierto} onClose={() => { setPosAbierto(false); queryClient.invalidateQueries({ queryKey: ['vendedor'] }); }} tasaBcv={tasa || 0} />}
         </Box>
     );

@@ -29,7 +29,7 @@ export async function GET(request) {
         if (!FECHA.test(desde || '') || !FECHA.test(hasta || '')) return NextResponse.json({ error: 'Rango de fechas inválido' }, { status: 400 });
 
         const tipo = ['DETAL', 'MAYOR', 'ONLINE'].includes(searchParams.get('tipo')) ? searchParams.get('tipo') : null;
-        const estado = ['Pendiente', 'Empacado', 'Parcial', 'Completado', 'Cancelado'].includes(searchParams.get('estado')) ? searchParams.get('estado') : null;
+        const estado = ['POR_DESPACHAR', 'Pendiente', 'Empacado', 'Parcial', 'Completado', 'Cancelado'].includes(searchParams.get('estado')) ? searchParams.get('estado') : null;
         const pago = ['Pendiente', 'Pagado', 'Vencido'].includes(searchParams.get('pago')) ? searchParams.get('pago') : null;
         const doc = DOCUMENTOS.includes(searchParams.get('doc')) ? searchParams.get('doc') : null;
         const q = (searchParams.get('q') || '').trim().slice(0, 60);
@@ -41,7 +41,11 @@ export async function GET(request) {
         const replacements = { desde, hasta, q: `%${q}%`, limite: TAMANO, salto: (pagina - 1) * TAMANO, ...alcance.replacements };
         let filtro = `(v."createdAt" AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta${alcance.sql}`;
         if (tipo) { filtro += ' AND v."tipoVenta" = :tipo'; replacements.tipo = tipo; }
-        if (estado) { filtro += ' AND v."statusDespacho" = :estado'; replacements.estado = estado; }
+        if (estado === 'POR_DESPACHAR') {
+            filtro += ` AND v."statusDespacho" IN ('Pendiente', 'Empacado', 'Parcial')`;
+        } else if (estado) {
+            filtro += ' AND v."statusDespacho" = :estado'; replacements.estado = estado;
+        }
         // "Vencido" = venta sin pagar cuya fecha de pago ya pasó (antes el filtro buscaba un estado que casi nunca se guarda y salía vacío)
         if (pago) { filtro += ` AND ${PAGO} = :pago`; replacements.pago = pago; }
         const soloVentas = ['FACTURA', 'NOTA_ENTREGA', 'VENTA_RAPIDA'].includes(doc);

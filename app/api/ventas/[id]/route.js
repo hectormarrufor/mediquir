@@ -385,6 +385,11 @@ export async function PUT(request, { params }) {
             if (!venta.empacadoAt) throw new ErrorLogistica('Primero debe firmarse el empaque', 409);
 
             venta.etiquetadoAt = new Date();
+            if (venta.tipoEntrega === 'pickup') {
+                venta.statusDespacho = 'Completado';
+                venta.fechaHoraRetiro = venta.fechaHoraRetiro || venta.etiquetadoAt;
+                await SalidaInventario.update({ estado: 'Entregada' }, { where: { ventaId: venta.id }, transaction: t });
+            }
             await venta.save({ transaction: t });
             await t.commit();
 

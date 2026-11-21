@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
     ActionIcon, Alert, Badge, Box, Button, Card, Center, CloseButton, Collapse, Drawer, Grid, Group, Modal, Pagination, Paper, Progress, SegmentedControl, Select, SimpleGrid,
@@ -69,6 +69,15 @@ const DOCUMENTOS = [
     { value: 'FACTURA', label: 'Facturas' }, { value: 'NOTA_ENTREGA', label: 'Notas de entrega' }, { value: 'VENTA_RAPIDA', label: 'Ventas rápidas' },
     { value: 'NOTA_CREDITO', label: 'Notas de crédito' }, { value: 'NOTA_DEBITO', label: 'Notas de débito' },
 ];
+const DESPACHOS = [
+    { value: 'POR_DESPACHAR', label: 'Por despachar' },
+    { value: 'Pendiente', label: 'Pendiente' },
+    { value: 'Empacado', label: 'Empacado' },
+    { value: 'Parcial', label: 'Parcial' },
+    { value: 'Completado', label: 'Completado' },
+    { value: 'Cancelado', label: 'Cancelado' },
+];
+const ETIQUETA_DESPACHO = { POR_DESPACHAR: 'Por despachar' };
 const DOC = {
     FACTURA: { etiqueta: 'Factura', color: 'navy' }, NOTA_ENTREGA: { etiqueta: 'N. entrega', color: 'gray' }, VENTA_RAPIDA: { etiqueta: 'V. rápida', color: 'lime' },
     NOTA_CREDITO: { etiqueta: 'N. crédito', color: 'red' }, NOTA_DEBITO: { etiqueta: 'N. débito', color: 'blue' },
@@ -80,15 +89,28 @@ const urlImprimir = (v) => (esNota(v) ? `/superuser/notas/${v.id}/imprimir` : `/
 const sePuedeImprimir = (v, esVendedor) => !v.porAprobar && (esNota(v) ? !esVendedor && v.estado === 'Emitida' : true);
 const COLOR_NOTA = { Emitida: 'teal', Anulada: 'gray' };
 
-function Indicador({ icono: Icono, color, titulo, valor, detalle, cargando, spanFull = false }) {
+function Indicador({ icono: Icono, color, titulo, valor, detalle, cargando, spanFull = false, onClick, activo = false }) {
     return (
-        <Card withBorder radius="lg" p={{ base: 'xs', sm: 'md' }} style={{ boxShadow: 'var(--mm-shadow-card)', gridColumn: spanFull ? '1 / -1' : undefined }}>
+        <Card
+            withBorder radius="lg" p={{ base: 'xs', sm: 'md' }}
+            onClick={onClick}
+            role={onClick ? 'button' : undefined}
+            tabIndex={onClick ? 0 : undefined}
+            onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+            style={{
+                boxShadow: activo ? `0 0 0 2px var(--mantine-color-${color}-5), var(--mm-shadow-card)` : 'var(--mm-shadow-card)',
+                borderColor: activo ? `var(--mantine-color-${color}-6)` : undefined,
+                gridColumn: spanFull ? '1 / -1' : undefined,
+                cursor: onClick ? 'pointer' : undefined,
+                transition: 'transform 120ms ease, box-shadow 120ms ease',
+            }}
+        >
             <Group wrap="nowrap" align="flex-start" gap={{ base: 8, sm: 'sm' }}>
-                <ThemeIcon size={32} radius="md" variant="light" color={color} style={{ flexShrink: 0 }}><Icono size={18} /></ThemeIcon>
+                <ThemeIcon size={32} radius="md" variant={activo ? 'filled' : 'light'} color={color} style={{ flexShrink: 0 }}><Icono size={18} /></ThemeIcon>
                 <Box style={{ minWidth: 0, flex: 1 }}>
                     <Tooltip label={titulo} multiline maw={340} withArrow openDelay={250}><Text fz={{ base: 10.5, sm: 'xs' }} c="dimmed" fw={700} tt="uppercase" lineClamp={1}>{titulo}</Text></Tooltip>
                     {cargando ? <Skeleton h={26} w={90} mt={4} /> : <Text fz={{ base: 17, sm: 23 }} fw={800} lh={1.2} c="navy.9" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{valor}</Text>}
-                    {detalle && !cargando && <Tooltip label={detalle} multiline maw={340} withArrow openDelay={250}><Text fz={11.5} c="dimmed" lineClamp={1}>{detalle}</Text></Tooltip>}
+                    {detalle && !cargando && <Tooltip label={detalle} multiline maw={340} withArrow openDelay={250}><Text fz={11.5} c={activo ? `${color}.7` : 'dimmed'} fw={activo ? 700 : 400} lineClamp={1}>{detalle}</Text></Tooltip>}
                 </Box>
             </Group>
         </Card>
@@ -241,10 +263,36 @@ export default function VentasDashboard() {
     const [eliminando, setEliminando] = useState(false);
     const [verGraficosMovil, setVerGraficosMovil] = useState(false);
     const [filtrosMovil, setFiltrosMovil] = useState(false);
+    const listaRef = useRef(null);
+
+    const irALista = () => {
+        setTimeout(() => listaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+    };
+    const filtrarPorDespachar = () => {
+        setEstado((prev) => (prev === 'POR_DESPACHAR' ? null : 'POR_DESPACHAR'));
+        irALista();
+    };
+    const filtrarPorCobrar = () => {
+        setPago((prev) => (prev === 'Pendiente' ? null : 'Pendiente'));
+        irALista();
+    };
 
     useEffect(() => { if (periodo !== 'RANGO') setRango(rangoDe(periodo)); }, [periodo]);
-    // Enlaces antiguos a "nuevo pedido" llegan con ?nueva=1: se abre el POS
-    useEffect(() => { if (new URLSearchParams(window.location.search).get('nueva')) setPosAbierto(true); }, []);
+    // Enlaces antiguos a "nuevo pedido" llegan con ?nueva=1: se abre el POS; ?estado=POR_DESPACHAR filtra por despachar
+    useEffect(() => {
+        const sp = new URLSearchParams(window.location.search);
+        if (sp.get('nueva')) setPosAbierto(true);
+        const est = sp.get('estado');
+        if (est && DESPACHOS.some((d) => d.value === est)) {
+            setEstado(est);
+            irALista();
+        }
+        const pg = sp.get('pago');
+        if (pg && ['Pagado', 'Pendiente', 'Vencido'].includes(pg)) {
+            setPago(pg);
+            irALista();
+        }
+    }, []);
     useEffect(() => { setPagina(1); }, [rango, q, tipo, doc, estado, pago, orden]);
 
     const [d1, d2] = rango;
@@ -431,8 +479,16 @@ export default function VentasDashboard() {
                     <Indicador icono={IconCash} color="teal" titulo="Total vendido" cargando={resumen.isLoading} valor={fmtUsd(r?.total)} detalle={tasa ? fmtBs((r?.total || 0) * tasa) : undefined} spanFull={telefono} />
                     <Indicador icono={IconShoppingBag} color="blue" titulo="Ventas" cargando={resumen.isLoading} valor={r?.ventas ?? 0} detalle={r?.anuladas ? `${r.anuladas} anulada(s)` : 'Sin anuladas'} />
                     <Indicador icono={IconReceipt2} color="grape" titulo="Ticket promedio" cargando={resumen.isLoading} valor={fmtUsd(r?.ticketPromedio)} />
-                    <Indicador icono={IconClockHour4} color="orange" titulo="Por cobrar" cargando={resumen.isLoading} valor={fmtUsd(r?.porCobrar)} detalle="Ventas sin pagar" />
-                    <Indicador icono={IconTruckDelivery} color="violet" titulo="Por despachar" cargando={resumen.isLoading} valor={r?.porDespachar ?? 0} detalle="Pendientes de entrega" />
+                    <Indicador
+                        icono={IconClockHour4} color="orange" titulo="Por cobrar" cargando={resumen.isLoading} valor={fmtUsd(r?.porCobrar)}
+                        detalle={pago === 'Pendiente' ? 'Filtrando pendientes · toca para quitar' : 'Toca para ver ventas sin pagar'}
+                        activo={pago === 'Pendiente'} onClick={filtrarPorCobrar}
+                    />
+                    <Indicador
+                        icono={IconTruckDelivery} color="violet" titulo="Por despachar" cargando={resumen.isLoading} valor={r?.porDespachar ?? 0}
+                        detalle={estado === 'POR_DESPACHAR' ? 'Filtrando pendientes · toca para quitar' : 'Toca para ver pendientes de entrega'}
+                        activo={estado === 'POR_DESPACHAR'} onClick={filtrarPorDespachar}
+                    />
                 </SimpleGrid>
 
                 {telefono ? (
@@ -451,7 +507,7 @@ export default function VentasDashboard() {
                     </Box>
                 ) : seccionGraficos}
 
-                <Paper withBorder radius="lg" p={{ base: 'xs', sm: 'md' }} style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+                <Paper ref={listaRef} withBorder radius="lg" p={{ base: 'xs', sm: 'md' }} style={{ boxShadow: 'var(--mm-shadow-card)' }}>
                     {telefono ? (
                         <Stack gap="xs" mb="sm">
                             <SegmentedControl fullWidth size="xs" color="navy.9" value={tipo} onChange={setTipo} data={[{ value: 'todos', label: 'Todas' }, { value: 'DETAL', label: 'Detal' }, { value: 'MAYOR', label: 'Mayor' }, { value: 'ONLINE', label: 'Online' }]} />
@@ -476,7 +532,7 @@ export default function VentasDashboard() {
                             {filtrosActivos > 0 && (
                                 <Group gap={6} wrap="wrap">
                                     {doc && <Badge size="sm" variant="light" color="navy" rightSection={<CloseButton size="xs" onClick={() => setDoc(null)} />}>{DOC[doc]?.etiqueta || doc}</Badge>}
-                                    {estado && <Badge size="sm" variant="light" color="blue" rightSection={<CloseButton size="xs" onClick={() => setEstado(null)} />}>{estado}</Badge>}
+                                    {estado && <Badge size="sm" variant="light" color="blue" rightSection={<CloseButton size="xs" onClick={() => setEstado(null)} />}>{ETIQUETA_DESPACHO[estado] || estado}</Badge>}
                                     {pago && <Badge size="sm" variant="light" color="orange" rightSection={<CloseButton size="xs" onClick={() => setPago(null)} />}>{pago}</Badge>}
                                     {(orden.sort !== 'fecha' || orden.dir !== 'desc') && (
                                         <Badge size="sm" variant="light" color="gray" rightSection={<CloseButton size="xs" onClick={() => setOrden({ sort: 'fecha', dir: 'desc' })} />}>
@@ -491,7 +547,7 @@ export default function VentasDashboard() {
                             <SegmentedControl color="navy.9" value={tipo} onChange={setTipo} data={[{ value: 'todos', label: 'Todas' }, { value: 'DETAL', label: 'Detal' }, { value: 'MAYOR', label: 'Mayor' }, { value: 'ONLINE', label: 'Online' }]} />
                             <TextInput flex="1 1 220px" placeholder="Buscar por documento, cliente o RIF…" leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)} />
                             <Select placeholder="Documento" clearable data={DOCUMENTOS} value={doc} onChange={setDoc} w={170} />
-                            <Select placeholder="Despacho" clearable data={['Pendiente', 'Empacado', 'Parcial', 'Completado', 'Cancelado']} value={estado} onChange={setEstado} w={150} />
+                            <Select placeholder="Despacho" clearable data={DESPACHOS} value={estado} onChange={setEstado} w={165} />
                             <Select placeholder="Pago" clearable data={['Pagado', 'Pendiente', 'Vencido']} value={pago} onChange={setPago} w={140} />
                         </Group>
                     )}
@@ -590,7 +646,7 @@ export default function VentasDashboard() {
                 <Stack gap="sm">
                     <Select label="Tipo de documento" placeholder="Todos" clearable data={DOCUMENTOS} value={doc} onChange={setDoc} />
                     <SimpleGrid cols={2} spacing="xs">
-                        <Select label="Despacho" placeholder="Todos" clearable data={['Pendiente', 'Empacado', 'Parcial', 'Completado', 'Cancelado']} value={estado} onChange={setEstado} />
+                        <Select label="Despacho" placeholder="Todos" clearable data={DESPACHOS} value={estado} onChange={setEstado} />
                         <Select label="Pago" placeholder="Todos" clearable data={['Pagado', 'Pendiente', 'Vencido']} value={pago} onChange={setPago} />
                     </SimpleGrid>
                     <Select

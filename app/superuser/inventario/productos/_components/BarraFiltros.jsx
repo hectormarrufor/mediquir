@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ActionIcon, Button, Checkbox, Group, Menu, Paper, SegmentedControl, Select, SimpleGrid, Stack, Switch, TextInput, Tooltip } from '@mantine/core';
+import { ActionIcon, Badge, Button, Checkbox, Collapse, Group, Menu, Paper, SegmentedControl, Select, SimpleGrid, Stack, Switch, TextInput, Tooltip } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import { IconArrowBackUp, IconChevronsDown, IconChevronsUp, IconColumns3, IconFileSpreadsheet, IconFileTypePdf, IconFilterOff, IconLock, IconLockOpen, IconPlus, IconSearch, IconX } from '@tabler/icons-react';
+import { IconAdjustmentsHorizontal, IconArrowBackUp, IconChevronsDown, IconChevronsUp, IconColumns3, IconFileSpreadsheet, IconFileTypePdf, IconFilterOff, IconLock, IconLockOpen, IconPlus, IconSearch, IconX } from '@tabler/icons-react';
 import { COLUMNAS } from '../_lib/columnas';
 
 const ESTADOS = [
@@ -25,6 +25,8 @@ export default function BarraFiltros({
     // (se perdían letras y los espacios, porque la URL guarda el texto sin espacios al final). Ahora solo se copia de la URL al campo
     // cuando el cambio NO lo mandamos nosotros (botón "limpiar filtros", atrás del navegador, enlace compartido).
     const [texto, setTexto] = useState(params.q);
+    const [verFiltrosMovil, setVerFiltrosMovil] = useState(false);
+    const nFiltrosSecundarios = ['categoriaId', 'marcaId', 'grupoId', 'tagId', 'oferta'].filter((k) => Boolean(params[k])).length;
     const [textoDebounced] = useDebouncedValue(texto, 300);
     const enviado = useRef(params.q);
     useEffect(() => {
@@ -125,8 +127,23 @@ export default function BarraFiltros({
 
                 {isMobile ? (
                     <>
-                        <SimpleGrid cols={2} spacing="xs">{filtros}</SimpleGrid>
-                        {acciones}
+                        <Group justify="space-between" gap={6} wrap="wrap">
+                            <Button
+                                size="xs"
+                                variant={nFiltrosSecundarios > 0 ? 'filled' : 'default'}
+                                color="navy.9"
+                                leftSection={<IconAdjustmentsHorizontal size={14} />}
+                                rightSection={nFiltrosSecundarios > 0 ? <Badge size="xs" circle color="sky.3" c="navy.9">{nFiltrosSecundarios}</Badge> : null}
+                                onClick={() => setVerFiltrosMovil((v) => !v)}
+                                tt="none"
+                            >
+                                Filtros
+                            </Button>
+                            {acciones}
+                        </Group>
+                        <Collapse in={verFiltrosMovil || nFiltrosSecundarios > 0}>
+                            <SimpleGrid cols={2} spacing="xs">{filtros}</SimpleGrid>
+                        </Collapse>
                     </>
                 ) : (
                     <Group gap="sm" wrap="wrap">{filtros}{acciones}</Group>
