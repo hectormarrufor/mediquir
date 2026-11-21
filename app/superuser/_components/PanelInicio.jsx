@@ -282,13 +282,62 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
                     )
                 )}
 
+                {/* Envíos empacados pendientes de despacho (por agencia de envíos o retiro en tienda) */}
+                {!isLoading && (d?.pedidos?.empacadosPorDespachar > 0) && (
+                    <Paper
+                        radius="lg"
+                        p={0}
+                        style={{
+                            overflow: 'hidden',
+                            border: '2px solid rgba(255, 255, 255, 0.35)',
+                            boxShadow: '0 8px 24px rgba(103, 65, 217, 0.28)',
+                        }}
+                    >
+                        <UnstyledButton
+                            component={Link}
+                            href="/superuser/ventas/despachos"
+                            w="100%"
+                            p={{ base: 'sm', sm: 'md' }}
+                            style={{
+                                display: 'block',
+                                background: 'linear-gradient(135deg, #4c6ef5 0%, #7950f2 55%, #ae3ec9 100%)',
+                                color: 'white',
+                            }}
+                        >
+                            <Group justify="space-between" wrap="nowrap" gap="sm">
+                                <Group wrap="nowrap" gap="sm" style={{ minWidth: 0 }}>
+                                    <ThemeIcon size={44} radius="md" color="white" variant="white" c="grape.7" style={{ flexShrink: 0 }}>
+                                        <IconTruckDelivery size={24} />
+                                    </ThemeIcon>
+                                    <Box style={{ minWidth: 0 }}>
+                                        <Group gap={8} wrap="wrap" align="center">
+                                            <Text fw={900} fz={{ base: 'md', sm: 'lg' }} lh={1.2}>
+                                                {d.pedidos.empacadosPorDespachar === 1
+                                                    ? '1 envío empacado pendiente de despacho'
+                                                    : `${d.pedidos.empacadosPorDespachar} envíos empacados pendientes de despacho`}
+                                            </Text>
+                                            <Badge size="md" radius="xl" color="yellow" variant="filled" c="dark.9" fw={900}>
+                                                DESPACHOS POR AGENCIA
+                                            </Badge>
+                                        </Group>
+                                        <Text size="xs" c="white" opacity={0.92} mt={2}>
+                                            Toca aquí para ver los pedidos por agencia, cambiar la agencia de envío si hace falta, entregar al chofer o imprimir Actas PDF.
+                                        </Text>
+                                    </Box>
+                                </Group>
+                                <Badge size="lg" variant="white" color="grape.8" style={{ flexShrink: 0 }}>Abrir →</Badge>
+                            </Group>
+                        </UnstyledButton>
+                    </Paper>
+                )}
+
                 {/* Pulso del negocio */}
                 <SimpleGrid cols={{ base: 2, lg: 4 }} spacing={{ base: 6, sm: 'md' }}>
                     <Pulso icono={IconCash} color="teal" titulo="Ventas de hoy" cargando={isLoading} valor={fmtUsd(d?.ventas.hoyTotal)} cambio={d?.ventas.cambioVsAyer} detalle={`${d?.ventas.hoyVentas ?? 0} venta(s) · vs ayer`} href="/superuser/ventas" />
                     <Pulso icono={IconReceipt} color="blue" titulo="Ventas del mes" cargando={isLoading} valor={fmtUsd(d?.ventas.mesTotal)} detalle={`${d?.ventas.mesVentas ?? 0} venta(s)`} href="/superuser/ventas" />
                     <Pulso icono={IconWallet} color="orange" titulo="Por cobrar" cargando={isLoading} valor={fmtUsd(d?.porCobrar.total)} detalle={d?.porCobrar.vencidas ? `${d.porCobrar.vencidas} vencida(s)` : 'Sin vencidas'} href="/superuser/cxc" />
                     <Pulso icono={IconWallet} color="red" titulo="Por pagar" cargando={isLoading} valor={fmtUsd(d?.porPagar.total)} detalle={d?.porPagar.vencidas ? `${d.porPagar.vencidas} vencida(s)` : 'Sin vencidas'} href="/superuser/cxp" />
-                    <Pulso icono={IconTruckDelivery} color="violet" titulo="Por despachar" cargando={isLoading} valor={d?.pedidos.porDespachar ?? 0} detalle={`${d?.pedidos.sinAsignar ?? 0} sin asignar`} href="/superuser/ventas?estado=POR_DESPACHAR" />
+                    <Pulso icono={IconTruckDelivery} color="violet" titulo="Por despachar" cargando={isLoading} valor={d?.pedidos.empacadosPorDespachar ?? d?.pedidos.porDespachar ?? 0} detalle="Despachos por agencia y Actas PDF" href="/superuser/ventas/despachos" />
                     <Pulso icono={IconShoppingCart} color="cyan" titulo="Tienda online hoy" cargando={isLoading} valor={fmtUsd(d?.tienda?.hoyTotal)} detalle={`${d?.tienda?.hoyCompras ?? 0} compra(s) · ${d?.tienda?.recibosMes ?? 0} recibo(s) sin factura en el mes`} href="/superuser/ventas" />
                     <Pulso icono={IconReceiptTax} color="grape" titulo="IVA facturado del mes" cargando={isLoading} valor={fmtUsd(d?.ivaMes)} detalle="Solo facturas, por fecha de emisión" href="/superuser/finanzas" />
                     <Pulso icono={IconAlertTriangle} color="yellow" titulo="Stock bajo" cargando={isLoading} valor={d?.stockBajo.total ?? 0} detalle={`${d?.stockBajo.agotados ?? 0} agotado(s)`} href="/superuser/inventario/productos" />

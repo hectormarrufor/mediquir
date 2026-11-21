@@ -245,6 +245,7 @@ export default function DashboardVendedor() {
     const nEmpacar = data?.porEmpacar?.length ?? 0;
     const nDisponibles = data?.porEmpacarDisponibles?.length ?? 0;
     const nEntregar = data?.porEntregar?.length ?? 0;
+    const nEnviosDespacho = data?.enviosPorDespachar ?? nEntregar;
     const nEtiquetar = data?.porEtiquetar?.length ?? 0;
 
     const tomarEmpaque = async (pedido) => {
@@ -433,11 +434,56 @@ export default function DashboardVendedor() {
                     )
                 )}
 
+                {/* Envíos empacados pendientes de despacho por agencia */}
+                {!isLoading && nEnviosDespacho > 0 && (
+                    <Paper
+                        radius="lg"
+                        p={0}
+                        style={{
+                            overflow: 'hidden',
+                            border: '2px solid rgba(255, 255, 255, 0.35)',
+                            boxShadow: '0 8px 24px rgba(103, 65, 217, 0.28)',
+                        }}
+                    >
+                        <UnstyledButton
+                            onClick={() => router.push('/superuser/ventas/despachos')}
+                            w="100%"
+                            p={{ base: 'sm', sm: 'md' }}
+                            style={{
+                                background: 'linear-gradient(135deg, #4c6ef5 0%, #7950f2 55%, #ae3ec9 100%)',
+                                color: 'white',
+                            }}
+                        >
+                            <Group justify="space-between" wrap="nowrap" gap="sm">
+                                <Group wrap="nowrap" gap="sm" style={{ minWidth: 0 }}>
+                                    <ThemeIcon size={44} radius="md" color="white" variant="white" c="grape.7" style={{ flexShrink: 0 }}>
+                                        <IconTruckDelivery size={24} />
+                                    </ThemeIcon>
+                                    <Box style={{ minWidth: 0 }}>
+                                        <Group gap={8} wrap="wrap" align="center">
+                                            <Text fw={900} fz={{ base: 'md', sm: 'lg' }} lh={1.2}>
+                                                {nEnviosDespacho === 1 ? '1 envío pendiente de despacho' : `${nEnviosDespacho} envíos pendientes de despacho`}
+                                            </Text>
+                                            <Badge size="md" radius="xl" color="yellow" variant="filled" c="dark.9" fw={900}>
+                                                ENTREGAR A AGENCIA / CLIENTE
+                                            </Badge>
+                                        </Group>
+                                        <Text size="xs" c="white" opacity={0.92} mt={2}>
+                                            ¿Llegó el chofer de una agencia de envíos? Toca aquí, elige la agencia y entrega todos sus paquetes con firma y Acta PDF.
+                                        </Text>
+                                    </Box>
+                                </Group>
+                                <Badge size="lg" variant="white" color="grape.8" style={{ flexShrink: 0 }}>Abrir →</Badge>
+                            </Group>
+                        </UnstyledButton>
+                    </Paper>
+                )}
+
                 <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }} spacing="md">
                     <Indicador icono={IconPrinter} color={nImprimir ? 'orange' : 'gray'} titulo="Documentos por imprimir" cargando={porImprimir.isLoading} valor={nImprimir} detalle={nImprimir ? 'Facturas y notas ya aprobadas: toca para imprimirlas' : 'Ninguno aprobado pendiente'} onClick={() => router.push('/superuser/ventas/por-imprimir')} />
                     <Indicador icono={IconPackage} color="blue" titulo="Por empacar" cargando={isLoading} valor={nEmpacar} detalle={nEmpacar ? 'Pedidos que te asignaron' : 'Nada pendiente'} />
                     <Indicador icono={IconTag} color="violet" titulo="Por etiquetar" cargando={isLoading} valor={nEtiquetar} detalle={nEtiquetar ? 'Pedidos que te asignaron' : 'Nada pendiente'} />
-                    <Indicador icono={IconTruckDelivery} color="grape" titulo="Por entregar" cargando={isLoading} valor={nEntregar} detalle={nEntregar ? 'Listos para el chofer o la agencia' : 'Nada pendiente'} />
+                    <Indicador icono={IconTruckDelivery} color="grape" titulo="Envíos por despachar" cargando={isLoading} valor={nEnviosDespacho} detalle={nEnviosDespacho ? 'Toca para despachar por agencia o cliente' : 'Ver historial de actas PDF'} onClick={() => router.push('/superuser/ventas/despachos')} />
                     <Indicador icono={IconCash} color="teal" titulo="Vendido hoy" cargando={isLoading} valor={fmtUsd(data?.hoy?.totalUsd)} detalle={`${data?.hoy?.ventas ?? 0} ventas · ${data?.hoy?.detal ?? 0} al detal`} />
                 </SimpleGrid>
 

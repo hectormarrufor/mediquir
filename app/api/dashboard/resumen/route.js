@@ -40,6 +40,7 @@ export async function GET() {
                FROM "CuentasPorPagar" c WHERE c."estado" <> 'Pagado' AND c."saldoPendiente" > 0`),
             q(`SELECT
                 COUNT(*) FILTER (WHERE v."statusDespacho" IN ('Pendiente', 'Empacado', 'Parcial') AND v."tipoEntrega" <> 'sitio')::int AS "porDespachar",
+                COUNT(*) FILTER (WHERE v."statusDespacho" NOT IN ('Cancelado', 'Completado') AND v."empacadoAt" IS NOT NULL AND v."tipoEntrega" <> 'sitio')::int AS "empacadosPorDespachar",
                 COUNT(*) FILTER (WHERE v."statusDespacho" NOT IN ('Cancelado', 'Completado') AND v."empacadoAt" IS NULL AND v."tipoEntrega" <> 'sitio')::int AS "porEmpacar",
                 COUNT(*) FILTER (WHERE v."statusDespacho" = 'Pendiente' AND v."tipoEntrega" <> 'sitio' AND v."empacadorId" IS NULL AND v."empacadoAt" IS NULL)::int AS "sinAsignar"
                FROM "Ventas" v`),

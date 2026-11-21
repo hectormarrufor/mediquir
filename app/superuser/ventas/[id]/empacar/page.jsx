@@ -14,6 +14,7 @@ import {
 } from '@tabler/icons-react';
 import EscanerCodigo, { escanerDisponible } from '../../_components/EscanerCodigo';
 import PresentacionesForm from '../../_components/PresentacionesForm';
+import { AGENCIAS_ENVIO_CON_OTRA as AGENCIAS_ENVIO } from '@/app/constants/agencias';
 
 // La foto del teléfono pesa varios MB y el servidor acepta ~4 MB: se reduce y se comprime antes de subirla
 async function comprimirFoto(archivo, maxLado = 1600, calidad = 0.8) {
@@ -26,14 +27,6 @@ async function comprimirFoto(archivo, maxLado = 1600, calidad = 0.8) {
     bmp.close?.();
     return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('No se pudo procesar la foto'))), 'image/jpeg', calidad));
 }
-
-const AGENCIAS_ENVIO = [
-    'Transporte Chacón',
-    'Transumica',
-    'Transporte Carrillo',
-    'Transporte Sígueme',
-    'Otra agencia / chofer',
-];
 
 function Aviso({ titulo, texto, volver }) {
     return (

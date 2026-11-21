@@ -56,7 +56,7 @@ export async function GET() {
         const desde = inicioDeHoy();
         const abiertas = { statusDespacho: { [Op.notIn]: CERRADOS } };
 
-        const [porEmpacar, porEmpacarDisponibles, porEtiquetar, porEntregar, firmadas, ventasHoy, pedidosEnCurso, tasa] = await Promise.all([
+        const [porEmpacar, porEmpacarDisponibles, porEtiquetar, porEntregar, enviosPorDespachar, firmadas, ventasHoy, pedidosEnCurso, tasa] = await Promise.all([
             Venta.findAll({ where: { empacadorId: yo, empacadoAt: null, ...abiertas }, include: INCLUDE_TAREA, order: [['createdAt', 'ASC']] }),
             Venta.findAll({
                 where: {
@@ -72,8 +72,10 @@ export async function GET() {
                 order: [['createdAt', 'ASC']],
             }),
             Venta.findAll({ where: { etiquetadorId: yo, etiquetadoAt: null, ...abiertas }, include: INCLUDE_TAREA, order: [['createdAt', 'ASC']] }),
-            // Ya empacados y etiquetados (retiro por cliente o por chofer/agencia): esperan ser entregados / despachados
-            Venta.findAll({ where: { [Op.or]: [{ empacadorId: yo }, { etiquetadorId: yo }, { vendedorId: yo }], empacadoAt: { [Op.ne]: null }, etiquetadoAt: { [Op.ne]: null }, tipoEntrega: { [Op.ne]: 'sitio' }, ...abiertas }, include: INCLUDE_TAREA, order: [['createdAt', 'ASC']] }),
+            // Ya empacados (retiro por cliente o por chofer/agencia): esperan ser entregados / despachados
+            Venta.findAll({ where: { [Op.or]: [{ empacadorId: yo }, { etiquetadorId: yo }, { vendedorId: yo }], empacadoAt: { [Op.ne]: null }, tipoEntrega: { [Op.ne]: 'sitio' }, ...abiertas }, include: INCLUDE_TAREA, order: [['createdAt', 'ASC']] }),
+            // Total global de envíos ya empacados pendientes de despacho (cualquier agencia o cliente en Mediquir)
+            Venta.count({ where: { empacadoAt: { [Op.ne]: null }, tipoEntrega: { [Op.ne]: 'sitio' }, ...abiertas } }),
             Venta.findAll({
                 where: { [Op.or]: [{ empacadorId: yo, empacadoAt: { [Op.ne]: null } }, { etiquetadorId: yo, etiquetadoAt: { [Op.ne]: null } }] },
                 include: [{ model: Cliente, as: 'cliente', attributes: ['nombre'] }],
@@ -105,6 +107,7 @@ export async function GET() {
             porEmpacarDisponibles: porEmpacarDisponibles.map((v) => ({ ...tarea(v), renglones: v.detalles.length })),
             porEtiquetar: porEtiquetar.map(tarea),
             porEntregar: porEntregar.map((v) => ({ ...tarea(v), transporte: v.quienRetira || '' })),
+            enviosPorDespachar,
             firmadas: firmadas.map((v) => ({
                 id: v.id, numero: v.numeroDocumento, cliente: v.cliente?.nombre || 'Cliente al detal',
                 empaque: v.empacadorId === yo ? v.empacadoAt : null,
