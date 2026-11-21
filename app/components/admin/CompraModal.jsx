@@ -190,7 +190,11 @@ export default function CompraModal({ opened, onClose, tasaBcv = 1, iniciarComoG
             const b = JSON.parse(localStorage.getItem(BORRADOR_COMPRA) || 'null');
             if (b) {
                 if (typeof b.esGasto === 'boolean') setEsGasto(b.esGasto);
-                if (b.form) formCompra.setValues({ ...formCompra.values, ...b.form });
+                if (b.form) formCompra.setValues({
+                    ...formCompra.values,
+                    ...b.form,
+                    retencionModo: CONFIG_FISCAL.agenteRetencionIva ? (b.form.retencionModo || 'ahora') : 'no',
+                });
                 if (Array.isArray(b.carritoCompra)) setCarritoCompra(b.carritoCompra);
                 if (b.descuentoPct !== undefined) setDescuentoPct(b.descuentoPct);
                 if (b.gasto) setGasto(b.gasto);

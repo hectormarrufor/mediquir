@@ -14,6 +14,7 @@ import PrecioVisual from '@/app/components/ui/PrecioVisual';
 import NotaCompraModal from './NotaCompraModal';
 import PagarRetenerModal, { estadoRetencion, saldoDe } from './_components/PagarRetenerModal';
 import { fechaCaracas, formatearFecha } from '@/app/constants/hora';
+import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { useAuth } from '@/hooks/useAuth';
 import GuiaTutorial from '../_components/GuiaTutorial';
@@ -27,13 +28,15 @@ const RETENCION = {
     retenida: { color: 'teal', label: 'Retenida' },
     pendiente: { color: 'orange', label: 'Por retener' },
     sin_retener: { color: 'gray', label: 'Sin retener' },
+    no_aplica: { color: 'gray', label: 'No aplica' },
     sin_iva: { color: 'gray', label: 'Sin IVA' },
     nota: { color: 'indigo', label: 'Nota de entrega' },
 };
+const esAgenteRet = CONFIG_FISCAL.agenteRetencionIva;
 const VISTAS = {
     periodo: { titulo: 'Historial de compras y gastos', sub: 'Las facturas, notas de entrega y gastos registrados en el periodo.' },
-    retenciones: { titulo: 'Retenciones de IVA', sub: 'Las facturas por retener y los comprobantes emitidos.' },
-    por_pagar: { titulo: 'Cuentas por pagar', sub: 'Lo que se le debe a cada proveedor: pagar y retener en un paso.' },
+    retenciones: { titulo: 'Retenciones de IVA', sub: 'Comprobantes de retención emitidos.' },
+    por_pagar: { titulo: 'Cuentas por pagar', sub: esAgenteRet ? 'Lo que se le debe a cada proveedor: pagar y retener en un paso.' : 'Lo que se le debe a cada proveedor.' },
 };
 
 async function pedir(url) {
@@ -182,10 +185,10 @@ export default function ComprasDashboardPage() {
                 <Table.Td><PrecioVisual valor={compra.totalFinal} simbolo={sim(compra.moneda)} size="sm" fw={700} /></Table.Td>
                 <Table.Td>
                     <Group gap={6} justify="flex-end" wrap="nowrap">
-                        {!esVendedor && vista === 'por_pagar' && saldo > 0.005 && <Button size="xs" color="teal" leftSection={<IconCash size={14} />} onClick={() => setAccion({ modo: 'pagar', facturas: [compra] })}>{['pendiente', 'sin_retener'].includes(est) ? 'Pagar y retener' : 'Pagar'}</Button>}
-                        {!esVendedor && vista !== 'por_pagar' && ['pendiente', 'sin_retener'].includes(est) && <Button size="xs" color="orange" variant={est === 'pendiente' ? 'filled' : 'light'} onClick={() => setAccion({ modo: 'retener', facturas: [compra] })}>Retener</Button>}
+                        {!esVendedor && vista === 'por_pagar' && saldo > 0.005 && <Button size="xs" color="teal" leftSection={<IconCash size={14} />} onClick={() => setAccion({ modo: 'pagar', facturas: [compra] })}>{esAgenteRet && ['pendiente', 'sin_retener'].includes(est) ? 'Pagar y retener' : 'Pagar'}</Button>}
+                        {!esVendedor && esAgenteRet && vista !== 'por_pagar' && ['pendiente', 'sin_retener'].includes(est) && <Button size="xs" color="orange" variant={est === 'pendiente' ? 'filled' : 'light'} onClick={() => setAccion({ modo: 'retener', facturas: [compra] })}>Retener</Button>}
                         {/* Pedido de administración: un botón aparte para las facturas a las que nunca se les hará retención */}
-                        {!esVendedor && vista === 'retenciones' && est === 'pendiente' && <Button size="xs" variant="default" leftSection={<IconReceiptOff size={14} />} onClick={() => noAplica(compra)}>No aplica retención</Button>}
+                        {!esVendedor && esAgenteRet && vista === 'retenciones' && est === 'pendiente' && <Button size="xs" variant="default" leftSection={<IconReceiptOff size={14} />} onClick={() => noAplica(compra)}>No aplica retención</Button>}
                         {est === 'retenida' && vista !== 'por_pagar' && <Button size="xs" variant="light" color="green" onClick={() => router.push(`/superuser/compras/${compra.id}/retencion`)}>Comprobante</Button>}
                         {compra.tipoDocumento === 'FACTURA' && vista === 'periodo' && <Button size="xs" variant="subtle" color="grape" onClick={() => setNotaDe(compra)}>Nota del proveedor</Button>}
                         <Button size="xs" variant="light" color="blue" rightSection={<IconArrowRight size={14} />} onClick={() => router.push(`/superuser/compras/${compra.id}`)}>Ver</Button>
@@ -242,8 +245,8 @@ export default function ComprasDashboardPage() {
         { doc: 'Notas de entrega', valor: notasMes, ver: () => abrir('periodo') },
         { doc: 'Gastos', valor: gastosMes, ver: () => abrir('periodo') },
         ...(esVendedor ? [] : [
-            { doc: 'Comprobantes de retención de IVA', valor: comprobantes.length, ver: () => { abrir('retenciones'); setSubRet('emitidos'); } },
-            { doc: 'Facturas por retener (todas)', valor: faltaRetener.length, ver: () => { abrir('retenciones'); setSubRet('pendientes'); } },
+            ...((esAgenteRet || comprobantes.length > 0) ? [{ doc: 'Comprobantes de retención de IVA', valor: comprobantes.length, ver: () => { abrir('retenciones'); setSubRet('emitidos'); } }] : []),
+            ...(esAgenteRet ? [{ doc: 'Facturas por retener (todas)', valor: faltaRetener.length, ver: () => { abrir('retenciones'); setSubRet('pendientes'); } }] : []),
             { doc: 'Cuentas por pagar (todas)', valor: porPagar.length, extra: deudaTexto, ver: () => abrir('por_pagar') },
         ]),
     ];
@@ -389,7 +392,7 @@ export default function ComprasDashboardPage() {
             {vista === 'por_pagar' && (
                 <>
                     {buscador(false)}
-                    {porPagar.length > 0 && <Text size="sm" c="gray.3" mb="sm">Total por pagar: <b>{deudaTexto}</b>. Marca varias facturas de un proveedor para pagarlas y retenerlas juntas. Si quien pagó no te pasó el comprobante, igual puedes marcarlo como pagado.</Text>}
+                    {porPagar.length > 0 && <Text size="sm" c="gray.3" mb="sm">Total por pagar: <b>{deudaTexto}</b>. Marca varias facturas de un proveedor para {esAgenteRet ? 'pagarlas y retenerlas' : 'pagarlas'} juntas. Si quien pagó no te pasó el comprobante, igual puedes marcarlo como pagado.</Text>}
                     {tablaCompras('No se le debe nada a ningún proveedor.')}
                 </>
             )}
@@ -399,12 +402,12 @@ export default function ComprasDashboardPage() {
                     <Group justify="space-between" wrap="wrap" gap="sm">
                         <div>
                             <Text fw={800}>{seleccion.length} factura(s) de {seleccion[0].proveedor?.nombre}</Text>
-                            <Text size="sm" c="dimmed">Un solo comprobante de retención{vista === 'por_pagar' ? ' y un solo pago' : ''}.</Text>
+                            <Text size="sm" c="dimmed">{esAgenteRet ? `Un solo comprobante de retención${vista === 'por_pagar' ? ' y un solo pago' : ''}.` : 'Pago conjunto de facturas del mismo proveedor.'}</Text>
                         </div>
                         <Group gap="xs">
                             <Button variant="default" onClick={() => setSeleccion([])}>Quitar selección</Button>
-                            {vista === 'retenciones' && selPorRetener && <Button color="orange" onClick={() => setAccion({ modo: 'retener', facturas: seleccion })}>Generar un solo comprobante</Button>}
-                            {vista === 'por_pagar' && selConSaldo && <Button color="teal" leftSection={<IconCash size={16} />} onClick={() => setAccion({ modo: 'pagar', facturas: seleccion })}>{selPorRetener ? 'Pagar y retener' : 'Pagar'}</Button>}
+                            {esAgenteRet && vista === 'retenciones' && selPorRetener && <Button color="orange" onClick={() => setAccion({ modo: 'retener', facturas: seleccion })}>Generar un solo comprobante</Button>}
+                            {vista === 'por_pagar' && selConSaldo && <Button color="teal" leftSection={<IconCash size={16} />} onClick={() => setAccion({ modo: 'pagar', facturas: seleccion })}>{esAgenteRet && selPorRetener ? 'Pagar y retener' : 'Pagar'}</Button>}
                         </Group>
                     </Group>
                 </Paper>

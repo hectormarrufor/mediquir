@@ -17,12 +17,13 @@ const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const fmt = (n) => Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
-// Estado de la retención de una compra: emitida (con comprobante), pendiente («al pagar»), no hecha (tiene IVA y nunca se retuvo) o no aplica
+// Estado de la retención de una compra: emitida (con comprobante), pendiente («al pagar»), no hecha (tiene IVA y nunca se retuvo), no aplica o nota
 export function estadoRetencion(c) {
     if (c.tipoDocumento !== 'FACTURA') return 'nota';
     const rets = c.retenciones || [];
     if (rets.some((r) => r.comprobante)) return 'retenida';
     if (!(Number(c.montoIva) > 0)) return 'sin_iva';
+    if (!CONFIG_FISCAL.agenteRetencionIva) return 'no_aplica';
     if (rets.some((r) => r.estado === 'PENDIENTE')) return 'pendiente';
     return 'sin_retener';
 }

@@ -5,6 +5,7 @@ import { tasaVigente, tasaDelDia } from '../../_lib/tasaBcv';
 import { retenerFacturas, ErrorRetencion } from '../../_lib/retenciones';
 import { ErrorNumeracion } from '../../_lib/numeracion';
 import { pagarCuenta, metodoValido, referenciaDePago, fechaDePago, ErrorPago } from '../../_lib/pagosCompra';
+import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { fechaCaracas } from '@/app/constants/hora';
 
 export const dynamic = 'force-dynamic';
@@ -37,9 +38,9 @@ export async function POST(request) {
         if (facturas.length !== ids.length) throw new ErrorPago('No se encontró alguna de las facturas', 404);
         if (new Set(facturas.map((f) => f.proveedorId)).size > 1) throw new ErrorPago('Se pagan juntas solo facturas de un mismo proveedor');
 
-        // 1. Retención de las que todavía no tienen comprobante
+        // 1. Retención de las que todavía no tienen comprobante (solo si la empresa es agente de retención)
         let retencion = null;
-        if (body.retener) {
+        if (CONFIG_FISCAL.agenteRetencionIva && body.retener) {
             const emitidas = new Set((await RetencionIva.findAll({ where: { facturaCompraId: ids, tipo: 'COMPRA' }, attributes: ['facturaCompraId', 'comprobante'], transaction: t }))
                 .filter((r) => r.comprobante).map((r) => r.facturaCompraId));
             const porRetener = facturas.filter((f) => f.tipoDocumento === 'FACTURA' && Number(f.montoIva) > 0 && !emitidas.has(f.id)).map((f) => f.id);

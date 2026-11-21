@@ -4,6 +4,7 @@ import db from '@/models';
 import { requerirNoVendedor } from '../../_lib/acceso';
 import { retenerFacturas, proximoComprobante, ErrorRetencion } from '../../_lib/retenciones';
 import { ErrorNumeracion } from '../../_lib/numeracion';
+import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { fechaCaracas } from '@/app/constants/hora';
 
 export const dynamic = 'force-dynamic';
@@ -57,6 +58,9 @@ export async function GET(request) {
 export async function POST(request) {
     const acceso = await requerirNoVendedor();
     if (acceso.error) return acceso.error;
+    if (!CONFIG_FISCAL.agenteRetencionIva) {
+        return NextResponse.json({ error: 'La empresa ya no es agente de retención de IVA: no se emiten retenciones en compras.' }, { status: 400 });
+    }
     const t = await sequelize.transaction();
     try {
         const body = await request.json();

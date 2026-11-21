@@ -36,10 +36,14 @@ export async function GET(request) {
             whereClause.createdAt = { [Op.between]: [`${fechaInicio} 00:00:00`, `${fechaInicio} 23:59:59`] };
         }
 
-        // ?pendientes=1: todo lo que falta por pagar o por retener, de cualquier fecha (no solo lo del periodo)
+        // ?pendientes=1: todo lo que falta por pagar (y por retener solo si somos agentes de retención)
         if (searchParams.get('pendientes') === '1') {
-            const conRetPendiente = await RetencionIva.findAll({ where: { tipo: 'COMPRA', estado: 'PENDIENTE' }, attributes: ['facturaCompraId'], raw: true });
-            whereClause = { [Op.or]: [{ '$cuentaPorPagar.saldoPendiente$': { [Op.gt]: 0.005 } }, { id: conRetPendiente.map((r) => r.facturaCompraId).filter(Boolean) }] };
+            if (CONFIG_FISCAL.agenteRetencionIva) {
+                const conRetPendiente = await RetencionIva.findAll({ where: { tipo: 'COMPRA', estado: 'PENDIENTE' }, attributes: ['facturaCompraId'], raw: true });
+                whereClause = { [Op.or]: [{ '$cuentaPorPagar.saldoPendiente$': { [Op.gt]: 0.005 } }, { id: conRetPendiente.map((r) => r.facturaCompraId).filter(Boolean) }] };
+            } else {
+                whereClause = { '$cuentaPorPagar.saldoPendiente$': { [Op.gt]: 0.005 } };
+            }
         }
 
         // ?proveedorId=..&soloFacturas=1: las facturas de un proveedor (para elegir la que afecta una nota de débito)
@@ -158,8 +162,8 @@ export async function POST(request) {
         const totalFinal = exacto(subtotalNum + montoIva);
         const porcentajeRetencion = [75, 100].includes(Number(porcentajeRetencionCliente)) ? Number(porcentajeRetencionCliente) : CONFIG_FISCAL.porcentajeRetencionCompras;
         // Cuándo se retiene: 'ahora' (comprobante al registrar), 'despues' (queda «Falta retener» y se hace al pagar; solo a crédito) o 'no'
-        const modoRetencion = ['ahora', 'despues', 'no'].includes(retencionModo) ? retencionModo : (aplicarRetencion === false ? 'no' : 'ahora');
         const aplicaRetencion = CONFIG_FISCAL.agenteRetencionIva && esFactura && montoIva > 0;
+        const modoRetencion = !aplicaRetencion ? 'no' : (['ahora', 'despues', 'no'].includes(retencionModo) ? retencionModo : (aplicarRetencion === false ? 'no' : 'ahora'));
         const retiene = aplicaRetencion && modoRetencion === 'ahora';
         const retencionPendiente = aplicaRetencion && modoRetencion === 'despues' && condicionPago === 'Credito';
         // Misma regla que la retención al pagar y que la pantalla: IVA en Bs (tasa completa, a céntimos) × %, a céntimos.

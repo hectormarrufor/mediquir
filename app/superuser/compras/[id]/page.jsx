@@ -10,6 +10,7 @@ import PrecioVisual from '@/app/components/ui/PrecioVisual';
 import { formatoExacto } from '@/app/helpers/sinRedondeo';
 import { fechaCaracas, formatearFecha, formatearFechaHora } from '@/app/constants/hora';
 import { aBolivares, aDolares } from '@/app/constants/facturacion';
+import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { useAuth } from '@/hooks/useAuth';
 import { OPCIONES_PAGO_PROVEEDOR } from '@/app/constants/metodosPago';
@@ -67,13 +68,13 @@ function PagoProveedorCard({ compra, onCambio, onPagarTodo }) {
             </Group>
             {cxp && (
                 <>
-                    <Group justify="space-between"><Text size="sm">Monto a pagar (sin la retención)</Text><PrecioVisual valor={cxp.montoTotal} simbolo={simboloCuenta} size="sm" /></Group>
+                    <Group justify="space-between"><Text size="sm">{Number(compra.montoRetencion) > 0 ? 'Monto a pagar (sin la retención)' : 'Monto a pagar'}</Text><PrecioVisual valor={cxp.montoTotal} simbolo={simboloCuenta} size="sm" /></Group>
                     <Group justify="space-between"><Text size="sm">Vence</Text><Text size="sm" fw={600} c={vencida ? 'red.7' : undefined}>{formatearFecha(cxp.fechaVencimiento) || '—'}</Text></Group>
                     <Group justify="space-between" mt={4}><Text fw={800}>Saldo pendiente</Text><PrecioVisual valor={saldo} simbolo={simboloCuenta} size="lg" fw={800} c={saldo > 0 ? 'red.7' : 'teal.7'} /></Group>
                     {saldo > 0 && (
                         <Group grow mt="sm">
-                            {/* Pago completo: si la factura tiene IVA sin retener, en el mismo paso sale su comprobante y se paga el total menos lo retenido */}
-                            <Button color="teal" leftSection={<IconCash size={18} />} onClick={onPagarTodo}>{['pendiente', 'sin_retener'].includes(estadoRetencion(compra)) ? 'Pagar y retener' : 'Pagar todo'}</Button>
+                            {/* Pago completo: si la empresa es agente de retención y la factura tiene IVA sin retener, en el mismo paso sale su comprobante */}
+                            <Button color="teal" leftSection={<IconCash size={18} />} onClick={onPagarTodo}>{CONFIG_FISCAL.agenteRetencionIva && ['pendiente', 'sin_retener'].includes(estadoRetencion(compra)) ? 'Pagar y retener' : 'Pagar todo'}</Button>
                             <Button variant="light" color="teal" onClick={abrir}>Abono parcial</Button>
                         </Group>
                     )}
@@ -226,7 +227,7 @@ export default function DetalleCompraPage() {
 
                     {!esVendedor && <PagoProveedorCard compra={c} onCambio={refrescar} onPagarTodo={() => setAccion('pagar')} />}
 
-                    {esFactura && (
+                    {esFactura && (CONFIG_FISCAL.agenteRetencionIva || Boolean(ret)) && (
                         <Card withBorder radius="lg" p="md" bg="white">
                             <Group gap={6} mb="xs"><IconFileText size={18} color="var(--mantine-color-green-7)" /><Title order={5} c="navy.9">Retención de IVA</Title></Group>
                             {ret ? (
