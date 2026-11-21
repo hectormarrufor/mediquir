@@ -270,13 +270,11 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const faltaTarifa = !tarifaActual || !tarifasPermitidas.includes(tarifaActual);
     const entregaElegida = formVenta.values.tipoEntrega;
     const faltaEntrega = !esPresupuesto && !entregaElegida;
-    const esTarifaMayor = ['precio6', 'precio5', 'precio1'].includes(tarifaActual);
-    // El tipo de venta (MAYOR vs DETAL) se deduce automáticamente: es MAYOR si usa tarifa mayorista (P6/P5/P1),
-    // si es a crédito, o si requiere empaque y despacho (el cliente o un chofer lo retiran después).
-    // Es DETAL solo cuando es tarifa al detal (P7/P4) + de contado + entrega inmediata en sitio.
+    // El tipo de venta (MAYOR vs DETAL) NO depende de la tarifa de precio:
+    // es MAYOR si es a crédito o si requiere empaque y despacho (pickup / delivery).
+    // Es DETAL cuando es de contado y entrega inmediata en sitio.
     const tipoVenta = (
-        esTarifaMayor
-        || formVenta.values.condicionPago === 'Credito'
+        formVenta.values.condicionPago === 'Credito'
         || (entregaElegida && entregaElegida !== 'sitio')
     ) ? 'MAYOR' : 'DETAL';
 
@@ -337,9 +335,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     // ---- Días de crédito: arrancan con los del cliente; solo administración los cambia (de esta factura o también de las futuras del cliente)
     const esCredito = formVenta.values.condicionPago === 'Credito';
-    // La forma de cobro se ELIGE (sin opción predeterminada) cuando es tarifa mayor, cuando requiere empaque/despacho o para administración.
-    // Si un vendedor hace una venta al detal (P7/P4) con entrega inmediata en sitio, es siempre de contado.
-    const cobroEsEleccion = !esPresupuesto && (puedeEditarPrecio || esTarifaMayor || (entregaElegida && entregaElegida !== 'sitio'));
+    // La forma de cobro se ELIGE (sin opción predeterminada) cuando requiere empaque/despacho o para administración.
+    // Si un vendedor hace una venta con entrega inmediata en sitio, es siempre de contado.
+    const cobroEsEleccion = !esPresupuesto && (puedeEditarPrecio || (entregaElegida && entregaElegida !== 'sitio'));
     const faltaCobro = cobroEsEleccion && !formVenta.values.condicionPago;
     useEffect(() => {
         if (!esPresupuesto && !faltaEntrega && !cobroEsEleccion && formVenta.values.condicionPago !== 'Contado') {
@@ -577,8 +575,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             });
         }
         
-        // Una venta mayorista (tarifa mayor o cliente con crédito) casi siempre es a crédito: si va de contado se confirma antes de asentar
-        if ((esTarifaMayor || clienteTieneCredito) && formVenta.values.condicionPago === 'Contado' && !window.confirm('Esta venta al MAYOR quedó DE CONTADO: se registrará el pago ahora, sin cuenta por cobrar. ¿Es correcto? (Aceptar = de contado · Cancelar = volver para cambiarla a Crédito)')) {
+        // Una venta de un cliente con crédito que quedó de contado se confirma antes de asentar
+        if (tipoVenta === 'MAYOR' && clienteTieneCredito && formVenta.values.condicionPago === 'Contado' && !window.confirm('Esta venta al MAYOR quedó DE CONTADO: se registrará el pago ahora, sin cuenta por cobrar. ¿Es correcto? (Aceptar = de contado · Cancelar = volver para cambiarla a Crédito)')) {
             setVista('datos');
             return;
         }
