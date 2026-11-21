@@ -351,6 +351,9 @@ export async function PUT(request, { params }) {
             venta.statusDespacho = 'Empacado';
             venta.empacadoAt = new Date();
             venta.empaqueVerificado = true;
+            if (body.quienRetira && String(body.quienRetira).trim()) {
+                venta.quienRetira = String(body.quienRetira).trim().slice(0, 120);
+            }
             await venta.save({ transaction: t });
             const empacador = await User.findByPk(yo, { include: [{ model: Empleado, as: 'empleado', attributes: ['nombre'] }], transaction: t });
             const nombreEmpacador = empacador?.empleado?.nombre || empacador?.nombre || 'Un vendedor';

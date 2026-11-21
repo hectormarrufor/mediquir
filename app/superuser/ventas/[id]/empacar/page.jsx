@@ -3,7 +3,7 @@
 import React, { useRef, useState } from 'react';
 import {
     Container, Stack, Paper, Title, Text, Badge, Button, Group, Progress, Image, TextInput, NumberInput,
-    Textarea, Alert, Center, Loader, ActionIcon, Radio, SimpleGrid, ThemeIcon,
+    Textarea, Alert, Center, Loader, ActionIcon, Radio, Select, SimpleGrid, ThemeIcon,
 } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
 import { useVolver } from '@/app/helpers/useVolver';
@@ -26,6 +26,14 @@ async function comprimirFoto(archivo, maxLado = 1600, calidad = 0.8) {
     bmp.close?.();
     return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('No se pudo procesar la foto'))), 'image/jpeg', calidad));
 }
+
+const AGENCIAS_ENVIO = [
+    'Transporte Chacón',
+    'Transumica',
+    'Transporte Carrillo',
+    'Transporte Sígueme',
+    'Otra agencia / chofer',
+];
 
 function Aviso({ titulo, texto, volver }) {
     return (
@@ -137,10 +145,22 @@ export default function EmpacarPage() {
 
     const tomarFoto = (tipo) => { setTipoFoto(tipo); setTimeout(() => inputFoto.current?.click(), 0); };
 
+    const [agencia, setAgencia] = useState('');
+    const [agenciaOtra, setAgenciaOtra] = useState('');
+
     const confirmarEmpaque = async () => {
+        const esDelivery = venta?.tipoEntrega === 'delivery';
+        const agenciaFinal = agencia === 'Otra agencia / chofer' ? agenciaOtra.trim() : (agencia || venta?.quienRetira || '').trim();
+        if (esDelivery && !agenciaFinal) {
+            return notifications.show({ title: 'Falta la agencia de envíos', message: 'Selecciona la agencia o transporte que va a retirar este pedido.', color: 'red' });
+        }
         setEnviando(true);
         try {
-            const res = await fetch(`/api/ventas/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'FIRMAR_EMPAQUE' }) });
+            const res = await fetch(`/api/ventas/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accion: 'FIRMAR_EMPAQUE', ...(esDelivery ? { quienRetira: agenciaFinal } : {}) }),
+            });
             const r = await res.json();
             if (!res.ok) throw new Error(r.error || 'No se pudo confirmar');
             notifications.show({ title: 'Empaque confirmado', message: `Pedido ${venta.numeroDocumento} listo, a tu nombre.`, color: 'teal' });
@@ -326,6 +346,28 @@ export default function EmpacarPage() {
                                 <Stack gap={2}>
                                     {items.map((i) => <Text key={i.detalleId} size="sm">✓ {i.entregaTexto || `${i.cantidadEmpacada} unidades`} · {i.nombre}</Text>)}
                                 </Stack>
+                                {venta.tipoEntrega === 'delivery' && (
+                                    <Stack gap="xs">
+                                        <Select
+                                            label="Agencia de envíos que retira el pedido"
+                                            placeholder="Selecciona la agencia…"
+                                            withAsterisk
+                                            allowDeselect={false}
+                                            data={AGENCIAS_ENVIO}
+                                            value={agencia || (AGENCIAS_ENVIO.includes(venta.quienRetira) ? venta.quienRetira : (venta.quienRetira ? 'Otra agencia / chofer' : null))}
+                                            onChange={(v) => setAgencia(v || '')}
+                                        />
+                                        {agencia === 'Otra agencia / chofer' && (
+                                            <TextInput
+                                                label="Nombre de la agencia o transporte"
+                                                placeholder="Ej: MRW, Tealca, transporte propio…"
+                                                withAsterisk
+                                                value={agenciaOtra}
+                                                onChange={(e) => setAgenciaOtra(e.currentTarget.value)}
+                                            />
+                                        )}
+                                    </Stack>
+                                )}
                                 <Alert color="blue" variant="light">
                                     Al confirmar, el pedido queda empacado a nombre de <b>{venta.empacadorNombre}</b>. No se puede modificar.
                                 </Alert>
