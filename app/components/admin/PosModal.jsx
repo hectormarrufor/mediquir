@@ -77,7 +77,6 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const esPresupuesto = modo === 'presupuesto';
     const editando = esPresupuesto && presupuestoEditar ? presupuestoEditar : null;
     const queryClient = useQueryClient(); // 🔥 INSTANCIADO PARA INVALIDAR QUERIES
-    const [tipoVenta, setTipoVenta] = useState('DETAL'); 
     const [carrito, setCarrito] = useState([]);
     const [cola, setCola] = useState([]); // facturas que faltan por hacer de un mismo presupuesto (cada una es un carrito)
     const [origen, setOrigen] = useState(null); // { numero, parte, de }: el presupuesto del que viene esta venta
@@ -160,7 +159,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             diasCredito: 15, // solo a crédito: arranca con los días del cliente
             metodoPago: '', // sin método predeterminado: el usuario TIENE que elegirlo (cuando la venta es de contado) 
             referencia: '',
-            tipoEntrega: 'sitio', // 'sitio' (entrega en el momento) | 'pickup' (cliente retira, empacar) | 'delivery' (chofer retira, empacar)
+            tipoEntrega: '', // sin opción predeterminada: el usuario TIENE que elegir ('sitio' | 'pickup' | 'delivery')
             quienRetira: '',
             costoFlete: '',
             numeroDocumento: '',
@@ -186,7 +185,6 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         try {
             const b = JSON.parse(localStorage.getItem(claveBorrador) || 'null');
             if (b) {
-                if (b.tipoVenta) setTipoVenta(b.tipoVenta);
                 if (b.form) formVenta.setValues({ ...formVenta.values, ...b.form });
                 if (Array.isArray(b.carrito)) setCarrito(b.carrito);
                 if (Array.isArray(b.cola)) setCola(b.cola);
@@ -208,9 +206,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         try {
             const vacio = esPresupuesto ? (carrito.length === 0 && !formVenta.values.clienteId && !formVenta.values.notas) : (carrito.length === 0 && cola.length === 0);
             if (vacio) localStorage.removeItem(claveBorrador);
-            else localStorage.setItem(claveBorrador, JSON.stringify({ tipoVenta, form: formVenta.values, carrito, cola, origen }));
+            else localStorage.setItem(claveBorrador, JSON.stringify({ form: formVenta.values, carrito, cola, origen }));
         } catch { /* almacenamiento lleno o bloqueado: no pasa nada */ }
-    }, [guardaBorrador, borradorListo, tipoVenta, carrito, cola, origen, formVenta.values]);
+    }, [guardaBorrador, borradorListo, carrito, cola, origen, formVenta.values]);
 
     // Borra el documento que se está llenando y deja la pantalla como nueva
     const hayAlgoQueBorrar = guardaBorrador && (carrito.length > 0 || cola.length > 0 || Boolean(formVenta.values.clienteId) || Boolean(formVenta.values.notas));
@@ -219,7 +217,6 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         try { localStorage.removeItem(claveBorrador); } catch { /* sin almacenamiento */ }
         setCarrito([]); setCola([]); setOrigen(null);
         formVenta.reset();
-        setTipoVenta('DETAL');
         setVista('productos');
     };
     const botonCero = hayAlgoQueBorrar && (
@@ -271,9 +268,24 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const tarifasPermitidas = esFacturaDoc ? TARIFAS_FACTURA : ['precio7', 'precio6', 'precio4', 'precio5', ...(puedeEditarPrecio && !esPresupuesto ? ['precio1'] : [])];
     const tarifaActual = formVenta.values.tipoPrecio;
     const faltaTarifa = !tarifaActual || !tarifasPermitidas.includes(tarifaActual);
-    const motivoSinAgregar = (!esPresupuesto && faltaDocumento)
-        ? 'Elige primero el documento (factura o nota de entrega) y luego la tarifa'
-        : (faltaTarifa ? 'Elige primero la tarifa: el precio sobre el que se basa la venta' : null);
+    const entregaElegida = formVenta.values.tipoEntrega;
+    const faltaEntrega = !esPresupuesto && !entregaElegida;
+    const esTarifaMayor = ['precio6', 'precio5', 'precio1'].includes(tarifaActual);
+    // El tipo de venta (MAYOR vs DETAL) se deduce automáticamente: es MAYOR si usa tarifa mayorista (P6/P5/P1),
+    // si es a crédito, o si requiere empaque y despacho (el cliente o un chofer lo retiran después).
+    // Es DETAL solo cuando es tarifa al detal (P7/P4) + de contado + entrega inmediata en sitio.
+    const tipoVenta = (
+        esTarifaMayor
+        || formVenta.values.condicionPago === 'Credito'
+        || (entregaElegida && entregaElegida !== 'sitio')
+    ) ? 'MAYOR' : 'DETAL';
+
+    const faltantesInicio = !esPresupuesto
+        ? [faltaDocumento && 'documento (Factura o Nota)', faltaEntrega && 'método de entrega', faltaTarifa && 'tarifa'].filter(Boolean)
+        : [faltaTarifa && 'tarifa'].filter(Boolean);
+    const motivoSinAgregar = faltantesInicio.length
+        ? `Elige primero ${faltantesInicio.join(', ')} antes de agregar productos`
+        : null;
     const tarifaBloqueada = carrito.length > 0 && !faltaTarifa;
     // Si la tarifa elegida no vale para el documento (p. ej. P7 en una factura) y el carrito está vacío, se borra para que se vuelva a elegir
     useEffect(() => {
@@ -323,29 +335,18 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formVenta.values.tipoPrecio]);
 
-    const tipoMontado = useRef(false);
-    useEffect(() => {
-        // Al abrir no se toca nada: así no se borra el cliente de un borrador recuperado
-        if (!tipoMontado.current) { tipoMontado.current = true; return; }
-        if (tipoVenta === 'DETAL') {
-            formVenta.setFieldValue('condicionPago', '');
-            formVenta.setFieldValue('clienteId', null);
-            formVenta.setFieldValue('tipoEntrega', 'sitio');
-        } else {
-            formVenta.setFieldValue('tipoEntrega', 'pickup');
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [tipoVenta]);
-
     // ---- Días de crédito: arrancan con los del cliente; solo administración los cambia (de esta factura o también de las futuras del cliente)
     const esCredito = formVenta.values.condicionPago === 'Credito';
-    // La forma de cobro se ELIGE (sin opción predeterminada) cuando hay selector: ventas al mayor y administración. Donde no lo hay (detal de un vendedor) es siempre de contado.
-    const cobroEsEleccion = !esPresupuesto && (tipoVenta === 'MAYOR' || puedeEditarPrecio);
+    // La forma de cobro se ELIGE (sin opción predeterminada) cuando es tarifa mayor, cuando requiere empaque/despacho o para administración.
+    // Si un vendedor hace una venta al detal (P7/P4) con entrega inmediata en sitio, es siempre de contado.
+    const cobroEsEleccion = !esPresupuesto && (puedeEditarPrecio || esTarifaMayor || (entregaElegida && entregaElegida !== 'sitio'));
     const faltaCobro = cobroEsEleccion && !formVenta.values.condicionPago;
     useEffect(() => {
-        if (!esPresupuesto && !cobroEsEleccion && !formVenta.values.condicionPago) formVenta.setFieldValue('condicionPago', 'Contado');
+        if (!esPresupuesto && !faltaEntrega && !cobroEsEleccion && formVenta.values.condicionPago !== 'Contado') {
+            formVenta.setFieldValue('condicionPago', 'Contado');
+        }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cobroEsEleccion, formVenta.values.condicionPago, esPresupuesto]);
+    }, [cobroEsEleccion, faltaEntrega, formVenta.values.condicionPago, esPresupuesto]);
     useEffect(() => {
         const c = clientes?.find((x) => x.id.toString() === formVenta.values.clienteId?.toString());
         setDatosCli({ direccion: c?.direccion || '', telefono: c?.telefono || '', email: c?.email || '', identificacion: esSinRif(c?.identificacion) ? '' : (c?.identificacion || '') });
@@ -527,6 +528,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         // En el teléfono, si falta algo se abre la parte de la pantalla donde se arregla
         if (carrito.length === 0) { setVista('productos'); return notifications.show({ message: 'El carrito está vacío', color: 'orange' }); }
         if (faltaDocumento) { setVista('datos'); return notifications.show({ title: 'Falta el documento', message: 'Elige si vas a emitir FACTURA o NOTA DE ENTREGA antes de revisar la venta', color: 'red' }); }
+        if (faltaEntrega) { setVista('datos'); return notifications.show({ title: 'Falta el método de entrega', message: 'Elige si se entrega en el momento, si el cliente lo va a buscar o si lo retira un chofer', color: 'red' }); }
         if (faltaTarifa) { setVista('datos'); return notifications.show({ title: 'Falta la tarifa', message: 'Elige la tarifa (el precio sobre el que se basa la venta) antes de revisarla', color: 'red' }); }
         if (faltaCliente) { setVista('datos'); return notifications.show({ title: 'Falta el cliente', message: tipoDocumentoActual === 'FACTURA' ? 'La factura necesita el cliente: elígelo o créalo' : 'Debe seleccionar un cliente mayorista', color: 'red' }); }
 
@@ -575,8 +577,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             });
         }
         
-        // Una venta al mayor casi siempre es a crédito: si va de contado se confirma antes de asentar (se registra el pago de una vez)
-        if (tipoVenta === 'MAYOR' && formVenta.values.condicionPago === 'Contado' && !window.confirm('Esta venta al MAYOR quedó DE CONTADO: se registrará el pago ahora, sin cuenta por cobrar. ¿Es correcto? (Aceptar = de contado · Cancelar = volver para cambiarla a Crédito)')) {
+        // Una venta mayorista (tarifa mayor o cliente con crédito) casi siempre es a crédito: si va de contado se confirma antes de asentar
+        if ((esTarifaMayor || clienteTieneCredito) && formVenta.values.condicionPago === 'Contado' && !window.confirm('Esta venta al MAYOR quedó DE CONTADO: se registrará el pago ahora, sin cuenta por cobrar. ¿Es correcto? (Aceptar = de contado · Cancelar = volver para cambiarla a Crédito)')) {
             setVista('datos');
             return;
         }
@@ -635,6 +637,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // imprimir=true: «Asentar e imprimir». La ventana se abre YA (con el toque del botón) porque el navegador bloquea las que se abren después de esperar al servidor
     const handleProcesarVenta = async (imprimir = false) => {
         if (faltaDocumento) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta el documento', message: 'Elige si vas a emitir FACTURA o NOTA DE ENTREGA antes de asentar', color: 'red' }); }
+        if (faltaEntrega) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta el método de entrega', message: 'Elige el método de entrega antes de asentar', color: 'red' }); }
         if (faltaTarifa) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta la tarifa', message: 'Elige la tarifa antes de asentar', color: 'red' }); }
         if (faltaCliente) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta el cliente', message: 'Elige el cliente antes de asentar', color: 'red' }); }
         if (faltaMetodo) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta el método de pago', message: 'Elige el método de pago antes de asentar', color: 'red' }); }
@@ -715,10 +718,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             setPreviewAbierto(false);
             if (cola.length > 0) {
                 // Quedan facturas del mismo presupuesto: se sigue con la siguiente, con el mismo cliente y condiciones
-                const { clienteId, tipoPrecio, conIva, tipoDocumento, condicionPago, diasCredito } = formVenta.values;
+                const { clienteId, tipoPrecio, conIva, tipoDocumento, tipoEntrega, quienRetira, condicionPago, diasCredito } = formVenta.values;
                 const [siguiente, ...resto] = cola;
                 formVenta.reset();
-                formVenta.setValues({ ...formVenta.values, clienteId, tipoPrecio, conIva, tipoDocumento, condicionPago, diasCredito });
+                formVenta.setValues({ ...formVenta.values, clienteId, tipoPrecio, conIva, tipoDocumento, tipoEntrega, quienRetira, condicionPago, diasCredito });
                 setCarrito(siguiente);
                 setCola(resto);
                 setOrigen((o) => (o ? { ...o, parte: o.parte + 1 } : o));
@@ -834,16 +837,6 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const equivalenteTotal = tasaBcv > 0 && totalFinal > 0 && !soloBs ? (esMonedaBs ? `≈ $${formatoNumero(prevTotalUsd)}` : `≈ Bs ${formatoNumero(prevTotalBs)}`) : null;
     const esExento = (item) => (item.isFicticio ? !item.aplicaIva : item.porcentajeIva === 0);
 
-    const selectorTipoVenta = !esPresupuesto && (isMobile ? (
-        <SegmentedControl fullWidth size="md" value={tipoVenta} onChange={setTipoVenta} color={tipoVenta === 'MAYOR' ? 'grape' : 'blue'}
-            data={[{ value: 'DETAL', label: 'Al detal' }, { value: 'MAYOR', label: 'Al mayor' }]} />
-    ) : (
-        <Button.Group mb="sm">
-            <Button fullWidth variant={tipoVenta === 'DETAL' ? 'filled' : 'light'} onClick={() => setTipoVenta('DETAL')}>Detal</Button>
-            <Button fullWidth variant={tipoVenta === 'MAYOR' ? 'filled' : 'light'} color="grape" onClick={() => setTipoVenta('MAYOR')}>Mayor</Button>
-        </Button.Group>
-    ));
-
     const buscador = (
         <>
             <Group wrap="nowrap" gap={6} mb={isMobile ? 2 : 'sm'}>
@@ -860,9 +853,22 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     + Ficticio
                 </Button>
             </Group>
-            {/* No se agrega nada hasta elegir el documento y la tarifa */}
+            {/* No se agrega nada hasta elegir el documento, el método de entrega y la tarifa */}
             {motivoSinAgregar && (
-                <Alert color="red" variant="light" p="xs" mb={isMobile ? 0 : 'sm'} mt={isMobile ? 6 : 0}><Text size="xs" fw={700}>{motivoSinAgregar}.</Text></Alert>
+                <Alert
+                    color="red"
+                    variant="light"
+                    p="xs"
+                    mb={isMobile ? 0 : 'sm'}
+                    mt={isMobile ? 6 : 0}
+                    onClick={isMobile ? () => setVista('datos') : undefined}
+                    style={isMobile ? { cursor: 'pointer' } : undefined}
+                >
+                    <Group justify="space-between" wrap="nowrap" gap="xs">
+                        <Text size="xs" fw={700}>{motivoSinAgregar}.</Text>
+                        {isMobile && <Text size="xs" fw={800} c="red.9" style={{ flexShrink: 0 }}>Ir a datos →</Text>}
+                    </Group>
+                </Alert>
             )}
         </>
     );
@@ -1110,7 +1116,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     );
 
     // «Forma de cobro»: grande y a la vista, porque de ella depende que la factura registre el pago (contado) o quede una cuenta por cobrar (crédito)
-    const selectorCobro = !esPresupuesto && (tipoVenta === 'MAYOR' || puedeEditarPrecio) && (
+    const selectorCobro = !esPresupuesto && cobroEsEleccion && (
         <Box mb="xs">
             <Text size="sm" fw={700} mb={2}>Forma de cobro <Text span c="red.7" fw={800}>*</Text></Text>
             <SegmentedControl fullWidth size={isMobile ? 'md' : 'sm'} value={formVenta.values.condicionPago} onChange={(v) => formVenta.setFieldValue('condicionPago', v)}
@@ -1158,22 +1164,32 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         { value: 'pickup', label: 'El cliente lo va a buscar (hay que empacar)' },
         { value: 'delivery', label: 'Lo va a buscar un chofer o agencia (hay que empacar)' },
     ];
-    const entregaActual = formVenta.values.tipoEntrega || (tipoVenta === 'DETAL' ? 'sitio' : 'pickup');
+    const ETIQUETA_ENTREGA_CORTA = {
+        sitio: 'En el momento',
+        pickup: 'Retira cliente (empacar)',
+        delivery: 'Retira chofer (empacar)',
+    };
+    const entregaActual = formVenta.values.tipoEntrega || '';
+    const etiquetaEntregaCorta = ETIQUETA_ENTREGA_CORTA[entregaActual] || '';
 
-    const filaMayor = !esPresupuesto && (
-        <SimpleGrid cols={isMobile ? 1 : (entregaActual === 'delivery' ? 3 : 1)} spacing="sm" mb="sm">
+    const campoEntrega = !esPresupuesto && (
+        <SimpleGrid cols={isMobile ? 1 : (entregaActual === 'delivery' ? 3 : 1)} spacing={isMobile ? 'xs' : 'sm'}>
             <Select
                 label="Método de entrega"
-                size={tamCampo}
+                size={isMobile ? tamCampo : 'xs'}
+                withAsterisk
                 allowDeselect={false}
+                placeholder="Elige cómo se entrega el pedido…"
                 data={OPCIONES_ENTREGA_POS}
-                value={entregaActual}
-                onChange={(v) => formVenta.setFieldValue('tipoEntrega', v || 'pickup')}
+                value={entregaActual || null}
+                onChange={(v) => formVenta.setFieldValue('tipoEntrega', v || '')}
+                styles={faltaEntrega ? { input: { border: '2px solid #e03131' } } : undefined}
+                error={faltaEntrega ? 'Elige el método de entrega antes de agregar productos' : null}
             />
             {entregaActual === 'delivery' && (
                 <>
-                    <TextInput placeholder="(Opcional: se confirma al despachar)" label="¿Chofer o agencia que retira?" size={tamCampo} {...formVenta.getInputProps('quienRetira')} />
-                    <NumberInput placeholder="(Opcional)" label={`Flete (${simboloMoneda})`} size={tamCampo} decimalScale={2} min={0} allowNegative={false} inputMode="decimal" hideControls {...formVenta.getInputProps('costoFlete')} />
+                    <TextInput placeholder="(Opcional: se confirma al despachar)" label="¿Chofer o agencia que retira?" size={isMobile ? tamCampo : 'xs'} {...formVenta.getInputProps('quienRetira')} />
+                    <NumberInput placeholder="(Opcional)" label={`Flete (${simboloMoneda})`} size={isMobile ? tamCampo : 'xs'} decimalScale={2} min={0} allowNegative={false} inputMode="decimal" hideControls {...formVenta.getInputProps('costoFlete')} />
                 </>
             )}
         </SimpleGrid>
@@ -1371,7 +1387,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         : 'Saldrá DE CONTADO: se registra el pago ahora.';
     const filaCobroEscritorio = !esPresupuesto && (
         <Group gap="sm" align="flex-end" wrap="wrap">
-            {(tipoVenta === 'MAYOR' || puedeEditarPrecio) && (
+            {cobroEsEleccion && (
                 <Box>
                     <Text size="xs" fw={700} mb={2}>Forma de cobro <Text span c="red.7" fw={800}>*</Text></Text>
                     <SegmentedControl size="xs" w={320} value={formVenta.values.condicionPago} onChange={(v) => formVenta.setFieldValue('condicionPago', v)}
@@ -1417,7 +1433,6 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             <Grid gutter="sm" m={0}>
                 <Grid.Col span={{ base: 5, xl: 4 }} p={0} pr="sm">
                     <Paper withBorder p="sm" radius="md" h={ALTO_PANELES} style={{ display: 'flex', flexDirection: 'column' }}>
-                        {selectorTipoVenta}
                         {buscador}
                         <ScrollArea style={{ flex: 1 }} type="auto">
                             <Stack gap="xs">
@@ -1431,9 +1446,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 <Grid.Col span={{ base: 7, xl: 8 }} p={0}>
                     {/* Si la pantalla es baja, el panel se desplaza entero en vez de achicar el carrito (que siempre deja lugar para 11 renglones) */}
                     <Paper withBorder p="sm" radius="md" h={ALTO_PANELES} style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-                        {/* Datos del documento: cada cosa en UNA fila compacta, para que casi todo el panel sea del carrito */}
+                        {/* Datos del documento: todo lo requerido arriba antes de agregar productos */}
                         <Stack gap={6} mb="xs">
                             {docEscritorio}
+                            {campoEntrega}
                             {filaClienteEscritorio}
                             {extrasCliente}
                             {filaCobroEscritorio}
@@ -1447,7 +1463,6 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                         </ScrollArea>
 
                         {campoObservaciones}
-                        {filaMayor}
 
                         <Divider mb="xs" />
 
@@ -1523,15 +1538,15 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             <Box p={6} style={{ flex: 1 }}>
                 {vista === 'productos' && (
                     <Stack gap={4}>
-                        {/* Qué se va a emitir y para quién: se cambia en «Datos y pago» */}
-                        <UnstyledButton onClick={() => setVista('datos')} px={8} py={6} bg="white" style={{ borderRadius: 6, border: `1px solid ${faltaCliente ? 'var(--mantine-color-red-4)' : '#dee2e6'}` }}>
+                        {/* Qué se va a emitir, método de entrega y cliente: se cambia en «Datos y pago» */}
+                        <UnstyledButton onClick={() => setVista('datos')} px={8} py={6} bg="white" style={{ borderRadius: 6, border: `1px solid ${(faltaDocumento || faltaEntrega || faltaTarifa || faltaCliente) ? 'var(--mantine-color-red-4)' : '#dee2e6'}` }}>
                             <Group justify="space-between" wrap="nowrap" gap="xs">
                                 <Box style={{ minWidth: 0 }}>
                                     <Text size="xs" fw={700} lh={1.25} truncate="end">
-                                        {esPresupuesto ? 'Presupuesto' : `${tipoDocumentoActual} ${formVenta.values.numeroDocumento}`} · {etiquetaTarifa || 'Falta la tarifa'}
+                                        {esPresupuesto ? 'Presupuesto' : (faltaDocumento ? 'Falta documento' : `${tipoDocumentoActual} ${formVenta.values.numeroDocumento}`)} · {etiquetaTarifa || 'Falta tarifa'}
                                     </Text>
-                                    <Text fz={11} lh={1.25} c={faltaCliente ? 'red.7' : 'dimmed'} fw={faltaCliente ? 700 : 400} truncate="end">
-                                        {!esPresupuesto && `${tipoVenta === 'MAYOR' ? 'Al mayor' : 'Al detal'} · `}{clienteSeleccionado ? clienteSeleccionado.nombre : (faltaCliente ? 'Falta elegir el cliente' : 'Sin cliente')}
+                                    <Text fz={11} lh={1.25} c={(faltaEntrega || faltaCliente) ? 'red.7' : 'dimmed'} fw={(faltaEntrega || faltaCliente) ? 700 : 400} truncate="end">
+                                        {!esPresupuesto && `${etiquetaEntregaCorta || 'Falta método de entrega'} · `}{clienteSeleccionado ? clienteSeleccionado.nombre : (faltaCliente ? 'Falta elegir el cliente' : 'Sin cliente')}
                                     </Text>
                                 </Box>
                                 <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
@@ -1567,10 +1582,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
                 {vista === 'datos' && (
                     <Stack gap={0}>
-                        {selectorTipoVenta && <Box mb={6}>{selectorTipoVenta}</Box>}
                         {bloqueDocumento}
                         <Paper withBorder radius="sm" p="xs" mb={6} bg="white">
                             <Stack gap="xs">
+                                {campoEntrega}
                                 {campoCliente}
                                 {campoTarifa}
                             </Stack>
@@ -1582,12 +1597,6 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                 {filaPago}
                                 {filaCredito}
                                 {formVenta.values.condicionPago === 'Credito' && <Text size="xs" c="dimmed">A crédito: el cliente queda debiendo y los abonos se registran después en Cuentas por cobrar.</Text>}
-                            </Paper>
-                        )}
-                        {filaMayor && (
-                            <Paper withBorder radius="sm" p="xs" mb={6} bg="white">
-                                <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb={4}>Despacho</Text>
-                                {filaMayor}
                             </Paper>
                         )}
                         {campoObservaciones}
@@ -1643,14 +1652,14 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             )}
 
             {/* MODAL SECUNDARIO: CREAR CLIENTE EN CALIENTE */}
-            <Modal opened={modalCrearCliente} onClose={() => setModalCrearCliente(false)} size="lg" fullScreen={isMobile} classNames={isMobile ? { content: CONTENIDO_SIN_RELLENO } : undefined} title={<Title order={4} c="grape" component="div">{tipoVenta === 'MAYOR' ? 'Registrar Nuevo Cliente' : 'Cliente nuevo al detal'}</Title>} centered zIndex={2000}>
+            <Modal opened={modalCrearCliente} onClose={() => setModalCrearCliente(false)} size="lg" fullScreen={isMobile} classNames={isMobile ? { content: CONTENIDO_SIN_RELLENO } : undefined} title={<Title order={4} c="grape" component="div">{(tipoVenta === 'MAYOR' || esFactura) ? 'Registrar Nuevo Cliente' : 'Cliente nuevo al detal'}</Title>} centered zIndex={2000}>
                 <form onSubmit={formNuevoCliente.onSubmit(async (values) => {
                     try {
                         if (!String(values.identificacion || '').trim() || !String(values.nombre || '').trim()) throw new Error('La cédula y el nombre son obligatorios');
                         const res = await fetch('/api/clientes', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(tipoVenta === 'MAYOR' ? { ...values } : { identificacion: values.identificacion.trim(), nombre: values.nombre.trim(), telefono: values.telefono?.trim() || null })
+                            body: JSON.stringify((tipoVenta === 'MAYOR' || esFactura) ? { ...values } : { identificacion: values.identificacion.trim(), nombre: values.nombre.trim(), telefono: values.telefono?.trim() || null })
                         });
                         const data = await res.json();
                         if (!res.ok) throw new Error(data.error);
@@ -1665,10 +1674,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     }
                 })}>
                     <Stack gap="sm">
-                        <TextInput size="md" label={tipoVenta === 'MAYOR' ? 'RIF / Cédula' : 'Cédula'} placeholder={tipoVenta === 'MAYOR' ? 'Ej: J-12345678-9 o V-12345678' : 'Ej: V-12345678'} withAsterisk autoComplete="off" data-autofocus {...formNuevoCliente.getInputProps('identificacion')} />
-                        <TextInput size="md" label={tipoVenta === 'MAYOR' ? 'Razón Social / Nombre' : 'Nombre'} placeholder={tipoVenta === 'MAYOR' ? 'Ej: Farmacia San Pedro' : 'Ej: María Pérez'} withAsterisk autoComplete="off" {...formNuevoCliente.getInputProps('nombre')} />
+                        <TextInput size="md" label={(tipoVenta === 'MAYOR' || esFactura) ? 'RIF / Cédula' : 'Cédula'} placeholder={(tipoVenta === 'MAYOR' || esFactura) ? 'Ej: J-12345678-9 o V-12345678' : 'Ej: V-12345678'} withAsterisk autoComplete="off" data-autofocus {...formNuevoCliente.getInputProps('identificacion')} />
+                        <TextInput size="md" label={(tipoVenta === 'MAYOR' || esFactura) ? 'Razón Social / Nombre' : 'Nombre'} placeholder={(tipoVenta === 'MAYOR' || esFactura) ? 'Ej: Farmacia San Pedro' : 'Ej: María Pérez'} withAsterisk autoComplete="off" {...formNuevoCliente.getInputProps('nombre')} />
                         <TextInput size="md" type="tel" inputMode="tel" label="Teléfono" placeholder="Ej: 0414-1234567 (opcional)" {...formNuevoCliente.getInputProps('telefono')} />
-                        {tipoVenta === 'MAYOR' && (
+                        {(tipoVenta === 'MAYOR' || esFactura) && (
                             <>
                                 <TextInput size="md" type="email" inputMode="email" label="Correo Electrónico" placeholder="contacto@cliente.com" {...formNuevoCliente.getInputProps('email')} />
                                 <TextInput size="md" label="Dirección Fiscal" placeholder="Ej: Av. Principal, Local 4..." {...formNuevoCliente.getInputProps('direccion')} />

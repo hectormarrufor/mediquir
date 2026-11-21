@@ -39,9 +39,9 @@ export async function GET() {
                 COUNT(*) FILTER (WHERE c."fechaVencimiento" BETWEEN ${HOY} AND ${HOY} + 7)::int AS "porVencer"
                FROM "CuentasPorPagar" c WHERE c."estado" <> 'Pagado' AND c."saldoPendiente" > 0`),
             q(`SELECT
-                COUNT(*) FILTER (WHERE v."statusDespacho" IN ('Pendiente', 'Empacado', 'Parcial') AND v."tipoVenta" <> 'DETAL')::int AS "porDespachar",
-                COUNT(*) FILTER (WHERE v."statusDespacho" NOT IN ('Cancelado', 'Completado') AND v."empacadoAt" IS NULL AND v."tipoVenta" <> 'DETAL')::int AS "porEmpacar",
-                COUNT(*) FILTER (WHERE v."statusDespacho" = 'Pendiente' AND v."tipoVenta" <> 'DETAL' AND v."empacadorId" IS NULL AND v."empacadoAt" IS NULL)::int AS "sinAsignar"
+                COUNT(*) FILTER (WHERE v."statusDespacho" IN ('Pendiente', 'Empacado', 'Parcial') AND v."tipoEntrega" <> 'sitio')::int AS "porDespachar",
+                COUNT(*) FILTER (WHERE v."statusDespacho" NOT IN ('Cancelado', 'Completado') AND v."empacadoAt" IS NULL AND v."tipoEntrega" <> 'sitio')::int AS "porEmpacar",
+                COUNT(*) FILTER (WHERE v."statusDespacho" = 'Pendiente' AND v."tipoEntrega" <> 'sitio' AND v."empacadorId" IS NULL AND v."empacadoAt" IS NULL)::int AS "sinAsignar"
                FROM "Ventas" v`),
             q(`SELECT v."id", v."numeroDocumento" AS numero, v."createdAt" AS fecha, v."tipoEntrega",
                       COALESCE(c."nombre", 'Cliente al detal') AS cliente,
@@ -55,7 +55,7 @@ export async function GET() {
                LEFT JOIN "Empleados" e ON e."id" = u."empleadoId"
                WHERE v."statusDespacho" NOT IN ('Cancelado', 'Completado')
                  AND v."empacadoAt" IS NULL
-                 AND v."tipoVenta" <> 'DETAL'
+                 AND v."tipoEntrega" <> 'sitio'
                  AND (v."revisionStock" IS NULL OR v."revisionStock" <> 'PENDIENTE')
                  AND (v."verificacionPago" IS NULL OR v."verificacionPago" <> 'POR_VERIFICAR')
                ORDER BY v."createdAt" ASC
