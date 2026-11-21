@@ -1163,7 +1163,7 @@ export default function DetallePedidoMayorPage() {
                     <Select
                         label="¿Cómo pagó?"
                         allowDeselect={false}
-                        data={['Efectivo ($)', 'Efectivo (Bs)', 'Pago Móvil', 'Punto de Venta Provincial', 'Punto de Venta Banesco', 'Biopago', 'Transferencia', 'Zelle']}
+                        data={['Efectivo ($)', 'Efectivo (Bs)', 'Pago Móvil', 'Punto de Venta Provincial', 'Punto de Venta Banesco', 'Biopago', 'Cashea', 'Transferencia', 'Zelle']}
                         value={cobroTienda.metodoPago}
                         onChange={(v) => setCobroTienda((c) => ({ ...c, metodoPago: v }))}
                     />
@@ -1192,7 +1192,7 @@ export default function DetallePedidoMayorPage() {
                                     : ''}.
                             </Text>
                         )}
-                        <Select label="Método de pago" data={['Transferencia', 'Pago Móvil', 'Efectivo', 'Zelle', 'Punto de Venta Provincial', 'Punto de Venta Banesco', 'Biopago']} allowDeselect={false} withAsterisk {...formAbono.getInputProps('metodoPago')} />
+                        <Select label="Método de pago" data={['Transferencia', 'Pago Móvil', 'Punto de Venta Provincial', 'Punto de Venta Banesco', 'Biopago', 'Cashea', 'Efectivo', 'Zelle']} allowDeselect={false} withAsterisk {...formAbono.getInputProps('metodoPago')} />
                         <TextInput label="Referencia (Opcional)" placeholder="Nro de recibo o transferencia" {...formAbono.getInputProps('referencia')} />
                         {puedeRetener && (
                             <Switch

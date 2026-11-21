@@ -21,6 +21,7 @@ import './superuser.css';
 import { useAuth } from '@/hooks/useAuth';
 import TareasPanel from '../components/tareas/TareasPanel';
 import { notifications } from '@mantine/notifications';
+import { useQueryClient } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 
 const PanelInicio = dynamic(() => import('./_components/PanelInicio'), { ssr: false });
@@ -101,6 +102,7 @@ export default function SuperUserHome() {
 }
 
 function PanelAdministrativo() {
+    const queryClient = useQueryClient();
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -265,7 +267,11 @@ function PanelAdministrativo() {
                 {modalPosAbierto && (
                     <PosModal
                         opened={modalPosAbierto}
-                        onClose={() => setModalPosAbierto(false)}
+                        onClose={() => {
+                            setModalPosAbierto(false);
+                            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+                            queryClient.invalidateQueries({ queryKey: ['vendedor'] });
+                        }}
                         tasaBcv={precioBCV}
                     />
                 )}

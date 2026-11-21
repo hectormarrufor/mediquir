@@ -19,7 +19,7 @@ export async function GET() {
         const q = (sql) => sequelize.query(sql, { type: sequelize.QueryTypes.SELECT });
         const activas = `v."statusDespacho" <> 'Cancelado'`;
 
-        const [[ventas], serie, [cobrar], [pagar], [pedidos], stockBajo, [tienda], [iva], [alertas]] = await Promise.all([
+        const [[ventas], serie, [cobrar], [pagar], [pedidos], porEmpacarLista, stockBajo, [tienda], [iva], [alertas]] = await Promise.all([
             q(`SELECT
                 COALESCE(SUM(${USD}) FILTER (WHERE ${DIA} = ${HOY}), 0)::float AS "hoyTotal",
                 COUNT(*) FILTER (WHERE ${DIA} = ${HOY})::int AS "hoyVentas",
@@ -40,8 +40,26 @@ export async function GET() {
                FROM "CuentasPorPagar" c WHERE c."estado" <> 'Pagado' AND c."saldoPendiente" > 0`),
             q(`SELECT
                 COUNT(*) FILTER (WHERE v."statusDespacho" IN ('Pendiente', 'Empacado', 'Parcial') AND v."tipoVenta" <> 'DETAL')::int AS "porDespachar",
-                COUNT(*) FILTER (WHERE v."statusDespacho" = 'Pendiente' AND v."tipoVenta" <> 'DETAL' AND v."empacadorId" IS NULL)::int AS "sinAsignar"
+                COUNT(*) FILTER (WHERE v."statusDespacho" NOT IN ('Cancelado', 'Completado') AND v."empacadoAt" IS NULL AND v."tipoVenta" <> 'DETAL')::int AS "porEmpacar",
+                COUNT(*) FILTER (WHERE v."statusDespacho" = 'Pendiente' AND v."tipoVenta" <> 'DETAL' AND v."empacadorId" IS NULL AND v."empacadoAt" IS NULL)::int AS "sinAsignar"
                FROM "Ventas" v`),
+            q(`SELECT v."id", v."numeroDocumento" AS numero, v."createdAt" AS fecha, v."tipoEntrega",
+                      COALESCE(c."nombre", 'Cliente al detal') AS cliente,
+                      v."empacadorId", v."empaqueIniciadoAt" AS "iniciadoAt",
+                      COALESCE(e."nombre" || ' ' || e."apellido", u."user") AS empacador,
+                      (SELECT COUNT(*)::int FROM "VentaDetalles" d WHERE d."ventaId" = v."id") AS renglones,
+                      (SELECT COALESCE(SUM(d."cantidad"), 0)::int FROM "VentaDetalles" d WHERE d."ventaId" = v."id") AS articulos
+               FROM "Ventas" v
+               LEFT JOIN "Clientes" c ON c."id" = v."clienteId"
+               LEFT JOIN "Usuarios" u ON u."id" = v."empacadorId"
+               LEFT JOIN "Empleados" e ON e."id" = u."empleadoId"
+               WHERE v."statusDespacho" NOT IN ('Cancelado', 'Completado')
+                 AND v."empacadoAt" IS NULL
+                 AND v."tipoVenta" <> 'DETAL'
+                 AND (v."revisionStock" IS NULL OR v."revisionStock" <> 'PENDIENTE')
+                 AND (v."verificacionPago" IS NULL OR v."verificacionPago" <> 'POR_VERIFICAR')
+               ORDER BY v."createdAt" ASC
+               LIMIT 30`),
             q(`SELECT p."id", p."nombre", p."stockAlmacen"::float AS stock, p."stockMinimo"::float AS minimo FROM "Productos" p
                WHERE p."stockMinimo" > 0 AND p."stockAlmacen" <= p."stockMinimo" AND p."grupoEquivalenciaId" IS NULL
                ORDER BY (p."stockAlmacen" / NULLIF(p."stockMinimo", 0)) ASC LIMIT 200`),
@@ -67,7 +85,7 @@ export async function GET() {
         return NextResponse.json({
             ventas: { ...ventas, cambioVsAyer: cambio },
             serie,
-            porCobrar: cobrar, porPagar: pagar, pedidos, tienda, ivaMes: iva.mes, alertas,
+            porCobrar: cobrar, porPagar: pagar, pedidos: { ...pedidos, listaPorEmpacar: porEmpacarLista }, tienda, ivaMes: iva.mes, alertas,
             stockBajo: { total: stockBajo.length, agotados: stockBajo.filter((p) => p.stock <= 0).length, top: stockBajo.slice(0, 5) },
         });
     } catch (error) {

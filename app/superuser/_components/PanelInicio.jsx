@@ -3,15 +3,17 @@
 import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { ActionIcon, Badge, Box, Button, Card, Grid, Group, Paper, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, Tooltip, UnstyledButton } from '@mantine/core';
+import { ActionIcon, Badge, Box, Button, Card, Collapse, Grid, Group, Paper, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, Tooltip, UnstyledButton } from '@mantine/core';
 import { LineChart } from '@mantine/charts';
-import { useMediaQuery } from '@mantine/hooks';
-import { useQuery } from '@tanstack/react-query';
+import { useDisclosure, useMediaQuery } from '@mantine/hooks';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
+import { notifications } from '@mantine/notifications';
 import { useAuth } from '@/hooks/useAuth';
 import ErroresEmpaqueCard from './ErroresEmpaqueCard';
 import DeliveryDiferenciasCard from './DeliveryDiferenciasCard';
 import {
-    IconAlertTriangle, IconArrowDownRight, IconArrowRight, IconArrowUpRight, IconBuildingStore, IconCash, IconCheck, IconClipboardList, IconClockExclamation, IconPackage,
+    IconAlertTriangle, IconArrowDownRight, IconArrowRight, IconArrowUpRight, IconBuildingStore, IconCash, IconCheck, IconChevronDown, IconClipboardList, IconClockExclamation, IconPackage,
     IconPrinter, IconTags, IconReceipt, IconReceiptTax, IconSettings, IconShoppingCart, IconTruckDelivery, IconWallet,
 } from '@tabler/icons-react';
 
@@ -22,6 +24,7 @@ const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFr
 const fmtUsd = (v) => `$${usd.format(Number(v) || 0)}`;
 const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 const diaCorto = (iso) => DIAS[new Date(`${iso}T12:00:00Z`).getUTCDay()];
+const fmtFechaHora = (v) => (v ? new Date(v).toLocaleString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'short', timeStyle: 'short' }) : '—');
 
 async function pedirJson(url) {
     const res = await fetch(url);
@@ -56,12 +59,40 @@ function Pulso({ icono: Icono, color, titulo, valor, detalle, cambio, href, carg
 
 // Panel de inicio del personal: cabecera, pulso del negocio, alertas, módulos y tareas
 export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, modulos, tareas }) {
+    const router = useRouter();
+    const queryClient = useQueryClient();
     const { isAdmin } = useAuth();
     const [consultorAbierto, setConsultorAbierto] = useState(false);
     const [cardexAbierto, setCardexAbierto] = useState(false);
+    const [empaqueAbierto, { toggle: toggleEmpaque }] = useDisclosure(false);
+    const [tomandoId, setTomandoId] = useState(null);
     const movil = useMediaQuery('(max-width: 48em)');
-    const { data, isLoading } = useQuery({ queryKey: ['dashboard', 'resumen'], queryFn: () => pedirJson('/api/dashboard/resumen'), refetchInterval: 120000, refetchOnWindowFocus: true });
+    const { data, isLoading } = useQuery({ queryKey: ['dashboard', 'resumen'], queryFn: () => pedirJson('/api/dashboard/resumen'), refetchInterval: 60000, refetchOnWindowFocus: true });
     const d = data;
+    const listaPorEmpacar = d?.pedidos?.listaPorEmpacar || [];
+    const nPorEmpacar = listaPorEmpacar.length;
+    const nSinAsignar = listaPorEmpacar.filter((p) => !p.empacadorId).length;
+
+    const tomarEmpaque = async (pedido) => {
+        setTomandoId(pedido.id);
+        try {
+            const res = await fetch(`/api/ventas/${pedido.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accion: 'TOMAR_EMPAQUE' }),
+            });
+            const cuerpo = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(cuerpo?.error || 'No se pudo tomar el pedido');
+            notifications.show({ color: 'teal', title: 'Pedido asignado', message: `Tomaste el pedido ${pedido.numero} para empacar y etiquetar.` });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            router.push(`/superuser/ventas/${pedido.id}/empacar`);
+        } catch (e) {
+            notifications.show({ color: 'red', title: 'No se pudo tomar el pedido', message: e.message });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        } finally {
+            setTomandoId(null);
+        }
+    };
     // Facturas y notas de vendedores por aprobar (solo responde para quien las aprueba: jolexi y el usuario 1)
     const porAprobar = useQuery({ queryKey: ['por-aprobar-conteo'], retry: false, refetchInterval: 60000, queryFn: async () => { const r = await fetch('/api/ventas/por-aprobar'); return r.ok ? r.json() : null; } });
 
@@ -108,6 +139,148 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
                         </Group>
                     </Group>
                 </Paper>
+
+                {/* Indicador principal de ventas por empacar */}
+                {!isLoading && (
+                    nPorEmpacar > 0 ? (
+                        <Paper
+                            radius="lg"
+                            p={0}
+                            style={{
+                                overflow: 'hidden',
+                                border: '2px solid rgba(255, 255, 255, 0.4)',
+                                boxShadow: '0 10px 28px rgba(245, 0, 87, 0.28)',
+                            }}
+                        >
+                            <UnstyledButton
+                                onClick={toggleEmpaque}
+                                w="100%"
+                                p={{ base: 'sm', sm: 'md' }}
+                                style={{
+                                    background: 'linear-gradient(135deg, #ff6b00 0%, #f50057 52%, #7c3aed 100%)',
+                                    color: 'white',
+                                }}
+                            >
+                                <Group justify="space-between" wrap="nowrap" gap="sm">
+                                    <Group wrap="nowrap" gap="sm" style={{ minWidth: 0 }}>
+                                        <ThemeIcon size={48} radius="md" color="white" variant="white" c="pink.7" style={{ flexShrink: 0 }}>
+                                            <IconPackage size={28} />
+                                        </ThemeIcon>
+                                        <Box style={{ minWidth: 0 }}>
+                                            <Group gap={8} wrap="wrap" align="center">
+                                                <Text fw={900} fz={{ base: 'md', sm: 'lg' }} lh={1.2}>
+                                                    {nPorEmpacar === 1 ? '¡1 venta pendiente por empacar!' : `¡${nPorEmpacar} ventas pendientes por empacar!`}
+                                                </Text>
+                                                <Badge size="lg" radius="xl" color="yellow" variant="filled" c="dark.9" fw={900}>
+                                                    {nPorEmpacar} POR EMPACAR
+                                                </Badge>
+                                                {nSinAsignar > 0 && (
+                                                    <Badge size="md" radius="xl" color="white" variant="white" c="pink.8" fw={800}>
+                                                        {nSinAsignar} sin vendedor asignado
+                                                    </Badge>
+                                                )}
+                                            </Group>
+                                            <Text size="xs" c="white" opacity={0.92} mt={2}>
+                                                {empaqueAbierto
+                                                    ? 'Toca para ocultar la lista de pedidos por empacar'
+                                                    : 'Toca aquí para desplegar los pedidos pendientes por empacar, ver quién los tomó o abrirlos'}
+                                            </Text>
+                                        </Box>
+                                    </Group>
+                                    <IconChevronDown
+                                        size={24}
+                                        style={{
+                                            flexShrink: 0,
+                                            transform: empaqueAbierto ? 'rotate(180deg)' : 'rotate(0deg)',
+                                            transition: 'transform 180ms ease',
+                                        }}
+                                    />
+                                </Group>
+                            </UnstyledButton>
+
+                            <Collapse in={empaqueAbierto}>
+                                <Stack gap="xs" p={{ base: 'xs', sm: 'md' }} bg="white">
+                                    {listaPorEmpacar.map((pedido) => (
+                                        <Paper key={pedido.id} withBorder radius="md" p="sm" bg="gray.0">
+                                            <Group justify="space-between" align="center" gap="sm" wrap="wrap">
+                                                <Box style={{ minWidth: 0, flex: '1 1 240px' }}>
+                                                    <Group gap={6} wrap="wrap">
+                                                        <Text fw={800} size="sm" c="navy.9">{pedido.numero}</Text>
+                                                        <Badge size="xs" variant="light" color={pedido.tipoEntrega === 'pickup' ? 'teal' : 'violet'}>
+                                                            {pedido.tipoEntrega === 'pickup' ? 'Retiro en tienda' : 'Envío / delivery'}
+                                                        </Badge>
+                                                        <Badge size="xs" variant="outline" color="orange">
+                                                            {pedido.renglones} prod. · {pedido.articulos} uds.
+                                                        </Badge>
+                                                        {pedido.empacador ? (
+                                                            <Badge size="xs" variant="filled" color="blue">
+                                                                Empacando: {pedido.empacador}
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge size="xs" variant="filled" color="pink">
+                                                                Sin empacador (libre)
+                                                            </Badge>
+                                                        )}
+                                                    </Group>
+                                                    <Text size="sm" fw={600} c="dark.7" truncate mt={2}>{pedido.cliente}</Text>
+                                                    <Text size="xs" c="dimmed">{fmtFechaHora(pedido.fecha)}</Text>
+                                                </Box>
+                                                <Group gap={6} wrap="nowrap">
+                                                    <Button
+                                                        size="xs"
+                                                        variant="default"
+                                                        radius="md"
+                                                        onClick={() => router.push(`/superuser/ventas/${pedido.id}`)}
+                                                    >
+                                                        Ver pedido
+                                                    </Button>
+                                                    {!pedido.empacadorId && (
+                                                        <Button
+                                                            variant="gradient"
+                                                            gradient={{ from: 'orange', to: 'pink', deg: 135 }}
+                                                            size="xs"
+                                                            radius="md"
+                                                            leftSection={<IconPackage size={15} />}
+                                                            loading={tomandoId === pedido.id}
+                                                            disabled={Boolean(tomandoId) && tomandoId !== pedido.id}
+                                                            onClick={() => tomarEmpaque(pedido)}
+                                                        >
+                                                            Empacar
+                                                        </Button>
+                                                    )}
+                                                </Group>
+                                            </Group>
+                                        </Paper>
+                                    ))}
+                                </Stack>
+                            </Collapse>
+                        </Paper>
+                    ) : (
+                        <Paper
+                            withBorder
+                            radius="lg"
+                            p={{ base: 'xs', sm: 'sm' }}
+                            style={{
+                                background: 'linear-gradient(90deg, rgba(12, 166, 120, 0.14) 0%, rgba(255, 255, 255, 0.96) 100%)',
+                                borderColor: 'var(--mantine-color-teal-5)',
+                                boxShadow: 'var(--mm-shadow-card)',
+                            }}
+                        >
+                            <Group justify="space-between" wrap="wrap" gap="xs">
+                                <Group gap="sm" wrap="nowrap">
+                                    <ThemeIcon size={38} radius="md" color="teal" variant="filled">
+                                        <IconPackage size={20} />
+                                    </ThemeIcon>
+                                    <Box>
+                                        <Text fw={800} size="sm" c="navy.9">Ventas por empacar: 0 pendientes</Text>
+                                        <Text size="xs" c="dimmed">Todo al día · Cuando se registre un pedido aparecerá aquí en grande para empacarlo.</Text>
+                                    </Box>
+                                </Group>
+                                <Badge color="teal" variant="light" size="md">Al día</Badge>
+                            </Group>
+                        </Paper>
+                    )
+                )}
 
                 {/* Pulso del negocio */}
                 <SimpleGrid cols={{ base: 2, lg: 4 }} spacing={{ base: 6, sm: 'md' }}>

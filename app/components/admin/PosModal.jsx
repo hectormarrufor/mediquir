@@ -312,8 +312,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     const esMonedaBs = ['precio1', 'precio4', 'precio5'].includes(formVenta.values.tipoPrecio);
     const opcionesMetodoPago = esMonedaBs 
-        ? ['Efectivo (Bs)', 'Transferencia', 'Pago Móvil', 'Punto de Venta Provincial', 'Punto de Venta Banesco', 'Biopago'] 
-        : ['Efectivo ($)', 'Zelle'];
+        ? ['Punto de Venta Provincial', 'Punto de Venta Banesco', 'Biopago', 'Cashea', 'Pago Móvil', 'Transferencia', 'Efectivo (Bs)'] 
+        : ['Punto de Venta Provincial', 'Punto de Venta Banesco', 'Biopago', 'Cashea', 'Pago Móvil', 'Transferencia', 'Efectivo ($)', 'Zelle'];
 
     useEffect(() => {
         const metodoActual = formVenta.values.metodoPago;

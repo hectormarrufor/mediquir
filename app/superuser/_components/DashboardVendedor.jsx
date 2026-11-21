@@ -251,91 +251,149 @@ export default function DashboardVendedor() {
                     <Acceso icono={IconTruckDelivery} color="grape.6" titulo="Mis ventas y pedidos" descripcion="Historial y seguimiento" onClick={() => router.push('/superuser/ventas')} />
                 </SimpleGrid>
 
-                {!isLoading && nDisponibles > 0 && (
-                    <Paper
-                        radius="lg"
-                        p={0}
-                        style={{
-                            overflow: 'hidden',
-                            border: '2px solid rgba(255, 255, 255, 0.35)',
-                            boxShadow: '0 10px 28px rgba(245, 0, 87, 0.28)',
-                        }}
-                    >
-                        <UnstyledButton
-                            onClick={toggleDisponibles}
-                            w="100%"
-                            p={{ base: 'sm', sm: 'md' }}
+                {!isLoading && (
+                    (nDisponibles + nEmpacar) > 0 ? (
+                        <Paper
+                            radius="lg"
+                            p={0}
                             style={{
-                                background: 'linear-gradient(135deg, #ff6b00 0%, #f50057 52%, #7c3aed 100%)',
-                                color: 'white',
+                                overflow: 'hidden',
+                                border: '2px solid rgba(255, 255, 255, 0.35)',
+                                boxShadow: '0 10px 28px rgba(245, 0, 87, 0.28)',
                             }}
                         >
-                            <Group justify="space-between" wrap="nowrap" gap="sm">
-                                <Group wrap="nowrap" gap="sm" style={{ minWidth: 0 }}>
-                                    <ThemeIcon size={48} radius="md" color="white" variant="white" c="pink.7" style={{ flexShrink: 0 }}>
-                                        <IconPackage size={28} />
-                                    </ThemeIcon>
-                                    <Box style={{ minWidth: 0 }}>
-                                        <Group gap={8} wrap="wrap" align="center">
-                                            <Text fw={900} fz={{ base: 'md', sm: 'lg' }} lh={1.2}>
-                                                {nDisponibles === 1 ? '¡1 pedido listo para empacar!' : `¡${nDisponibles} pedidos listos para empacar!`}
+                            <UnstyledButton
+                                onClick={toggleDisponibles}
+                                w="100%"
+                                p={{ base: 'sm', sm: 'md' }}
+                                style={{
+                                    background: 'linear-gradient(135deg, #ff6b00 0%, #f50057 52%, #7c3aed 100%)',
+                                    color: 'white',
+                                }}
+                            >
+                                <Group justify="space-between" wrap="nowrap" gap="sm">
+                                    <Group wrap="nowrap" gap="sm" style={{ minWidth: 0 }}>
+                                        <ThemeIcon size={48} radius="md" color="white" variant="white" c="pink.7" style={{ flexShrink: 0 }}>
+                                            <IconPackage size={28} />
+                                        </ThemeIcon>
+                                        <Box style={{ minWidth: 0 }}>
+                                            <Group gap={8} wrap="wrap" align="center">
+                                                <Text fw={900} fz={{ base: 'md', sm: 'lg' }} lh={1.2}>
+                                                    {(nDisponibles + nEmpacar) === 1 ? '¡1 pedido pendiente por empacar!' : `¡${nDisponibles + nEmpacar} pedidos pendientes por empacar!`}
+                                                </Text>
+                                                <Badge size="lg" radius="xl" color="yellow" variant="filled" c="dark.9" fw={900}>
+                                                    {nDisponibles + nEmpacar} POR EMPACAR
+                                                </Badge>
+                                                {nDisponibles > 0 && (
+                                                    <Badge size="md" radius="xl" color="white" variant="white" c="pink.8" fw={800}>
+                                                        {nDisponibles} libre(s) para tomar
+                                                    </Badge>
+                                                )}
+                                            </Group>
+                                            <Text size="xs" c="white" opacity={0.92} mt={2}>
+                                                {disponiblesAbierto ? 'Toca para ocultar la lista' : 'Toca aquí para ver la lista y presionar «Empacar» (quedarás a cargo del empaque y etiquetado)'}
                                             </Text>
-                                            <Badge size="lg" radius="xl" color="yellow" variant="filled" c="dark.9" fw={900}>
-                                                {nDisponibles} {nDisponibles === 1 ? 'PENDIENTE' : 'PENDIENTES'}
-                                            </Badge>
-                                        </Group>
-                                        <Text size="xs" c="white" opacity={0.92} mt={2}>
-                                            {disponiblesAbierto ? 'Toca para ocultar la lista' : 'Toca aquí para ver la lista y presionar «Empacar» (quedarás a cargo del empaque y etiquetado)'}
-                                        </Text>
+                                        </Box>
+                                    </Group>
+                                    <IconChevronDown
+                                        size={24}
+                                        style={{
+                                            flexShrink: 0,
+                                            transform: disponiblesAbierto ? 'rotate(180deg)' : 'rotate(0deg)',
+                                            transition: 'transform 180ms ease',
+                                        }}
+                                    />
+                                </Group>
+                            </UnstyledButton>
+
+                            <Collapse in={disponiblesAbierto}>
+                                <Stack gap="xs" p={{ base: 'xs', sm: 'md' }} bg="white">
+                                    {(data.porEmpacarDisponibles || []).map((pedido) => (
+                                        <Paper key={`disp-${pedido.id}`} withBorder radius="md" p="sm" bg="gray.0">
+                                            <Group justify="space-between" align="center" gap="sm" wrap="wrap">
+                                                <Box style={{ minWidth: 0, flex: '1 1 220px' }}>
+                                                    <Group gap={6} wrap="wrap">
+                                                        <Text fw={800} size="sm" c="navy.9">{pedido.numero}</Text>
+                                                        <Badge size="xs" variant="light" color={pedido.tipoEntrega === 'pickup' ? 'teal' : 'violet'}>
+                                                            {pedido.tipoEntrega === 'pickup' ? 'Retiro en tienda' : 'Envío / delivery'}
+                                                        </Badge>
+                                                        <Badge size="xs" variant="outline" color="orange">
+                                                            {pedido.renglones} prod. · {pedido.articulos} uds.
+                                                        </Badge>
+                                                        <Badge size="xs" variant="filled" color="pink">Libre</Badge>
+                                                    </Group>
+                                                    <Text size="sm" fw={600} c="dark.7" truncate mt={2}>{pedido.cliente}</Text>
+                                                    <Text size="xs" c="dimmed">{fmtFechaHora(pedido.fecha)}</Text>
+                                                </Box>
+                                                <Button
+                                                    variant="gradient"
+                                                    gradient={{ from: 'orange', to: 'pink', deg: 135 }}
+                                                    size="sm"
+                                                    radius="md"
+                                                    leftSection={<IconPackage size={16} />}
+                                                    loading={tomandoId === pedido.id}
+                                                    disabled={Boolean(tomandoId) && tomandoId !== pedido.id}
+                                                    onClick={() => tomarEmpaque(pedido)}
+                                                >
+                                                    Empacar
+                                                </Button>
+                                            </Group>
+                                        </Paper>
+                                    ))}
+                                    {(data.porEmpacar || []).map((pedido) => (
+                                        <Paper key={`mio-${pedido.id}`} withBorder radius="md" p="sm" bg="blue.0">
+                                            <Group justify="space-between" align="center" gap="sm" wrap="wrap">
+                                                <Box style={{ minWidth: 0, flex: '1 1 220px' }}>
+                                                    <Group gap={6} wrap="wrap">
+                                                        <Text fw={800} size="sm" c="navy.9">{pedido.numero}</Text>
+                                                        <Badge size="xs" variant="filled" color="blue">Asignado a ti · {pedido.verificados}/{pedido.renglones}</Badge>
+                                                        <Badge size="xs" variant="outline" color="blue">
+                                                            {pedido.renglones} prod. · {pedido.articulos} uds.
+                                                        </Badge>
+                                                    </Group>
+                                                    <Text size="sm" fw={600} c="dark.7" truncate mt={2}>{pedido.cliente}</Text>
+                                                    <Text size="xs" c="dimmed">{fmtFechaHora(pedido.fecha)}</Text>
+                                                </Box>
+                                                <Button
+                                                    color="blue"
+                                                    size="sm"
+                                                    radius="md"
+                                                    leftSection={<IconPackage size={16} />}
+                                                    onClick={() => router.push(`/superuser/ventas/${pedido.id}/empacar`)}
+                                                >
+                                                    {pedido.iniciado ? 'Continuar empaque' : 'Empacar'}
+                                                </Button>
+                                            </Group>
+                                        </Paper>
+                                    ))}
+                                </Stack>
+                            </Collapse>
+                        </Paper>
+                    ) : (
+                        <Paper
+                            withBorder
+                            radius="lg"
+                            p={{ base: 'xs', sm: 'sm' }}
+                            style={{
+                                background: 'linear-gradient(90deg, rgba(12, 166, 120, 0.14) 0%, rgba(255, 255, 255, 0.96) 100%)',
+                                borderColor: 'var(--mantine-color-teal-5)',
+                                boxShadow: 'var(--mm-shadow-card)',
+                            }}
+                        >
+                            <Group justify="space-between" wrap="wrap" gap="xs">
+                                <Group gap="sm" wrap="nowrap">
+                                    <ThemeIcon size={38} radius="md" color="teal" variant="filled">
+                                        <IconPackage size={20} />
+                                    </ThemeIcon>
+                                    <Box>
+                                        <Text fw={800} size="sm" c="navy.9">Ventas por empacar: 0 pendientes</Text>
+                                        <Text size="xs" c="dimmed">Todo al día · Cuando haya un pedido por empacar aparecerá aquí resaltado.</Text>
                                     </Box>
                                 </Group>
-                                <IconChevronDown
-                                    size={24}
-                                    style={{
-                                        flexShrink: 0,
-                                        transform: disponiblesAbierto ? 'rotate(180deg)' : 'rotate(0deg)',
-                                        transition: 'transform 180ms ease',
-                                    }}
-                                />
+                                <Badge color="teal" variant="light" size="md">Al día</Badge>
                             </Group>
-                        </UnstyledButton>
-
-                        <Collapse in={disponiblesAbierto}>
-                            <Stack gap="xs" p={{ base: 'xs', sm: 'md' }} bg="white">
-                                {data.porEmpacarDisponibles.map((pedido) => (
-                                    <Paper key={pedido.id} withBorder radius="md" p="sm" bg="gray.0">
-                                        <Group justify="space-between" align="center" gap="sm" wrap="wrap">
-                                            <Box style={{ minWidth: 0, flex: '1 1 220px' }}>
-                                                <Group gap={6} wrap="wrap">
-                                                    <Text fw={800} size="sm" c="navy.9">{pedido.numero}</Text>
-                                                    <Badge size="xs" variant="light" color={pedido.tipoEntrega === 'pickup' ? 'teal' : 'violet'}>
-                                                        {pedido.tipoEntrega === 'pickup' ? 'Retiro en tienda' : 'Envío / delivery'}
-                                                    </Badge>
-                                                    <Badge size="xs" variant="outline" color="orange">
-                                                        {pedido.renglones} prod. · {pedido.articulos} uds.
-                                                    </Badge>
-                                                </Group>
-                                                <Text size="sm" fw={600} c="dark.7" truncate mt={2}>{pedido.cliente}</Text>
-                                                <Text size="xs" c="dimmed">{fmtFechaHora(pedido.fecha)}</Text>
-                                            </Box>
-                                            <Button
-                                                variant="gradient"
-                                                gradient={{ from: 'orange', to: 'pink', deg: 135 }}
-                                                size="sm"
-                                                radius="md"
-                                                leftSection={<IconPackage size={16} />}
-                                                loading={tomandoId === pedido.id}
-                                                disabled={Boolean(tomandoId) && tomandoId !== pedido.id}
-                                                onClick={() => tomarEmpaque(pedido)}
-                                            >
-                                                Empacar
-                                            </Button>
-                                        </Group>
-                                    </Paper>
-                                ))}
-                            </Stack>
-                        </Collapse>
-                    </Paper>
+                        </Paper>
+                    )
                 )}
 
                 <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }} spacing="md">
