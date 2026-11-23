@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
+import { ActionIcon, Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { IconFileDiff } from '@tabler/icons-react';
+import { IconFileDiff, IconPrinter } from '@tabler/icons-react';
 import EmitirNotaModal from './EmitirNotaModal';
 import NotaAcciones from './NotaAcciones';
 import DiferencialCambiarioModal from './DiferencialCambiarioModal';
@@ -49,9 +49,12 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
         <Paper withBorder p="md" radius="md" bg="gray.0">
             <Text fw={700} mb="xs" c="blue.9"><IconFileDiff size={16} style={{ verticalAlign: 'middle' }} /> Notas de crédito y débito</Text>
             <Group gap="xs" mb="sm" grow>
-                <Button size="xs" variant="light" color="red" onClick={() => setAnulando(true)} disabled={data && data.acreditable <= 0}>Anular factura / nota de crédito</Button>
-                <Button size="xs" variant="light" color="blue" onClick={() => setEmitiendo('DEBITO')}>Nota de débito</Button>
+                <Button size="xs" variant="light" color="red" onClick={() => setAnulando(true)} disabled={pedido.aprobacionPendiente || (data && data.acreditable <= 0)}>Anular factura / nota de crédito</Button>
+                <Button size="xs" variant="light" color="blue" onClick={() => setEmitiendo('DEBITO')} disabled={pedido.aprobacionPendiente}>Nota de débito</Button>
             </Group>
+            {pedido.aprobacionPendiente && (
+                <Text size="xs" c="orange.8" mb="sm">Esta factura está por aprobar: podrás emitirle notas cuando administración la apruebe.</Text>
+            )}
 
             {!esVendedor && pedido.moneda === 'USD' && (
                 <Button size="xs" variant="light" color="indigo" fullWidth mb="sm" onClick={() => setDiferencial(true)}>Nota de débito por diferencial cambiario</Button>
@@ -84,7 +87,15 @@ export default function NotasFacturaCard({ pedido, onCambio }) {
                                 <Text size="sm" fw={800} c={n.tipo === 'CREDITO' ? 'red.7' : 'blue.7'} style={{ whiteSpace: 'nowrap', textDecoration: n.estado === 'ANULADA' ? 'line-through' : undefined }}>
                                     {n.tipo === 'CREDITO' ? '−' : '+'}{simbolo}{nf(n.totalFinal)}
                                 </Text>
-                                {!esVendedor && <NotaAcciones nota={n} onCambio={refrescar} />}
+                                {!esVendedor ? <NotaAcciones nota={n} onCambio={refrescar} /> : (
+                                    n.aprobacionEstado === 'PENDIENTE'
+                                        ? <Badge size="xs" color="orange" variant="light">Por aprobar</Badge>
+                                        : n.estado === 'EMITIDA' && (
+                                            <ActionIcon size="sm" variant="subtle" color="gray" component="a" href={`/superuser/notas/${n.id}/imprimir`} target="_blank" aria-label="Imprimir nota">
+                                                <IconPrinter size={15} />
+                                            </ActionIcon>
+                                        )
+                                )}
                             </Group>
                         </Group>
                     ))}

@@ -55,6 +55,7 @@ const VENDEDOR_API = [
     ['POST', /^\/api\/ventas\/[^/]+\/notas$/],         // nota de crédito o débito de un vendedor: queda por aprobar
     ['GET', /^\/api\/ventas\/[^/]+\/empaque$/],        // wizard de empaque: solo el empacador asignado (lo valida la ruta)
     ['POST', /^\/api\/ventas\/[^/]+\/empaque(\/foto)?$/],
+    ['GET', /^\/api\/notas$/],                    // listado de sus notas de venta (lo filtra la ruta)
     ['GET', /^\/api\/notas\/[^/]+$/],               // la nota que el vendedor imprime: solo las SUYAS ya aprobadas (lo valida la ruta)
     ['POST', /^\/api\/control$/],                // número de control al imprimir: solo de SUS facturas ya aprobadas (lo valida la ruta)
     ['POST', /^\/api\/ventas\/[^/]+\/impresa$/],   // marca de impresa: igual, solo SUS facturas aprobadas
@@ -70,7 +71,7 @@ const VENDEDOR_API = [
     ['DELETE', /^\/api\/tareas\/[^/]+$/],
 ];
 const VENDEDOR_PAGINAS = [
-    /^\/superuser$/, /^\/superuser\/ventas(\/.*)?$/, /^\/superuser\/notas\/[^/]+\/imprimir$/,
+    /^\/superuser$/, /^\/superuser\/ventas(\/.*)?$/, /^\/superuser\/notas(\/[^/]+\/imprimir)?$/,
     /^\/superuser\/inventario\/consulta$/, /^\/superuser\/clientes(\/nuevo)?$/, /^\/superuser\/notificaciones$/,
     /^\/superuser\/presupuestos(\/.*)?$/, /^\/superuser\/proveedores$/,
 ];

@@ -20,7 +20,9 @@ export async function GET(request, { params }) {
         if (!UUID.test(id)) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
         const venta = await Venta.findByPk(id);
         if (!venta) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
-        if (rolDe(acceso.sesion) === 'vendedor' && Number(venta.vendedorId) !== Number(acceso.sesion.id)) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
+        if (rolDe(acceso.sesion) === 'vendedor' && ![venta.vendedorId, venta.empacadorId, venta.etiquetadorId].map(Number).includes(Number(acceso.sesion.id))) {
+            return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
+        }
         const datos = await notasDeVenta(venta);
         // Vista previa del diferencial cambiario con la tasa de hoy (?usd= tramo de la factura que se paga)
         let diferencial = null;
@@ -49,9 +51,11 @@ export async function POST(request, { params }) {
 
         const venta = await Venta.findByPk(id, { transaction: t, lock: t.LOCK.UPDATE });
         if (!venta) throw new ErrorNota('Factura no encontrada', 404);
-        // Un vendedor emite notas de crédito o débito normales sobre SUS facturas; quedan por aprobar (el diferencial cambiario es de administración)
+        // Un vendedor emite notas de crédito o débito normales sobre sus facturas; quedan por aprobar (el diferencial cambiario es de administración)
         if (esVend) {
-            if (Number(venta.vendedorId) !== Number(acceso.sesion.id)) throw new ErrorNota('Factura no encontrada', 404);
+            if (![venta.vendedorId, venta.empacadorId, venta.etiquetadorId].map(Number).includes(Number(acceso.sesion.id))) {
+                throw new ErrorNota('Factura no encontrada', 404);
+            }
             if (!['CREDITO', 'DEBITO'].includes(tipo)) throw new ErrorNota('Tu rol no permite esta acción', 403);
             if (!(await aprobacionDisponible())) throw new ErrorNota('Todavía no está activada la aprobación de documentos: pídele a administración que emita la nota', 409);
         }

@@ -24,7 +24,9 @@ export async function GET(_request, { params }) {
         if (!UUID.test(id)) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
         const venta = await Venta.findByPk(id);
         if (!venta) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
-        if (rolDe(acceso.sesion) === 'vendedor' && Number(venta.vendedorId) !== Number(acceso.sesion.id)) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
+        if (rolDe(acceso.sesion) === 'vendedor' && ![venta.vendedorId, venta.empacadorId, venta.etiquetadorId].map(Number).includes(Number(acceso.sesion.id))) {
+            return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
+        }
         return NextResponse.json(await planAnulacion({ venta }));
     } catch (error) {
         return respuestaError(error, 'Plan de anulación:');
@@ -44,7 +46,9 @@ export async function POST(request, { params }) {
         const venta = await Venta.findByPk(id, { transaction: t, lock: t.LOCK.UPDATE });
         if (!venta) throw new ErrorAnulacion('Factura no encontrada', 404);
         if (esVend) {
-            if (Number(venta.vendedorId) !== Number(acceso.sesion.id)) throw new ErrorAnulacion('Factura no encontrada', 404);
+            if (![venta.vendedorId, venta.empacadorId, venta.etiquetadorId].map(Number).includes(Number(acceso.sesion.id))) {
+                throw new ErrorAnulacion('Factura no encontrada', 404);
+            }
             if (!(await aprobacionDisponible())) throw new ErrorAnulacion('Todavía no está activada la aprobación de documentos: pídele a administración que emita la nota', 409);
         }
         // Una factura por aprobar todavía no movió nada: se corrige o se elimina, no se anula con una nota

@@ -86,7 +86,7 @@ const esNota = (v) => v.tipoDocumento === 'NOTA_CREDITO' || v.tipoDocumento === 
 // Factura, nota de entrega o recibo se imprimen desde la venta; una nota de crédito o débito, desde la nota (solo las emitidas, y no las ve un vendedor)
 const urlImprimir = (v) => (esNota(v) ? `/superuser/notas/${v.id}/imprimir` : `/superuser/ventas/imprimir/${v.id}`);
 // Lo que un vendedor asentó (factura o nota) no se imprime hasta que jolexi lo apruebe
-const sePuedeImprimir = (v, esVendedor) => !v.porAprobar && (esNota(v) ? !esVendedor && v.estado === 'Emitida' : true);
+const sePuedeImprimir = (v) => !v.porAprobar && (esNota(v) ? v.estado === 'Emitida' : true);
 const COLOR_NOTA = { Emitida: 'teal', Anulada: 'gray' };
 
 function Indicador({ icono: Icono, color, titulo, valor, detalle, cargando, spanFull = false, onClick, activo = false }) {
@@ -290,6 +290,11 @@ export default function VentasDashboard() {
         const pg = sp.get('pago');
         if (pg && ['Pagado', 'Pendiente', 'Vencido'].includes(pg)) {
             setPago(pg);
+            irALista();
+        }
+        const d = sp.get('doc');
+        if (d && DOCUMENTOS.some((x) => x.value === d)) {
+            setDoc(d);
             irALista();
         }
     }, []);
