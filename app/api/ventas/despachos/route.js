@@ -108,9 +108,6 @@ export async function PUT(request) {
     if (acceso.error) return acceso.error;
 
     try {
-        if (!(await puedeCambiarAgencia(acceso.sesion))) {
-            return NextResponse.json({ error: 'Solo Jolexi o Joalex pueden cambiar la agencia de envío' }, { status: 403 });
-        }
         const body = await request.json();
         const ventaId = body.ventaId;
         const agencia = String(body.agencia ?? '').trim().slice(0, 120);
@@ -121,6 +118,13 @@ export async function PUT(request) {
         if (!venta) return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
         if (['Cancelado', 'Completado'].includes(venta.statusDespacho)) {
             return NextResponse.json({ error: 'Este pedido ya fue despachado o cancelado' }, { status: 409 });
+        }
+
+        const puedeEditar = await puedeCambiarAgencia(acceso.sesion);
+        const tieneAgencia = Boolean(String(venta.quienRetira || '').trim());
+        const cambiaTipoEntrega = Boolean(tipoEntrega && tipoEntrega !== venta.tipoEntrega);
+        if (!puedeEditar && (tieneAgencia || cambiaTipoEntrega || venta.tipoEntrega === 'pickup')) {
+            return NextResponse.json({ error: 'Solo Jolexi o Joalex pueden cambiar una agencia ya asignada o el tipo de retiro' }, { status: 403 });
         }
 
         if (tipoEntrega) venta.tipoEntrega = tipoEntrega;

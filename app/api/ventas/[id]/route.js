@@ -33,8 +33,8 @@ class ErrorLogistica extends Error {
     constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
 }
 
-// El vendedor solo toma empaques libres, firma sus tareas o marca entregas; asignar a terceros y cobrar es de administración
-const ACCIONES_VENDEDOR = ['TOMAR_EMPAQUE', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'ENTREGAR_CHOFER', 'DESPACHAR'];
+// El vendedor solo toma empaques libres, firma sus tareas, asigna agencia o marca entregas; asignar a terceros y cobrar es de administración
+const ACCIONES_VENDEDOR = ['TOMAR_EMPAQUE', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO', 'DATOS_ENVIO', 'ENTREGAR_CHOFER', 'DESPACHAR'];
 
 // Descuenta el stock y deja las salidas como "Empacada". Solo las ventas que requieren empaque (pickup o chofer) descuentan aquí:
 // las entregas en el momento (sitio) y las ventas web (ONLINE) ya descontaron al venderse.
@@ -220,7 +220,7 @@ export async function PUT(request, { params }) {
 
         if (rol === 'vendedor' && !ACCIONES_VENDEDOR.includes(accion)) {
             await t.rollback();
-            return NextResponse.json({ error: 'Tu rol solo permite firmar tus tareas de empaque y etiquetado' }, { status: 403 });
+            return NextResponse.json({ error: 'Tu rol no permite realizar esta acción sobre este pedido' }, { status: 403 });
         }
 
         const cerrada = ['Cancelado', 'Completado'].includes(venta.statusDespacho);
@@ -434,29 +434,44 @@ export async function PUT(request, { params }) {
         // ==========================================================
         if (accion === 'DATOS_ENVIO') {
             if (cerrada) throw new ErrorLogistica('Este pedido ya está cerrado', 409);
-            if (venta.tipoEntrega === 'pickup') throw new ErrorLogistica('Este pedido es retiro en tienda: no lleva transporte ni flete', 409);
+            if (venta.tipoEntrega === 'pickup' || venta.tipoEntrega === 'sitio') throw new ErrorLogistica('Este pedido es retiro en tienda: no lleva transporte ni flete', 409);
             if (venta.tipoVenta === 'ONLINE' && venta.tipoEntrega === 'flete') throw new ErrorLogistica('Envío nacional por Zoom con cobro a destino: el flete no forma parte de esta venta', 409);
 
-            const flete = Math.round(Number(body.costoFlete ?? venta.costoFlete ?? 0) * 100) / 100;
-            if (!Number.isFinite(flete) || flete < 0) throw new ErrorLogistica('El flete debe ser un monto igual o mayor a 0');
-            const actual = Number(venta.costoFlete) || 0;
+            const nuevaAgencia = String(body.quienRetira ?? '').trim().slice(0, 120) || null;
 
-            if (flete !== actual) {
-                if (venta.statusPago === 'Pagado') throw new ErrorLogistica('Esta factura ya está pagada: el flete no se puede cambiar', 409);
-                venta.costoFlete = flete;
-                venta.totalFinal = Math.round((Number(venta.subtotal) + Number(venta.montoIva) + flete) * 100) / 100;
-                const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, transaction: t });
-                if (cxc) { cxc.montoTotal = venta.totalFinal; await cxc.save({ transaction: t }); }
-                await venta.save({ transaction: t });
-                await recalcularCobro(venta, t); // el saldo vuelve a ser total - abonos (retención incluida)
+            if (rol === 'vendedor') {
+                if (![venta.vendedorId, venta.empacadorId, venta.etiquetadorId].some((x) => Number(x) === yo)) {
+                    throw new ErrorLogistica('Este pedido no es tuyo', 403);
+                }
+                if (!nuevaAgencia) throw new ErrorLogistica('Indica la agencia de envíos que va a retirar el pedido');
+            } else {
+                const flete = Math.round(Number(body.costoFlete ?? venta.costoFlete ?? 0) * 100) / 100;
+                if (!Number.isFinite(flete) || flete < 0) throw new ErrorLogistica('El flete debe ser un monto igual o mayor a 0');
+                const actual = Number(venta.costoFlete) || 0;
+
+                if (flete !== actual) {
+                    if (venta.statusPago === 'Pagado') throw new ErrorLogistica('Esta factura ya está pagada: el flete no se puede cambiar', 409);
+                    venta.costoFlete = flete;
+                    venta.totalFinal = Math.round((Number(venta.subtotal) + Number(venta.montoIva) + flete) * 100) / 100;
+                    const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, transaction: t });
+                    if (cxc) { cxc.montoTotal = venta.totalFinal; await cxc.save({ transaction: t }); }
+                    await venta.save({ transaction: t });
+                    await recalcularCobro(venta, t); // el saldo vuelve a ser total - abonos (retención incluida)
+                }
             }
             const transporteAntes = venta.quienRetira;
-            venta.quienRetira = String(body.quienRetira ?? '').trim().slice(0, 120) || null;
+            venta.quienRetira = nuevaAgencia;
             await venta.save({ transaction: t });
+            if (venta.quienRetira && venta.clienteId && venta.tipoEntrega === 'delivery') {
+                await Cliente.update(
+                    { agenciaEnvioHabitual: venta.quienRetira },
+                    { where: { id: venta.clienteId }, transaction: t }
+                ).catch(() => null);
+            }
             await t.commit();
             // El cliente se entera cuando ya hay empresa de transporte (o cambia)
             if (venta.quienRetira && venta.quienRetira !== transporteAntes && venta.tipoVenta === 'MAYOR') await avisarCliente(venta, 'TRANSPORTE');
-            return NextResponse.json({ success: true, totalFinal: venta.totalFinal });
+            return NextResponse.json({ success: true, totalFinal: venta.totalFinal, quienRetira: venta.quienRetira });
         }
 
         // ==========================================================
@@ -471,7 +486,7 @@ export async function PUT(request, { params }) {
             if (accion === 'DESPACHAR' && rol === 'vendedor') {
                 if (venta.tipoEntrega !== 'pickup') throw new ErrorLogistica('Este pedido lo retira un chofer: usa la entrega al chofer con sus datos y firma', 409);
                 if (![venta.empacadorId, venta.etiquetadorId, venta.vendedorId].some((x) => Number(x) === yo)) throw new ErrorLogistica('Este pedido no es tuyo', 403);
-                if (!venta.empacadoAt || !venta.etiquetadoAt) throw new ErrorLogistica('El pedido debe estar empacado y etiquetado antes de despacharlo', 409);
+                if (!venta.empacadoAt) throw new ErrorLogistica('El pedido debe estar empacado antes de despacharlo', 409);
                 costoFlete = 0;
             }
 
@@ -479,7 +494,7 @@ export async function PUT(request, { params }) {
                 if (venta.tipoEntrega === 'pickup' || venta.tipoEntrega === 'sitio') throw new ErrorLogistica('Este pedido es retiro del cliente en tienda: no lo retira un chofer', 409);
                 if (rol === 'vendedor') {
                     if (![venta.empacadorId, venta.etiquetadorId, venta.vendedorId].some((x) => Number(x) === yo)) throw new ErrorLogistica('Este pedido no es tuyo', 403);
-                    if (!venta.empacadoAt || !venta.etiquetadoAt) throw new ErrorLogistica('El pedido debe estar empacado y etiquetado antes de entregarlo', 409);
+                    if (!venta.empacadoAt) throw new ErrorLogistica('El pedido debe estar empacado antes de entregarlo', 409);
                 }
                 const limpia = (x, max) => String(x ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
                 const choferNombre = limpia(body.choferNombre, 120);
@@ -510,6 +525,7 @@ export async function PUT(request, { params }) {
             venta.statusDespacho = 'Completado';
             venta.quienRetira = quienRetira || (venta.tipoEntrega === 'pickup' ? 'Retirado por el cliente en tienda' : null);
             venta.fechaHoraRetiro = fechaHoraRetiro ? desdeInputFechaHora(fechaHoraRetiro) : new Date(); // lo escrito en el formulario es hora de Caracas
+            venta.etiquetadoAt = venta.etiquetadoAt || venta.fechaHoraRetiro;
             // El flete que se le cobra al cliente (venta.costoFlete) se fija en DATOS_ENVIO; aquí solo se asienta lo que pagó la empresa
             // Compra de la tienda: el delivery que pagó el cliente es dinero de la empresa de transporte (no fue ingreso), así que no hay gasto:
             // solo se anota lo que cobró de verdad (costoFleteReal) para compararlo con lo que se le cobró al cliente

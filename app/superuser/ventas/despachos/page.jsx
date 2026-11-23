@@ -448,7 +448,7 @@ export default function DespachosPendientesPage() {
 
                                     {grupoActivo.esSinAgencia && (
                                         <Alert color="orange" variant="light" mb="sm" icon={<IconAlertTriangle size={18} />}>
-                                            Estos pedidos fueron empacados sin agencia de envíos seleccionada. {puedeCambiarAgencia ? 'Puedes asignarles su agencia aquí con «Cambiar agencia» o entregarlos directamente eligiendo la agencia en el asistente.' : 'Jolexi o Joalex pueden asignarles su agencia, o puedes entregarlos indicando la agencia al chofer.'}
+                                            Estos pedidos fueron empacados sin agencia de envíos seleccionada. Puedes asignarles su agencia aquí con «Asignar agencia» o entregarlos directamente eligiendo la agencia en el asistente.
                                         </Alert>
                                     )}
 
@@ -504,9 +504,9 @@ export default function DespachosPendientesPage() {
                                                                 <Button size="xs" variant="default" onClick={() => router.push(`/superuser/ventas/${p.id}`)}>
                                                                     Ver pedido
                                                                 </Button>
-                                                                {puedeCambiarAgencia && (
+                                                                {(puedeCambiarAgencia || !p.agencia) && (
                                                                     <Button size="xs" variant="light" color="orange" leftSection={<IconEdit size={14} />} onClick={() => abrirCambioAgencia(p)}>
-                                                                        Cambiar agencia
+                                                                        {!p.agencia ? 'Asignar agencia' : 'Cambiar agencia'}
                                                                     </Button>
                                                                 )}
                                                             </Group>
@@ -667,31 +667,33 @@ export default function DespachosPendientesPage() {
                 </Tabs>
             </Stack>
 
-            {/* MODAL PARA CAMBIAR AGENCIA DE ENVÍO (SOLO JOLEXI / JOALEX / ADMIN PRINCIPAL) */}
+            {/* MODAL PARA ASIGNAR O CAMBIAR AGENCIA DE ENVÍO */}
             <Modal
                 opened={Boolean(editandoAgencia)}
                 onClose={() => setEditandoAgencia(null)}
                 centered
-                title={<Text fw={800}>Cambiar agencia de envío · {editandoAgencia?.numero}</Text>}
+                title={<Text fw={800}>{editandoAgencia?.agencia ? 'Cambiar agencia de envío' : 'Asignar agencia de envío'} · {editandoAgencia?.numero}</Text>}
             >
                 <Stack gap="sm">
                     <Text size="xs" c="dimmed">
                         Cliente: <b>{editandoAgencia?.cliente}</b>
                     </Text>
-                    <Select
-                        label="Tipo de retiro"
-                        allowDeselect={false}
-                        data={[
-                            { value: 'delivery', label: 'Despacho por agencia de envíos / chofer' },
-                            { value: 'pickup', label: 'El cliente lo retira en tienda' },
-                        ]}
-                        value={nuevoTipoEntrega}
-                        onChange={(v) => v && setNuevoTipoEntrega(v)}
-                    />
+                    {puedeCambiarAgencia && (
+                        <Select
+                            label="Tipo de retiro"
+                            allowDeselect={false}
+                            data={[
+                                { value: 'delivery', label: 'Despacho por agencia de envíos / chofer' },
+                                { value: 'pickup', label: 'El cliente lo retira en tienda' },
+                            ]}
+                            value={nuevoTipoEntrega}
+                            onChange={(v) => v && setNuevoTipoEntrega(v)}
+                        />
+                    )}
                     {nuevoTipoEntrega !== 'pickup' && (
                         <>
                             <Select
-                                label="Nueva agencia de envíos"
+                                label={editandoAgencia?.agencia ? 'Nueva agencia de envíos' : 'Agencia de envíos'}
                                 placeholder="Selecciona la agencia…"
                                 withAsterisk
                                 allowDeselect={false}
@@ -712,7 +714,9 @@ export default function DespachosPendientesPage() {
                     )}
                     <Group justify="flex-end" mt="xs">
                         <Button variant="default" onClick={() => setEditandoAgencia(null)}>Cancelar</Button>
-                        <Button color="orange" loading={guardandoAgencia} onClick={guardarCambioAgencia}>Guardar cambio</Button>
+                        <Button color="orange" loading={guardandoAgencia} onClick={guardarCambioAgencia}>
+                            {editandoAgencia?.agencia ? 'Guardar cambio' : 'Asignar agencia'}
+                        </Button>
                     </Group>
                 </Stack>
             </Modal>

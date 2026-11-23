@@ -139,6 +139,9 @@ export default function DetallePedidoMayorPage() {
     }
 
     const cancelado = pedido.statusDespacho === 'Cancelado';
+    const soyEmpacador = Boolean(userId && pedido.empacadorId) && Number(pedido.empacadorId) === Number(userId);
+    const soyEtiquetador = Boolean(userId && pedido.etiquetadorId) && Number(pedido.etiquetadorId) === Number(userId);
+    const soyVendedorPedido = Boolean(userId && pedido.vendedorId) && Number(pedido.vendedorId) === Number(userId);
     let pasoActual = 0;
     if (pedido.statusDespacho === 'Empacado' || pedido.statusDespacho === 'Parcial') pasoActual = 1;
     if (pedido.statusDespacho === 'Completado') pasoActual = 3;
@@ -733,12 +736,12 @@ export default function DetallePedidoMayorPage() {
                             )}
 
                             <Group mt={isMobile ? 'md' : 'xl'} justify="center" gap="sm" wrap="wrap">
-                                {Number(pedido.empacadorId) === Number(userId) && !pedido.empacadoAt && !cancelado && (
+                                {soyEmpacador && !pedido.empacadoAt && !cancelado && (
                                     <Button size="md" fullWidth={isMobile} color="blue" loading={isSubmitting} leftSection={<IconPackage size={18} />} onClick={() => router.push(`/superuser/ventas/${params.id}/empacar`)}>
                                         Empacar paso a paso
                                     </Button>
                                 )}
-                                {Number(pedido.etiquetadorId) === Number(userId) && !pedido.etiquetadoAt && !cancelado && (
+                                {soyEtiquetador && !pedido.etiquetadoAt && !cancelado && (
                                     <Button size="md" fullWidth={isMobile} color="grape" loading={isSubmitting} disabled={!pedido.empacadoAt} leftSection={<IconPackage size={18} />} onClick={() => handleFirmar('FIRMAR_ETIQUETADO', 'Etiquetado firmado.')}>
                                         {pedido.empacadoAt ? 'Firmar etiquetado' : 'Etiquetado (esperando empaque)'}
                                     </Button>
@@ -761,7 +764,7 @@ export default function DetallePedidoMayorPage() {
                                         {pedido.empacadorId ? 'Cambiar personal asignado' : 'Asignar personal'}
                                     </Button>
                                 )}
-                                {pasoActual === 1 && (!esVendedor || soyEmpacador || soyEtiquetador || Number(pedido.vendedorId) === Number(userId)) && (
+                                {pasoActual === 1 && (!esVendedor || soyEmpacador || soyEtiquetador || soyVendedorPedido) && (
                                     pedido.tipoEntrega === 'pickup' ? (
                                         <Button
                                             size="md"
@@ -881,7 +884,7 @@ export default function DetallePedidoMayorPage() {
                                 )}
                             </Paper>
 
-                            {!esVendedor && !esNacional && <EnvioCard pedido={pedido} onCambio={refetch} />}
+                            {!esNacional && <EnvioCard pedido={pedido} soloAgencia={esVendedor} onCambio={refetch} />}
                             <EntregaChoferCard pedido={pedido} />
                         </SimpleGrid>
                     </Stack>
@@ -1105,20 +1108,23 @@ export default function DetallePedidoMayorPage() {
             >
                 {pedido.tipoEntrega !== 'pickup' && !esNacional ? (
                     <EntregaChoferForm
+                        key={`${pedido.id}-${pedido.quienRetira || ''}`}
                         numeroDocumento={pedido.numeroDocumento}
                         empresaInicial={pedido.quienRetira || ''}
                         cargando={isSubmitting}
-                        onConfirmar={(v) => handleAction('ENTREGAR_CHOFER', { ...v, costoFlete: formDespacho.values.costoFlete }, setModalDespacho, 'Entrega al chofer registrada con su firma.')}
+                        onConfirmar={(v) => handleAction('ENTREGAR_CHOFER', { ...v, costoFlete: esVendedor ? 0 : formDespacho.values.costoFlete }, setModalDespacho, 'Entrega al chofer registrada con su firma.')}
                     >
-                        <NumberInput
-                            label={pedido.tipoVenta === 'ONLINE' ? 'Lo que cobró el delivery' : 'Lo que pagó la empresa por el flete (gasto)'}
-                            description={pedido.tipoVenta === 'ONLINE' ? `Se compara con lo que se le cobró al cliente (${Number(pedido.costoFlete || 0).toFixed(2)}); genera un ajuste en tesorería` : 'El flete que se le cobra al cliente se fija en «Envío y transporte»'}
-                            decimalScale={2}
-                            min={0}
-                            allowNegative={false}
-                            inputMode="decimal"
-                            {...formDespacho.getInputProps('costoFlete')}
-                        />
+                        {!esVendedor && (
+                            <NumberInput
+                                label={pedido.tipoVenta === 'ONLINE' ? 'Lo que cobró el delivery' : 'Lo que pagó la empresa por el flete (gasto)'}
+                                description={pedido.tipoVenta === 'ONLINE' ? `Se compara con lo que se le cobró al cliente (${Number(pedido.costoFlete || 0).toFixed(2)}); genera un ajuste en tesorería` : 'El flete que se le cobra al cliente se fija en «Envío y transporte»'}
+                                decimalScale={2}
+                                min={0}
+                                allowNegative={false}
+                                inputMode="decimal"
+                                {...formDespacho.getInputProps('costoFlete')}
+                            />
+                        )}
                     </EntregaChoferForm>
                 ) : (
                     <form onSubmit={formDespacho.onSubmit((values) => {
