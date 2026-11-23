@@ -835,7 +835,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const esEfectivo = ['Efectivo ($)', 'Efectivo (Bs)'].includes(formVenta.values.metodoPago);
     const unidadesCarrito = carrito.reduce((a, i) => a + i.cantidad, 0);
     // Lo que se cobra en la otra moneda (a la tasa de hoy): la persona en caja lo ve sin hacer la cuenta
-    const equivalenteTotal = tasaBcv > 0 && totalFinal > 0 && !soloBs ? (esMonedaBs ? `≈ $${formatoNumero(prevTotalUsd)}` : `≈ Bs ${formatoNumero(prevTotalBs)}`) : null;
+    const equivalenteTotal = tasaBcv > 0 && totalFinal > 0 ? (esMonedaBs ? `≈ $${formatoNumero(prevTotalUsd)}` : `≈ Bs ${formatoNumero(prevTotalBs)}`) : null;
     const esExento = (item) => (item.isFicticio ? !item.aplicaIva : item.porcentajeIva === 0);
 
     const buscador = (
@@ -1836,7 +1836,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                                     <span className="label-red">TOTAL IMPUESTO: 16%</span><br/>
                                                     <div className="monto-split">
                                                         <strong>{formatoNumero(prevIvaBs)} <span className="label-red">Bs.</span></strong>
-                                                        {!soloBs && <strong>{formatoNumero(prevIvaUsd)} <span className="label-red">USD</span></strong>}
+                                                        <strong>{formatoNumero(prevIvaUsd)} <span className="label-red">USD</span></strong>
                                                     </div>
                                                 </>
                                             ) : (
@@ -1847,7 +1847,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                             <span className="label-red">TOTAL EXENTO:</span><br/>
                                             <div className="monto-split">
                                                 <strong>{formatoNumero(prevExentoBs)} <span className="label-red">Bs.</span></strong>
-                                                {!soloBs && <strong>{formatoNumero(prevExentoUsd)} <span className="label-red">USD</span></strong>}
+                                                <strong>{formatoNumero(prevExentoUsd)} <span className="label-red">USD</span></strong>
                                             </div>
                                         </td>
                                         <td className="total-cell text-center" style={{ backgroundColor: '#f9f9f9' }}>
@@ -1862,7 +1862,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                                     <span className="label-red">BASE IMPONIBLE:</span><br/>
                                                     <div className="monto-split">
                                                         <strong>{formatoNumero(prevBaseBs)} <span className="label-red">Bs.</span></strong>
-                                                        {!soloBs && <strong>{formatoNumero(prevBaseUsd)} <span className="label-red">USD</span></strong>}
+                                                        <strong>{formatoNumero(prevBaseUsd)} <span className="label-red">USD</span></strong>
                                                     </div>
                                                 </>
                                             ) : (
@@ -1874,10 +1874,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                             <strong>{formatoNumero(tasaBcv)} <span className="label-red">Bs.</span></strong>
                                         </td>
                                         <td className="total-cell text-center" style={{ backgroundColor: '#f9f9f9' }}>
-                                            {!soloBs && (<>
-                                                <span className="label-red">TOTAL GENERAL USD$</span><br/>
-                                                <strong style={{fontSize: '1.1rem'}}>{formatoNumero(prevTotalUsd)}</strong>
-                                            </>)}
+                                            <span className="label-red">TOTAL GENERAL USD$</span><br/>
+                                            <strong style={{fontSize: '1.1rem'}}>{formatoNumero(prevTotalUsd)}</strong>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -1897,6 +1895,14 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                 ? `ESTA FACTURA SALDRÁ A CRÉDITO${formVenta.values.clienteId ? ` · ${Number(formVenta.values.diasCredito) || diasDelCliente} días · ${clienteSeleccionado?.nombre || ''}` : ''}: queda por cobrar, no se registra pago`
                                 : `ESTA VENTA SALDRÁ DE CONTADO: se registra el pago ahora (${formVenta.values.metodoPago})`}
                         </Text>
+                        <Text fw={600} size="xs" c="white" ta="center" mt={2} opacity={0.95}>
+                            {carrito.length} {carrito.length === 1 ? 'producto' : 'productos'} ({unidadesCarrito} und.) · Entrega:{' '}
+                            {entregaActual === 'sitio'
+                                ? 'En el momento (en sitio)'
+                                : entregaActual === 'pickup'
+                                    ? 'Retira el cliente en tienda (empacar)'
+                                    : `Por agencia / chofer${formVenta.values.quienRetira ? ` (${formVenta.values.quienRetira})` : ''} (empacar)`}
+                        </Text>
                     </Alert>
                 )}
                 <Group justify="flex-end" gap="sm" wrap="nowrap" bg="gray.1"
@@ -1907,7 +1913,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     <Button color="green.8" leftSection={<IconCheck size={20} />} onClick={() => handleProcesarVenta(false)} loading={isSubmitting} size={isMobile ? 'sm' : 'md'} h={isMobile ? 46 : undefined} style={isMobile ? { flex: 2 } : undefined}>
                         {esPresupuesto ? 'Asentar venta' : (esCredito ? 'Asentar A CRÉDITO' : 'Asentar DE CONTADO')}
                     </Button>
-                    {!esPresupuesto && !(esVendedor && esFactura) && (
+                    {!esPresupuesto && (
                         <Button color="blue.8" variant="filled" leftSection={<IconPrinter size={20} />} onClick={() => handleProcesarVenta(true)} loading={isSubmitting} size={isMobile ? 'sm' : 'md'} h={isMobile ? 46 : undefined} style={isMobile ? { flex: 2 } : undefined}>
                             {isMobile ? 'Asentar e imprimir' : 'Asentar e imprimir'}
                         </Button>

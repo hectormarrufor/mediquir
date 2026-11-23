@@ -48,11 +48,11 @@ export async function idsPorAprobar(tipo, ids) {
     }
 }
 
-/** ¿Es una factura de este vendedor y ya está aprobada? Solo así un vendedor puede imprimirla (asignarle el número de control y marcarla impresa). */
+/** ¿Es una factura de este vendedor y no está pendiente de aprobación? Así puede imprimirla (asignarle control y marcarla impresa). */
 export async function esFacturaAprobadaDe(ventaId, usuarioId) {
     try {
         const [f] = await sequelize.query(
-            `SELECT 1 AS ok FROM "Ventas" WHERE id = :id AND "vendedorId" = :u AND "tipoDocumento" = 'FACTURA' AND "aprobacionEstado" = 'APROBADA' AND "statusDespacho" <> 'Cancelado'`,
+            `SELECT 1 AS ok FROM "Ventas" WHERE id = :id AND "vendedorId" = :u AND "tipoDocumento" = 'FACTURA' AND ("aprobacionEstado" IS NULL OR "aprobacionEstado" <> 'PENDIENTE') AND "statusDespacho" <> 'Cancelado'`,
             { replacements: { id: ventaId, u: Number(usuarioId) }, type: sequelize.QueryTypes.SELECT },
         );
         return Boolean(f);

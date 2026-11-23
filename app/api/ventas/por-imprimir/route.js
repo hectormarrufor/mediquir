@@ -23,14 +23,14 @@ export async function GET() {
                     SELECT v."id", 'FACTURA' AS tipo, v."numeroDocumento" AS numero, COALESCE(v."fechaEmision", v."createdAt") AS fecha, v."aprobadaAt", v."moneda"::text AS moneda, v."totalFinal"::float AS total,
                            COALESCE(c."nombre", 'Cliente al detal') AS cliente
                       FROM "Ventas" v LEFT JOIN "Clientes" c ON c."id" = v."clienteId"
-                     WHERE v."vendedorId" = :u AND v."tipoDocumento" = 'FACTURA' AND v."aprobacionEstado" = 'APROBADA' AND v."impresaAt" IS NULL AND v."statusDespacho" <> 'Cancelado'
+                     WHERE v."vendedorId" = :u AND v."tipoDocumento" = 'FACTURA' AND (v."aprobacionEstado" IS NULL OR v."aprobacionEstado" <> 'PENDIENTE') AND v."impresaAt" IS NULL AND v."statusDespacho" <> 'Cancelado'
                     UNION ALL
                     SELECT n."id", CASE WHEN n."tipo" = 'CREDITO' THEN 'NOTA_CREDITO' ELSE 'NOTA_DEBITO' END, n."numeroDocumento", n."fecha"::timestamptz, n."aprobadaAt", n."moneda"::text, n."totalFinal"::float,
                            COALESCE(c."nombre", 'Cliente al detal')
                       FROM "NotasFiscales" n LEFT JOIN "Ventas" v ON v."id" = COALESCE(n."ventaId", (n."facturasAfectadas"->0->>'ventaId')::uuid) LEFT JOIN "Clientes" c ON c."id" = n."clienteId"
                      WHERE n."origen" = 'VENTA' AND n."estado" = 'EMITIDA' AND n."aprobacionEstado" = 'APROBADA' AND n."numeroControl" IS NULL
                        AND COALESCE(n."registradoPorId", v."vendedorId") = :u
-                 ) d ORDER BY d."aprobadaAt" NULLS LAST`,
+                 ) d ORDER BY COALESCE(d."aprobadaAt", d."fecha") NULLS LAST`,
                 { u: Number(a.sesion.id) },
             );
         } else {

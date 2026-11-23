@@ -28,8 +28,8 @@ function presentacionValida(item, producto, unidades) {
 class ErrorNegocio extends Error {
     constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
 }
-import { notificarTodos } from '@/app/handlers/notificar';
-import { marcarPorAprobar, avisarPorAprobar, nombreDeUsuario, aprobacionDisponible, efectosDiferidosDisponible, guardarEfectosPendientes } from '@/app/api/_lib/aprobacion';
+import { notificarTodos, notificarCabezas } from '@/app/handlers/notificar';
+import { nombreDeUsuario } from '@/app/api/_lib/aprobacion';
 
 export async function GET(request) {
     const acceso = await requerirStaff();
@@ -127,11 +127,10 @@ export async function POST(request) {
             throw new ErrorNegocio(`Una factura admite hasta ${CONFIG_FISCAL.maxRenglonesFactura} renglones (la forma libre no da para más). Divide la venta en dos facturas.`);
         }
 
-        // Un vendedor puede escribir el precio de cada renglón (jolexi lo revisa al aprobar), pero no vende productos genéricos de precio libre
+        // Un vendedor puede escribir el precio de cada renglón, pero no vende productos genéricos de precio libre
         const esVend = rolDe(acceso.sesion) === 'vendedor';
-        // La factura de un vendedor no mueve inventario, cuentas por cobrar, caja ni comisión hasta que jolexi la aprueba (ver efectosVenta.js).
-        // Esto se consulta fuera de la transacción; sin las migraciones de aprobación todo se aplica al crearla, como antes.
-        const diferir = esVend && tipoDocumento === 'FACTURA' && (await aprobacionDisponible()) && (await efectosDiferidosDisponible());
+        // Los vendedores ya asientan sus ventas automáticamente (sin esperar aprobación de administración); se avisa a las cabezas al asentar.
+        const diferir = false;
         if (esVend) {
             if (!TARIFAS_VENDEDOR.includes(body.tipoPrecio)) throw new ErrorNegocio('Tarifa de precio no permitida', 403);
             if (tipoDocumento === 'FACTURA' && ['precio7', 'precio6'].includes(body.tipoPrecio)) throw new ErrorNegocio('Un vendedor no puede facturar en dólares: usa un precio en bolívares (P4 o P5)', 403);
@@ -399,32 +398,41 @@ export async function POST(request) {
         }
 
         // --- 6. COMISIÓN: si el cliente es de un vendedor externo, la factura o nota lleva su línea de comisión desde ya
-        if (!diferir) await asegurarComisionFactura({ venta: nuevaVenta, transaction: t });
-
-        // La factura de un vendedor nace por aprobar con sus efectos anotados (se aplican al aprobar); todo en la misma transacción
-        if (diferir) {
-            await guardarEfectosPendientes('VENTA', nuevaVenta.id, { metodoPago: metodoPago || null, referencia: referencia || null, solicitadoPorId: Number(acceso.sesion.id) }, t);
-            if (!(await marcarPorAprobar('VENTA', nuevaVenta.id, t))) throw new Error('No se pudo marcar la factura por aprobar');
-        }
+        await asegurarComisionFactura({ venta: nuevaVenta, transaction: t });
 
         await t.commit();
 
-        // La factura de un vendedor queda por aprobar: jolexi la revisa, la corrige si hace falta, la aprueba y la imprime (el vendedor no la imprime)
-        let porAprobar = false;
-        if (esVend && tipoDocumento === 'FACTURA') {
-            porAprobar = diferir ? true : await marcarPorAprobar('VENTA', nuevaVenta.id);
-            if (porAprobar) await avisarPorAprobar({ tipoDoc: 'la factura', numero: numeroDocumento, vendedor: await nombreDeUsuario(acceso.sesion.id).catch(() => null) });
+        const porAprobar = false;
+        const clienteDB = clienteId ? await Cliente.findByPk(clienteId).catch(() => null) : null;
+        const nombreCliente = clienteDB ? (clienteDB.nombre || clienteDB.identificacion) : 'Cliente al detal';
+
+        // --- 7. NOTIFICACIÓN A LAS CABEZAS CUANDO UN VENDEDOR ASIENTA UNA VENTA ---
+        if (esVend) {
+            try {
+                const nombreVend = (await nombreDeUsuario(acceso.sesion.id).catch(() => null)) || 'Un vendedor';
+                const tipoTxt = tipoDocumento === 'FACTURA' ? 'la factura' : tipoDocumento === 'NOTA_ENTREGA' ? 'la nota de entrega' : 'la venta rápida';
+                const montoTxt = moneda === 'BS'
+                    ? `Bs ${Number(factura.totalFinal).toFixed(2)} (≈ $${aDolares(factura.totalFinal, tasaCambio).toFixed(2)})`
+                    : `$${Number(factura.totalFinal).toFixed(2)}`;
+                const pagoTxt = condicionPago === 'Credito' ? 'Crédito' : `Contado${metodoPago ? ` · ${metodoPago}` : ''}`;
+                await notificarCabezas({
+                    title: 'Venta asentada por vendedor 🧾',
+                    body: `${nombreVend} asentó ${tipoTxt} ${numeroDocumento} para ${nombreCliente} por ${montoTxt} (${pagoTxt}).`,
+                    url: `/superuser/ventas/${nuevaVenta.id}`,
+                    tipo: 'Info',
+                });
+            } catch (notifError) {
+                console.error('Error notificando a cabezas sobre venta de vendedor:', notifError);
+            }
         }
 
-        // --- 7. NOTIFICACIÓN PUSH AL MAYOR ---
-        if (tipoVenta === 'MAYOR' && !diferir) { // la de un vendedor avisa al aprobarse
+        // --- 8. NOTIFICACIÓN PUSH AL MAYOR ---
+        if (tipoVenta === 'MAYOR') {
             try {
-                const clienteDB = await Cliente.findByPk(clienteId);
-                const nombreCliente = clienteDB ? (clienteDB.nombre || clienteDB.identificacion) : 'Cliente Desconocido';
-
                 let nombreVendedor = 'Administración';
-                if (vendedorId) {
-                    const usuarioVendedor = await User.findByPk(vendedorId, { include: [{ model: Empleado, as: 'empleado' }] });
+                const idVendedorNotif = esVend ? Number(acceso.sesion.id) : vendedorId;
+                if (idVendedorNotif) {
+                    const usuarioVendedor = await User.findByPk(idVendedorNotif, { include: [{ model: Empleado, as: 'empleado' }] });
                     if (usuarioVendedor?.empleado) {
                         nombreVendedor = `${usuarioVendedor.empleado.nombre} ${usuarioVendedor.empleado.apellido}`;
                     } else if (usuarioVendedor) {
@@ -435,7 +443,7 @@ export async function POST(request) {
                 await notificarTodos({
                     title: 'Nuevo Pedido Mayorista 📦',
                     body: `Se ha creado un nuevo pedido de ${nombreCliente} por ${nombreVendedor}.`,
-                    url: `/superuser/ventas`,
+                    url: `/superuser/ventas/${nuevaVenta.id}`,
                     tipo: 'Info'
                 });
             } catch (notifError) {
