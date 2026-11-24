@@ -230,6 +230,11 @@ export default function DespachosPendientesPage() {
         });
     }, [listaChoferes, grupoActivo?.etiqueta]);
 
+    const setCampoChofer = (campo) => (e) => {
+        const valor = e.currentTarget.value;
+        setChofer((p) => ({ ...p, [campo]: valor }));
+    };
+
     const seleccionarChofer = (idStr) => {
         setChoferId(idStr);
         if (!idStr) return;
@@ -881,7 +886,7 @@ export default function DespachosPendientesPage() {
                                     withAsterisk
                                     placeholder="Nombre y apellido"
                                     value={chofer.choferNombre}
-                                    onChange={(e) => setChofer((p) => ({ ...p, choferNombre: e.currentTarget.value }))}
+                                    onChange={setCampoChofer('choferNombre')}
                                     error={erroresWizard.choferNombre}
                                     maxLength={120}
                                 />
@@ -890,7 +895,7 @@ export default function DespachosPendientesPage() {
                                     withAsterisk
                                     placeholder="V-12345678"
                                     value={chofer.choferCedula}
-                                    onChange={(e) => setChofer((p) => ({ ...p, choferCedula: e.currentTarget.value }))}
+                                    onChange={setCampoChofer('choferCedula')}
                                     error={erroresWizard.choferCedula}
                                     maxLength={30}
                                 />
@@ -902,7 +907,7 @@ export default function DespachosPendientesPage() {
                                         label="Agencia de envíos / transporte"
                                         withAsterisk
                                         value={chofer.choferEmpresa}
-                                        onChange={(e) => setChofer((p) => ({ ...p, choferEmpresa: e.currentTarget.value }))}
+                                        onChange={setCampoChofer('choferEmpresa')}
                                         error={erroresWizard.choferEmpresa}
                                         maxLength={120}
                                     />
@@ -919,7 +924,7 @@ export default function DespachosPendientesPage() {
                                 minRows={1}
                                 maxRows={3}
                                 value={chofer.observacion}
-                                onChange={(e) => setChofer((p) => ({ ...p, observacion: e.currentTarget.value }))}
+                                onChange={setCampoChofer('observacion')}
                             />
 
                             <Text size="sm" fw={700}>Firma del chofer recibiendo los {pedidosSeleccionados.length} paquete(s) y sus facturas *</Text>
