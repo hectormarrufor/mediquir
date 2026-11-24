@@ -329,7 +329,7 @@ export default function DatosPagoEmpleadoCard({
                                 placeholder="01340000000000000000"
                                 maxLength={30}
                                 value={borrador.numeroCuenta}
-                                onChange={(e) => setBorrador((b) => ({ ...b, numeroCuenta: e.currentTarget.value }))}
+                                onChange={(e) => { const v = e.currentTarget.value; setBorrador((b) => ({ ...b, numeroCuenta: v })); }}
                             />
                         </Group>
                     ) : (
@@ -339,7 +339,7 @@ export default function DatosPagoEmpleadoCard({
                             placeholder="Ej. 0412-1234567"
                             maxLength={25}
                             value={borrador.telefono}
-                            onChange={(e) => setBorrador((b) => ({ ...b, telefono: e.currentTarget.value }))}
+                            onChange={(e) => { const v = e.currentTarget.value; setBorrador((b) => ({ ...b, telefono: v })); }}
                         />
                     )}
 
@@ -349,14 +349,14 @@ export default function DatosPagoEmpleadoCard({
                             placeholder="Ej. V-12345678"
                             maxLength={25}
                             value={borrador.cedula}
-                            onChange={(e) => setBorrador((b) => ({ ...b, cedula: e.currentTarget.value }))}
+                            onChange={(e) => { const v = e.currentTarget.value; setBorrador((b) => ({ ...b, cedula: v })); }}
                         />
                         <TextInput
                             label="Nombre del titular"
                             placeholder={nombreEmpleado || 'Nombre completo'}
                             maxLength={120}
                             value={borrador.titular}
-                            onChange={(e) => setBorrador((b) => ({ ...b, titular: e.currentTarget.value }))}
+                            onChange={(e) => { const v = e.currentTarget.value; setBorrador((b) => ({ ...b, titular: v })); }}
                         />
                     </Group>
 
@@ -365,13 +365,13 @@ export default function DatosPagoEmpleadoCard({
                         placeholder="Ej. Cuenta nómina, cuenta de familiar, etc."
                         maxLength={160}
                         value={borrador.notas}
-                        onChange={(e) => setBorrador((b) => ({ ...b, notas: e.currentTarget.value }))}
+                        onChange={(e) => { const v = e.currentTarget.value; setBorrador((b) => ({ ...b, notas: v })); }}
                     />
 
                     <Switch
                         label="Usar como dato de pago principal"
                         checked={borrador.principal}
-                        onChange={(e) => setBorrador((b) => ({ ...b, principal: e.currentTarget.checked }))}
+                        onChange={(e) => { const checked = e.currentTarget.checked; setBorrador((b) => ({ ...b, principal: checked })); }}
                     />
 
                     <Group justify="flex-end" mt="xs">

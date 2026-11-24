@@ -208,7 +208,7 @@ export default function EmpleadosPage() {
                             <Menu.Target><Button size="xs" variant="light" leftSection={<IconColumns size={14} />}>Columnas</Button></Menu.Target>
                             <Menu.Dropdown>
                                 {OPCIONALES.map((c) => (
-                                    <Box key={c.key} px="sm" py={4}><Checkbox size="xs" label={c.label} checked={visibles.includes(c.key)} onChange={(e) => setVisibles((v) => (e.currentTarget.checked ? [...v, c.key] : v.filter((k) => k !== c.key)))} /></Box>
+                                    <Box key={c.key} px="sm" py={4}><Checkbox size="xs" label={c.label} checked={visibles.includes(c.key)} onChange={(e) => { const checked = e.currentTarget.checked; setVisibles((v) => (checked ? [...v, c.key] : v.filter((k) => k !== c.key))); }} /></Box>
                                 ))}
                                 <Menu.Divider />
                                 <Menu.Item onClick={() => setVisibles(VISIBLES_POR_DEFECTO)}>Restablecer</Menu.Item>

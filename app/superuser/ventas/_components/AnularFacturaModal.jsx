@@ -143,9 +143,9 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                                     </Group>
                                     <Group grow align="flex-start" mb={6}>
                                         {controlInicial && <TextInput size="xs" label="N° de control (hueco que se registra)" placeholder="déjalo vacío" value={controles[k]?.control || ''}
-                                            onChange={(e) => setControles((c) => c.map((x, i) => (i === k ? { ...x, control: e.currentTarget.value } : x)))} />}
+                                            onChange={(e) => { const v = e.currentTarget.value; setControles((c) => c.map((x, i) => (i === k ? { ...x, control: v } : x))); }} />}
                                         <TextInput size="xs" label="Número de NC (si ya la emitiste en el sistema anterior)" placeholder={sumarNumero(plan.siguienteNc, k)} value={controles[k]?.numero || ''}
-                                            onChange={(e) => setControles((c) => c.map((x, i) => (i === k ? { ...x, numero: e.currentTarget.value } : x)))} />
+                                            onChange={(e) => { const v = e.currentTarget.value; setControles((c) => c.map((x, i) => (i === k ? { ...x, numero: v } : x))); }} />
                                     </Group>
                                     <Table fz="sm" verticalSpacing={2}>
                                         <Table.Thead><Table.Tr><Table.Th>Renglón</Table.Th><Table.Th ta="right">Quedan</Table.Th><Table.Th w={170}>Esta nota</Table.Th></Table.Tr></Table.Thead>
@@ -228,9 +228,9 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                                 <Text size="sm" fw={700} mb={4}>Nota de crédito sobre {plan.factura.numero}</Text>
                                 <Group grow align="flex-start">
                                     {controlInicial && <TextInput size="xs" label="N° de control (hueco que se registra)" placeholder="déjalo vacío" value={controles[0]?.control || ''}
-                                        onChange={(e) => setControles((c) => c.map((x, i) => (i === 0 ? { ...x, control: e.currentTarget.value } : x)))} />}
+                                        onChange={(e) => { const v = e.currentTarget.value; setControles((c) => c.map((x, i) => (i === 0 ? { ...x, control: v } : x))); }} />}
                                     <TextInput size="xs" label="Número de NC (si ya la emitiste en el sistema anterior)" placeholder={plan.siguienteNc || ''} value={controles[0]?.numero || ''}
-                                        onChange={(e) => setControles((c) => c.map((x, i) => (i === 0 ? { ...x, numero: e.currentTarget.value } : x)))} />
+                                        onChange={(e) => { const v = e.currentTarget.value; setControles((c) => c.map((x, i) => (i === 0 ? { ...x, numero: v } : x))); }} />
                                 </Group>
                             </Card>
                         )}
@@ -239,9 +239,9 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                                 <Text size="sm" fw={700} mb={4}>Nota de crédito sobre {f.numero}{deNotas ? ` (${f.moneda === 'BS' ? 'Bs' : '$'} ${nf(f.acreditable)})` : ''}</Text>
                                 <Group grow align="flex-start">
                                     {controlInicial && <TextInput size="xs" label="N° de control (hueco que se registra)" placeholder="déjalo vacío" value={documentos[f.id]?.control || ''}
-                                        onChange={(e) => setDocumentos((d) => ({ ...d, [f.id]: { ...d[f.id], control: e.currentTarget.value } }))} />}
+                                        onChange={(e) => { const v = e.currentTarget.value; setDocumentos((d) => ({ ...d, [f.id]: { ...d[f.id], control: v } })); }} />}
                                     <TextInput size="xs" label="Número de NC (si ya la emitiste en el sistema anterior)" placeholder={plan.siguienteNc || ''} value={documentos[f.id]?.numero || ''}
-                                        onChange={(e) => setDocumentos((d) => ({ ...d, [f.id]: { ...d[f.id], numero: e.currentTarget.value } }))} />
+                                        onChange={(e) => { const v = e.currentTarget.value; setDocumentos((d) => ({ ...d, [f.id]: { ...d[f.id], numero: v } })); }} />
                                 </Group>
                             </Card>
                         ))}

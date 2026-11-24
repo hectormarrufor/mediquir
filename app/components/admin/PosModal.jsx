@@ -1050,18 +1050,18 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     <Group gap="xs" align="flex-start" wrap={isMobile ? 'wrap' : 'nowrap'} grow>
                         {idProvisional ? (
                             <TextInput size={isMobile ? 'md' : 'xs'} label="RIF o cédula" withAsterisk={exigeDatosFiscales} placeholder="J-12345678-9 o V-12345678" value={datosCli.identificacion}
-                                onChange={(e) => setDatosCli((d) => ({ ...d, identificacion: e.currentTarget.value }))} error={faltaIdCli ? 'Falta el RIF o la cédula (este cliente no lo tiene registrado)' : null} />
+                                onChange={(e) => { const v = e.currentTarget.value; setDatosCli((d) => ({ ...d, identificacion: v })); }} error={faltaIdCli ? 'Falta el RIF o la cédula (este cliente no lo tiene registrado)' : null} />
                         ) : (
                             <Box>
                                 <Text fz={isMobile ? 'sm' : 'xs'} fw={500}>RIF o cédula</Text>
                                 <Text fw={800} size="sm" lh={1.6}>{idClienteBD}</Text>
                             </Box>
                         )}
-                        <TextInput size={isMobile ? 'md' : 'xs'} type="tel" inputMode="tel" label="Teléfono" placeholder="(opcional)" value={datosCli.telefono} onChange={(e) => setDatosCli((d) => ({ ...d, telefono: e.currentTarget.value }))} />
-                        <TextInput size={isMobile ? 'md' : 'xs'} type="email" label="Correo" placeholder="(opcional)" value={datosCli.email} onChange={(e) => setDatosCli((d) => ({ ...d, email: e.currentTarget.value }))} />
+                        <TextInput size={isMobile ? 'md' : 'xs'} type="tel" inputMode="tel" label="Teléfono" placeholder="(opcional)" value={datosCli.telefono} onChange={(e) => { const v = e.currentTarget.value; setDatosCli((d) => ({ ...d, telefono: v })); }} />
+                        <TextInput size={isMobile ? 'md' : 'xs'} type="email" label="Correo" placeholder="(opcional)" value={datosCli.email} onChange={(e) => { const v = e.currentTarget.value; setDatosCli((d) => ({ ...d, email: v })); }} />
                     </Group>
                     <TextInput size={isMobile ? 'md' : 'xs'} label="Dirección" withAsterisk={exigeDatosFiscales} placeholder={exigeDatosFiscales ? 'Obligatoria en la factura' : 'Recomendable'} value={datosCli.direccion}
-                        onChange={(e) => setDatosCli((d) => ({ ...d, direccion: e.currentTarget.value }))} error={faltaDireccionCli ? 'Falta la dirección' : null} />
+                        onChange={(e) => { const v = e.currentTarget.value; setDatosCli((d) => ({ ...d, direccion: v })); }} error={faltaDireccionCli ? 'Falta la dirección' : null} />
                 </Stack>
             </Paper>
         )}

@@ -176,7 +176,10 @@ export default function AuditarPage() {
     };
     const quitarFoto = () => quitarRelacionado(foto.entidad, '¿Quitar esta foto? Quedará como "falta la foto".');
 
-    const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.currentTarget ? e.currentTarget.value : e }));
+    const set = (k) => (e) => {
+        const val = e.currentTarget ? e.currentTarget.value : e;
+        setForm((f) => ({ ...f, [k]: val }));
+    };
     const costo = aNum(form?.costoUsd), p6 = aNum(form?.precio6), p7 = aNum(form?.precio7);
     const margen6 = costo > 0 && p6 > 0 ? ((p6 - costo) / costo) * 100 : null;
     const margen7 = p6 > 0 && p7 > 0 ? ((p7 - p6) / p6) * 100 : null;
@@ -321,7 +324,7 @@ export default function AuditarPage() {
                                     <Box>
                                         <Text size="sm" fw={500} mb={6}>IVA</Text>
                                         <Checkbox mt={4} label={aNum(form.porcentajeIva) === 16 ? 'Con IVA (16 %)' : 'Sin IVA (0 %)'} checked={aNum(form.porcentajeIva) === 16}
-                                            onChange={(e) => setForm((f) => ({ ...f, porcentajeIva: e.currentTarget.checked ? '16' : '0' }))} />
+                                            onChange={(e) => { const checked = e.currentTarget.checked; setForm((f) => ({ ...f, porcentajeIva: checked ? '16' : '0' })); }} />
                                     </Box>
                                 </SimpleGrid>
                                 <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs">

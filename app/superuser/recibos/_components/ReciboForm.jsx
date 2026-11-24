@@ -59,7 +59,7 @@ export default function ReciboForm({ inicial, numeroSugerido, onGuardar, guardan
                     <NumberInput label={`Monto (${d.moneda === 'USD' ? '$' : 'Bs'})`} withAsterisk decimalScale={2} fixedDecimalScale min={0} hideControls thousandSeparator="." decimalSeparator="," value={d.monto} onChange={poner('monto')} inputMode="decimal" w={200} />
                 </Group>
                 <Textarea label="La cantidad de (en letras)" autosize minRows={1} maxRows={3} value={letras}
-                    onChange={(e) => { setLetrasManual(true); setD((x) => ({ ...x, montoLetras: e.currentTarget.value })); }}
+                    onChange={(e) => { const v = e.currentTarget.value; setLetrasManual(true); setD((x) => ({ ...x, montoLetras: v })); }}
                     description={letrasManual ? <Text span size="xs" c="orange.8">Escrita a mano. <Text span size="xs" td="underline" style={{ cursor: 'pointer' }} onClick={() => setLetrasManual(false)}>Volver a la automática</Text></Text> : 'Se arma sola con el monto; puedes corregirla'} />
                 <Textarea label="Por concepto de" autosize minRows={3} maxRows={8} value={d.concepto} onChange={poner('concepto')} />
                 <Box>
