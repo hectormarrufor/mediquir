@@ -141,7 +141,7 @@ export default function EntregaChoferForm({ numeroDocumento, empresaInicial = ''
             <FirmaPad onChange={setFirma} error={errores.firma} />
             <Checkbox
                 color="grape" size="md" error={errores.facturaEntregada}
-                checked={v.facturaEntregada} onChange={(e) => setV((p) => ({ ...p, facturaEntregada: e.currentTarget.checked }))}
+                checked={v.facturaEntregada} onChange={(e) => { const checked = e.currentTarget.checked; setV((p) => ({ ...p, facturaEntregada: checked })); }}
                 label={<Text size="sm" fw={600}><IconFileInvoice size={16} style={{ verticalAlign: 'middle' }} /> ¿Estás seguro de que le estás entregando al chofer la factura impresa ({numeroDocumento})? Marca la casilla para confirmarlo.</Text>}
             />
             <Button fullWidth size="md" color="grape" loading={cargando} onClick={enviar} leftSection={<IconTruckDelivery size={18} />}>

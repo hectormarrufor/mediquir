@@ -806,7 +806,10 @@ export default function DespachosPendientesPage() {
                                             color="teal"
                                             size="md"
                                             checked={Boolean(facturasMarcadas[p.id])}
-                                            onChange={(e) => setFacturasMarcadas((prev) => ({ ...prev, [p.id]: e.currentTarget.checked }))}
+                                            onChange={(e) => {
+                                                const marcado = e.currentTarget.checked;
+                                                setFacturasMarcadas((prev) => ({ ...prev, [p.id]: marcado }));
+                                            }}
                                             label={
                                                 <Box>
                                                     <Group gap={6}>
