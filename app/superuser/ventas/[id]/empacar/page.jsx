@@ -56,6 +56,8 @@ export default function EmpacarPage() {
     const [enviando, setEnviando] = useState(false);
     const [verEscaner, setVerEscaner] = useState(false);
     const [tipoFoto, setTipoFoto] = useState(null);
+    const [agencia, setAgencia] = useState('');
+    const [agenciaOtra, setAgenciaOtra] = useState('');
 
     const { data, isLoading, refetch } = useQuery({
         queryKey: ['empaque', id],
@@ -137,9 +139,6 @@ export default function EmpacarPage() {
     };
 
     const tomarFoto = (tipo) => { setTipoFoto(tipo); setTimeout(() => inputFoto.current?.click(), 0); };
-
-    const [agencia, setAgencia] = useState('');
-    const [agenciaOtra, setAgenciaOtra] = useState('');
 
     const confirmarEmpaque = async () => {
         const esDelivery = venta?.tipoEntrega === 'delivery';
