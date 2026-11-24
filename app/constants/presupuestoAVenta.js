@@ -38,7 +38,10 @@ export function armarBorradorVenta(presupuesto, tipo, tasa = 0) {
         tipoVenta: 'MAYOR', // el documento a un cliente (factura o nota de entrega) es una venta al mayor
         form: {
             clienteId: presupuesto.clienteId ? String(presupuesto.clienteId) : null,
-            tipoPrecio: aBs ? 'precio4' : tarifaDe(presupuesto), conIva: esFactura, costoFlete: flete > 0 ? flete : '',
+            tipoDocumento: tipo,
+            tipoPrecio: aBs ? (['precio6', 'precio5'].includes(presupuesto.tarifa) ? 'precio5' : 'precio4') : tarifaDe(presupuesto),
+            conIva: esFactura,
+            costoFlete: flete > 0 ? flete : '',
         },
         carrito: carritos[0] || [],
         cola: carritos.slice(1),

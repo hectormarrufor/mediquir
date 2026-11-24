@@ -284,15 +284,46 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const motivoSinAgregar = faltantesInicio.length
         ? `Elige primero ${faltantesInicio.join(', ')} antes de agregar productos`
         : null;
-    const tarifaBloqueada = carrito.length > 0 && !faltaTarifa;
+    const tarifaBloqueada = !origen && carrito.length > 0 && !faltaTarifa;
     // Si la tarifa elegida no vale para el documento (p. ej. P7 en una factura) y el carrito está vacío, se borra para que se vuelva a elegir
     useEffect(() => {
         if (tarifaActual && !tarifasPermitidas.includes(tarifaActual) && carrito.length === 0) formVenta.setFieldValue('tipoPrecio', '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tarifaActual, esFacturaDoc, carrito.length]);
-    // Cambiar de documento: si pasa a ser FACTURA y el carrito ya tiene productos con una tarifa en dólares, no se deja (hay que vaciar el carrito)
+    // Cambiar tarifa: si viene de un presupuesto (`origen`), se permite cambiar la tarifa sin vaciar el carrito y se recalculan los renglones
+    const cambiarTarifa = (v) => {
+        const nueva = v || '';
+        if (origen && nueva && nueva !== formVenta.values.tipoPrecio) {
+            setCarrito((prev) => prev.map((it) => ({ ...it, precioManual: false })));
+            if (cola.length > 0 && productos) {
+                const nuevaEsBs = ['precio1', 'precio4', 'precio5'].includes(nueva);
+                setCola((prev) => prev.map((grupo) => grupo.map((it) => {
+                    if (it.isFicticio) {
+                        const nuevoSimbolo = nuevaEsBs ? 'Bs' : '$';
+                        const precio = (it.simbolo && it.simbolo !== nuevoSimbolo && tasaBcv > 0)
+                            ? (nuevaEsBs ? aBolivares(it.precio, tasaBcv) : aDolares(it.precio, tasaBcv))
+                            : it.precio;
+                        return { ...it, precio, simbolo: nuevoSimbolo };
+                    }
+                    const prod = productos.find((p) => p.id === it.id);
+                    if (!prod) return { ...it, precioManual: false };
+                    const info = calcularPrecioInfo(prod, nueva);
+                    return { ...it, precio: info.precio, precioManual: false, simbolo: info.simbolo, tieneDescuento: info.tieneDescuento, porcentajeDescuento: info.porcentajeDescuento };
+                })));
+            }
+        }
+        formVenta.setFieldValue('tipoPrecio', nueva);
+    };
+    // Cambiar de documento: si pasa a ser FACTURA y el carrito ya tiene productos con una tarifa en dólares, no se deja (hay que vaciar el carrito),
+    // salvo si viene de un presupuesto (`origen`), en cuyo caso se pasa a su tarifa equivalente en bolívares (P4 o P5).
     const cambiarDocumento = (v) => {
         if (v === 'FACTURA' && tarifaActual && !TARIFAS_FACTURA.includes(tarifaActual)) {
+            if (origen) {
+                const equivBs = tarifaActual === 'precio6' ? 'precio5' : 'precio4';
+                cambiarTarifa(equivBs);
+                formVenta.setFieldValue('tipoDocumento', v);
+                return;
+            }
             if (carrito.length > 0) {
                 return notifications.show({ color: 'red', title: 'No se puede cambiar a Factura', message: 'La factura solo usa P4 o P5 (bolívares) y el carrito ya tiene productos con otra tarifa. Vacía el carrito primero.', autoClose: 8000 });
             }
@@ -387,7 +418,13 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     useEffect(() => {
         if (!productos || carrito.length === 0 || !formVenta.values.tipoPrecio) return;
         setCarrito(prevCarrito => prevCarrito.map(item => {
-            if (item.isFicticio) return { ...item, simbolo: esMonedaBs ? 'Bs' : '$' };
+            if (item.isFicticio) {
+                const nuevoSimbolo = esMonedaBs ? 'Bs' : '$';
+                const precio = (item.simbolo && item.simbolo !== nuevoSimbolo && tasaBcv > 0)
+                    ? (esMonedaBs ? aBolivares(item.precio, tasaBcv) : aDolares(item.precio, tasaBcv))
+                    : item.precio;
+                return { ...item, precio, simbolo: nuevoSimbolo };
+            }
 
             const productoOriginal = productos.find(p => p.id === item.id);
             if (!productoOriginal) return item;
@@ -1109,7 +1146,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const campoTarifa = (
         <Select
             label="Tarifa (precio base de la venta)" size={tamCampo} data={opcionesTarifa} allowDeselect={false} withAsterisk
-            placeholder="Elige la tarifa" value={formVenta.values.tipoPrecio || null} onChange={(v) => formVenta.setFieldValue('tipoPrecio', v || '')}
+            placeholder="Elige la tarifa" value={formVenta.values.tipoPrecio || null} onChange={cambiarTarifa}
             disabled={tarifaBloqueada} styles={faltaTarifa ? { input: { border: '2px solid #e03131' } } : undefined}
             description={tarifaBloqueada ? 'Para cambiar la tarifa vacía el carrito' : (esFacturaDoc ? 'Factura: solo P4 o P5 (bolívares)' : undefined)}
             error={faltaTarifa && !(!esPresupuesto && faltaDocumento) ? 'Elige la tarifa antes de agregar productos' : null}
