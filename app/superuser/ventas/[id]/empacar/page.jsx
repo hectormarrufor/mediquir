@@ -73,7 +73,8 @@ export default function EmpacarPage() {
     if (isLoading) return <Center h="60vh"><Loader /></Center>;
     if (!data) return <Aviso titulo="No se pudo cargar" texto="Revisa tu conexión e intenta de nuevo." volver={volver} />;
 
-    const { venta, items, esEmpacador } = data;
+    const { venta, items, itemsAnuladosPorNc = [], anuladaPorNc, ncResumen, esEmpacador } = data;
+    if (anuladaPorNc) return <Aviso titulo="Factura anulada por nota de crédito" texto="Esta factura recibió una nota de crédito total y salió de pendientes por empacar." volver={volver} />;
     if (!esEmpacador) return <Aviso titulo="Este empaque no es tuyo" texto={`Solo ${venta.empacadorNombre || 'la persona asignada'} puede empacar este pedido.`} volver={volver} />;
     if (venta.empacadoAt) return <Aviso titulo="Empaque ya firmado" texto="La evidencia quedó guardada y ya no se puede modificar." volver={volver} />;
     if (['Cancelado', 'Completado'].includes(venta.statusDespacho)) return <Aviso titulo="Pedido cerrado" texto="Este pedido ya no admite empaque." volver={volver} />;
@@ -170,6 +171,18 @@ export default function EmpacarPage() {
                 <Badge variant="light">{hechos}/{items.length}</Badge>
             </Group>
             <Progress value={(hechos / Math.max(items.length, 1)) * 100} size="lg" radius="xl" />
+            {ncResumen?.modificaEmpaque && (
+                <Alert color="orange" variant="light" icon={<IconAlertTriangle size={16} />} py={6}>
+                    <Text size="xs" fw={700}>
+                        Cantidades ajustadas por Nota de Crédito ({(ncResumen.notas || []).filter((n) => n.afectaCxc).map((n) => n.numero).join(', ')}).
+                    </Text>
+                    {itemsAnuladosPorNc.length > 0 && (
+                        <Text size="xs">
+                            Retirados del empaque: {itemsAnuladosPorNc.map((x) => `${x.nombre} (${x.cantidadOriginal})`).join(', ')}.
+                        </Text>
+                    )}
+                </Alert>
+            )}
         </Stack>
     );
 
@@ -233,6 +246,11 @@ export default function EmpacarPage() {
                                 : <Center h={160}><IconPhotoOff size={48} color="gray" /></Center>}
                             <Title order={3}>{actual.nombre}</Title>
                             {actual.marca && <Text c="dimmed" size="sm">Marca: {actual.marca}</Text>}
+                            {actual.cantidadOriginal > actual.cantidadPedida && (
+                                <Badge color="orange" variant="filled" size="md" tt="none" w="fit-content">
+                                    Ajustado por NC: eran {actual.cantidadOriginal} → empacar {actual.cantidadPedida}
+                                </Badge>
+                            )}
                             {/* Solo personal: verde = su stock ya está auditado y se descuenta; naranja = sin auditar, no mueve stock */}
                             <Badge color={actual.inventarioAuditado ? 'teal' : 'orange'} variant="light" tt="none" w="fit-content">{actual.inventarioAuditado ? 'Inventario auditado' : 'Inventario sin auditar: no mueve stock'}</Badge>
                             {/* Qué hay que meter, por nivel: no es lo mismo una caja de 100 que 100 unidades sueltas */}

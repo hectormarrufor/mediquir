@@ -3,8 +3,8 @@ import { sequelize } from '@/models';
 import { getSesion } from '@/app/api/notificaciones/_lib';
 import { puedeAprobar, aprobar, avisarAprobado } from '@/app/api/_lib/aprobacion';
 import { aplicarEfectosVenta, avisarPedidoMayor, ErrorEfectos } from '@/app/api/_lib/efectosVenta';
-import { aplicarEfectosNota } from '@/app/api/_lib/notasFiscales';
-import { ErrorNota } from '@/app/api/_lib/notasFiscales';
+import { aplicarEfectosNota, ErrorNota } from '@/app/api/_lib/notasFiscales';
+import { asegurarColumnasEmpaqueNotas, notificarCajaRetenidaPorNc } from '@/app/api/_lib/empaqueNotas';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +56,7 @@ export async function GET() {
 export async function POST(request) {
     const a = await requerirAprobador();
     if (a.error) return a.error;
+    await asegurarColumnasEmpaqueNotas();
     const t = await sequelize.transaction();
     try {
         const { tipo, id } = await request.json();
@@ -65,6 +66,7 @@ export async function POST(request) {
         const efectos = tipo === 'VENTA' ? await aplicarEfectosVenta({ ventaId: id, transaction: t }) : await aplicarEfectosNota({ notaId: id, transaction: t });
         await t.commit();
         if (tipo === 'VENTA' && efectos.aplicado) await avisarPedidoMayor(efectos.venta);
+        if (tipo === 'NOTA' && efectos.avisoPostEmpaque) await notificarCajaRetenidaPorNc(efectos.avisoPostEmpaque);
         await avisarAprobado({ tipo, id, aprobadorId: Number(a.sesion.id) }); // el vendedor se entera: ya puede imprimirla
         return NextResponse.json({ success: true });
     } catch (error) {

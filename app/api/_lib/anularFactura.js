@@ -20,6 +20,7 @@ import { aBolivares, aDolares } from '../../constants/facturacion.js';
 import { emitirNotaVenta, notasDeVenta, ErrorNota } from './notasFiscales.js';
 import { controlesLibres, reservarControl, ErrorNumeracion } from './numeracion.js';
 import { recalcularCobro, hoyCaracas } from './retencionesVenta.js';
+import { sincronizarLogisticaTrasNota } from './empaqueNotas.js';
 
 const { sequelize, Venta, CuentaPorCobrar, Abono, ComisionVenta, RetencionIva, NotaFiscal, Correlativo, Cliente, MovimientoFinanciero, CategoriaFinanciera } = db;
 const { Op } = db.Sequelize;
@@ -86,7 +87,7 @@ async function rebajarPago({ venta, nota, transaction: t }) {
 }
 
 // ¿La mercancía de la factura ya salió? (si no salió, no hay nada que devolver al inventario)
-const yaSalio = (v) => v.tipoVenta !== 'MAYOR' || Boolean(v.empacadoAt) || v.statusDespacho === 'Completado';
+const yaSalio = (v) => v.tipoVenta === 'ONLINE' || v.tipoEntrega === 'sitio' || v.tipoDocumento === 'VENTA_RAPIDA' || Boolean(v.empacadoAt) || v.statusDespacho === 'Completado';
 const regexNumero = (num) => `(^|, )${String(num).replace(/[^A-Za-z0-9-]/g, '')}(,|$)`;
 
 /** Facturas vigentes que comparten notas de entrega con `venta` (incluida ella) y esas notas. Sin notas de origen: solo la factura. */
@@ -152,7 +153,12 @@ export async function planAnulacion({ venta, transaction }) {
         return { id: f.id, numero: f.numeroDocumento, moneda: f.moneda, total: Number(f.totalFinal), acreditable: n.acreditable, notas: numerosAnteriores(f.numeroDocumentoAnterior).filter((x) => x.startsWith('NE-')) };
     }));
     return {
-        factura: { id: venta.id, numero: venta.numeroDocumento, moneda: venta.moneda, tasa: Number(venta.tasaCambio), total: Number(venta.totalFinal), acreditable: propia.acreditable, yaSalio: yaSalio(venta), pagada: venta.statusPago === 'Pagado' },
+        factura: {
+            id: venta.id, numero: venta.numeroDocumento, moneda: venta.moneda, tasa: Number(venta.tasaCambio), total: Number(venta.totalFinal),
+            acreditable: propia.acreditable, yaSalio: yaSalio(venta), pagada: venta.statusPago === 'Pagado',
+            empacado: Boolean(venta.empacadoAt), despachado: venta.statusDespacho === 'Completado',
+            tipoEntrega: venta.tipoEntrega, statusDespacho: venta.statusDespacho,
+        },
         renglones: propia.renglones,
         deNotas,
         notasEntrega: grupo.notas.map((n) => ({ id: n.id, numero: n.numeroDocumento, totalUsd: Number(n.totalFinal) })),
@@ -222,6 +228,7 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
         if (!sinCxc && typeof afectaCxc !== 'boolean') throw new ErrorAnulacion('Indica si las notas de crédito afectan la cuenta por cobrar');
         const devuelve = !sinCxc && yaSalio(venta) && (completa || afectaCxc);
         const emitidasAqui = [];
+        const avisosPostEmpaque = [];
         for (let i = 0; i < grupos.length; i++) {
             const g = grupos[i];
             let ctrl;
@@ -231,10 +238,11 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
                 motivo: `Anulación ${completa ? 'total' : 'parcial'} de la factura ${venta.numeroDocumento} en ${grupos.length} notas de crédito (${i + 1} de ${grupos.length}): ${motivoTxt}`,
                 numeroManual: g.numero || null, numeroControl: ctrl, fecha, diferir, permitirControl,
             });
+            if (nota._avisoPostEmpaque) avisosPostEmpaque.push(nota._avisoPostEmpaque);
             const pagoRebajado = modificarPago ? await rebajarPago({ venta, nota, transaction: t }) : false;
             emitidasAqui.push({ id: nota.id, numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda, pagoRebajado });
         }
-        if (!sinCxc) return { notas: emitidasAqui, notasEntrega: [] };
+        if (!sinCxc) return { notas: emitidasAqui, notasEntrega: [], avisosPostEmpaque };
         previas.set(venta.id, emitidasAqui);
     }
 
@@ -251,7 +259,11 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
         // Si afecta la deuda, lo anulado vuelve al inventario; si no la afecta, no se mueve nada
         const nota = await emitir(venta, elegidos, afectaCxc && yaSalio(venta), afectaCxc, `Anulación parcial de la factura ${venta.numeroDocumento}: ${motivoTxt}`);
         const pagoRebajado = modificarPago ? await rebajarPago({ venta, nota, transaction: t }) : false;
-        return { notas: [{ id: nota.id, numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda, pagoRebajado }], notasEntrega: [] };
+        return {
+            notas: [{ id: nota.id, numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda, pagoRebajado }],
+            notasEntrega: [],
+            avisosPostEmpaque: nota._avisoPostEmpaque ? [nota._avisoPostEmpaque] : [],
+        };
     }
     if (modificarPago) throw new ErrorAnulacion(MENSAJE_SOLO_PAGADA);
 
@@ -259,7 +271,11 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
     if (!varias && !plan.deNotas) {
         if (typeof afectaCxc !== 'boolean') throw new ErrorAnulacion('Indica si la nota de crédito afecta la cuenta por cobrar');
         const nota = await emitir(venta, todos(plan.renglones), yaSalio(venta), afectaCxc, `Anulación total de la factura ${venta.numeroDocumento}: ${motivoTxt}`);
-        return { notas: [{ id: nota.id, numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda }], notasEntrega: [] };
+        return {
+            notas: [{ id: nota.id, numero: nota.numeroDocumento, control: nota.numeroControl, factura: venta.numeroDocumento, total: Number(nota.totalFinal), moneda: nota.moneda }],
+            notasEntrega: [],
+            avisosPostEmpaque: nota._avisoPostEmpaque ? [nota._avisoPostEmpaque] : [],
+        };
     }
 
     // ---------- Total de factura(s) que salieron de notas de entrega: la deuda vuelve a las notas
@@ -327,11 +343,25 @@ export async function anularFactura({ venta, tipo, renglones = [], afectaCxc = n
             observacion: `Vuelve de la factura anulada ${unirAnteriores(facturas.map((f) => f.numeroDocumento))}`,
         }, { transaction: t });
         n.statusDespacho = facturas[0].statusDespacho === 'Cancelado' ? 'Completado' : facturas[0].statusDespacho;
+        if (notasEntrega.length === 1 && facturas[0].empacadoAt && !n.empacadoAt) {
+            n.empacadoAt = facturas[0].empacadoAt;
+            n.empacadorId = facturas[0].empacadorId;
+            n.etiquetadorId = facturas[0].etiquetadorId;
+            n.etiquetadoAt = facturas[0].etiquetadoAt;
+            n.quienRetira = facturas[0].quienRetira;
+            n.fotoCajaAbiertaUrl = facturas[0].fotoCajaAbiertaUrl;
+            n.fotoCajaSelladaUrl = facturas[0].fotoCajaSelladaUrl;
+            n.empaqueVerificado = facturas[0].empaqueVerificado;
+        }
         n.statusPago = 'Pendiente';
         await n.save({ transaction: t });
         await recalcularCobro(n, t);
     }
-    // Las facturas quedan acreditadas por completo con su NC: ya no se deben
-    for (const f of facturas) { f.statusPago = 'Pagado'; await f.save({ transaction: t }); }
-    return { notas: emitidas, notasEntrega: notasEntrega.map((n) => n.numeroDocumento) };
+    // Las facturas quedan acreditadas por completo con su NC: ya no se deben y su empaque queda retirado
+    for (const f of facturas) {
+        f.statusPago = 'Pagado';
+        await f.save({ transaction: t });
+        await sincronizarLogisticaTrasNota({ venta: f, nota: null, afectaCxc: false, deNotas: true, transaction: t });
+    }
+    return { notas: emitidas, notasEntrega: notasEntrega.map((n) => n.numeroDocumento), avisosPostEmpaque: [] };
 }

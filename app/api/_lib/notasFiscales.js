@@ -14,6 +14,7 @@ import { calcularFactura, aBolivares, aDolares, REGLAS } from '../../constants/f
 import { hoyCaracas, recalcularCobro } from './retencionesVenta.js';
 import { fechaCaracas } from '../../constants/hora.js';
 import { controlAlNacer } from './numeracion.js';
+import { sincronizarLogisticaTrasNota, reconciliarLogisticaTrasAnularNota } from './empaqueNotas.js';
 
 const {
     sequelize, NotaFiscal, NotaFiscalDetalle, Venta, VentaDetalle, Producto, Abono, CuentaPorCobrar, CuentaPorPagar, Correlativo,
@@ -222,10 +223,10 @@ async function efectosNota({ nota, venta, afectaCxc, transaction: t }) {
     const totalBs = aBsDoc(factura.totalFinal, moneda, tasa);
 
     if (tipo === 'CREDITO') {
-        // 1) Inventario: solo si la mercancía ya salió (el mayor descuenta al empacar; el detal y la tienda, al vender; una factura copiada
-        //    del sistema anterior ya está despachada aunque nunca pasó por el empaque)
+        // 1) Inventario: solo si la mercancía ya salió (el mayor descuenta al empacar; el detal, entrega en sitio y la tienda, al vender;
+        //    una factura copiada del sistema anterior ya está despachada aunque nunca pasó por el empaque)
         if (nota.devuelveInventario) {
-            const descontado = venta.tipoVenta !== 'MAYOR' || Boolean(venta.empacadoAt) || venta.statusDespacho === 'Completado';
+            const descontado = venta.tipoVenta === 'ONLINE' || venta.tipoEntrega === 'sitio' || venta.tipoDocumento === 'VENTA_RAPIDA' || Boolean(venta.empacadoAt) || venta.statusDespacho === 'Completado';
             if (!descontado) throw new ErrorNota('Este pedido aún no se ha empacado: no salió mercancía del inventario, no hay nada que reintegrar. Desmarca esa opción.', 409);
             for (const l of lineas.filter((x) => x.productoId)) {
                 const producto = await Producto.findByPk(l.productoId, { transaction: t, lock: t.LOCK.UPDATE });
@@ -259,6 +260,8 @@ async function efectosNota({ nota, venta, afectaCxc, transaction: t }) {
             nota.saldoAFavorUsd = Math.min(totalUsd, r2(Math.max(0, abonado - debidoUsd)));
         }
         await nota.save({ transaction: t });
+        const avisoPostEmpaque = await sincronizarLogisticaTrasNota({ venta, nota, afectaCxc: Boolean(afectaCxc), deNotas: false, transaction: t });
+        if (avisoPostEmpaque) nota._avisoPostEmpaque = avisoPostEmpaque;
     } else {
         // Nota de débito: el cliente debe más
         const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, transaction: t, lock: t.LOCK.UPDATE });
@@ -289,7 +292,7 @@ export async function aplicarEfectosNota({ notaId, transaction: t }) {
     if (nota.estado !== 'EMITIDA') throw new ErrorNota('La nota está anulada: no se puede aprobar', 409);
     await efectosNota({ nota, venta, afectaCxc: f.e.afectaCxc !== false, transaction: t });
     await sequelize.query('UPDATE "NotasFiscales" SET "efectosPendientes" = NULL WHERE id = :id', { replacements: { id: notaId }, transaction: t });
-    return { aplicado: true };
+    return { aplicado: true, avisoPostEmpaque: nota._avisoPostEmpaque || null };
 }
 
 // ------------------------------------------------------------------ registro de notas recibidas del proveedor (compras)
@@ -371,10 +374,12 @@ export async function anularNota({ nota, transaction: t }) {
         : [];
     const sinEfectos = Boolean(pendiente?.e);
 
+    let ventaAfectada = null;
     if (sinEfectos) {
         // nada que revertir
     } else if (nota.origen === 'VENTA') {
         const venta = await nota.getVenta({ transaction: t, lock: t.LOCK.UPDATE });
+        ventaAfectada = venta;
         const tasa = Number(nota.tasaCambio) || 1;
         const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: nota.ventaId }, transaction: t, lock: t.LOCK.UPDATE });
 
@@ -443,6 +448,9 @@ export async function anularNota({ nota, transaction: t }) {
     nota.saldoAFavorUsd = 0;
     await nota.save({ transaction: t });
     if (sinEfectos) await sequelize.query('UPDATE "NotasFiscales" SET "efectosPendientes" = NULL WHERE id = :id', { replacements: { id: nota.id }, transaction: t });
+    if (!sinEfectos && nota.origen === 'VENTA' && nota.tipo === 'CREDITO' && ventaAfectada) {
+        await reconciliarLogisticaTrasAnularNota({ venta: ventaAfectada, notaAnulada: nota, transaction: t });
+    }
     return nota;
 }
 

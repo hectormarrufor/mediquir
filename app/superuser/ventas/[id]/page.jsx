@@ -34,6 +34,7 @@ import { aInputFechaHora, formatearFecha, formatearFechaHora } from '@/app/const
 import NotasFacturaCard from '../_components/NotasFacturaCard';
 import FacturarNotasModal from '../_components/FacturarNotasModal';
 import CorregirFacturaModal from '../_components/CorregirFacturaModal';
+import GestionNcEmpaqueModal from '../_components/GestionNcEmpaqueModal';
 import DatosDeCopia from '@/app/components/admin/DatosDeCopia';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -91,6 +92,7 @@ export default function DetallePedidoMayorPage() {
     const [modalNotaAFactura, setModalNotaAFactura] = useState(false);
     const [aprobando, setAprobando] = useState(false);
     const [modalCorregir, setModalCorregir] = useState(false);
+    const [modalGestionNc, setModalGestionNc] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const isMobile = useEsTelefono();
     const { tasa: precioBCV } = useTasaBcv();
@@ -139,6 +141,9 @@ export default function DetallePedidoMayorPage() {
     }
 
     const cancelado = pedido.statusDespacho === 'Cancelado';
+    const empaqueNc = pedido.empaqueNc || null;
+    const ncPorDetalle = new Map((empaqueNc?.cambios || []).map((c) => [c.detalleId, c]));
+    const empaqueAnulado = (!pedido.empacadoAt && Boolean(empaqueNc?.anuladaTotalParaEmpaque)) || empaqueNc?.estadoEfectivo === 'DESARMADO';
     const soyEmpacador = Boolean(userId && pedido.empacadorId) && Number(pedido.empacadorId) === Number(userId);
     const soyEtiquetador = Boolean(userId && pedido.etiquetadorId) && Number(pedido.etiquetadorId) === Number(userId);
     const soyVendedorPedido = Boolean(userId && pedido.vendedorId) && Number(pedido.vendedorId) === Number(userId);
@@ -416,6 +421,42 @@ export default function DetallePedidoMayorPage() {
                 </Alert>
             )}
 
+            {!cancelado && empaqueNc?.bloqueaDespacho && (
+                <Alert color="red" variant="light" radius="md" mb="md" icon={<IconAlertTriangle size={18} />} title="Caja empacada retenida por Nota de Crédito — NO despachar">
+                    <Group justify="space-between" align="center" wrap="wrap" gap="xs">
+                        <Text size="sm">
+                            {empaqueNc.esAnulacionTotal
+                                ? 'Esta factura recibió una nota de crédito total después de empacarse. Desarma la caja antes de mover mercancía.'
+                                : `Esta factura recibió una nota de crédito parcial que afecta la CxC (${(empaqueNc.cambios || []).filter((c) => c.sacar > 0).map((c) => `${c.nombre}: sacar ${c.sacar}`).join(', ')}).`}
+                        </Text>
+                        <Button size="xs" color="red" onClick={() => setModalGestionNc(true)}>
+                            Gestionar ajuste de caja
+                        </Button>
+                    </Group>
+                </Alert>
+            )}
+
+            {!cancelado && empaqueNc?.estadoEfectivo === 'DESARMADO' && (
+                <Alert color="gray" variant="light" radius="md" mb="md" icon={<IconAlertTriangle size={18} />} title="Caja desarmada por Nota de Crédito">
+                    <Text size="sm">
+                        Este pedido salió de despacho porque la caja fue desarmada{empaqueNc.resolucion?.usuarioNombre ? ` por ${empaqueNc.resolucion.usuarioNombre}` : ''}{empaqueNc.resolucion?.fecha ? ` (${formatearFechaHora(empaqueNc.resolucion.fecha)})` : ''}.
+                        {empaqueNc.resolucion?.nota ? ` Nota: ${empaqueNc.resolucion.nota}` : ''}
+                    </Text>
+                </Alert>
+            )}
+
+            {!cancelado && !pedido.empacadoAt && empaqueNc?.anuladaTotalParaEmpaque && (
+                <Alert color="red" variant="light" radius="md" mb="md" icon={<IconAlertTriangle size={18} />} title="Factura anulada totalmente con Nota de Crédito">
+                    <Text size="sm">Este pedido aún no se había empacado y salió automáticamente de «Pendientes por empacar».</Text>
+                </Alert>
+            )}
+
+            {!cancelado && !pedido.empacadoAt && empaqueNc?.modificaEmpaque && (
+                <Alert color="orange" variant="light" radius="md" mb="md" icon={<IconAlertTriangle size={18} />} title="Cantidades por empacar ajustadas por Nota de Crédito">
+                    <Text size="sm">Las notas de crédito que afectaron la CxC redujeron las unidades que hay que empacar (las cantidades fiscales de la factura se conservan intactas).</Text>
+                </Alert>
+            )}
+
             {!cancelado && reemplazos.length > 0 && (
                 <Alert color="orange" variant="light" radius="md" mb="md" title="Documento reemplazado">
                     <Group gap={6} wrap="wrap">
@@ -569,6 +610,7 @@ export default function DetallePedidoMayorPage() {
                                         <Stack gap="xs">
                                             {pedido.detalles?.map((d) => {
                                                 const pres = presentacionRenglon(d);
+                                                const ncDet = ncPorDetalle.get(d.id);
                                                 return (
                                                     <Group key={d.id} wrap="nowrap" align="flex-start" gap="sm" p="xs" style={renglonTarjeta}>
                                                         {miniatura(obtenerTodasLasImagenes(d.producto), 46)}
@@ -583,6 +625,11 @@ export default function DetallePedidoMayorPage() {
                                                                         <b>{d.cantidad}</b> × <PrecioVisual valor={d.precioUnitario} simbolo={pedido.moneda} size="xs" fw={600} />
                                                                     </Text>
                                                                     {pres && <Text size="xs" c="dimmed">{pres}</Text>}
+                                                                    {ncDet && ncDet.acreditadoCxc > 0 && (
+                                                                        <Badge size="xs" mt={2} color={ncDet.restante === 0 ? 'red' : 'orange'} variant="light">
+                                                                            {ncDet.restante === 0 ? `NC -${ncDet.acreditadoCxc} (retirado)` : `NC -${ncDet.acreditadoCxc} → empacar ${ncDet.restante}`}
+                                                                        </Badge>
+                                                                    )}
                                                                 </Box>
                                                                 <Box ta="right" style={{ flexShrink: 0 }}>
                                                                     <PrecioVisual valor={d.subtotal ?? d.precioUnitario * d.cantidad} simbolo={pedido.moneda} size="sm" fw={800} c="navy.9" />
@@ -611,6 +658,7 @@ export default function DetallePedidoMayorPage() {
                                                     {pedido.detalles?.map((d) => {
                                                         const nombreMarca = d.producto?.marca?.nombre || 'Genérica';
                                                         const pres = presentacionRenglon(d);
+                                                        const ncDet = ncPorDetalle.get(d.id);
                                                         return (
                                                             <Table.Tr key={d.id}>
                                                                 <Table.Td>{miniatura(obtenerTodasLasImagenes(d.producto), 40)}</Table.Td>
@@ -624,6 +672,11 @@ export default function DetallePedidoMayorPage() {
                                                                 <Table.Td ta="center">
                                                                     <Text fw={800}>{d.cantidad}</Text>
                                                                     {pres && <Text size="xs" c="dimmed">{pres}</Text>}
+                                                                    {ncDet && ncDet.acreditadoCxc > 0 && (
+                                                                        <Badge size="xs" mt={2} color={ncDet.restante === 0 ? 'red' : 'orange'} variant="light">
+                                                                            {ncDet.restante === 0 ? `NC -${ncDet.acreditadoCxc} (retirado)` : `NC -${ncDet.acreditadoCxc} → empacar ${ncDet.restante}`}
+                                                                        </Badge>
+                                                                    )}
                                                                 </Table.Td>
                                                                 <Table.Td ta="right"><PrecioVisual valor={d.precioUnitario} simbolo={pedido.moneda} size="sm" /></Table.Td>
                                                                 <Table.Td ta="right">
@@ -736,17 +789,17 @@ export default function DetallePedidoMayorPage() {
                             )}
 
                             <Group mt={isMobile ? 'md' : 'xl'} justify="center" gap="sm" wrap="wrap">
-                                {soyEmpacador && !pedido.empacadoAt && !cancelado && (
+                                {soyEmpacador && !pedido.empacadoAt && !cancelado && !empaqueAnulado && (
                                     <Button size="md" fullWidth={isMobile} color="blue" loading={isSubmitting} leftSection={<IconPackage size={18} />} onClick={() => router.push(`/superuser/ventas/${params.id}/empacar`)}>
                                         Empacar paso a paso
                                     </Button>
                                 )}
-                                {soyEtiquetador && !pedido.etiquetadoAt && !cancelado && (
+                                {soyEtiquetador && !pedido.etiquetadoAt && !cancelado && !empaqueAnulado && (
                                     <Button size="md" fullWidth={isMobile} color="grape" loading={isSubmitting} disabled={!pedido.empacadoAt} leftSection={<IconPackage size={18} />} onClick={() => handleFirmar('FIRMAR_ETIQUETADO', 'Etiquetado firmado.')}>
                                         {pedido.empacadoAt ? 'Firmar etiquetado' : 'Etiquetado (esperando empaque)'}
                                     </Button>
                                 )}
-                                {!esVendedor && !pedido.empacadoAt && !['Completado', 'Cancelado'].includes(pedido.statusDespacho) && (
+                                {!esVendedor && !pedido.empacadoAt && !['Completado', 'Cancelado'].includes(pedido.statusDespacho) && !empaqueAnulado && (
                                     <Button
                                         size="md"
                                         fullWidth={isMobile}
@@ -764,7 +817,12 @@ export default function DetallePedidoMayorPage() {
                                         {pedido.empacadorId ? 'Cambiar personal asignado' : 'Asignar personal'}
                                     </Button>
                                 )}
-                                {pasoActual === 1 && (!esVendedor || soyEmpacador || soyEtiquetador || soyVendedorPedido) && (
+                                {pasoActual === 1 && empaqueNc?.bloqueaDespacho && (
+                                    <Button size="md" fullWidth={isMobile} color="red" leftSection={<IconAlertTriangle size={18} />} onClick={() => setModalGestionNc(true)}>
+                                        Gestionar ajuste de caja por NC
+                                    </Button>
+                                )}
+                                {pasoActual === 1 && !empaqueNc?.bloqueaDespacho && !empaqueAnulado && (!esVendedor || soyEmpacador || soyEtiquetador || soyVendedorPedido) && (
                                     pedido.tipoEntrega === 'pickup' ? (
                                         <Button
                                             size="md"
@@ -789,6 +847,15 @@ export default function DetallePedidoMayorPage() {
                                     )
                                 )}
                             </Group>
+                            {empaqueNc?.resolucion && (
+                                <Alert mt="md" color={empaqueNc.estadoEfectivo === 'DESARMADO' ? 'gray' : 'teal'} variant="light" title={`Ajuste logístico por NC (${empaqueNc.resolucion.estado || 'REEMPACAR'})`}>
+                                    <Text size="xs">
+                                        {empaqueNc.resolucion.usuarioNombre ? `Por ${empaqueNc.resolucion.usuarioNombre}` : 'Registrado'}
+                                        {empaqueNc.resolucion.fecha ? ` · ${formatearFechaHora(empaqueNc.resolucion.fecha)}` : ''}
+                                        {empaqueNc.resolucion.nota ? ` — ${empaqueNc.resolucion.nota}` : ''}
+                                    </Text>
+                                </Alert>
+                            )}
                         </Paper>
 
                         <EvidenciaEmpaque ventaId={pedido.id} puedeLiberar={!esVendedor} />
@@ -1301,6 +1368,19 @@ export default function DetallePedidoMayorPage() {
                     </Stack>
                 )}
             </Modal>
+
+            {modalGestionNc && (
+                <GestionNcEmpaqueModal
+                    opened={modalGestionNc}
+                    onClose={() => setModalGestionNc(false)}
+                    ventaId={pedido.id}
+                    numeroDocumento={pedido.numeroDocumento}
+                    cliente={pedido.cliente?.nombre}
+                    agencia={pedido.tipoEntrega === 'pickup' ? 'Retiro en tienda' : pedido.quienRetira}
+                    ncAfectacion={empaqueNc}
+                    onResuelto={() => refetch()}
+                />
+            )}
         </Box>
     );
 }

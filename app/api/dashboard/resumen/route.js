@@ -1,6 +1,16 @@
 import { NextResponse } from 'next/server';
 import sequelize from '@/sequelize';
 import { requerirNoVendedor } from '../../_lib/acceso';
+import {
+    asegurarColumnasEmpaqueNotas,
+    analizarEmpaquesBatch,
+    sqlExcluirPorEmpacar,
+    sqlExcluirDesarmado,
+    sqlFacturaAnuladaTotalNc,
+    sqlCantidadEfectivaDetalle,
+    sqlNcActiva,
+    sqlNcAfectaCxc,
+} from '../../_lib/empaqueNotas';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,8 +26,19 @@ export async function GET() {
     if (acceso.error) return acceso.error;
 
     try {
+        await asegurarColumnasEmpaqueNotas();
         const q = (sql) => sequelize.query(sql, { type: sequelize.QueryTypes.SELECT });
         const activas = `v."statusDespacho" <> 'Cancelado'`;
+        const excluirPorEmpacar = sqlExcluirPorEmpacar('v');
+        const excluirDesarmado = sqlExcluirDesarmado('v');
+        const anuladaTotal = sqlFacturaAnuladaTotalNc('v');
+        const cantEf = sqlCantidadEfectivaDetalle('d');
+        const ncModifica = `EXISTS (
+            SELECT 1 FROM "NotaFiscalDetalles" nd
+            JOIN "NotasFiscales" n2 ON n2."id" = nd."notaId"
+            JOIN "VentaDetalles" d2 ON d2."id" = nd."ventaDetalleId"
+            WHERE d2."ventaId" = v."id" AND ${sqlNcActiva('n2')} AND ${sqlNcAfectaCxc('n2')}
+        )`;
 
         const [[ventas], serie, [cobrar], [pagar], [pedidos], porEmpacarLista, stockBajo, [tienda], [iva], [alertas]] = await Promise.all([
             q(`SELECT
@@ -39,17 +60,18 @@ export async function GET() {
                 COUNT(*) FILTER (WHERE c."fechaVencimiento" BETWEEN ${HOY} AND ${HOY} + 7)::int AS "porVencer"
                FROM "CuentasPorPagar" c WHERE c."estado" <> 'Pagado' AND c."saldoPendiente" > 0`),
             q(`SELECT
-                COUNT(*) FILTER (WHERE v."statusDespacho" IN ('Pendiente', 'Empacado', 'Parcial') AND v."tipoEntrega" <> 'sitio')::int AS "porDespachar",
-                COUNT(*) FILTER (WHERE v."statusDespacho" NOT IN ('Cancelado', 'Completado') AND v."empacadoAt" IS NOT NULL AND v."tipoEntrega" <> 'sitio')::int AS "empacadosPorDespachar",
-                COUNT(*) FILTER (WHERE v."statusDespacho" NOT IN ('Cancelado', 'Completado') AND v."empacadoAt" IS NULL AND v."tipoEntrega" <> 'sitio')::int AS "porEmpacar",
-                COUNT(*) FILTER (WHERE v."statusDespacho" = 'Pendiente' AND v."tipoEntrega" <> 'sitio' AND v."empacadorId" IS NULL AND v."empacadoAt" IS NULL)::int AS "sinAsignar"
+                COUNT(*) FILTER (WHERE v."statusDespacho" IN ('Pendiente', 'Empacado', 'Parcial') AND v."tipoEntrega" <> 'sitio' AND ${excluirDesarmado} AND (v."empacadoAt" IS NOT NULL OR NOT (${anuladaTotal})))::int AS "porDespachar",
+                COUNT(*) FILTER (WHERE v."statusDespacho" NOT IN ('Cancelado', 'Completado') AND v."empacadoAt" IS NOT NULL AND v."tipoEntrega" <> 'sitio' AND ${excluirDesarmado})::int AS "empacadosPorDespachar",
+                COUNT(*) FILTER (WHERE v."statusDespacho" NOT IN ('Cancelado', 'Completado') AND v."empacadoAt" IS NULL AND v."tipoEntrega" <> 'sitio' AND ${excluirPorEmpacar})::int AS "porEmpacar",
+                COUNT(*) FILTER (WHERE v."statusDespacho" = 'Pendiente' AND v."tipoEntrega" <> 'sitio' AND v."empacadorId" IS NULL AND v."empacadoAt" IS NULL AND ${excluirPorEmpacar})::int AS "sinAsignar"
                FROM "Ventas" v`),
             q(`SELECT v."id", v."numeroDocumento" AS numero, v."createdAt" AS fecha, v."tipoEntrega",
                       COALESCE(c."nombre", 'Cliente al detal') AS cliente,
                       v."empacadorId", v."empaqueIniciadoAt" AS "iniciadoAt",
                       COALESCE(e."nombre" || ' ' || e."apellido", u."user") AS empacador,
-                      (SELECT COUNT(*)::int FROM "VentaDetalles" d WHERE d."ventaId" = v."id") AS renglones,
-                      (SELECT COALESCE(SUM(d."cantidad"), 0)::int FROM "VentaDetalles" d WHERE d."ventaId" = v."id") AS articulos
+                      (SELECT COUNT(*)::int FROM "VentaDetalles" d WHERE d."ventaId" = v."id" AND ${cantEf} > 0) AS renglones,
+                      (SELECT COALESCE(SUM(${cantEf}), 0)::int FROM "VentaDetalles" d WHERE d."ventaId" = v."id") AS articulos,
+                      ${ncModifica} AS "modificadoPorNc"
                FROM "Ventas" v
                LEFT JOIN "Clientes" c ON c."id" = v."clienteId"
                LEFT JOIN "Usuarios" u ON u."id" = v."empacadorId"
@@ -59,6 +81,7 @@ export async function GET() {
                  AND v."tipoEntrega" <> 'sitio'
                  AND (v."revisionStock" IS NULL OR v."revisionStock" <> 'PENDIENTE')
                  AND (v."verificacionPago" IS NULL OR v."verificacionPago" <> 'POR_VERIFICAR')
+                 AND ${excluirPorEmpacar}
                ORDER BY v."createdAt" ASC
                LIMIT 30`),
             q(`SELECT p."id", p."nombre", p."stockAlmacen"::float AS stock, p."stockMinimo"::float AS minimo FROM "Productos" p
@@ -82,11 +105,23 @@ export async function GET() {
                 (SELECT COUNT(*) FROM "RetencionesIva" r WHERE r."tipo" = 'VENTA' AND r."estado" = 'POR_REVISAR')::int AS "retencionesPorRevisar"`),
         ]);
 
+        const empacadosIds = await q(
+            `SELECT v."id" FROM "Ventas" v
+             WHERE v."statusDespacho" NOT IN ('Cancelado', 'Completado')
+               AND v."empacadoAt" IS NOT NULL
+               AND v."tipoEntrega" <> 'sitio'
+               AND ${excluirDesarmado}
+               AND (v."empaqueNcEstado" = 'PENDIENTE' OR EXISTS (SELECT 1 FROM "NotasFiscales" n WHERE n."ventaId" = v."id" AND ${sqlNcActiva('n')}))`
+        );
+        const empacadosAnalisis = empacadosIds.length ? await analizarEmpaquesBatch(empacadosIds.map((x) => x.id)) : new Map();
+        let empacadosConNcPendiente = 0;
+        for (const a of empacadosAnalisis.values()) if (a?.bloqueaDespacho) empacadosConNcPendiente++;
+
         const cambio = ventas.ayerTotal > 0 ? ((ventas.hoyTotal - ventas.ayerTotal) / ventas.ayerTotal) * 100 : null;
         return NextResponse.json({
             ventas: { ...ventas, cambioVsAyer: cambio },
             serie,
-            porCobrar: cobrar, porPagar: pagar, pedidos: { ...pedidos, listaPorEmpacar: porEmpacarLista }, tienda, ivaMes: iva.mes, alertas,
+            porCobrar: cobrar, porPagar: pagar, pedidos: { ...pedidos, empacadosConNcPendiente, listaPorEmpacar: porEmpacarLista }, tienda, ivaMes: iva.mes, alertas,
             stockBajo: { total: stockBajo.length, agotados: stockBajo.filter((p) => p.stock <= 0).length, top: stockBajo.slice(0, 5) },
         });
     } catch (error) {

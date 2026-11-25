@@ -4,6 +4,7 @@ import { requerirStaff } from '../../inventario/_lib';
 import { USD, alcanceDe } from '../_lib';
 import { idsPorAprobar } from '../../_lib/aprobacion';
 import { pendientesDeControlOrdenados } from '../../_lib/numeracion';
+import { asegurarColumnasEmpaqueNotas, sqlExcluirDesarmado, sqlFacturaAnuladaTotalNc } from '../../_lib/empaqueNotas';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,7 @@ export async function GET(request) {
     if (acceso.error) return acceso.error;
 
     try {
+        await asegurarColumnasEmpaqueNotas();
         const { searchParams } = new URL(request.url);
         const desde = searchParams.get('desde');
         const hasta = searchParams.get('hasta');
@@ -41,8 +43,9 @@ export async function GET(request) {
         const replacements = { desde, hasta, q: `%${q}%`, limite: TAMANO, salto: (pagina - 1) * TAMANO, ...alcance.replacements };
         let filtro = `(v."createdAt" AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta${alcance.sql}`;
         if (tipo) { filtro += ' AND v."tipoVenta" = :tipo'; replacements.tipo = tipo; }
+        const anuladaNcSql = sqlFacturaAnuladaTotalNc('v');
         if (estado === 'POR_DESPACHAR') {
-            filtro += ` AND v."statusDespacho" IN ('Pendiente', 'Empacado', 'Parcial')`;
+            filtro += ` AND v."statusDespacho" IN ('Pendiente', 'Empacado', 'Parcial') AND ${sqlExcluirDesarmado('v')} AND (v."empacadoAt" IS NOT NULL OR NOT (${anuladaNcSql}))`;
         } else if (estado) {
             filtro += ' AND v."statusDespacho" = :estado'; replacements.estado = estado;
         }
@@ -74,6 +77,7 @@ export async function GET(request) {
         if (incluyeVentas) partes.push(`SELECT v."id", v."id" AS "ventaId", v."numeroDocumento" AS numero, v."createdAt" AS fecha, v."tipoVenta" AS tipo, v."tipoDocumento"::text AS "tipoDocumento", v."moneda"::text AS moneda,
                 v."totalFinal"::float AS total, ${USD}::float AS "totalUsd", v."statusDespacho"::text AS estado, ${PAGO} AS pago, v."condicionPago"::text AS "condicionPago",
                 v."empacadoAt", v."etiquetadoAt", v."empacadorId", v."etiquetadorId",
+                v."empaqueNcEstado", (${anuladaNcSql}) AS "anuladaPorNc",
                 COALESCE(c."nombre", 'Cliente al detal') AS cliente, COALESCE(e."nombre" || ' ' || e."apellido", u."user") AS vendedor,
                 (SELECT COALESCE(SUM(d."cantidad"), 0)::int FROM "VentaDetalles" d WHERE d."ventaId" = v."id") AS articulos,
                 (SELECT r."estado" FROM "RetencionesIva" r WHERE r."ventaId" = v."id" LIMIT 1) AS retencion
@@ -83,6 +87,7 @@ export async function GET(request) {
                 (n."totalFinal" * (CASE WHEN n."tipo" = 'CREDITO' THEN -1 ELSE 1 END))::float AS total, ${NOTA_USD}::float AS "totalUsd",
                 (CASE WHEN n."estado" = 'ANULADA' THEN 'Anulada' ELSE 'Emitida' END) AS estado, NULL::text AS pago, NULL::text AS "condicionPago",
                 NULL::timestamptz AS "empacadoAt", NULL::timestamptz AS "etiquetadoAt", NULL::int AS "empacadorId", NULL::int AS "etiquetadorId",
+                NULL::text AS "empaqueNcEstado", FALSE AS "anuladaPorNc",
                 COALESCE(c."nombre", 'Cliente al detal') AS cliente, COALESCE(ee."nombre" || ' ' || ee."apellido", ue."user", e."nombre" || ' ' || e."apellido", u."user") AS vendedor, NULL::int AS articulos,
                 NULL::text AS retencion
                 ${desdeNota} WHERE ${filtroNota}`);

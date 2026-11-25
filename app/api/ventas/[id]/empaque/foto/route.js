@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { requerirStaff } from '@/app/api/inventario/_lib';
 import db from '@/models/index';
 import { buscarVentaParaEmpaque } from '../../../_empaque';
+import { analizarEmpaqueConNotas, asegurarColumnasEmpaqueNotas } from '@/app/api/_lib/empaqueNotas';
 
 const { VentaEmpaqueItem } = db;
 
@@ -26,13 +27,20 @@ export async function POST(request, { params }) {
         const formato = FORMATOS[(request.headers.get('content-type') || '').split(';')[0].trim()];
         if (!formato) return NextResponse.json({ error: 'Solo se aceptan imágenes JPG, PNG o WebP' }, { status: 415 });
 
+        await asegurarColumnasEmpaqueNotas();
         const venta = await buscarVentaParaEmpaque(id);
         if (!venta) return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
         if (Number(venta.empacadorId) !== Number(acceso.sesion.id)) return NextResponse.json({ error: 'Este empaque no está asignado a ti' }, { status: 403 });
         if (['Cancelado', 'Completado'].includes(venta.statusDespacho)) return NextResponse.json({ error: 'Este pedido ya está cerrado' }, { status: 409 });
         if (venta.empacadoAt) return NextResponse.json({ error: 'El empaque ya fue firmado: la evidencia no se puede modificar' }, { status: 409 });
 
-        const pendientes = venta.detalles.length - await VentaEmpaqueItem.count({ where: { ventaId: venta.id, estado: 'OK' } });
+        const analisis = await analizarEmpaqueConNotas(venta.id);
+        if (analisis?.anuladaTotalParaEmpaque) return NextResponse.json({ error: 'Esta factura fue anulada totalmente con nota de crédito' }, { status: 409 });
+        const cambioPorDet = new Map((analisis?.cambios || []).map((c) => [c.detalleId, c]));
+        const activos = venta.detalles.filter((d) => (cambioPorDet.get(d.id)?.restante ?? Number(d.cantidad)) > 0);
+        const activosIds = new Set(activos.map((d) => d.id));
+        const verificados = await VentaEmpaqueItem.findAll({ where: { ventaId: venta.id, estado: 'OK' }, attributes: ['ventaDetalleId'], raw: true });
+        const pendientes = activos.length - verificados.filter((v) => activosIds.has(v.ventaDetalleId)).length;
         if (pendientes > 0) return NextResponse.json({ error: `Primero verifica los ${pendientes} producto(s) que faltan` }, { status: 409 });
         if (tipo === 'sellada' && !venta.fotoCajaAbiertaUrl) return NextResponse.json({ error: 'Primero toma la foto de la caja abierta' }, { status: 409 });
 

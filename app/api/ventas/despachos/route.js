@@ -6,6 +6,11 @@ import { USUARIOS_QUE_CAMBIAN_PRECIOS } from '../../_lib/preciosAcceso';
 import { guardarChoferFrecuente } from '../choferes/route';
 import { notificarCabezas } from '@/app/handlers/notificar';
 import { avisarCliente } from '../../_lib/avisosCliente';
+import {
+    asegurarColumnasEmpaqueNotas,
+    analizarEmpaquesBatch,
+    sqlExcluirDesarmado,
+} from '../../_lib/empaqueNotas';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +57,7 @@ export async function GET() {
 
     try {
         await asegurarTablaDespachos();
+        await asegurarColumnasEmpaqueNotas();
         const [puedeEditar, pendientes, actas] = await Promise.all([
             puedeCambiarAgencia(acceso.sesion),
             sequelize.query(
@@ -71,6 +77,7 @@ export async function GET() {
                  WHERE v."statusDespacho" NOT IN ('Cancelado', 'Completado')
                    AND v."empacadoAt" IS NOT NULL
                    AND v."tipoEntrega" <> 'sitio'
+                   AND ${sqlExcluirDesarmado('v')}
                  ORDER BY v."empacadoAt" ASC, v."createdAt" ASC`,
                 { type: sequelize.QueryTypes.SELECT }
             ),
@@ -85,13 +92,29 @@ export async function GET() {
             ),
         ]);
 
-        const pendientesDelivery = pendientes.filter((p) => p.tipoEntrega !== 'pickup');
-        const pendientesPickup = pendientes.filter((p) => p.tipoEntrega === 'pickup');
+        const analisisMapa = await analizarEmpaquesBatch(pendientes.map((p) => p.id));
+        const pendientesEnriquecidos = pendientes.map((p) => {
+            const nc = analisisMapa.get(String(p.id)) || null;
+            const ajustado = nc && (nc.modificaEmpaque || nc.esAnulacionTotal);
+            return {
+                ...p,
+                renglones: ajustado ? nc.renglonesEfectivos : p.renglones,
+                articulos: ajustado ? nc.totalRestante : p.articulos,
+                renglonesOriginales: p.renglones,
+                articulosOriginales: p.articulos,
+                ncAfectacion: nc,
+            };
+        });
+
+        const pendientesDelivery = pendientesEnriquecidos.filter((p) => p.tipoEntrega !== 'pickup');
+        const pendientesPickup = pendientesEnriquecidos.filter((p) => p.tipoEntrega === 'pickup');
+        const retenidosPorNc = pendientesEnriquecidos.filter((p) => p.ncAfectacion?.bloqueaDespacho);
 
         return NextResponse.json({
             puedeCambiarAgencia: puedeEditar,
             pendientesDelivery,
             pendientesPickup,
+            retenidosPorNc,
             actas,
         });
     } catch (error) {
@@ -159,6 +182,7 @@ export async function POST(request) {
     if (acceso.error) return acceso.error;
     const yo = Number(acceso.sesion.id);
 
+    await asegurarColumnasEmpaqueNotas();
     const t = await sequelize.transaction();
     try {
         await asegurarTablaDespachos(t);
@@ -210,7 +234,20 @@ export async function POST(request) {
             }
         }
 
-        const detallesResumen = await sequelize.query(
+        const analisisMapa = await analizarEmpaquesBatch(ventaIds, t);
+        for (const v of ventas) {
+            const nc = analisisMapa.get(String(v.id));
+            if (nc?.bloqueaDespacho) {
+                await t.rollback();
+                return NextResponse.json({ error: `El pedido ${v.numeroDocumento} recibió una nota de crédito después de empacarse. Resuelve el ajuste de la caja antes de despacharlo.` }, { status: 409 });
+            }
+            if (nc?.estadoEfectivo === 'DESARMADO') {
+                await t.rollback();
+                return NextResponse.json({ error: `La caja del pedido ${v.numeroDocumento} fue desarmada por nota de crédito y no se puede despachar.` }, { status: 409 });
+            }
+        }
+
+        const detallesResumenRaw = await sequelize.query(
             `SELECT v."id", v."numeroDocumento", v."tipoDocumento"::text AS "tipoDocumento",
                     COALESCE(c."nombre", 'Cliente al detal') AS cliente,
                     COALESCE(c."identificacion", '') AS identificacion,
@@ -222,6 +259,13 @@ export async function POST(request) {
              ORDER BY v."numeroDocumento" ASC`,
             { replacements: { ids: ventaIds }, type: sequelize.QueryTypes.SELECT, transaction: t }
         );
+        const detallesResumen = detallesResumenRaw.map((d) => {
+            const nc = analisisMapa.get(String(d.id));
+            if (nc && (nc.modificaEmpaque || nc.esAnulacionTotal)) {
+                return { ...d, renglones: nc.renglonesEfectivos, articulos: nc.totalRestante };
+            }
+            return d;
+        });
 
         const usuario = await User.findByPk(yo, { include: [{ model: Empleado, as: 'empleado', attributes: ['nombre', 'apellido'] }], transaction: t });
         const entregadoPorNombre = (usuario?.empleado

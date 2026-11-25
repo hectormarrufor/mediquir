@@ -144,6 +144,9 @@ function TarjetaVenta({ v, esVendedor, isAdmin, onAbrir, onEliminar }) {
                         {v.tipo && <Badge size="xs" variant="light" color={TIPOS[v.tipo]?.color}>{TIPOS[v.tipo]?.etiqueta}</Badge>}
                         {v.porAprobar && <Badge size="xs" variant="filled" color="orange">Por aprobar</Badge>}
                         {v.porImprimir && !v.porAprobar && <Badge size="xs" variant="filled" color="blue.8">Falta imprimir</Badge>}
+                        {v.empaqueNcEstado === 'PENDIENTE' && <Badge size="xs" variant="filled" color="red">Caja retenida NC</Badge>}
+                        {v.empaqueNcEstado === 'DESARMADO' && <Badge size="xs" variant="light" color="gray">Caja desarmada</Badge>}
+                        {!v.empacadoAt && v.anuladaPorNc && <Badge size="xs" variant="light" color="red">Anulada NC</Badge>}
                     </Group>
                     <Text size="sm" fw={700} c="navy.9" lineClamp={1} mt={4}>{v.cliente}</Text>
                     <Text fz={11.5} c="dimmed" lineClamp={1} mt={1}>
@@ -589,7 +592,7 @@ export default function VentasDashboard() {
                                     <Table.Tbody>
                                         {lista.data.ventas.map((v) => (
                                             <Table.Tr key={`${v.tipoDocumento}-${v.id}`} style={{ cursor: 'pointer' }} onClick={() => router.push(`/superuser/ventas/${v.ventaId || v.id}`)}>
-                                                <Table.Td><Group gap={6} wrap="nowrap"><Text fw={700} size="sm">{v.numero}</Text><Badge size="xs" variant="light" color={DOC[v.tipoDocumento]?.color}>{DOC[v.tipoDocumento]?.etiqueta}</Badge>{v.tipo && <Badge size="xs" variant="light" color={TIPOS[v.tipo]?.color}>{TIPOS[v.tipo]?.etiqueta}</Badge>}{v.porAprobar && <Badge size="xs" variant="filled" color="orange">Por aprobar</Badge>}{v.porImprimir && !v.porAprobar && <Badge size="xs" variant="filled" color="blue.8">Falta imprimir</Badge>}</Group></Table.Td>
+                                                <Table.Td><Group gap={6} wrap="nowrap"><Text fw={700} size="sm">{v.numero}</Text><Badge size="xs" variant="light" color={DOC[v.tipoDocumento]?.color}>{DOC[v.tipoDocumento]?.etiqueta}</Badge>{v.tipo && <Badge size="xs" variant="light" color={TIPOS[v.tipo]?.color}>{TIPOS[v.tipo]?.etiqueta}</Badge>}{v.porAprobar && <Badge size="xs" variant="filled" color="orange">Por aprobar</Badge>}{v.porImprimir && !v.porAprobar && <Badge size="xs" variant="filled" color="blue.8">Falta imprimir</Badge>}{v.empaqueNcEstado === 'PENDIENTE' && <Badge size="xs" variant="filled" color="red">Caja retenida NC</Badge>}{v.empaqueNcEstado === 'DESARMADO' && <Badge size="xs" variant="light" color="gray">Caja desarmada</Badge>}{!v.empacadoAt && v.anuladaPorNc && <Badge size="xs" variant="light" color="red">Anulada NC</Badge>}</Group></Table.Td>
                                                 <Table.Td><Text size="xs">{fmtFecha(v.fecha)}</Text></Table.Td>
                                                 <Table.Td><Tooltip label={v.cliente} multiline maw={340} withArrow openDelay={250}><Text size="sm" lineClamp={1} maw={320}>{v.cliente}</Text></Tooltip></Table.Td>
                                                 {!esVendedor && <Table.Td><Tooltip label={v.vendedor || '—'} multiline maw={340} withArrow openDelay={250}><Text size="sm" c="dimmed" lineClamp={1} maw={140}>{v.vendedor || '—'}</Text></Tooltip></Table.Td>}

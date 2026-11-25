@@ -6,6 +6,7 @@ import { aprobacionDisponible, marcarPorAprobar, avisarPorAprobar, nombreDeUsuar
 import { ErrorNota, emitirNotaVenta, notasDeVenta, calcularDiferencial, emitirNotaDiferencial, otrasFacturasDelCliente } from '@/app/api/_lib/notasFiscales';
 import { tasaVigente } from '@/app/api/_lib/tasaBcv';
 import { avisarCliente } from '@/app/api/_lib/avisosCliente';
+import { asegurarColumnasEmpaqueNotas, notificarCajaRetenidaPorNc } from '@/app/api/_lib/empaqueNotas';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,11 +44,12 @@ export async function POST(request, { params }) {
     if (acceso.error) return acceso.error;
     const esVend = rolDe(acceso.sesion) === 'vendedor';
 
+    await asegurarColumnasEmpaqueNotas();
     const t = await sequelize.transaction();
     try {
         const { id } = await params;
         if (!UUID.test(id)) throw new ErrorNota('Factura no encontrada', 404);
-        const { tipo, motivo, renglones, devuelveInventario, usdDiferencial, otrasFacturasIds, numeroNota, numeroControl, fecha, huecoControl } = await request.json();
+        const { tipo, motivo, renglones, devuelveInventario, afectaCxc, usdDiferencial, otrasFacturasIds, numeroNota, numeroControl, fecha, huecoControl } = await request.json();
 
         const venta = await Venta.findByPk(id, { transaction: t, lock: t.LOCK.UPDATE });
         if (!venta) throw new ErrorNota('Factura no encontrada', 404);
@@ -66,9 +68,10 @@ export async function POST(request, { params }) {
         const diferir = esVend && tipo !== 'DIFERENCIAL' && (await efectosDiferidosDisponible());
         const nota = tipo === 'DIFERENCIAL'
             ? await emitirNotaDiferencial({ venta, tasaHoy: await tasaVigente({ transaction: t }), usdSolicitado: usdDiferencial, usuarioId: Number(acceso.sesion.id) || null, transaction: t })
-            : await emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario: Boolean(devuelveInventario), otrasFacturasIds, usuarioId: Number(acceso.sesion.id) || null, transaction: t, numeroManual: numeroNota || null, numeroControl: numeroControl || null, fecha: fecha || null, diferir, permitirControl: !esVend && huecoControl === true });
+            : await emitirNotaVenta({ venta, tipo, renglones, motivo, devuelveInventario: Boolean(devuelveInventario), afectaCxc: typeof afectaCxc === 'boolean' ? afectaCxc : true, otrasFacturasIds, usuarioId: Number(acceso.sesion.id) || null, transaction: t, numeroManual: numeroNota || null, numeroControl: numeroControl || null, fecha: fecha || null, diferir, permitirControl: !esVend && huecoControl === true });
         if (diferir) await marcarPorAprobar('NOTA', nota.id, t); // por aprobar en la misma transacción
         await t.commit();
+        if (nota._avisoPostEmpaque) await notificarCajaRetenidaPorNc(nota._avisoPostEmpaque);
         let porAprobar = false;
         if (esVend) {
             porAprobar = diferir ? true : await marcarPorAprobar('NOTA', nota.id);

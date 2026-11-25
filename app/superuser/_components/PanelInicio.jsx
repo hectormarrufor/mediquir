@@ -106,6 +106,7 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
     if (d?.porPagar.vencidas > 0) atencion.push({ color: 'red', icono: IconClockExclamation, texto: `${d.porPagar.vencidas} cuenta(s) por pagar vencida(s)`, detalle: 'Revisa tus proveedores', href: '/superuser/cxp' });
     if (d?.porPagar.porVencer > 0) atencion.push({ color: 'orange', icono: IconWallet, texto: `${d.porPagar.porVencer} pago(s) a proveedor vencen esta semana`, detalle: 'Próximos 7 días', href: '/superuser/cxp' });
     if (d?.pedidos.sinAsignar > 0) atencion.push({ color: 'blue', icono: IconPackage, texto: `${d.pedidos.sinAsignar} pedido(s) sin empacador asignado`, detalle: 'Asigna quién empaca y etiqueta', href: '/superuser/ventas' });
+    if (d?.pedidos.empacadosConNcPendiente > 0) atencion.unshift({ color: 'red', icono: IconAlertTriangle, texto: `${d.pedidos.empacadosConNcPendiente} caja(s) empacada(s) retenida(s) por Nota de Crédito`, detalle: 'Gestiona el ajuste o desarme antes de despachar', href: '/superuser/ventas/despachos' });
     if (d?.alertas?.porVerificar > 0) atencion.unshift({ color: 'red', icono: IconAlertTriangle, texto: `${d.alertas.porVerificar} compra(s) de la tienda con pago por verificar`, detalle: 'Confírmalo en el banco o recházalo', href: '/superuser/ventas' });
     if (d?.alertas?.intentosFallidos > 0) atencion.push({ color: 'orange', icono: IconAlertTriangle, texto: `${d.alertas.intentosFallidos} intento(s) de pago sin coincidencia en 24 h`, detalle: 'Referencias que no existen o montos distintos', href: '/superuser/pagos-recibidos' });
     if (d?.alertas?.enRevision > 0) atencion.push({ color: 'violet', icono: IconPackage, texto: `${d.alertas.enRevision} pedido(s) B2B en revisión de existencias`, detalle: 'Confirma o ajusta las cantidades', href: '/superuser/ventas' });
@@ -221,6 +222,11 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
                                                                 Sin empacador (libre)
                                                             </Badge>
                                                         )}
+                                                        {pedido.modificadoPorNc && (
+                                                            <Badge size="xs" variant="filled" color="orange">
+                                                                Ajustado por NC
+                                                            </Badge>
+                                                        )}
                                                     </Group>
                                                     <Text size="sm" fw={600} c="dark.7" truncate mt={2}>{pedido.cliente}</Text>
                                                     <Text size="xs" c="dimmed">{fmtFechaHora(pedido.fecha)}</Text>
@@ -319,6 +325,11 @@ export default function PanelInicio({ nombre, tasa, onPos, onCompra, onAjustes, 
                                             <Badge size="md" radius="xl" color="yellow" variant="filled" c="dark.9" fw={900}>
                                                 DESPACHOS POR AGENCIA
                                             </Badge>
+                                            {d.pedidos.empacadosConNcPendiente > 0 && (
+                                                <Badge size="md" radius="xl" color="red" variant="filled" fw={900}>
+                                                    {d.pedidos.empacadosConNcPendiente} RETENIDO(S) POR NC
+                                                </Badge>
+                                            )}
                                         </Group>
                                         <Text size="xs" c="white" opacity={0.92} mt={2}>
                                             Toca aquí para ver los pedidos por agencia, cambiar la agencia de envío si hace falta, entregar al chofer o imprimir Actas PDF.

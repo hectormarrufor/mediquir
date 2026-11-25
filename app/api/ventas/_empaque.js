@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { Op } from 'sequelize';
 import db from '@/models/index';
 import { codigoCoincide, codigosAceptados, codigosDe, entregaDe, nivelDelCodigo, nivelMayor, normalizarCodigo, presentacionDe, presentacionesDe } from '@/app/constants/presentaciones';
+import { analizarEmpaqueConNotas } from '@/app/api/_lib/empaqueNotas';
 
 const { Venta, VentaDetalle, Producto, Marca, GrupoEquivalencia, VentaEmpaqueItem, EmpaqueError, User, Empleado } = db;
 
@@ -178,10 +179,17 @@ export function faltanPresentaciones(detalle) {
 
 // Lo que falta para poder firmar el empaque (vacío = todo comprobado)
 export async function faltantesDeEmpaque(venta, transaction) {
+    const analisis = await analizarEmpaqueConNotas(venta.id, transaction);
+    if (analisis?.anuladaTotalParaEmpaque) return ['Esta factura fue anulada totalmente con nota de crédito'];
+    const cambioPorDet = new Map((analisis?.cambios || []).map((c) => [c.detalleId, c]));
+    const detallesActivos = venta.detalles.filter((d) => {
+        const c = cambioPorDet.get(d.id);
+        return c ? c.restante > 0 : Number(d.cantidad) > 0;
+    });
     const items = await VentaEmpaqueItem.findAll({ where: { ventaId: venta.id }, transaction });
     const porDetalle = new Map(items.map((i) => [i.ventaDetalleId, i]));
     const faltantes = [];
-    const sinVerificar = venta.detalles.filter((d) => porDetalle.get(d.id)?.estado !== 'OK');
+    const sinVerificar = detallesActivos.filter((d) => porDetalle.get(d.id)?.estado !== 'OK');
     if (sinVerificar.length) faltantes.push(`Faltan ${sinVerificar.length} producto(s) por verificar en el empaque paso a paso`);
     if (!venta.fotoCajaAbiertaUrl) faltantes.push('Falta la foto de la caja abierta con el contenido');
     if (!venta.fotoCajaSelladaUrl) faltantes.push('Falta la foto de la caja sellada');

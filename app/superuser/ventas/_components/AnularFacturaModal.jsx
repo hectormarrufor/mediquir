@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
     Alert, Button, Card, Checkbox, Group, Loader, Modal, NumberInput, Paper, Radio, SegmentedControl, Select, Stack, Table, Text, TextInput, Textarea,
 } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { PANTALLA_COMPLETA_MOVIL } from '@/app/components/ui/modalMovil';
@@ -33,6 +33,7 @@ async function pedir(url, opciones) {
 import { avisarNotaEmitida } from './avisoNota';
 
 export default function AnularFacturaModal({ opened, onClose, pedido, onListo, controlInicial = null }) {
+    const queryClient = useQueryClient();
     const [tipo, setTipo] = useState('TOTAL');
     const [cantidades, setCantidades] = useState({});
     const [afecta, setAfecta] = useState(null); // 'si' | 'no'
@@ -117,6 +118,10 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                 color: 'green', titulo: 'Nota de crédito emitida', porAprobar: r.porAprobar, notas: r.notas.map((n) => ({ id: n.id, numero: n.numero })),
                 mensaje: `${r.notas.map((n) => `${n.numero} (control ${n.control}) sobre ${n.factura}`).join('; ')}.${r.notasEntrega.length ? ` La deuda volvió a ${r.notasEntrega.join(', ')}.` : ''}${r.notas.some((n) => n.pagoRebajado) ? ' Se rebajó el pago ya registrado.' : ''}`,
             });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['vendedor'] });
+            queryClient.invalidateQueries({ queryKey: ['ventas', 'despachos-pendientes'] });
+            queryClient.invalidateQueries({ queryKey: ['empaque', pedido.id] });
             onClose();
             onListo?.();
         } catch (e) {
@@ -220,6 +225,30 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                         </Radio.Group>
                     )}
                     {!varias && tipo === 'TOTAL' && !deNotas && <Text size="xs" c="dimmed">{plan.factura.yaSalio ? 'Todo lo facturado vuelve al inventario.' : 'El pedido aún no salió del almacén: no hay mercancía que devolver al inventario.'}</Text>}
+                    {plan?.factura && !plan.factura.despachado && plan.factura.tipoEntrega !== 'sitio' && (() => {
+                        const esTotalVista = varias ? completaVarias : tipo === 'TOTAL';
+                        const afectaReal = deNotas ? false : parcialPagada ? false : afecta === 'si';
+                        const empacado = Boolean(plan.factura.empacado);
+                        if (deNotas) {
+                            return <Alert color="blue" variant="light">Logística: la factura saldrá de empaque y el despacho volverá a su(s) nota(s) de entrega.</Alert>;
+                        }
+                        if (!empacado) {
+                            if (esTotalVista) return <Alert color="teal" variant="light">Empaque: este pedido aún no se empaca — saldrá automáticamente de <b>Pendientes por empacar</b>.</Alert>;
+                            if (afecta === 'si') return <Alert color="orange" variant="light">Empaque: al afectar la CxC, se ajustarán automáticamente las unidades que hay que empacar.</Alert>;
+                            if (afecta === 'no' || parcialPagada) return <Alert color="gray" variant="light">Empaque: como no afecta la CxC, el pedido sigue pendiente por empacar con las mismas cantidades.</Alert>;
+                            return null;
+                        }
+                        if (esTotalVista) {
+                            return <Alert color="red" variant="light">Despacho: este pedido ya está empacado. Quedará <b>retenido en Despachos</b> para desarmar la caja antes de entregar.</Alert>;
+                        }
+                        if (afecta === 'si') {
+                            return <Alert color="orange" variant="light">Despacho: este pedido ya está empacado. Quedará <b>retenido en Despachos</b> para ajustar la caja o re-empacar.</Alert>;
+                        }
+                        if (afecta === 'no' || parcialPagada) {
+                            return <Alert color="gray" variant="light">Despacho: no afecta la CxC, la caja ya empacada podrá despacharse sin cambios.</Alert>;
+                        }
+                        return null;
+                    })()}
                     {deNotas && plan.bloqueosNotas.map((b) => <Alert key={b} color="red" icon={<IconAlertTriangle size={18} />}>{b}</Alert>)}
 
                     <Stack gap={6}>

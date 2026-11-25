@@ -16,6 +16,7 @@ import { AGENCIAS_ENVIO, AGENCIAS_ENVIO_CON_OTRA } from '@/app/constants/agencia
 import { useEsTelefono } from '@/app/components/ui/modalMovil';
 import { useVolver } from '@/app/helpers/useVolver';
 import FirmaPad from '@/app/components/ui/FirmaPad';
+import GestionNcEmpaqueModal from '../_components/GestionNcEmpaqueModal';
 
 const SIN_AGENCIA = '__SIN_AGENCIA__';
 const fmtFechaHora = (v) => (v ? new Date(v).toLocaleString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'short', timeStyle: 'short' }) : '—');
@@ -46,6 +47,7 @@ export default function DespachosPendientesPage() {
 
     // Despacho rápido de retiro por cliente en tienda (pickup)
     const [despachandoPickupId, setDespachandoPickupId] = useState(null);
+    const [gestionandoNc, setGestionandoNc] = useState(null);
 
     // Wizard de entrega en lote a la agencia
     const [wizardAbierto, setWizardAbierto] = useState(false);
@@ -80,6 +82,7 @@ export default function DespachosPendientesPage() {
     const puedeCambiarAgencia = Boolean(data?.puedeCambiarAgencia);
     const pendientesDelivery = data?.pendientesDelivery || [];
     const pendientesPickup = data?.pendientesPickup || [];
+    const retenidosPorNc = data?.retenidosPorNc || [];
     const actas = data?.actas || [];
 
     // Agrupar pedidos delivery por agencia (siempre mostrando las 4 principales + cualquier otra que tenga paquetes + sin agencia)
@@ -112,13 +115,13 @@ export default function DespachosPendientesPage() {
     const elegirAgencia = (clave) => {
         setAgenciaElegida(clave);
         const g = gruposAgencias.find((x) => x.clave === clave);
-        setSeleccionados((g?.pedidos || []).map((p) => p.id));
+        setSeleccionados((g?.pedidos || []).filter((p) => !p.ncAfectacion?.bloqueaDespacho).map((p) => p.id));
     };
 
     const pedidosSeleccionados = useMemo(() => {
         if (!grupoActivo) return [];
         const setIds = new Set(seleccionados);
-        return grupoActivo.pedidos.filter((p) => setIds.has(p.id));
+        return grupoActivo.pedidos.filter((p) => setIds.has(p.id) && !p.ncAfectacion?.bloqueaDespacho);
     }, [grupoActivo, seleccionados]);
 
     const togglePedido = (id) => {
@@ -340,6 +343,44 @@ export default function DespachosPendientesPage() {
 
                 {error && <Alert color="red" icon={<IconAlertTriangle size={18} />}>{error.message}</Alert>}
 
+                {retenidosPorNc.length > 0 && (
+                    <Alert
+                        color="red"
+                        variant="light"
+                        radius="lg"
+                        icon={<IconAlertTriangle size={20} />}
+                        title={`${retenidosPorNc.length} pedido(s) empacado(s) retenido(s) por Nota de Crédito — NO despachar sin revisar`}
+                        styles={{ root: { background: '#fff5f5', border: '2px solid var(--mantine-color-red-6)' } }}
+                    >
+                        <Stack gap="xs" mt={4}>
+                            {retenidosPorNc.map((r) => {
+                                const nc = r.ncAfectacion;
+                                const resumenSacar = nc?.esAnulacionTotal
+                                    ? 'NC Total — desarmar caja y retirar de despacho'
+                                    : `Sacar: ${(nc?.cambios || []).filter((c) => c.sacar > 0).map((c) => `${c.nombre} (${c.sacar})`).join(', ')}`;
+                                return (
+                                    <Paper key={r.id} withBorder radius="md" p="xs" bg="white">
+                                        <Group justify="space-between" align="center" gap="xs" wrap="wrap">
+                                            <Box style={{ minWidth: 0, flex: '1 1 240px' }}>
+                                                <Group gap={6} wrap="wrap">
+                                                    <Text fw={800} size="sm" c="red.8">{r.numero}</Text>
+                                                    <Badge size="xs" color="red" variant="filled">{nc?.esAnulacionTotal ? 'Anulación total' : 'NC parcial'}</Badge>
+                                                    <Badge size="xs" color="grape" variant="light">{r.tipoEntrega === 'pickup' ? 'Retiro en tienda' : (r.agencia || 'Sin agencia')}</Badge>
+                                                </Group>
+                                                <Text size="xs" fw={600} mt={2}>{r.cliente}</Text>
+                                                <Text size="xs" c="dimmed" lineClamp={2}>{resumenSacar}</Text>
+                                            </Box>
+                                            <Button size="xs" color="red" onClick={() => setGestionandoNc(r)}>
+                                                Gestionar ajuste
+                                            </Button>
+                                        </Group>
+                                    </Paper>
+                                );
+                            })}
+                        </Stack>
+                    </Alert>
+                )}
+
                 <Tabs value={tab} onChange={(v) => v && setTab(v)} variant="pills" radius="md">
                     <Paper withBorder p={6} radius="md" bg="white" mb="sm">
                         <Tabs.List grow={telefono}>
@@ -429,26 +470,30 @@ export default function DespachosPendientesPage() {
                                                 {grupoActivo.pedidos.length} pendiente(s)
                                             </Badge>
                                         </Group>
-                                        {grupoActivo.pedidos.length > 0 && (
-                                            <Group gap="xs">
-                                                <Button
-                                                    size="xs"
-                                                    variant="subtle"
-                                                    onClick={() => setSeleccionados(seleccionados.length === grupoActivo.pedidos.length ? [] : grupoActivo.pedidos.map((p) => p.id))}
-                                                >
-                                                    {seleccionados.length === grupoActivo.pedidos.length ? 'Desmarcar todos' : 'Seleccionar todos'}
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    color="grape"
-                                                    leftSection={<IconTruckDelivery size={18} />}
-                                                    disabled={pedidosSeleccionados.length === 0}
-                                                    onClick={abrirWizard}
-                                                >
-                                                    Entregar {pedidosSeleccionados.length} pedido(s)
-                                                </Button>
-                                            </Group>
-                                        )}
+                                        {grupoActivo.pedidos.length > 0 && (() => {
+                                            const seleccionables = grupoActivo.pedidos.filter((p) => !p.ncAfectacion?.bloqueaDespacho);
+                                            return (
+                                                <Group gap="xs">
+                                                    <Button
+                                                        size="xs"
+                                                        variant="subtle"
+                                                        disabled={seleccionables.length === 0}
+                                                        onClick={() => setSeleccionados(seleccionados.length === seleccionables.length ? [] : seleccionables.map((p) => p.id))}
+                                                    >
+                                                        {seleccionables.length > 0 && seleccionados.length === seleccionables.length ? 'Desmarcar todos' : 'Seleccionar todos'}
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        color="grape"
+                                                        leftSection={<IconTruckDelivery size={18} />}
+                                                        disabled={pedidosSeleccionados.length === 0}
+                                                        onClick={abrirWizard}
+                                                    >
+                                                        Entregar {pedidosSeleccionados.length} pedido(s)
+                                                    </Button>
+                                                </Group>
+                                            );
+                                        })()}
                                     </Group>
 
                                     {grupoActivo.esSinAgencia && (
@@ -467,7 +512,9 @@ export default function DespachosPendientesPage() {
                                     ) : (
                                         <Stack gap="xs">
                                             {grupoActivo.pedidos.map((p) => {
-                                                const marcado = seleccionados.includes(p.id);
+                                                const nc = p.ncAfectacion;
+                                                const bloqueadoNc = Boolean(nc?.bloqueaDespacho);
+                                                const marcado = !bloqueadoNc && seleccionados.includes(p.id);
                                                 return (
                                                     <Paper
                                                         key={p.id}
@@ -475,8 +522,8 @@ export default function DespachosPendientesPage() {
                                                         radius="md"
                                                         p="sm"
                                                         style={{
-                                                            borderColor: marcado ? 'var(--mantine-color-grape-5)' : undefined,
-                                                            background: marcado ? 'var(--mantine-color-grape-0)' : 'white',
+                                                            borderColor: bloqueadoNc ? 'var(--mantine-color-red-6)' : (marcado ? 'var(--mantine-color-grape-5)' : undefined),
+                                                            background: bloqueadoNc ? 'var(--mantine-color-red-0)' : (marcado ? 'var(--mantine-color-grape-0)' : 'white'),
                                                         }}
                                                     >
                                                         <Group justify="space-between" align="center" gap="sm" wrap="wrap">
@@ -485,6 +532,7 @@ export default function DespachosPendientesPage() {
                                                                     mt={2}
                                                                     color="grape"
                                                                     size="md"
+                                                                    disabled={bloqueadoNc}
                                                                     checked={marcado}
                                                                     onChange={() => togglePedido(p.id)}
                                                                     aria-label={`Seleccionar ${p.numero}`}
@@ -498,14 +546,30 @@ export default function DespachosPendientesPage() {
                                                                         <Badge size="xs" variant="outline" color="grape">
                                                                             {p.renglones} prod. · {p.articulos} uds.
                                                                         </Badge>
+                                                                        {bloqueadoNc && <Badge size="xs" variant="filled" color="red">⛔ Retenido por NC</Badge>}
+                                                                        {!bloqueadoNc && nc?.estadoEfectivo === 'AJUSTADO' && <Badge size="xs" variant="light" color="teal">✓ Caja ajustada por NC</Badge>}
+                                                                        {!bloqueadoNc && nc?.estadoEfectivo === 'DESPACHAR_IGUAL' && <Badge size="xs" variant="light" color="orange">NC resuelta</Badge>}
+                                                                        {!bloqueadoNc && nc?.tieneNcSoloInformativa && <Badge size="xs" variant="light" color="gray">Con NC · sin cambios</Badge>}
                                                                     </Group>
                                                                     <Text size="sm" fw={600} c="dark.7" mt={2}>{p.cliente}</Text>
                                                                     <Text size="xs" c="dimmed">
                                                                         Empacado: {fmtFechaHora(p.empacadoAt)}{p.empacador ? ` · por ${p.empacador}` : ''}
                                                                     </Text>
+                                                                    {bloqueadoNc && (
+                                                                        <Text size="xs" c="red.8" fw={600} mt={2}>
+                                                                            {nc?.esAnulacionTotal
+                                                                                ? 'NC total: desarma la caja antes de entregar.'
+                                                                                : `Sacar: ${(nc?.cambios || []).filter((c) => c.sacar > 0).map((c) => `${c.nombre} (${c.sacar})`).join(', ')}`}
+                                                                        </Text>
+                                                                    )}
                                                                 </Box>
                                                             </Group>
                                                             <Group gap={6} wrap="wrap">
+                                                                {bloqueadoNc && (
+                                                                    <Button size="xs" color="red" onClick={() => setGestionandoNc(p)}>
+                                                                        Gestionar ajuste
+                                                                    </Button>
+                                                                )}
                                                                 <Button size="xs" variant="default" onClick={() => router.push(`/superuser/ventas/${p.id}`)}>
                                                                     Ver pedido
                                                                 </Button>
@@ -551,37 +615,58 @@ export default function DespachosPendientesPage() {
                                 </Center>
                             ) : (
                                 <Stack gap="xs">
-                                    {pendientesPickup.map((p) => (
-                                        <Paper key={p.id} withBorder radius="md" p="sm" bg="gray.0">
-                                            <Group justify="space-between" align="center" gap="sm" wrap="wrap">
-                                                <Box style={{ minWidth: 0, flex: '1 1 220px' }}>
+                                    {pendientesPickup.map((p) => {
+                                        const nc = p.ncAfectacion;
+                                        const bloqueadoNc = Boolean(nc?.bloqueaDespacho);
+                                        return (
+                                            <Paper key={p.id} withBorder radius="md" p="sm" bg={bloqueadoNc ? 'red.0' : 'gray.0'} style={bloqueadoNc ? { borderColor: 'var(--mantine-color-red-6)' } : undefined}>
+                                                <Group justify="space-between" align="center" gap="sm" wrap="wrap">
+                                                    <Box style={{ minWidth: 0, flex: '1 1 220px' }}>
+                                                        <Group gap={6} wrap="wrap">
+                                                            <Text fw={800} size="sm" c="navy.9">{p.numero}</Text>
+                                                            <Badge size="xs" variant="light" color="teal">Retiro en tienda</Badge>
+                                                            <Badge size="xs" variant="outline" color="gray">{p.renglones} prod. · {p.articulos} uds.</Badge>
+                                                            {bloqueadoNc && <Badge size="xs" variant="filled" color="red">⛔ Retenido por NC</Badge>}
+                                                            {!bloqueadoNc && nc?.estadoEfectivo === 'AJUSTADO' && <Badge size="xs" variant="light" color="teal">✓ Caja ajustada por NC</Badge>}
+                                                            {!bloqueadoNc && nc?.estadoEfectivo === 'DESPACHAR_IGUAL' && <Badge size="xs" variant="light" color="orange">NC resuelta</Badge>}
+                                                            {!bloqueadoNc && nc?.tieneNcSoloInformativa && <Badge size="xs" variant="light" color="gray">Con NC · sin cambios</Badge>}
+                                                        </Group>
+                                                        <Text size="sm" fw={600} mt={2}>{p.cliente}</Text>
+                                                        <Text size="xs" c="dimmed">Empacado: {fmtFechaHora(p.empacadoAt)}</Text>
+                                                        {bloqueadoNc && (
+                                                            <Text size="xs" c="red.8" fw={600} mt={2}>
+                                                                {nc?.esAnulacionTotal
+                                                                    ? 'NC total: desarma la caja antes de entregar.'
+                                                                    : `Sacar: ${(nc?.cambios || []).filter((c) => c.sacar > 0).map((c) => `${c.nombre} (${c.sacar})`).join(', ')}`}
+                                                            </Text>
+                                                        )}
+                                                    </Box>
                                                     <Group gap={6} wrap="wrap">
-                                                        <Text fw={800} size="sm" c="navy.9">{p.numero}</Text>
-                                                        <Badge size="xs" variant="light" color="teal">Retiro en tienda</Badge>
-                                                        <Badge size="xs" variant="outline" color="gray">{p.renglones} prod. · {p.articulos} uds.</Badge>
-                                                    </Group>
-                                                    <Text size="sm" fw={600} mt={2}>{p.cliente}</Text>
-                                                    <Text size="xs" c="dimmed">Empacado: {fmtFechaHora(p.empacadoAt)}</Text>
-                                                </Box>
-                                                <Group gap={6} wrap="wrap">
-                                                    {puedeCambiarAgencia && (
-                                                        <Button size="xs" variant="light" color="orange" leftSection={<IconEdit size={14} />} onClick={() => abrirCambioAgencia(p)}>
-                                                            Pasar a agencia
+                                                        {bloqueadoNc && (
+                                                            <Button size="sm" color="red" onClick={() => setGestionandoNc(p)}>
+                                                                Gestionar ajuste
+                                                            </Button>
+                                                        )}
+                                                        {puedeCambiarAgencia && (
+                                                            <Button size="xs" variant="light" color="orange" leftSection={<IconEdit size={14} />} onClick={() => abrirCambioAgencia(p)}>
+                                                                Pasar a agencia
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            size="sm"
+                                                            color="teal.7"
+                                                            disabled={bloqueadoNc}
+                                                            loading={despachandoPickupId === p.id}
+                                                            leftSection={<IconCheck size={16} />}
+                                                            onClick={() => despacharPickup(p)}
+                                                        >
+                                                            Marcar como despachado
                                                         </Button>
-                                                    )}
-                                                    <Button
-                                                        size="sm"
-                                                        color="teal.7"
-                                                        loading={despachandoPickupId === p.id}
-                                                        leftSection={<IconCheck size={16} />}
-                                                        onClick={() => despacharPickup(p)}
-                                                    >
-                                                        Marcar como despachado
-                                                    </Button>
+                                                    </Group>
                                                 </Group>
-                                            </Group>
-                                        </Paper>
-                                    ))}
+                                            </Paper>
+                                        );
+                                    })}
                                 </Stack>
                             )}
                         </Paper>
@@ -946,6 +1031,18 @@ export default function DespachosPendientesPage() {
                     )}
                 </Stack>
             </Modal>
+
+            {gestionandoNc && (
+                <GestionNcEmpaqueModal
+                    opened={Boolean(gestionandoNc)}
+                    onClose={() => setGestionandoNc(null)}
+                    ventaId={gestionandoNc.id}
+                    numeroDocumento={gestionandoNc.numero}
+                    cliente={gestionandoNc.cliente}
+                    agencia={gestionandoNc.tipoEntrega === 'pickup' ? 'Retiro en tienda' : gestionandoNc.agencia}
+                    ncAfectacion={gestionandoNc.ncAfectacion}
+                />
+            )}
         </Box>
     );
 }

@@ -6,6 +6,7 @@ import { requerirStaff } from '@/app/api/inventario/_lib';
 import { aprobacionDisponible, marcarPorAprobar, avisarPorAprobar, nombreDeUsuario, efectosDiferidosDisponible, leerEfectosPendientes } from '@/app/api/_lib/aprobacion';
 import { planAnulacion, anularFactura, ErrorAnulacion } from '@/app/api/_lib/anularFactura';
 import { ErrorNota } from '@/app/api/_lib/notasFiscales';
+import { asegurarColumnasEmpaqueNotas, notificarCajaRetenidaPorNc } from '@/app/api/_lib/empaqueNotas';
 
 export const dynamic = 'force-dynamic';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -39,6 +40,7 @@ export async function POST(request, { params }) {
     const acceso = await requerirStaff();
     if (acceso.error) return acceso.error;
     const esVend = rolDe(acceso.sesion) === 'vendedor';
+    await asegurarColumnasEmpaqueNotas();
     const t = await sequelize.transaction();
     try {
         const { id } = await params;
@@ -62,6 +64,7 @@ export async function POST(request, { params }) {
         });
         if (diferir) for (const n of r.notas || []) if (n.id) await marcarPorAprobar('NOTA', n.id, t); // por aprobar en la misma transacción: nunca queda una nota con efectos pendientes sin aprobación
         await t.commit();
+        for (const aviso of r.avisosPostEmpaque || []) await notificarCajaRetenidaPorNc(aviso);
         // Lo que emite un vendedor queda por aprobar (jolexi lo revisa y lo imprime)
         let porAprobar = false;
         if (esVend) {

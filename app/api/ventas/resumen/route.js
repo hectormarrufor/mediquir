@@ -3,6 +3,7 @@ import sequelize from '@/sequelize';
 import { rolDe } from '@/app/constants/roles';
 import { requerirStaff } from '../../inventario/_lib';
 import { USD, alcanceDe } from '../_lib';
+import { asegurarColumnasEmpaqueNotas, sqlExcluirDesarmado, sqlFacturaAnuladaTotalNc } from '../../_lib/empaqueNotas';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +20,7 @@ export async function GET(request) {
     if (acceso.error) return acceso.error;
 
     try {
+        await asegurarColumnasEmpaqueNotas();
         const { searchParams } = new URL(request.url);
         const desde = searchParams.get('desde');
         const hasta = searchParams.get('hasta');
@@ -36,7 +38,7 @@ export async function GET(request) {
                 COALESCE(SUM(${USD}) FILTER (WHERE v."statusDespacho" <> 'Cancelado'), 0)::float AS total,
                 COUNT(*) FILTER (WHERE v."statusDespacho" = 'Cancelado')::int AS anuladas,
                 COALESCE(SUM(${SALDO_VENTA}) FILTER (WHERE v."statusDespacho" <> 'Cancelado' AND v."statusPago" <> 'Pagado'), 0)::float AS "porCobrar",
-                COUNT(*) FILTER (WHERE v."statusDespacho" IN ('Pendiente', 'Empacado', 'Parcial'))::int AS "porDespachar"
+                COUNT(*) FILTER (WHERE v."statusDespacho" IN ('Pendiente', 'Empacado', 'Parcial') AND ${sqlExcluirDesarmado('v')} AND (v."empacadoAt" IS NOT NULL OR NOT (${sqlFacturaAnuladaTotalNc('v')})))::int AS "porDespachar"
                 ${base}`),
             consultar(`SELECT to_char((v."createdAt" AT TIME ZONE 'America/Caracas')::date, 'YYYY-MM-DD') AS dia,
                 COALESCE(SUM(${USD}), 0)::float AS total, COUNT(*)::int AS ventas

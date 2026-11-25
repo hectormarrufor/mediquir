@@ -19,6 +19,7 @@ const ConsultorPrecios = dynamic(() => import('./ConsultorPrecios'), { ssr: fals
 const CardexModal = dynamic(() => import('./CardexModal'), { ssr: false });
 const PosModal = dynamic(() => import('../../components/admin/PosModal'), { ssr: false });
 const EntregaChoferForm = dynamic(() => import('../../components/admin/EntregaChoferForm'), { ssr: false });
+const GestionNcEmpaqueModal = dynamic(() => import('../ventas/_components/GestionNcEmpaqueModal'), { ssr: false });
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtUsd = (v) => `$${usd.format(Number(v) || 0)}`;
@@ -80,6 +81,7 @@ function TarjetaTarea({ tarea, tipo, onFirmar }) {
                     <Group gap={8}>
                         <Text fw={800} c="navy.9">{tarea.numero}</Text>
                         <Badge variant="light" color={tarea.tipoEntrega === 'pickup' ? 'grape' : 'cyan'} size="sm">{tarea.tipoEntrega === 'pickup' ? 'Retiro' : 'Envío'}</Badge>
+                        {tarea.modificadoPorNc && <Badge variant="filled" color="orange" size="xs">Ajustado por NC</Badge>}
                     </Group>
                     <Text size="sm" c="dimmed" truncate>{tarea.cliente} · {tarea.articulos} artículos · {fmtFechaHora(tarea.fecha)}</Text>
                 </Box>
@@ -121,10 +123,11 @@ function TarjetaTarea({ tarea, tipo, onFirmar }) {
 
 // Pedido ya empacado y etiquetado: si lo busca el cliente en tienda (pickup), un clic lo pasa a despachado sin pedir datos;
 // si lo busca un chofer o agencia, abre el formulario con la lista de choferes frecuentes, firma y confirmación de factura.
-function TarjetaEntrega({ tarea, onEntregar, onDespacharCliente, despachandoId }) {
+function TarjetaEntrega({ tarea, onEntregar, onDespacharCliente, onGestionarNc, despachandoId }) {
     const esPickup = tarea.tipoEntrega === 'pickup';
+    const bloqueadoNc = Boolean(tarea.empaqueNc?.bloqueaDespacho);
     return (
-        <Paper withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)' }}>
+        <Paper withBorder radius="lg" p="md" style={{ boxShadow: 'var(--mm-shadow-card)', borderColor: bloqueadoNc ? 'var(--mantine-color-red-6)' : undefined, background: bloqueadoNc ? 'var(--mantine-color-red-0)' : undefined }}>
             <Group justify="space-between" wrap="nowrap" align="flex-start">
                 <Box style={{ minWidth: 0 }}>
                     <Group gap={8} wrap="wrap">
@@ -132,11 +135,18 @@ function TarjetaEntrega({ tarea, onEntregar, onDespacharCliente, despachandoId }
                         <Badge variant="light" color={esPickup ? 'teal' : 'grape'} size="sm">
                             {esPickup ? 'Cliente lo busca en tienda' : 'Lo busca chofer / agencia'}
                         </Badge>
+                        {bloqueadoNc && <Badge variant="filled" color="red" size="xs">⛔ Retenido por NC</Badge>}
+                        {!bloqueadoNc && tarea.empaqueNc?.estadoEfectivo === 'AJUSTADO' && <Badge variant="light" color="teal" size="xs">✓ Ajustado por NC</Badge>}
                     </Group>
                     <Text size="sm" c="dimmed" truncate>{tarea.cliente} · {tarea.articulos} artículos</Text>
                     {tarea.transporte && <Text size="xs" c="dimmed" truncate>Lo retira: {tarea.transporte}</Text>}
+                    {bloqueadoNc && <Text size="xs" c="red.8" fw={600} mt={2}>Recibió NC después de empacarse. Resuelve el ajuste antes de entregar.</Text>}
                 </Box>
-                {esPickup ? (
+                {bloqueadoNc ? (
+                    <Button size="sm" color="red" onClick={() => onGestionarNc(tarea)}>
+                        Gestionar ajuste
+                    </Button>
+                ) : esPickup ? (
                     <Button
                         size="sm"
                         color="teal.7"
@@ -171,6 +181,7 @@ export default function DashboardVendedor() {
     const [porEntregar, setPorEntregar] = useState(null); // tarea que se va a entregar al chofer
     const [entregando, setEntregando] = useState(false);
     const [despachandoId, setDespachandoId] = useState(null);
+    const [gestionandoNc, setGestionandoNc] = useState(null);
     const [disponiblesAbierto, { toggle: toggleDisponibles }] = useDisclosure(false);
     const [tomandoId, setTomandoId] = useState(null);
 
@@ -246,6 +257,7 @@ export default function DashboardVendedor() {
     const nDisponibles = data?.porEmpacarDisponibles?.length ?? 0;
     const nEntregar = data?.porEntregar?.length ?? 0;
     const nEnviosDespacho = data?.enviosPorDespachar ?? nEntregar;
+    const nEnviosNc = data?.enviosConNcPendiente ?? 0;
     const nEtiquetar = data?.porEtiquetar?.length ?? 0;
 
     const tomarEmpaque = async (pedido) => {
@@ -360,6 +372,7 @@ export default function DashboardVendedor() {
                                                             {pedido.renglones} prod. · {pedido.articulos} uds.
                                                         </Badge>
                                                         <Badge size="xs" variant="filled" color="pink">Libre</Badge>
+                                                        {pedido.modificadoPorNc && <Badge size="xs" variant="filled" color="orange">Ajustado por NC</Badge>}
                                                     </Group>
                                                     <Text size="sm" fw={600} c="dark.7" truncate mt={2}>{pedido.cliente}</Text>
                                                     <Text size="xs" c="dimmed">{fmtFechaHora(pedido.fecha)}</Text>
@@ -389,6 +402,7 @@ export default function DashboardVendedor() {
                                                         <Badge size="xs" variant="outline" color="blue">
                                                             {pedido.renglones} prod. · {pedido.articulos} uds.
                                                         </Badge>
+                                                        {pedido.modificadoPorNc && <Badge size="xs" variant="filled" color="orange">Ajustado por NC</Badge>}
                                                     </Group>
                                                     <Text size="sm" fw={600} c="dark.7" truncate mt={2}>{pedido.cliente}</Text>
                                                     <Text size="xs" c="dimmed">{fmtFechaHora(pedido.fecha)}</Text>
@@ -468,6 +482,11 @@ export default function DashboardVendedor() {
                                             <Badge size="md" radius="xl" color="yellow" variant="filled" c="dark.9" fw={900}>
                                                 ENTREGAR A AGENCIA / CLIENTE
                                             </Badge>
+                                            {nEnviosNc > 0 && (
+                                                <Badge size="md" radius="xl" color="red" variant="filled" fw={900}>
+                                                    {nEnviosNc} RETENIDO(S) POR NC
+                                                </Badge>
+                                            )}
                                         </Group>
                                         <Text size="xs" c="white" opacity={0.92} mt={2}>
                                             ¿Llegó el chofer de una agencia de envíos? Toca aquí, elige la agencia y entrega todos sus paquetes con firma y Acta PDF.
@@ -505,7 +524,7 @@ export default function DashboardVendedor() {
                         <Group gap={8}><IconTruckDelivery size={20} color="var(--mantine-color-grape-6)" /><Title order={4} c="white">Mis entregas / Por despachar</Title></Group>
                         {isLoading ? <Skeleton h={120} radius="lg" />
                             : nEntregar === 0 ? <Paper withBorder radius="lg" p="lg"><Group gap="xs"><IconCircleCheck color="var(--mantine-color-teal-6)" /><Text c="dimmed">No tienes pedidos listos para entregar.</Text></Group></Paper>
-                                : data.porEntregar.map((t) => <TarjetaEntrega key={t.id} tarea={t} onEntregar={setPorEntregar} onDespacharCliente={despacharCliente} despachandoId={despachandoId} />)}
+                                : data.porEntregar.map((t) => <TarjetaEntrega key={t.id} tarea={t} onEntregar={setPorEntregar} onDespacharCliente={despacharCliente} onGestionarNc={setGestionandoNc} despachandoId={despachandoId} />)}
                     </Stack>
                 </SimpleGrid>
 
@@ -567,6 +586,18 @@ export default function DashboardVendedor() {
             <Modal opened={Boolean(porEntregar)} onClose={() => setPorEntregar(null)} fullScreen={false} size="lg" centered title={<Text fw={800}>Entregar al chofer</Text>} closeOnClickOutside={false}>
                 {porEntregar && <EntregaChoferForm key={porEntregar.id} numeroDocumento={porEntregar.numero} empresaInicial={porEntregar.transporte} cargando={entregando} onConfirmar={entregar} />}
             </Modal>
+
+            {gestionandoNc && (
+                <GestionNcEmpaqueModal
+                    opened={Boolean(gestionandoNc)}
+                    onClose={() => setGestionandoNc(null)}
+                    ventaId={gestionandoNc.id}
+                    numeroDocumento={gestionandoNc.numero}
+                    cliente={gestionandoNc.cliente}
+                    agencia={gestionandoNc.tipoEntrega === 'pickup' ? 'Retiro en tienda' : gestionandoNc.transporte}
+                    ncAfectacion={gestionandoNc.empaqueNc}
+                />
+            )}
 
             {consultorAbierto && <ConsultorPrecios opened={consultorAbierto} onClose={() => setConsultorAbierto(false)} />}
             {cardexAbierto && <CardexModal opened={cardexAbierto} onClose={() => setCardexAbierto(false)} />}

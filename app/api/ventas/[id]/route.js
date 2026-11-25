@@ -27,6 +27,7 @@ import { confirmarPagoManual, cancelarPedidoTienda, asentarCobroTienda, ErrorPag
 import { fechaCaracas, desdeInputFechaHora } from '@/app/constants/hora';
 import { numerosAnteriores } from '@/app/constants/documentosAnteriores';
 import { guardarChoferFrecuente } from '../choferes/route';
+import { asegurarColumnasEmpaqueNotas, analizarEmpaqueConNotas, registrarSnapshotEmpaque } from '../../_lib/empaqueNotas';
 
 // Error de reglas de logística (permisos, estados) con su código HTTP
 class ErrorLogistica extends Error {
@@ -38,16 +39,19 @@ const ACCIONES_VENDEDOR = ['TOMAR_EMPAQUE', 'FIRMAR_EMPAQUE', 'FIRMAR_ETIQUETADO
 
 // Descuenta el stock y deja las salidas como "Empacada". Solo las ventas que requieren empaque (pickup o chofer) descuentan aquí:
 // las entregas en el momento (sitio) y las ventas web (ONLINE) ya descontaron al venderse.
-async function ejecutarEmpaque(venta, t, empacadorId) {
+async function ejecutarEmpaque(venta, t, empacadorId, analisis = null) {
+    const cambioPorDet = new Map((analisis?.cambios || []).map((c) => [c.detalleId, c]));
     if (venta.tipoVenta !== 'ONLINE' && venta.tipoEntrega !== 'sitio') {
         for (const item of venta.detalles) {
             if (item.isFicticio || item.afectaInventario === false) continue;
+            const cantEfectiva = cambioPorDet.has(item.id) ? cambioPorDet.get(item.id).restante : Number(item.cantidad);
+            if (cantEfectiva <= 0) continue;
             const productoDB = await Producto.findByPk(item.productoId, { transaction: t, lock: t.LOCK.UPDATE });
             if (!productoDB) continue;
             // Producto sin auditar (naranja): su stock aún no es confiable, así que NO se mueve ni se exige existencia; solo se suma lo vendido.
             // Cuando se audita (verde), el stock ya corregido sí se descuenta al empacar.
             if (!productoDB.inventarioAuditado) {
-                productoDB.nroVentas = (Number(productoDB.nroVentas) || 0) + Number(item.cantidad);
+                productoDB.nroVentas = (Number(productoDB.nroVentas) || 0) + cantEfectiva;
                 await productoDB.save({ transaction: t });
                 continue;
             }
@@ -55,17 +59,17 @@ async function ejecutarEmpaque(venta, t, empacadorId) {
             // Pedido confirmado tras la revisión de existencias: administración aseguró que consigue lo que falta por fuera, así que solo se
             // descuenta lo que sí hay en almacén (el stock nunca queda negativo y lo de afuera no pasa por el inventario)
             const conseguidoAfuera = venta.revisionStock === 'RESUELTA';
-            if (stock < Number(item.cantidad) && !conseguidoAfuera) {
-                throw new ErrorLogistica(`Sin existencia suficiente de "${productoDB.nombre}" (hay ${stock}, se necesitan ${item.cantidad})`, 409);
+            if (stock < cantEfectiva && !conseguidoAfuera) {
+                throw new ErrorLogistica(`Sin existencia suficiente de "${productoDB.nombre}" (hay ${stock}, se necesitan ${cantEfectiva})`, 409);
             }
-            productoDB.stockAlmacen = stock - Math.min(stock, Number(item.cantidad));
-            productoDB.nroVentas = (Number(productoDB.nroVentas) || 0) + Number(item.cantidad);
+            productoDB.stockAlmacen = stock - Math.min(stock, cantEfectiva);
+            productoDB.nroVentas = (Number(productoDB.nroVentas) || 0) + cantEfectiva;
             await productoDB.save({ transaction: t });
         }
     }
     await SalidaInventario.update(
         { estado: 'Empacada', despachadoPorId: Number(empacadorId) || null },
-        { where: { ventaId: venta.id }, transaction: t }
+        { where: { ventaId: venta.id, estado: { [Op.ne]: 'Cancelada' } }, transaction: t }
     );
 }
 
@@ -101,6 +105,7 @@ export async function GET(request, { params }) {
     const acceso = await requerirStaff();
     if (acceso.error) return acceso.error;
     try {
+        await asegurarColumnasEmpaqueNotas();
         const { id } = await params;
         let whereClause = {};
 
@@ -158,6 +163,7 @@ export async function GET(request, { params }) {
             j.abonos = [];
             j.salidasInventario = (j.salidasInventario || []).map(({ costoAlMomento, ...resto }) => resto);
             j.aprobacionPendiente = venta.tipoDocumento === 'FACTURA' && await estaPorAprobar('VENTA', venta.id);
+            j.empaqueNc = await analizarEmpaqueConNotas(venta.id);
             return NextResponse.json(j);
         }
 
@@ -185,7 +191,8 @@ export async function GET(request, { params }) {
         // Factura de un vendedor por aprobar: no se imprime hasta que jolexi (o el usuario 1) la apruebe
         const aprobacionPendiente = venta.tipoDocumento === 'FACTURA' && await estaPorAprobar('VENTA', venta.id);
         const puedeAprobarla = aprobacionPendiente && await puedeAprobar(acceso.sesion);
-        return NextResponse.json({ ...venta.toJSON(), ...(vendedorExterno ? { vendedorExterno } : {}), puedeCorregir, aprobacionPendiente, puedeAprobar: puedeAprobarla });
+        const empaqueNc = await analizarEmpaqueConNotas(venta.id);
+        return NextResponse.json({ ...venta.toJSON(), ...(vendedorExterno ? { vendedorExterno } : {}), puedeCorregir, aprobacionPendiente, puedeAprobar: puedeAprobarla, empaqueNc });
     } catch (error) {
         console.error('Error obteniendo detalle de venta:', error);
         return NextResponse.json({ error: 'Error interno del servidor', detalle: error.message }, { status: 500 });
@@ -201,6 +208,7 @@ export async function PUT(request, { params }) {
     const rol = rolDe(acceso.sesion);
     const yo = Number(acceso.sesion.id);
 
+    await asegurarColumnasEmpaqueNotas();
     const t = await sequelize.transaction();
 
     try {
@@ -277,6 +285,8 @@ export async function PUT(request, { params }) {
             const vLock = await Venta.findByPk(venta.id, { transaction: t, lock: t.LOCK.UPDATE });
             if (['Cancelado', 'Completado'].includes(vLock.statusDespacho)) throw new ErrorLogistica('Este pedido ya está cerrado', 409);
             if (vLock.empacadoAt) throw new ErrorLogistica('Este pedido ya fue empacado', 409);
+            const analisis = await analizarEmpaqueConNotas(vLock.id, t);
+            if (analisis?.anuladaTotalParaEmpaque) throw new ErrorLogistica('Esta factura fue anulada totalmente por nota de crédito y ya no se empaca', 409);
             if (vLock.empacadorId && Number(vLock.empacadorId) !== yo) {
                 throw new ErrorLogistica('Otro compañero ya tomó este pedido para empacarlo', 409);
             }
@@ -311,6 +321,8 @@ export async function PUT(request, { params }) {
         // ==========================================================
         if (accion === 'ASIGNAR') {
             if (cerrada) throw new ErrorLogistica('Este pedido ya está cerrado', 409);
+            const analisis = await analizarEmpaqueConNotas(venta.id, t);
+            if (!venta.empacadoAt && analisis?.anuladaTotalParaEmpaque) throw new ErrorLogistica('Esta factura fue anulada totalmente por nota de crédito y ya no se empaca', 409);
             if (venta.empacadoAt && Number(empacadorId) !== Number(venta.empacadorId)) throw new ErrorLogistica('El empaque ya fue firmado: no se puede cambiar al empacador', 409);
             if (venta.etiquetadoAt && Number(etiquetadorId) !== Number(venta.etiquetadorId)) throw new ErrorLogistica('El etiquetado ya fue firmado: no se puede cambiar al etiquetador', 409);
             if (!empacadorId || !etiquetadorId) throw new ErrorLogistica('Indica quién empaca y quién etiqueta');
@@ -343,11 +355,13 @@ export async function PUT(request, { params }) {
             if (Number(venta.empacadorId) !== yo) throw new ErrorLogistica('Este empaque no está asignado a ti', 403);
             if (venta.empacadoAt) throw new ErrorLogistica('Ya firmaste este empaque', 409);
             if (cerrada) throw new ErrorLogistica('Este pedido ya está cerrado', 409);
+            const analisis = await analizarEmpaqueConNotas(venta.id, t);
+            if (analisis?.anuladaTotalParaEmpaque) throw new ErrorLogistica('Esta factura fue anulada totalmente por nota de crédito y ya no se empaca', 409);
 
             const faltantes = await faltantesDeEmpaque(venta, t);
             if (faltantes.length) throw new ErrorLogistica(faltantes[0], 409);
 
-            await ejecutarEmpaque(venta, t, yo);
+            await ejecutarEmpaque(venta, t, yo, analisis);
             venta.statusDespacho = 'Empacado';
             venta.empacadoAt = new Date();
             venta.empaqueVerificado = true;
@@ -361,6 +375,7 @@ export async function PUT(request, { params }) {
                 }
             }
             await venta.save({ transaction: t });
+            await registrarSnapshotEmpaque(venta, t);
             const empacador = await User.findByPk(yo, { include: [{ model: Empleado, as: 'empleado', attributes: ['nombre'] }], transaction: t });
             const nombreEmpacador = empacador?.empleado?.nombre || empacador?.nombre || 'Un vendedor';
             await t.commit();
@@ -412,16 +427,19 @@ export async function PUT(request, { params }) {
         if (accion === 'EMPACAR') {
             if (cerrada) throw new ErrorLogistica('Este pedido ya está cerrado', 409);
             if (venta.empacadoAt) throw new ErrorLogistica('Este pedido ya fue empacado', 409);
+            const analisis = await analizarEmpaqueConNotas(venta.id, t);
+            if (analisis?.anuladaTotalParaEmpaque) throw new ErrorLogistica('Esta factura fue anulada totalmente por nota de crédito y ya no se empaca', 409);
             if (!empacadorId || !etiquetadorId) throw new ErrorLogistica('Indica quién empaca y quién etiqueta');
             await validarPersonal([empacadorId, etiquetadorId], t);
 
-            await ejecutarEmpaque(venta, t, empacadorId);
+            await ejecutarEmpaque(venta, t, empacadorId, analisis);
             venta.statusDespacho = 'Empacado';
             venta.empacadorId = Number(empacadorId);
             venta.etiquetadorId = Number(etiquetadorId);
             venta.asignadoAt = venta.asignadoAt || new Date();
             venta.empacadoAt = new Date();
             await venta.save({ transaction: t });
+            await registrarSnapshotEmpaque(venta, t);
 
             await t.commit();
             await avisosDeEmpaque(venta);
@@ -482,6 +500,10 @@ export async function PUT(request, { params }) {
         if (accion === 'DESPACHAR' || accion === 'ENTREGAR_CHOFER') {
             if (venta.statusDespacho === 'Completado') throw new ErrorLogistica('Este pedido ya fue despachado', 409);
             if (venta.statusDespacho === 'Cancelado') throw new ErrorLogistica('Este pedido está cancelado', 409);
+            const analisisDespacho = await analizarEmpaqueConNotas(venta.id, t);
+            if (analisisDespacho?.bloqueaDespacho) throw new ErrorLogistica('Este pedido recibió una nota de crédito después de empacarse. Resuelve el ajuste de la caja antes de despacharlo.', 409);
+            if (analisisDespacho?.estadoEfectivo === 'DESARMADO') throw new ErrorLogistica('La caja de este pedido fue desarmada por nota de crédito y no se despacha.', 409);
+            if (!venta.empacadoAt && analisisDespacho?.anuladaTotalParaEmpaque) throw new ErrorLogistica('Esta factura fue anulada totalmente por nota de crédito.', 409);
 
             if (accion === 'DESPACHAR' && rol === 'vendedor') {
                 if (venta.tipoEntrega !== 'pickup') throw new ErrorLogistica('Este pedido lo retira un chofer: usa la entrega al chofer con sus datos y firma', 409);

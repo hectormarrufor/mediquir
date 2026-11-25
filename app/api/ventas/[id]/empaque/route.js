@@ -9,6 +9,7 @@ import { nivelMayor, textoEntrega } from '@/app/constants/presentaciones';
 import {
     buscarVentaParaEmpaque, codigosDelRenglon, faltanPresentaciones, entregaDeDetalle, evaluarCodigo, imagenDe, nombreDe, modoVerificacion, opcionesDeMarca, registrarError,
 } from '../../_empaque';
+import { asegurarColumnasEmpaqueNotas, analizarEmpaqueConNotas, detalleEfectivo } from '@/app/api/_lib/empaqueNotas';
 
 const { sequelize, Venta, VentaEmpaqueItem, Producto } = db;
 
@@ -27,6 +28,7 @@ export async function GET(request, { params }) {
     const acceso = await requerirStaff();
     if (acceso.error) return acceso.error;
     try {
+        await asegurarColumnasEmpaqueNotas();
         const { id } = await params;
         const venta = await buscarVentaParaEmpaque(id);
         if (!venta) return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
@@ -38,14 +40,50 @@ export async function GET(request, { params }) {
             return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
         }
 
-        const registros = await VentaEmpaqueItem.findAll({ where: { ventaId: venta.id } });
+        const [registros, analisis] = await Promise.all([
+            VentaEmpaqueItem.findAll({ where: { ventaId: venta.id } }),
+            analizarEmpaqueConNotas(venta.id),
+        ]);
         const porDetalle = new Map(registros.map((r) => [r.ventaDetalleId, r]));
+        const cambioPorDet = new Map((analisis?.cambios || []).map((c) => [c.detalleId, c]));
+
+        const baseVenta = {
+            id: venta.id, numeroDocumento: venta.numeroDocumento, statusDespacho: venta.statusDespacho,
+            tipoEntrega: venta.tipoEntrega, quienRetira: venta.quienRetira || '',
+            empacadorId: venta.empacadorId, empacadorNombre: nombreEmpleado(venta.empacador),
+            empaqueIniciadoAt: venta.empaqueIniciadoAt, empacadoAt: venta.empacadoAt, empaqueVerificado: venta.empaqueVerificado, fotosVencidasAt: venta.fotosVencidasAt,
+            fotoCajaAbiertaUrl: venta.fotoCajaAbiertaUrl, fotoCajaSelladaUrl: venta.fotoCajaSelladaUrl,
+        };
+
+        if (!venta.empacadoAt && analisis?.anuladaTotalParaEmpaque) {
+            return NextResponse.json({
+                venta: baseVenta,
+                esEmpacador: Number(venta.empacadorId) === yo,
+                items: [],
+                itemsAnuladosPorNc: [],
+                anuladaPorNc: true,
+                ncResumen: analisis,
+            });
+        }
 
         const items = [];
+        const itemsAnuladosPorNc = [];
         for (const d of venta.detalles) {
+            const c = cambioPorDet.get(d.id);
+            const cantEfectiva = c ? c.restante : Number(d.cantidad);
+            if (!venta.empacadoAt && cantEfectiva <= 0) {
+                itemsAnuladosPorNc.push({
+                    detalleId: d.id,
+                    nombre: nombreDe(d),
+                    cantidadOriginal: c?.original ?? Number(d.cantidad),
+                    acreditadoCxc: c?.acreditadoCxc ?? Number(d.cantidad),
+                });
+                continue;
+            }
+            const dEf = !venta.empacadoAt ? detalleEfectivo(d, cantEfectiva) : d;
             const r = porDetalle.get(d.id);
-            const modo = modoVerificacion(d);
-            const entrega = entregaDeDetalle(d);
+            const modo = modoVerificacion(dEf);
+            const entrega = entregaDeDetalle(dEf);
             items.push({
                 detalleId: d.id,
                 productoCodigo: d.producto?.codigo || null,
@@ -60,10 +98,12 @@ export async function GET(request, { params }) {
                 nombre: nombreDe(d),
                 marca: d.producto?.marca?.nombre || null,
                 imagen: imagenDe(d.producto),
-                cantidadPedida: Number(d.cantidad),
+                cantidadPedida: !venta.empacadoAt ? cantEfectiva : Number(d.cantidad),
+                cantidadOriginal: c?.original ?? Number(d.cantidad),
+                acreditadoCxc: c?.acreditadoCxc ?? 0,
                 // Lo que hay que entregar, por nivel: "2 cajas" o "50 unidades sueltas" (con lo que trae cada una)
                 entrega, entregaTexto: textoEntrega(entrega), nivelRequerido: entrega.length ? nivelMayor(entrega) : null,
-                nivelesCodigo: modo === 'codigo' ? codigosDelRenglon(d).map((c) => c.nivel) : [],
+                nivelesCodigo: modo === 'codigo' ? codigosDelRenglon(dEf).map((x) => x.nivel) : [],
                 modo,
                 // No se envía el código esperado: se valida en el servidor
                 opcionesMarca: modo === 'marca' && r?.estado !== 'OK' ? await opcionesDeMarca(d) : null,
@@ -79,15 +119,12 @@ export async function GET(request, { params }) {
         }
 
         return NextResponse.json({
-            venta: {
-                id: venta.id, numeroDocumento: venta.numeroDocumento, statusDespacho: venta.statusDespacho,
-                tipoEntrega: venta.tipoEntrega, quienRetira: venta.quienRetira || '',
-                empacadorId: venta.empacadorId, empacadorNombre: nombreEmpleado(venta.empacador),
-                empaqueIniciadoAt: venta.empaqueIniciadoAt, empacadoAt: venta.empacadoAt, empaqueVerificado: venta.empaqueVerificado, fotosVencidasAt: venta.fotosVencidasAt,
-                fotoCajaAbiertaUrl: venta.fotoCajaAbiertaUrl, fotoCajaSelladaUrl: venta.fotoCajaSelladaUrl,
-            },
+            venta: baseVenta,
             esEmpacador: Number(venta.empacadorId) === yo,
             items,
+            itemsAnuladosPorNc,
+            anuladaPorNc: false,
+            ncResumen: analisis,
         });
     } catch (error) {
         console.error('Error leyendo el empaque:', error);
@@ -104,6 +141,7 @@ export async function POST(request, { params }) {
     const yo = Number(acceso.sesion.id);
     const esVendedor = rolDe(acceso.sesion) === 'vendedor';
 
+    await asegurarColumnasEmpaqueNotas();
     const t = await sequelize.transaction();
     let novedad = null;
     try {
@@ -120,6 +158,11 @@ export async function POST(request, { params }) {
         if (['Cancelado', 'Completado'].includes(venta.statusDespacho)) throw new ErrorEmpaque('Este pedido ya está cerrado', 409);
         if (await leerEfectosPendientes('VENTA', venta.id, t)) throw new ErrorEmpaque('Este pedido está por aprobar: se podrá empacar cuando Jolexi apruebe la factura', 409);
         if (venta.empacadoAt) throw new ErrorEmpaque('El empaque ya fue firmado: la evidencia no se puede modificar', 409);
+        const analisis = await analizarEmpaqueConNotas(venta.id, t);
+        if (analisis?.anuladaTotalParaEmpaque) throw new ErrorEmpaque('Esta factura fue anulada totalmente con nota de crédito y ya no se empaca', 409);
+        const cambioDet = analisis?.cambios?.find((c) => c.detalleId === detalle.id);
+        const cantEfectiva = cambioDet ? cambioDet.restante : Number(detalle.cantidad);
+        const detalleEf = detalleEfectivo(detalle, cantEfectiva);
 
         // ---- Administración libera un renglón con novedad para que el empacador lo vuelva a verificar ----
         if (accion === 'LIBERAR_ITEM') {
@@ -180,41 +223,44 @@ export async function POST(request, { params }) {
         // Evalúa el código (no cambia el renglón): el wizard lo usa al escanear para avisar de inmediato qué se tiene en la mano.
         // Si el producto o la presentación son equivocados queda constancia a nombre del empacador (reporte de errores).
         if (accion === 'COMPROBAR_CODIGO') {
-            const ev = evaluarCodigo(detalle, codigo, Boolean(escaneado));
-            if (!ev.productoOk) await registrarError({ venta, detalle, empacadorId: yo, tipo: 'PRODUCTO', codigo }, t);
-            else if (ev.alerta?.tipo === 'error') await registrarError({ venta, detalle, empacadorId: yo, tipo: 'PRESENTACION', codigo }, t);
+            if (cantEfectiva <= 0) throw new ErrorEmpaque('Este producto fue retirado del pedido por una nota de crédito', 409);
+            const ev = evaluarCodigo(detalleEf, codigo, Boolean(escaneado));
+            if (!ev.productoOk) await registrarError({ venta, detalle: detalleEf, empacadorId: yo, tipo: 'PRODUCTO', codigo }, t);
+            else if (ev.alerta?.tipo === 'error') await registrarError({ venta, detalle: detalleEf, empacadorId: yo, tipo: 'PRESENTACION', codigo }, t);
             await t.commit();
             return NextResponse.json({ aceptado: ev.aceptado, productoOk: ev.productoOk, alerta: ev.alerta });
         }
 
+        if (cantEfectiva <= 0) throw new ErrorEmpaque('Este producto fue retirado del pedido por una nota de crédito', 409);
+
         const [reg] = await VentaEmpaqueItem.findOrCreate({
             where: { ventaDetalleId: detalle.id },
-            defaults: { ventaId: venta.id, ventaDetalleId: detalle.id, cantidadPedida: Number(detalle.cantidad) },
+            defaults: { ventaId: venta.id, ventaDetalleId: detalle.id, cantidadPedida: cantEfectiva },
             transaction: t,
         });
         if (reg.estado === 'OK') throw new ErrorEmpaque('Este producto ya fue verificado', 409);
         if (reg.estado === 'NOVEDAD') throw new ErrorEmpaque('Este producto tiene una novedad reportada: espera a que administración la resuelva', 409);
 
         // 1) ¿Es el producto correcto?
-        const modo = modoVerificacion(detalle);
+        const modo = modoVerificacion(detalleEf);
         let metodo = 'manual';
         let coincide = true;
         let nivelVerificado = null;
-        const entrega = entregaDeDetalle(detalle);
+        const entrega = entregaDeDetalle(detalleEf);
         let alerta = null;
         if (modo === 'codigo') {
-            const ev = evaluarCodigo(detalle, codigo, Boolean(escaneado));
+            const ev = evaluarCodigo(detalleEf, codigo, Boolean(escaneado));
             alerta = ev.alerta;
             // Aunque se acepte (el nivel exigido no tiene código), tomar otra presentación es un error del empacador
-            if (!ev.productoOk) await registrarError({ venta, detalle, empacadorId: yo, tipo: 'PRODUCTO', codigo }, t);
-            else if (ev.alerta?.tipo === 'error') await registrarError({ venta, detalle, empacadorId: yo, tipo: 'PRESENTACION', codigo }, t);
+            if (!ev.productoOk) await registrarError({ venta, detalle: detalleEf, empacadorId: yo, tipo: 'PRODUCTO', codigo }, t);
+            else if (ev.alerta?.tipo === 'error') await registrarError({ venta, detalle: detalleEf, empacadorId: yo, tipo: 'PRESENTACION', codigo }, t);
             coincide = ev.aceptado;
             nivelVerificado = ev.aceptado ? ev.nivelEscaneado : null;
             metodo = escaneado && coincide ? 'escaneo' : 'codigo';
         } else if (modo === 'marca') {
             coincide = String(marcaElegida || '') === detalle.producto.marca.nombre;
             metodo = 'marca';
-            if (!coincide) await registrarError({ venta, detalle, empacadorId: yo, tipo: 'MARCA' }, t);
+            if (!coincide) await registrarError({ venta, detalle: detalleEf, empacadorId: yo, tipo: 'MARCA' }, t);
         }
         if (!coincide) {
             // Se guarda el intento fallido (es un error que el sistema evitó) y se responde sin revertirlo
@@ -228,7 +274,7 @@ export async function POST(request, { params }) {
         }
 
         // 2) ¿Lo que se metió coincide con lo pedido? El empacador cuenta por nivel (bultos, cajas, sueltas); sin desglose (clientes viejos) se compara el total
-        const pedida = Number(detalle.cantidad);
+        const pedida = cantEfectiva;
         let cant;
         let coincideCantidad;
         if (empacado && typeof empacado === 'object') {

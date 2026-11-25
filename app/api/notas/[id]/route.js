@@ -7,6 +7,7 @@ import { getSesion } from '@/app/api/notificaciones/_lib';
 import { rolDe } from '@/app/constants/roles';
 import { ErrorNota, anularNota, registrarReintegro, compensarSaldoAFavor } from '@/app/api/_lib/notasFiscales';
 import { puedeCorregirFacturas } from '@/app/api/_lib/corregirFactura';
+import { asegurarColumnasEmpaqueNotas } from '@/app/api/_lib/empaqueNotas';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +52,7 @@ export async function GET(request, { params }) {
 
 // Acciones sobre una nota: NUMERO_CONTROL (dato fiscal) · REINTEGRO (devolver dinero al cliente) · ANULAR (solo administrador)
 export async function PUT(request, { params }) {
+    await asegurarColumnasEmpaqueNotas();
     const t = await sequelize.transaction();
     let compensacion = null;
     let eliminada = false;
