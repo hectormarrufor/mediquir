@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import db from '@/models';
 import { avisarCliente } from '../../../../_lib/avisosCliente';
 import { requerirNoVendedor } from '../../../../_lib/acceso';
-import { ErrorCxc, registrarAbonoCxc } from '../../../../_lib/cxc';
+import { aUsd, ErrorCxc, registrarAbonoCxc } from '../../../../_lib/cxc';
 
 export const dynamic = 'force-dynamic';
 const { sequelize } = db;
@@ -27,7 +27,8 @@ export async function POST(request, { params }) {
                 if (venta?.tipoVenta === 'MAYOR') await avisarCliente(venta, 'PAGO_RECIBIDO', { abonoUsd: Number(r.abono.montoUsd), liquidada: Number(r.cuenta.saldoPendiente) <= 0.005, saldoRestante: Number(r.cuenta.saldoPendiente), monedaCuenta: r.cuenta.moneda, tasa: Number(venta.tasaCambio) });
             } catch (e) { console.error('No se pudo avisar el pago al cliente:', e.message); }
         }
-        return NextResponse.json({ ok: true, abono: r.abono, saldo: Number(r.cuenta.saldoPendiente), estado: r.cuenta.estado, retencion: Boolean(r.retencion), quedaDebiendo: Boolean(b.cierraFactura) && Number(r.cuenta.saldoPendiente) > 0.005 }, { status: 201 });
+        const saldoUsd = aUsd(r.cuenta.saldoPendiente, r.cuenta.moneda, r.cuenta.tasaCambio);
+        return NextResponse.json({ ok: true, abono: r.abono, saldo: saldoUsd, estado: r.cuenta.estado, retencion: Boolean(r.retencion), quedaDebiendo: Boolean(b.cierraFactura) && saldoUsd > 0.005 }, { status: 201 });
     } catch (error) {
         if (!t.finished) await t.rollback();
         if (error instanceof ErrorCxc) return NextResponse.json({ error: error.message }, { status: error.status });

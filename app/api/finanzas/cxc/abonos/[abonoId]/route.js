@@ -7,7 +7,7 @@ import { tasaDelDia } from '../../../../_lib/tasaBcv';
 import { fechaCaracas } from '@/app/constants/hora';
 
 export const dynamic = 'force-dynamic';
-const { Abono, Venta, MovimientoFinanciero, RetencionIva, sequelize } = db;
+const { Abono, Venta, CuentaPorCobrar, MovimientoFinanciero, RetencionIva, sequelize } = db;
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
 async function cargar(id, t) {
@@ -40,16 +40,21 @@ export async function PUT(request, { params }) {
         if (b.metodo !== undefined) cambios.metodoPago = String(b.metodo || '').trim().slice(0, 60) || abono.metodoPago;
         if (b.referencia !== undefined) cambios.referencia = String(b.referencia || '').trim().slice(0, 100) || null;
         if (b.notas !== undefined) cambios.notas = String(b.notas || '').trim().slice(0, 250) || null;
+        let montoVesCaja;
         if (cambios.fechaPago || cambios.montoUsd !== undefined) {
             const tasa = (await tasaDelDia(cambios.fechaPago || abono.fechaPago, { transaction: t })) || Number(abono.tasaBcvAplicada) || 1;
             const monto = cambios.montoUsd ?? Number(abono.montoUsd);
-            Object.assign(cambios, { tasaBcvAplicada: tasa, tasaCambio: tasa, montoVes: r2(monto * tasa), montoBs: r2(monto * tasa) });
+            const cxc = await CuentaPorCobrar.findOne({ where: { ventaId: venta.id }, transaction: t });
+            const tasaCuenta = cxc?.moneda === 'BS' ? (Number(cxc.tasaCambio) || Number(venta.tasaCambio) || tasa) : tasa;
+            const montoVesCuenta = r2(monto * tasaCuenta);
+            montoVesCaja = r2(monto * tasa);
+            Object.assign(cambios, { tasaBcvAplicada: tasa, tasaCambio: tasaCuenta, montoVes: montoVesCuenta, montoBs: montoVesCuenta });
         }
         await abono.update(cambios, { transaction: t });
         // Si el abono tenía su ingreso de caja, ese movimiento sigue al abono
         const mov = await MovimientoFinanciero.findOne({ where: { abonoId: abono.id }, transaction: t });
         if (mov && (cambios.fechaPago || cambios.montoUsd !== undefined)) {
-            await mov.update({ fecha: abono.fechaPago, montoUsd: abono.montoUsd, montoVes: abono.montoVes, tasaBcvAplicada: abono.tasaBcvAplicada }, { transaction: t });
+            await mov.update({ fecha: abono.fechaPago, montoUsd: abono.montoUsd, montoVes: montoVesCaja ?? abono.montoVes, tasaBcvAplicada: abono.tasaBcvAplicada }, { transaction: t });
         }
         await recalcularCobro(venta, t);
         await t.commit();

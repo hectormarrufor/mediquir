@@ -29,7 +29,7 @@ export async function GET() {
                       cl.id AS "clienteId", cl.nombre AS cliente, cl.identificacion AS rif, cl.telefono,
                       (SELECT max(a."fechaPago") FROM "Abonos" a WHERE a."ventaId" = c."ventaId" AND a.notas LIKE :marca) AS declarada
                  FROM "CuentasPorCobrar" c JOIN "Ventas" v ON v.id = c."ventaId" LEFT JOIN "Clientes" cl ON cl.id = c."clienteId"
-                WHERE c.estado <> 'Pagado' AND c."saldoPendiente" > 0.005 AND EXISTS (SELECT 1 FROM "Abonos" a WHERE a."ventaId" = c."ventaId" AND a.notas LIKE :marca)
+                WHERE c.estado <> 'Pagado' AND (CASE WHEN c.moneda = 'BS' THEN c."saldoPendiente" / NULLIF(c."tasaCambio", 0) ELSE c."saldoPendiente" END) > 0.005 AND EXISTS (SELECT 1 FROM "Abonos" a WHERE a."ventaId" = c."ventaId" AND a.notas LIKE :marca)
                 ORDER BY declarada, c.id`, { marca: `%${MARCA_CIERRE}%` }),
         ]);
         const hoy = Date.parse(`${iso(new Date())}T00:00:00Z`);

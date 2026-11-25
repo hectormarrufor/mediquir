@@ -34,7 +34,9 @@ export async function registrarAbonoCxc({ cuentaId, fecha, monto, metodo, refere
     const importe = r2(monto);
     if (!Number.isFinite(importe) || importe === 0) throw new ErrorCxc('El monto debe ser distinto de cero');
     if (importe < 0 && tipo !== 'AJUSTE') throw new ErrorCxc('Un abono no puede ser negativo: para subir la deuda registra un ajuste');
-    if (importe > 0 && cuenta.moneda === 'USD' && importe > Number(cuenta.saldoPendiente) + 0.005) throw new ErrorCxc(`El abono (${importe.toFixed(2)}) supera el saldo de la cuenta (${Number(cuenta.saldoPendiente).toFixed(2)})`, 409);
+    const tasaCuenta = Number(cuenta.tasaCambio) || Number(venta.tasaCambio) || 1;
+    const saldoUsd = aUsd(cuenta.saldoPendiente, cuenta.moneda, tasaCuenta);
+    if (importe > 0 && importe > saldoUsd + 0.005) throw new ErrorCxc(`El abono (${importe.toFixed(2)}) supera el saldo de la cuenta (${saldoUsd.toFixed(2)})`, 409);
 
     const tasa = (await tasaDelDia(fechaPago, { transaction: t })) || (await tasaVigente({ transaction: t })) || Number(venta.tasaCambio) || 1;
     const metodoPago = String(metodo || (tipo === 'AJUSTE' ? 'Ajuste de saldo' : 'Abono')).trim().slice(0, 60);
@@ -52,10 +54,14 @@ export async function registrarAbonoCxc({ cuentaId, fecha, monto, metodo, refere
         await cuenta.reload({ transaction: t });
         return { abono: registrado, cuenta, retencion: retencionDeclarada };
     }
+    // En cuentas en bolívares, el abono se convierte a la tasa de la cuenta; si liquida el saldo en USD se asientan los bolívares exactos pendientes para no dejar centavos de residuo.
+    const montoBsCuenta = cuenta.moneda === 'BS'
+        ? ((tipo === 'ABONO' && importe > 0 && Math.abs(importe - saldoUsd) <= 0.005) ? r2(Number(cuenta.saldoPendiente)) : r2(importe * tasaCuenta))
+        : r2(importe * tasa);
     const abono = await Abono.create({
         ventaId: venta.id, fechaPago, metodoPago, referencia: String(referencia || '').trim().slice(0, 100) || null,
-        montoUsd: importe, tasaBcvAplicada: tasa, montoVes: r2(importe * tasa), montoBs: r2(importe * tasa), tasaCambio: tasa,
-        notas: [String(notas || '').trim().slice(0, 230), cierraFactura && tipo === 'ABONO' ? MARCA_CIERRE : ''].filter(Boolean).join(' ') || null,
+        montoUsd: importe, tasaBcvAplicada: tasa, montoVes: montoBsCuenta, montoBs: montoBsCuenta, tasaCambio: cuenta.moneda === 'BS' ? tasaCuenta : tasa,
+        notas: notasAbono,
     }, { transaction: t });
 
     if (tipo === 'ABONO' && importe > 0) await generarComisionPorPago({ abono, transaction: t });

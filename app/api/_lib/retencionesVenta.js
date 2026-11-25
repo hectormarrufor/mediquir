@@ -34,8 +34,11 @@ export async function recalcularCobro(venta, t) {
     }
     if (cxc) {
         const abonado = cxc.moneda === 'USD' ? abonadoUsd : abonos.reduce((a, x) => a + Number(x.montoVes), 0);
-        cxc.saldoPendiente = Math.max(0, Number((Number(cxc.montoTotal) - abonado).toFixed(2)));
-        cxc.estado = cxc.saldoPendiente <= 0.005 ? 'Pagado' : 'Pendiente';
+        const pendiente = Math.max(0, Number((Number(cxc.montoTotal) - abonado).toFixed(2)));
+        const tasaCuenta = Number(cxc.tasaCambio) || Number(venta.tasaCambio) || 1;
+        const saldoUsd = cxc.moneda === 'BS' ? pendiente / tasaCuenta : pendiente;
+        cxc.saldoPendiente = saldoUsd <= 0.005 ? 0 : pendiente;
+        cxc.estado = saldoUsd <= 0.005 ? 'Pagado' : 'Pendiente';
         await cxc.save({ transaction: t });
         pagada = cxc.estado === 'Pagado'; // con notas de débito la deuda es mayor que el total de la factura
     }

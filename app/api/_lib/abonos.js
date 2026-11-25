@@ -93,8 +93,11 @@ export async function registrarAbono({ venta, monto, moneda, tasa, metodoPago, r
 
     await generarComisionPorPago({ abono, transaction: t });
 
-    cxc.saldoPendiente = Math.max(0, r2(saldo - enMonedaCuenta));
-    const liquidada = cxc.saldoPendiente <= 0;
+    const pendiente = Math.max(0, r2(saldo - enMonedaCuenta));
+    const tasaCuenta = Number(cxc.tasaCambio) || Number(venta.tasaCambio) || 1;
+    const saldoUsd = cxc.moneda === 'BS' ? pendiente / tasaCuenta : pendiente;
+    const liquidada = saldoUsd <= 0.005;
+    cxc.saldoPendiente = liquidada ? 0 : pendiente;
     if (liquidada) {
         cxc.estado = 'Pagado';
         venta.statusPago = 'Pagado';
