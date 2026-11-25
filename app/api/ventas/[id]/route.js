@@ -271,9 +271,20 @@ export async function PUT(request, { params }) {
             if (rol !== 'admin') throw new ErrorLogistica('Solo un administrador puede convertir un recibo en factura', 403);
             // Mientras convivan los dos sistemas la factura se copia con el número, el control y la fecha que ya tiene en el sistema anterior (opcionales)
             const datosCopia = { numeroManual: body.numeroFactura || null, numeroControl: body.numeroControl || null, fecha: body.fecha || null };
-            const r = venta.tipoDocumento === 'NOTA_ENTREGA'
-                ? await convertirNotaEntregaAFactura({ venta, tasaHoy: (datosCopia.fecha && await tasaDelDia(datosCopia.fecha, { transaction: t })) || await tasaVigente({ transaction: t }), transaction: t, ...datosCopia })
-                : await convertirAFactura({ venta, transaction: t, ...datosCopia });
+            let r;
+            if (venta.tipoDocumento === 'NOTA_ENTREGA') {
+                const fechaCopia = datosCopia.fecha ? String(datosCopia.fecha) : null;
+                let tasaHoy;
+                if (fechaCopia && fechaCopia < fechaCaracas()) {
+                    tasaHoy = await tasaDelDia(fechaCopia, { transaction: t });
+                    if (!tasaHoy) throw new ErrorConversion(`No hay tasa BCV registrada para el ${fechaCopia.split('-').reverse().join('/')}`, 409);
+                } else {
+                    tasaHoy = await tasaVigente({ transaction: t });
+                }
+                r = await convertirNotaEntregaAFactura({ venta, tasaHoy, transaction: t, ...datosCopia });
+            } else {
+                r = await convertirAFactura({ venta, transaction: t, ...datosCopia });
+            }
             await t.commit();
             return NextResponse.json({ success: true, ...r });
         }

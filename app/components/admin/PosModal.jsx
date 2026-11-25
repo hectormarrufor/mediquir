@@ -264,7 +264,28 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // ---- Tarifa: el precio sobre el que se basa la venta. Se ELIGE (sin opción predeterminada) antes de agregar productos y no se cambia con el carrito lleno,
     //      para que un precio escrito a mano nunca se altere por cambiar de tarifa. Factura: solo P4/P5 (bolívares). Presupuesto y nota de entrega: P7/P6 (dólares) o P4/P5.
     const TARIFAS_FACTURA = ['precio4', 'precio5'];
-    const esFacturaDoc = !esPresupuesto && tipoDocumentoActual === 'FACTURA';
+    const esFactura = tipoDocumentoActual === 'FACTURA';
+    const esFacturaDoc = !esPresupuesto && esFactura;
+    const talonario = esFacturaDoc && puedeEditarPrecio && Boolean(formVenta.values.facturaTalonario);
+    const hoyStr = fechaCaracas();
+    const fechaEmisionVal = (!esPresupuesto && puedeEditarPrecio && formVenta.values.fechaEmision) ? String(formVenta.values.fechaEmision).trim() : '';
+    const usaFechaAnterior = Boolean(fechaEmisionVal && /^\d{4}-\d{2}-\d{2}$/.test(fechaEmisionVal) && fechaEmisionVal < hoyStr);
+    const { data: datosTasaFecha, isFetching: cargandoTasaFecha } = useQuery({
+        queryKey: ['bcv-por-fecha', fechaEmisionVal],
+        enabled: opened && usaFechaAnterior,
+        staleTime: 5 * 60 * 1000,
+        queryFn: async () => {
+            const r = await fetch(`/api/bcv/obtener-por-fecha?fecha=${encodeURIComponent(fechaEmisionVal)}`);
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(d.error || 'No se pudo consultar la tasa BCV');
+            return d;
+        },
+    });
+    const tasaFecha = usaFechaAnterior ? (Number(datosTasaFecha?.vigente?.monto) || 0) : 0;
+    const sinTasaFecha = usaFechaAnterior && !cargandoTasaFecha && !(tasaFecha > 0);
+    const tasaActiva = usaFechaAnterior ? tasaFecha : Number(tasaBcv || 0);
+    const faltaFechaTalonario = talonario && !fechaEmisionVal;
+
     const tarifasPermitidas = esFacturaDoc ? TARIFAS_FACTURA : ['precio7', 'precio6', 'precio4', 'precio5', ...(puedeEditarPrecio && !esPresupuesto ? ['precio1'] : [])];
     const tarifaActual = formVenta.values.tipoPrecio;
     const faltaTarifa = !tarifaActual || !tarifasPermitidas.includes(tarifaActual);
@@ -279,10 +300,17 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     ) ? 'MAYOR' : 'DETAL';
 
     const faltantesInicio = !esPresupuesto
-        ? [faltaDocumento && 'documento (Factura o Nota)', faltaEntrega && 'método de entrega', faltaTarifa && 'tarifa'].filter(Boolean)
+        ? [
+            faltaDocumento && 'documento (Factura o Nota)',
+            faltaFechaTalonario && 'fecha de emisión de la factura manual',
+            (usaFechaAnterior && cargandoTasaFecha) && 'esperar la tasa BCV de esa fecha',
+            sinTasaFecha && 'una fecha con tasa BCV registrada',
+            faltaEntrega && 'método de entrega',
+            faltaTarifa && 'tarifa',
+        ].filter(Boolean)
         : [faltaTarifa && 'tarifa'].filter(Boolean);
     const motivoSinAgregar = faltantesInicio.length
-        ? `Elige primero ${faltantesInicio.join(', ')} antes de agregar productos`
+        ? `Completa primero: ${faltantesInicio.join(', ')} antes de agregar productos`
         : null;
     const tarifaBloqueada = !origen && carrito.length > 0 && !faltaTarifa;
     // Si la tarifa elegida no vale para el documento (p. ej. P7 en una factura) y el carrito está vacío, se borra para que se vuelva a elegir
@@ -300,8 +328,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 setCola((prev) => prev.map((grupo) => grupo.map((it) => {
                     if (it.isFicticio) {
                         const nuevoSimbolo = nuevaEsBs ? 'Bs' : '$';
-                        const precio = (it.simbolo && it.simbolo !== nuevoSimbolo && tasaBcv > 0)
-                            ? (nuevaEsBs ? aBolivares(it.precio, tasaBcv) : aDolares(it.precio, tasaBcv))
+                        const precio = (it.simbolo && it.simbolo !== nuevoSimbolo && tasaActiva > 0)
+                            ? (nuevaEsBs ? aBolivares(it.precio, tasaActiva) : aDolares(it.precio, tasaActiva))
                             : it.precio;
                         return { ...it, precio, simbolo: nuevoSimbolo };
                     }
@@ -406,7 +434,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // Misma función que usa el servidor para cobrarle a un vendedor: el precio que se ve es el que se acepta.
     // Un vendedor no ve costos, así que el Precio 6 faltante nunca se rellena con el costo.
     const calcularPrecioInfo = (producto, tarifa) => {
-        const { precio, moneda, descuento } = precioPorTarifa(producto, tarifa, tasaBcv, { sinCosto: esVendedor });
+        const { precio, moneda, descuento } = precioPorTarifa(producto, tarifa, tasaActiva, { sinCosto: esVendedor });
         return {
             precio,
             simbolo: moneda === 'BS' ? 'Bs' : '$',
@@ -416,12 +444,12 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     };
 
     useEffect(() => {
-        if (!productos || carrito.length === 0 || !formVenta.values.tipoPrecio) return;
+        if (!productos || carrito.length === 0 || !formVenta.values.tipoPrecio || !(tasaActiva > 0)) return;
         setCarrito(prevCarrito => prevCarrito.map(item => {
             if (item.isFicticio) {
                 const nuevoSimbolo = esMonedaBs ? 'Bs' : '$';
-                const precio = (item.simbolo && item.simbolo !== nuevoSimbolo && tasaBcv > 0)
-                    ? (esMonedaBs ? aBolivares(item.precio, tasaBcv) : aDolares(item.precio, tasaBcv))
+                const precio = (item.simbolo && item.simbolo !== nuevoSimbolo && tasaActiva > 0)
+                    ? (esMonedaBs ? aBolivares(item.precio, tasaActiva) : aDolares(item.precio, tasaActiva))
                     : item.precio;
                 return { ...item, precio, simbolo: nuevoSimbolo };
             }
@@ -444,7 +472,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             };
         }));
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [formVenta.values.tipoPrecio, tasaBcv]);
+    }, [formVenta.values.tipoPrecio, tasaActiva]);
 
 
     // Un renglón por producto Y presentación: 2 cajas + 50 sueltas del mismo producto son dos renglones.
@@ -566,6 +594,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         // En el teléfono, si falta algo se abre la parte de la pantalla donde se arregla
         if (carrito.length === 0) { setVista('productos'); return notifications.show({ message: 'El carrito está vacío', color: 'orange' }); }
         if (faltaDocumento) { setVista('datos'); return notifications.show({ title: 'Falta el documento', message: 'Elige si vas a emitir FACTURA o NOTA DE ENTREGA antes de revisar la venta', color: 'red' }); }
+        if (faltaFechaTalonario) { setVista('datos'); return notifications.show({ title: 'Falta la fecha de emisión', message: 'La factura de talonario exige su fecha de emisión para tomar la tasa BCV de ese día', color: 'red' }); }
+        if (usaFechaAnterior && cargandoTasaFecha) { setVista('datos'); return notifications.show({ title: 'Consultando tasa BCV', message: 'Espera un segundo mientras se consulta la tasa BCV de la fecha elegida', color: 'orange' }); }
+        if (sinTasaFecha) { setVista('datos'); return notifications.show({ title: 'Sin tasa BCV', message: `No hay tasa BCV registrada para el ${fechaEmision}`, color: 'red' }); }
+        if (!(tasaActiva > 0)) { setVista('datos'); return notifications.show({ title: 'Sin tasa BCV', message: 'No hay tasa BCV disponible para calcular la venta', color: 'red' }); }
         if (faltaEntrega) { setVista('datos'); return notifications.show({ title: 'Falta el método de entrega', message: 'Elige si se entrega en el momento, si el cliente lo va a buscar o si lo retira un chofer', color: 'red' }); }
         if (faltaTarifa) { setVista('datos'); return notifications.show({ title: 'Falta la tarifa', message: 'Elige la tarifa (el precio sobre el que se basa la venta) antes de revisarla', color: 'red' }); }
         if (faltaCliente) { setVista('datos'); return notifications.show({ title: 'Falta el cliente', message: tipoDocumentoActual === 'FACTURA' ? 'La factura necesita el cliente: elígelo o créalo' : 'Debe seleccionar un cliente mayorista', color: 'red' }); }
@@ -631,7 +663,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         if (carrito.length === 0) return notifications.show({ message: 'El carrito está vacío', color: 'orange' });
         if (faltaTarifa) return notifications.show({ title: 'Falta la tarifa', message: 'Elige la tarifa del presupuesto (P7, P6, P5 o P4)', color: 'red' });
         // El presupuesto muestra también los montos en la otra moneda a la tasa: sin tasa no se puede guardar
-        if (!(tasaBcv > 0)) return notifications.show({ message: 'Todavía no hay tasa BCV: espera un momento e intenta de nuevo', color: 'red' });
+        if (!(tasaActiva > 0)) return notifications.show({ message: 'Todavía no hay tasa BCV: espera un momento e intenta de nuevo', color: 'red' });
         const renglones = carrito.map((item) => ({
             productoId: item.isFicticio ? null : item.id,
             codigo: item.codigo,
@@ -650,7 +682,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 method: editando ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     clienteId: clienteSeleccionado?.id || null, clienteNombre: clienteSeleccionado?.nombre || '',
-                    tarifa: formVenta.values.tipoPrecio, moneda: esMonedaBs ? 'BS' : 'USD', tasaCambio: tasaBcv, renglones,
+                    tarifa: formVenta.values.tipoPrecio, moneda: esMonedaBs ? 'BS' : 'USD', tasaCambio: tasaActiva, renglones,
                     ...(esPresupuesto ? { validoDias: formVenta.values.validoDias, notas: formVenta.values.notas } : {}),
                 }),
             });
@@ -675,6 +707,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // imprimir=true: «Asentar e imprimir». La ventana se abre YA (con el toque del botón) porque el navegador bloquea las que se abren después de esperar al servidor
     const handleProcesarVenta = async (imprimir = false) => {
         if (faltaDocumento) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta el documento', message: 'Elige si vas a emitir FACTURA o NOTA DE ENTREGA antes de asentar', color: 'red' }); }
+        if (faltaFechaTalonario) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta la fecha de emisión', message: 'La factura de talonario exige su fecha de emisión para tomar la tasa BCV de ese día', color: 'red' }); }
+        if (usaFechaAnterior && cargandoTasaFecha) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Consultando tasa BCV', message: 'Espera un segundo mientras se consulta la tasa BCV de la fecha elegida', color: 'orange' }); }
+        if (sinTasaFecha) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Sin tasa BCV', message: `No hay tasa BCV registrada para el ${fechaEmision}`, color: 'red' }); }
+        if (!(tasaActiva > 0)) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Sin tasa BCV', message: 'No hay tasa BCV disponible para asentar la venta', color: 'red' }); }
         if (faltaEntrega) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta el método de entrega', message: 'Elige el método de entrega antes de asentar', color: 'red' }); }
         if (faltaTarifa) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta la tarifa', message: 'Elige la tarifa antes de asentar', color: 'red' }); }
         if (faltaCliente) { setPreviewAbierto(false); setVista('datos'); return notifications.show({ title: 'Falta el cliente', message: 'Elige el cliente antes de asentar', color: 'red' }); }
@@ -693,10 +729,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 numeroControl: tipoDocumentoActual === 'FACTURA' && (formVenta.values.facturaTalonario || controlInicial) ? formVenta.values.numeroControl : null,
                 huecoControl: controlInicial ? true : undefined, // solo al registrar un hueco desde «Números de control»
                 facturaTalonario: tipoDocumentoActual === 'FACTURA' && puedeEditarPrecio && formVenta.values.facturaTalonario ? true : undefined,
-                fechaEmision: talonario && puedeEditarPrecio && formVenta.values.fechaEmision ? formVenta.values.fechaEmision : undefined, // la emisión es siempre hoy; solo una factura de talonario trae su fecha
+                fechaEmision: puedeEditarPrecio && fechaEmisionVal ? fechaEmisionVal : undefined,
                 clienteId: formVenta.values.clienteId ? Number(formVenta.values.clienteId) : null,
                 moneda: simboloMoneda === 'Bs' ? 'BS' : 'USD',
-                tasaCambio: tasaBcv,
+                tasaCambio: tasaActiva,
                 condicionPago: formVenta.values.condicionPago,
                 ...(esCredito ? { diasCredito: Math.floor(Number(formVenta.values.diasCredito)), actualizarDiasCliente: alcanceDias?.alcance === 'cliente' && alcanceDias.valor === Math.floor(Number(formVenta.values.diasCredito)) } : {}),
                 metodoPago: formVenta.values.condicionPago === 'Contado' ? formVenta.values.metodoPago : null,
@@ -796,8 +832,8 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     const tituloDocumento = tipoDocumentoActual === 'FACTURA' ? 'Factura' : (tipoDocumentoActual === 'NOTA DE ENTREGA' ? 'Nota de Entrega' : 'Recibo de Venta');
     
-    const aBs = (v) => (esMonedaBs ? v : aBolivares(v, tasaBcv));
-    const aUsd = (v) => (esMonedaBs ? aDolares(v, tasaBcv) : v);
+    const aBs = (v) => (esMonedaBs ? v : (tasaActiva > 0 ? aBolivares(v, tasaActiva) : 0));
+    const aUsd = (v) => (esMonedaBs ? (tasaActiva > 0 ? aDolares(v, tasaActiva) : 0) : v);
     // Nota de entrega y venta rápida no cobran IVA, pero la hoja se ve como una factura (es para facturar a futuro): IVA referencial y total con IVA, como al imprimirla
     const referencial = !conIva && tipoDocumentoActual !== 'FACTURA' && carrito.length > 0;
     const facturaPrev = referencial
@@ -830,15 +866,14 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const faltaVendedorExt = !esPresupuesto && !esVendedor && Boolean(clienteSeleccionado) && !clienteSeleccionado.vendedorComisionId && !vendExtDecision;
     const faltaMetodo = !esPresupuesto && formVenta.values.condicionPago === 'Contado' && !formVenta.values.metodoPago;
     const formatoNumero = (num) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
-    const fechaEmision = formatearFecha(formVenta.values.fechaEmision ? new Date(`${formVenta.values.fechaEmision}T12:00:00-04:00`) : new Date());
+    const fechaEmisionDate = fechaEmisionVal ? new Date(`${fechaEmisionVal}T12:00:00-04:00`) : new Date();
+    const fechaEmision = formatearFecha(fechaEmisionDate);
 
     const limiteMediaCarta = 8;
     const cantidadArticulos = carrito.length || 0;
     const altoPapel = cantidadArticulos <= limiteMediaCarta ? '5.5in' : '10.5in';
 
     // ---------------- Piezas de la pantalla (las mismas en el teléfono y en la computadora) ----------------
-    const esFactura = tipoDocumentoActual === 'FACTURA';
-    const talonario = esFactura && puedeEditarPrecio && Boolean(formVenta.values.facturaTalonario);
     const tamCampo = isMobile ? 'md' : 'sm'; // en el teléfono, campos más altos (se tocan con el dedo y la letra no obliga a acercar)
     // Los vendedores, al VENDER, solo trabajan y ven bolívares (tarifas P4/P5); los dólares son solo de los presupuestos y de administración.
     // (la nota de entrega y la venta rápida sí pueden ir en dólares; la restricción es de la factura y, por derivar de ella, de sus notas de crédito y débito)
@@ -866,13 +901,13 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             valor: info.precio, simbolo: info.simbolo, editable: puedeFijarPrecio, etiqueta: etiquetaTarifa,
             opciones: mismas.map((t) => ({ etiqueta: CORTO_TARIFA[t], valor: calcularPrecioInfo(producto, t).precio })),
             // el vendedor cobra en Bs pero ve también el precio en $ (P7/P6)
-            equivalente: tasaBcv > 0 ? (v) => (esMonedaBs ? `≈ $${formatoNumero(aDolares(v, tasaBcv))}` : `≈ Bs ${formatoNumero(aBolivares(v, tasaBcv))}`) : null,
+            equivalente: tasaActiva > 0 ? (v) => (esMonedaBs ? `≈ $${formatoNumero(aDolares(v, tasaActiva))}` : `≈ Bs ${formatoNumero(aBolivares(v, tasaActiva))}`) : null,
         };
     };
     const esEfectivo = ['Efectivo ($)', 'Efectivo (Bs)'].includes(formVenta.values.metodoPago);
     const unidadesCarrito = carrito.reduce((a, i) => a + i.cantidad, 0);
-    // Lo que se cobra en la otra moneda (a la tasa de hoy): la persona en caja lo ve sin hacer la cuenta
-    const equivalenteTotal = tasaBcv > 0 && totalFinal > 0 ? (esMonedaBs ? `≈ $${formatoNumero(prevTotalUsd)}` : `≈ Bs ${formatoNumero(prevTotalBs)}`) : null;
+    // Lo que se cobra en la otra moneda (a la tasa de la fecha del documento): la persona en caja lo ve sin hacer la cuenta
+    const equivalenteTotal = tasaActiva > 0 && totalFinal > 0 ? (esMonedaBs ? `≈ $${formatoNumero(prevTotalUsd)}` : `≈ Bs ${formatoNumero(prevTotalBs)}`) : null;
     const esExento = (item) => (item.isFicticio ? !item.aplicaIva : item.porcentajeIva === 0);
 
     const buscador = (
@@ -1027,9 +1062,12 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     {esFactura && (talonario || controlInicial) && (
                         <TextInput label={talonario ? 'N° de control del talonario' : 'N° de control'} withAsterisk={talonario} placeholder={talonario ? (guiaTalonario?.controlSugerido || '00-0000000') : (siguienteControl || '00-000000')} description={talonario ? `Escribe el control impreso en esta factura del talonario (distinto al de la forma libre).${guiaTalonario?.ultima ? ` La última cargada fue ${guiaTalonario.ultima.numero}, control ${guiaTalonario.ultima.control}.` : ''}` : (siguienteControl ? `Vacío = toma el siguiente: ${siguienteControl}. Si la forma que vas a imprimir trae otro, escríbelo.` : undefined)} size={tamCampo} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
                     )}
-                    {puedeEditarPrecio && talonario && (
-                        <TextInput type="date" label="Fecha de emisión" description="Vacía = hoy. Si copias una factura de otro día, elige esa fecha (toma la tasa BCV de ese día)"
+                    {puedeEditarPrecio && (
+                        <TextInput type="date" label="Fecha de emisión" withAsterisk={talonario}
+                            description={talonario ? 'Obligatoria en factura manual (toma la tasa BCV de ese día).' : 'Vacía = hoy. Si copias una factura o nota de otro día, elige esa fecha (toma la tasa BCV de ese día).'}
                             inputWrapperOrder={isMobile ? undefined : ['label', 'input', 'description', 'error']}
+                            styles={(faltaFechaTalonario || sinTasaFecha) ? { input: { border: '2px solid #e03131' } } : undefined}
+                            error={faltaFechaTalonario ? 'La factura manual exige su fecha' : (sinTasaFecha ? 'No hay tasa BCV registrada para esta fecha' : null)}
                             size={tamCampo} max={fechaCaracas()} {...formVenta.getInputProps('fechaEmision')} />
                     )}
                 </SimpleGrid>
@@ -1376,7 +1414,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // ---------------- Computadora: filas compactas (el carrito es lo que importa, así que lo de arriba ocupa lo mínimo) ----------------
     const ayudaDocEscritorio = faltaDocumento ? 'Elige FACTURA o NOTA DE ENTREGA: es obligatorio antes de asentar. Factura = con IVA; nota de entrega = sin IVA. El número de control se asigna al imprimir.' : [
         talonario ? `Control del talonario (distinto al de la forma libre).${guiaTalonario?.ultima ? ` Última cargada: ${guiaTalonario.ultima.numero}, control ${guiaTalonario.ultima.control}.` : ''}` : (esFactura && siguienteControl ? `Control vacío = toma el siguiente (${siguienteControl}).` : ''),
-        talonario && puedeEditarPrecio ? 'Fecha vacía = hoy; si copias una factura de otro día, elige esa fecha (toma la tasa BCV de ese día).' : '',
+        puedeEditarPrecio ? (talonario ? 'Fecha obligatoria en factura manual (toma la tasa BCV de ese día).' : 'Fecha vacía = hoy; si copias un documento de otro día, elige esa fecha (toma la tasa BCV de ese día).') : '',
     ].filter(Boolean).join(' ');
     const colorAyudaDoc = faltaDocumento ? 'red.8' : 'dimmed';
     const docEscritorio = esPresupuesto ? bloqueDocumento : (
@@ -1395,8 +1433,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                 {esFactura && (talonario || controlInicial) && (
                     <TextInput label={talonario ? 'N° de control del talonario' : 'N° de control'} withAsterisk={talonario} placeholder={talonario ? (guiaTalonario?.controlSugerido || '00-0000000') : (siguienteControl || '00-000000')} size="xs" w={170} autoComplete="off" {...formVenta.getInputProps('numeroControl')} />
                 )}
-                {puedeEditarPrecio && talonario && (
-                    <TextInput type="date" label="Fecha de emisión" size="xs" w={150} max={fechaCaracas()} {...formVenta.getInputProps('fechaEmision')} />
+                {puedeEditarPrecio && (
+                    <TextInput type="date" label="Fecha de emisión" withAsterisk={talonario} size="xs" w={155} max={fechaCaracas()}
+                        styles={(faltaFechaTalonario || sinTasaFecha) ? { input: { border: '2px solid #e03131' } } : undefined}
+                        {...formVenta.getInputProps('fechaEmision')} />
                 )}
                 {esFactura && puedeEditarPrecio && (
                     <Switch color="grape" size="xs" pb={6} label="Factura de talonario (hecha a mano)" checked={Boolean(formVenta.values.facturaTalonario)} onChange={(e) => formVenta.setFieldValue('facturaTalonario', e.currentTarget.checked)} />
@@ -1456,12 +1496,16 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     // ---------------- Computadora: productos a la izquierda, documento y carrito a la derecha ----------------
     const contenidoEscritorio = (
         <>
-            <Paper px="xs" py={4} mb={6} bg="blue.0" radius="md">
+            <Paper px="xs" py={4} mb={6} bg={sinTasaFecha ? 'red.0' : (usaFechaAnterior ? 'grape.0' : 'blue.0')} radius="md">
                 <Group gap="xs" justify="space-between">
                     <Group gap="xs">
-                        <IconExchange size={20} color="#1971C2" />
-                        <Text fw={600} c="blue.9">Tasa BCV:</Text>
-                        <Badge size="md" color="blue" variant="filled">{tasaBcv} Bs/$</Badge>
+                        <IconExchange size={20} color={sinTasaFecha ? '#e03131' : (usaFechaAnterior ? '#7048e8' : '#1971C2')} />
+                        <Text fw={600} c={sinTasaFecha ? 'red.9' : (usaFechaAnterior ? 'grape.9' : 'blue.9')}>
+                            Tasa BCV{usaFechaAnterior ? ` (${fechaEmision})` : ''}:
+                        </Text>
+                        <Badge size="md" color={sinTasaFecha ? 'red' : (usaFechaAnterior ? 'grape' : 'blue')} variant="filled">
+                            {cargandoTasaFecha ? 'Cargando…' : (sinTasaFecha ? 'Sin tasa registrada' : `${tasaActiva} Bs/$`)}
+                        </Badge>
                         {origen && <Badge size="lg" color="teal" variant="light">{origen.numero ? `Presupuesto ${origen.numero}` : 'Venta dividida'}{origen.de > 1 ? ` · factura ${origen.parte} de ${origen.de}` : ''}</Badge>}
                     </Group>
                     {botonCero}
@@ -1557,8 +1601,10 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     <Box style={{ minWidth: 0 }}>
                         <Text fw={800} size="md" c="blue.9" lh={1.15} truncate="end">{esPresupuesto ? (editando ? `Modificar ${editando.numero}` : 'Nuevo presupuesto') : 'Nueva venta'}</Text>
                         <Group gap={4} wrap="nowrap">
-                            <IconExchange size={13} color="#1971C2" />
-                            <Text size="xs" c="dimmed" lh={1.15}>BCV: <b>{tasaBcv ? `${tasaBcv} Bs/$` : '…'}</b></Text>
+                            <IconExchange size={13} color={sinTasaFecha ? '#e03131' : (usaFechaAnterior ? '#7048e8' : '#1971C2')} />
+                            <Text size="xs" c={sinTasaFecha ? 'red.8' : (usaFechaAnterior ? 'grape.8' : 'dimmed')} lh={1.15}>
+                                BCV{usaFechaAnterior ? ` (${fechaEmision})` : ''}: <b>{cargandoTasaFecha ? 'Cargando…' : (sinTasaFecha ? 'Sin tasa' : (tasaActiva ? `${tasaActiva} Bs/$` : '…'))}</b>
+                            </Text>
                         </Group>
                     </Box>
                     <Group gap={4} wrap="nowrap">{botonCero}<CloseButton size="lg" onClick={onClose} aria-label="Cerrar" /></Group>
@@ -1829,7 +1875,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                 <table className="doc-meta">
                                     <tbody>
                                         <tr><td className="text-right fw-bold" style={{ width: '60%' }}>ORDEN DE COMPRA</td><td>Emisión: {fechaEmision}</td></tr>
-                                        <tr><td className="text-right">Condiciones de la Transacción<br/><strong>{formVenta.values.condicionPago === 'Credito' ? 'Crédito' : formVenta.values.condicionPago}</strong></td><td className="valign-bottom">Vence: {esCredito ? formatearFecha(new Date(Date.now() + (Number(formVenta.values.diasCredito) || 0) * 86400000)) : fechaEmision}</td></tr>
+                                        <tr><td className="text-right">Condiciones de la Transacción<br/><strong>{formVenta.values.condicionPago === 'Credito' ? 'Crédito' : formVenta.values.condicionPago}</strong></td><td className="valign-bottom">Vence: {esCredito ? formatearFecha(new Date(fechaEmisionDate.getTime() + (Number(formVenta.values.diasCredito) || 0) * 86400000)) : fechaEmision}</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -1908,7 +1954,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                         </td>
                                         <td className="total-cell border-right text-center">
                                             <span className="text-black">Monto Operación segun Tasa BCV</span><br/>
-                                            <strong>{formatoNumero(tasaBcv)} <span className="label-red">Bs.</span></strong>
+                                            <strong>{formatoNumero(tasaActiva)} <span className="label-red">Bs.</span></strong>
                                         </td>
                                         <td className="total-cell text-center" style={{ backgroundColor: '#f9f9f9' }}>
                                             <span className="label-red">TOTAL GENERAL USD$</span><br/>

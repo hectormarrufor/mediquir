@@ -148,6 +148,7 @@ export async function POST(request) {
         }
         if (esTalonario) {
             if (esVend) throw new ErrorNegocio('Solo administración carga facturas de talonario', 403);
+            if (!fechaEmisionBody) throw new ErrorNegocio('La factura de talonario requiere su fecha de emisión');
             if (!(parseInt(String(numeroDocumentoManual || '').replace(/\D/g, ''), 10) > 0)) throw new ErrorNegocio('Escribe el número de la factura del talonario');
             if (!/^[0-9]{2,3}-[0-9]{4,10}$/.test(controlTalonario)) throw new ErrorNegocio('El número de control del talonario debe llevar el prefijo, un guion y los dígitos (por ejemplo 00-1234567)');
         }
@@ -169,6 +170,11 @@ export async function POST(request) {
         const tasaCambio = fechaDoc
             ? ((await tasaDelDia(fechaDoc, { transaction: t })) || (() => { throw new ErrorNegocio(`No hay tasa BCV registrada para el ${fechaDoc.split('-').reverse().join('/')}`); })())
             : await tasaVigente({ transaction: t });
+        const tasaEnviada = Number(body.tasaCambio);
+        if (moneda === 'BS' && tasaEnviada > 0 && Math.abs(tasaEnviada - tasaCambio) > 0.01) {
+            const etiquetaFecha = fechaDoc ? `del ${fechaDoc.split('-').reverse().join('/')}` : 'del día';
+            throw new ErrorNegocio(`La tasa BCV en pantalla (${tasaEnviada.toFixed(2)}) no coincide con la tasa ${etiquetaFecha} (${tasaCambio.toFixed(2)}). Espera a que se actualice la tasa y verifica los precios antes de asentar.`, 409);
+        }
         const momentoDoc = fechaDoc ? new Date(`${fechaDoc}T12:00:00-04:00`) : null;
 
         // --- 1. CÁLCULO EXACTO DE RENGLONES Y TOTALES (mismas reglas que el POS) ---
