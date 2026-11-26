@@ -22,7 +22,6 @@ import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { useEsTelefono } from '@/app/components/ui/modalMovil';
 
 const PosModal = dynamic(() => import('../../components/admin/PosModal'), { ssr: false });
-const ModalContadoCredito = dynamic(() => import('./_components/ModalContadoCredito'), { ssr: false });
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtUsd = (v) => `$${usd.format(Number(v) || 0)}`;
@@ -258,12 +257,12 @@ export default function VentasDashboard() {
     const [q] = useDebouncedValue(busqueda.trim(), 350);
     const [tipo, setTipo] = useState('todos');
     const [doc, setDoc] = useState(null);
+    const [condicion, setCondicion] = useState(null);
     const [estado, setEstado] = useState(null);
     const [pago, setPago] = useState(null);
     const [orden, setOrden] = useState({ sort: 'fecha', dir: 'desc' });
     const [pagina, setPagina] = useState(1);
     const [posAbierto, setPosAbierto] = useState(false);
-    const [revisionAbierta, setRevisionAbierta] = useState(false);
     const [porEliminar, setPorEliminar] = useState(null);
     const [eliminando, setEliminando] = useState(false);
     const [verGraficosMovil, setVerGraficosMovil] = useState(false);
@@ -303,7 +302,7 @@ export default function VentasDashboard() {
             irALista();
         }
     }, []);
-    useEffect(() => { setPagina(1); }, [rango, q, tipo, doc, estado, pago, orden]);
+    useEffect(() => { setPagina(1); }, [rango, q, tipo, doc, condicion, estado, pago, orden]);
 
     const [d1, d2] = rango;
     const listo = Boolean(d1 && d2);
@@ -319,10 +318,11 @@ export default function VentasDashboard() {
     if (q) params.set('q', q);
     if (tipo !== 'todos') params.set('tipo', tipo);
     if (doc) params.set('doc', doc);
+    if (condicion) params.set('condicion', condicion);
     if (estado) params.set('estado', estado);
     if (pago) params.set('pago', pago);
     const lista = useQuery({
-        queryKey: ['ventas', 'lista', desde, hasta, q, tipo, doc, estado, pago, orden, pagina], enabled: listo,
+        queryKey: ['ventas', 'lista', desde, hasta, q, tipo, doc, condicion, estado, pago, orden, pagina], enabled: listo,
         queryFn: () => pedirJson(`/api/ventas/lista?${params}`),
         placeholderData: keepPreviousData,
     });
@@ -367,8 +367,8 @@ export default function VentasDashboard() {
         }
     };
 
-    const filtrosActivos = (doc ? 1 : 0) + (estado ? 1 : 0) + (pago ? 1 : 0) + (orden.sort !== 'fecha' || orden.dir !== 'desc' ? 1 : 0);
-    const limpiarFiltros = () => { setDoc(null); setEstado(null); setPago(null); setOrden({ sort: 'fecha', dir: 'desc' }); };
+    const filtrosActivos = (doc ? 1 : 0) + (condicion ? 1 : 0) + (estado ? 1 : 0) + (pago ? 1 : 0) + (orden.sort !== 'fecha' || orden.dir !== 'desc' ? 1 : 0);
+    const limpiarFiltros = () => { setDoc(null); setCondicion(null); setEstado(null); setPago(null); setOrden({ sort: 'fecha', dir: 'desc' }); };
     const alertasMovil = [porImprimir.data, porAprobar.data].filter(Boolean).length;
 
     const seccionGraficos = (
@@ -445,15 +445,12 @@ export default function VentasDashboard() {
                                 </SimpleGrid>
                             )}
 
-                            <SimpleGrid cols={esVendedor ? 3 : 3} spacing={8}>
+                            <SimpleGrid cols={esVendedor ? 2 : 4} spacing={8}>
                                 <Button size="xs" h={38} radius="md" variant="light" color="grape" leftSection={<IconTruckDelivery size={15} />} px={8} onClick={() => router.push('/superuser/ventas/despachos')}>
                                     Despachos
                                 </Button>
                                 <Button size="xs" h={38} radius="md" variant="light" color="teal" leftSection={<IconFileInvoice size={15} />} px={8} onClick={() => router.push('/superuser/presupuestos')}>
                                     Presupuestos
-                                </Button>
-                                <Button size="xs" h={38} radius="md" variant="light" color="indigo" leftSection={<IconReceipt2 size={15} />} px={6} onClick={() => setRevisionAbierta(true)}>
-                                    Contado/Créd.
                                 </Button>
                                 {!esVendedor && (
                                     <Button size="xs" h={38} radius="md" variant="light" color="gray" leftSection={<IconCashRegister size={15} />} px={8} onClick={() => router.push('/superuser/ventas/cierre')}>
@@ -475,7 +472,6 @@ export default function VentasDashboard() {
                             {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconCashRegister size={18} />} onClick={() => router.push('/superuser/ventas/cierre')}>Cierre de caja</Button>}
                             {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconListNumbers size={18} />} onClick={() => router.push('/superuser/ventas/controles')}>Números de control</Button>}
                             <Button size="md" variant="light" color="teal" leftSection={<IconFileInvoice size={18} />} onClick={() => router.push('/superuser/presupuestos')}>Presupuestos</Button>
-                            <Button size="md" variant="light" color="indigo" leftSection={<IconReceipt2 size={18} />} onClick={() => setRevisionAbierta(true)}>Contado / Crédito</Button>
                             <Button size="md" color="accent.6" leftSection={<IconPlus size={18} />} onClick={() => setPosAbierto(true)}>Nueva venta o pedido</Button>
                         </Group>
                     )}
@@ -550,6 +546,7 @@ export default function VentasDashboard() {
                             {filtrosActivos > 0 && (
                                 <Group gap={6} wrap="wrap">
                                     {doc && <Badge size="sm" variant="light" color="navy" rightSection={<CloseButton size="xs" onClick={() => setDoc(null)} />}>{DOC[doc]?.etiqueta || doc}</Badge>}
+                                    {condicion && <Badge size="sm" variant="light" color={CONDICION[condicion]?.color || 'gray'} rightSection={<CloseButton size="xs" onClick={() => setCondicion(null)} />}>{CONDICION[condicion]?.texto || condicion}</Badge>}
                                     {estado && <Badge size="sm" variant="light" color="blue" rightSection={<CloseButton size="xs" onClick={() => setEstado(null)} />}>{ETIQUETA_DESPACHO[estado] || estado}</Badge>}
                                     {pago && <Badge size="sm" variant="light" color="orange" rightSection={<CloseButton size="xs" onClick={() => setPago(null)} />}>{pago}</Badge>}
                                     {(orden.sort !== 'fecha' || orden.dir !== 'desc') && (
@@ -565,6 +562,7 @@ export default function VentasDashboard() {
                             <SegmentedControl color="navy.9" value={tipo} onChange={setTipo} data={[{ value: 'todos', label: 'Todas' }, { value: 'DETAL', label: 'Detal' }, { value: 'MAYOR', label: 'Mayor' }, { value: 'ONLINE', label: 'Online' }]} />
                             <TextInput flex="1 1 220px" placeholder="Buscar por documento, cliente o RIF…" leftSection={<IconSearch size={16} />} value={busqueda} onChange={(e) => setBusqueda(e.currentTarget.value)} />
                             <Select placeholder="Documento" clearable data={DOCUMENTOS} value={doc} onChange={setDoc} w={170} />
+                            <Select placeholder="Forma de pago" clearable data={[{ value: 'Contado', label: 'Contado' }, { value: 'Credito', label: 'Crédito' }]} value={condicion} onChange={setCondicion} w={155} />
                             <Select placeholder="Despacho" clearable data={DESPACHOS} value={estado} onChange={setEstado} w={165} />
                             <Select placeholder="Pago" clearable data={['Pagado', 'Pendiente', 'Vencido']} value={pago} onChange={setPago} w={140} />
                         </Group>
@@ -663,6 +661,7 @@ export default function VentasDashboard() {
             >
                 <Stack gap="sm">
                     <Select label="Tipo de documento" placeholder="Todos" clearable data={DOCUMENTOS} value={doc} onChange={setDoc} />
+                    <Select label="Forma de pago" placeholder="Todas" clearable data={[{ value: 'Contado', label: 'Contado' }, { value: 'Credito', label: 'Crédito' }]} value={condicion} onChange={setCondicion} />
                     <SimpleGrid cols={2} spacing="xs">
                         <Select label="Despacho" placeholder="Todos" clearable data={DESPACHOS} value={estado} onChange={setEstado} />
                         <Select label="Pago" placeholder="Todos" clearable data={['Pagado', 'Pendiente', 'Vencido']} value={pago} onChange={setPago} />
@@ -690,7 +689,6 @@ export default function VentasDashboard() {
             </Modal>
 
             {posAbierto && <PosModal opened={posAbierto} onClose={() => { setPosAbierto(false); queryClient.invalidateQueries({ queryKey: ['ventas'] }); }} tasaBcv={tasa || 0} />}
-            {revisionAbierta && <ModalContadoCredito opened={revisionAbierta} onClose={() => setRevisionAbierta(false)} rangoInicial={rango} telefono={telefono} />}
         </Box>
     );
 }
