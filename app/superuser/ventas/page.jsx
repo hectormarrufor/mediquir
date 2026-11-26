@@ -22,6 +22,7 @@ import { useTasaBcv } from '@/hooks/useTasaBcv';
 import { useEsTelefono } from '@/app/components/ui/modalMovil';
 
 const PosModal = dynamic(() => import('../../components/admin/PosModal'), { ssr: false });
+const ModalContadoCredito = dynamic(() => import('./_components/ModalContadoCredito'), { ssr: false });
 
 const usd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtUsd = (v) => `$${usd.format(Number(v) || 0)}`;
@@ -262,6 +263,7 @@ export default function VentasDashboard() {
     const [orden, setOrden] = useState({ sort: 'fecha', dir: 'desc' });
     const [pagina, setPagina] = useState(1);
     const [posAbierto, setPosAbierto] = useState(false);
+    const [revisionAbierta, setRevisionAbierta] = useState(false);
     const [porEliminar, setPorEliminar] = useState(null);
     const [eliminando, setEliminando] = useState(false);
     const [verGraficosMovil, setVerGraficosMovil] = useState(false);
@@ -443,12 +445,15 @@ export default function VentasDashboard() {
                                 </SimpleGrid>
                             )}
 
-                            <SimpleGrid cols={esVendedor ? 2 : 4} spacing={8}>
+                            <SimpleGrid cols={esVendedor ? 3 : 3} spacing={8}>
                                 <Button size="xs" h={38} radius="md" variant="light" color="grape" leftSection={<IconTruckDelivery size={15} />} px={8} onClick={() => router.push('/superuser/ventas/despachos')}>
                                     Despachos
                                 </Button>
                                 <Button size="xs" h={38} radius="md" variant="light" color="teal" leftSection={<IconFileInvoice size={15} />} px={8} onClick={() => router.push('/superuser/presupuestos')}>
                                     Presupuestos
+                                </Button>
+                                <Button size="xs" h={38} radius="md" variant="light" color="indigo" leftSection={<IconReceipt2 size={15} />} px={6} onClick={() => setRevisionAbierta(true)}>
+                                    Contado/Créd.
                                 </Button>
                                 {!esVendedor && (
                                     <Button size="xs" h={38} radius="md" variant="light" color="gray" leftSection={<IconCashRegister size={15} />} px={8} onClick={() => router.push('/superuser/ventas/cierre')}>
@@ -470,6 +475,7 @@ export default function VentasDashboard() {
                             {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconCashRegister size={18} />} onClick={() => router.push('/superuser/ventas/cierre')}>Cierre de caja</Button>}
                             {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconListNumbers size={18} />} onClick={() => router.push('/superuser/ventas/controles')}>Números de control</Button>}
                             <Button size="md" variant="light" color="teal" leftSection={<IconFileInvoice size={18} />} onClick={() => router.push('/superuser/presupuestos')}>Presupuestos</Button>
+                            <Button size="md" variant="light" color="indigo" leftSection={<IconReceipt2 size={18} />} onClick={() => setRevisionAbierta(true)}>Contado / Crédito</Button>
                             <Button size="md" color="accent.6" leftSection={<IconPlus size={18} />} onClick={() => setPosAbierto(true)}>Nueva venta o pedido</Button>
                         </Group>
                     )}
@@ -684,6 +690,7 @@ export default function VentasDashboard() {
             </Modal>
 
             {posAbierto && <PosModal opened={posAbierto} onClose={() => { setPosAbierto(false); queryClient.invalidateQueries({ queryKey: ['ventas'] }); }} tasaBcv={tasa || 0} />}
+            {revisionAbierta && <ModalContadoCredito opened={revisionAbierta} onClose={() => setRevisionAbierta(false)} rangoInicial={rango} telefono={telefono} />}
         </Box>
     );
 }

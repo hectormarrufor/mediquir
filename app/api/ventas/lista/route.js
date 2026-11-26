@@ -34,14 +34,22 @@ export async function GET(request) {
         const estado = ['POR_DESPACHAR', 'Pendiente', 'Empacado', 'Parcial', 'Completado', 'Cancelado'].includes(searchParams.get('estado')) ? searchParams.get('estado') : null;
         const pago = ['Pendiente', 'Pagado', 'Vencido'].includes(searchParams.get('pago')) ? searchParams.get('pago') : null;
         const doc = DOCUMENTOS.includes(searchParams.get('doc')) ? searchParams.get('doc') : null;
+        const condicion = ['Contado', 'Credito'].includes(searchParams.get('condicion')) ? searchParams.get('condicion') : null;
+        const todas = searchParams.get('todas') === '1';
         const q = (searchParams.get('q') || '').trim().slice(0, 60);
-        const pagina = Math.max(1, Number(searchParams.get('page')) || 1);
+        const pagina = todas ? 1 : Math.max(1, Number(searchParams.get('page')) || 1);
+        const limite = todas ? 1000 : TAMANO;
         const orden = ORDENABLES[searchParams.get('sort')] || ORDENABLES.fecha;
         const dir = searchParams.get('dir') === 'asc' ? 'ASC' : 'DESC';
 
         const alcance = alcanceDe(acceso.sesion);
-        const replacements = { desde, hasta, q: `%${q}%`, limite: TAMANO, salto: (pagina - 1) * TAMANO, ...alcance.replacements };
+        const replacements = { desde, hasta, q: `%${q}%`, limite, salto: (pagina - 1) * limite, ...alcance.replacements };
         let filtro = `(v."createdAt" AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta${alcance.sql}`;
+        if (condicion) {
+            filtro += ' AND v."condicionPago" = :condicion';
+            replacements.condicion = condicion;
+            if (!estado) filtro += ` AND v."statusDespacho" <> 'Cancelado'`;
+        }
         if (tipo) { filtro += ' AND v."tipoVenta" = :tipo'; replacements.tipo = tipo; }
         const anuladaNcSql = sqlFacturaAnuladaTotalNc('v');
         if (estado === 'POR_DESPACHAR') {
@@ -60,8 +68,8 @@ export async function GET(request) {
         const consultar = (sql) => sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
 
         // Notas de crédito y débito emitidas a clientes: entran a la lista salvo que se filtre por algo que solo tienen las ventas
-        // (despacho o pago) o por otro tipo de documento. El tipo de venta (detal/mayor/online) es el de la factura que afectan.
-        const incluyeNotas = !estado && !pago && (!doc || doc === 'NOTA_CREDITO' || doc === 'NOTA_DEBITO');
+        // (condición de pago, despacho o pago) o por otro tipo de documento. El tipo de venta (detal/mayor/online) es el de la factura que afectan.
+        const incluyeNotas = !condicion && !estado && !pago && (!doc || doc === 'NOTA_CREDITO' || doc === 'NOTA_DEBITO');
         const incluyeVentas = !doc || soloVentas;
         let filtroNota = `n."origen" = 'VENTA' AND n."fecha" BETWEEN :desde AND :hasta${alcance.sql}`;
         if (tipo) filtroNota += ' AND v."tipoVenta" = :tipo';
@@ -91,12 +99,12 @@ export async function GET(request) {
                 COALESCE(c."nombre", 'Cliente al detal') AS cliente, COALESCE(ee."nombre" || ' ' || ee."apellido", ue."user", e."nombre" || ' ' || e."apellido", u."user") AS vendedor, NULL::int AS articulos,
                 NULL::text AS retencion
                 ${desdeNota} WHERE ${filtroNota}`);
-        if (!partes.length) return NextResponse.json({ ventas: [], total: 0, pagina, paginas: 1 });
+        if (!partes.length) return NextResponse.json({ ventas: [], total: 0, totalMontoUsd: 0, pagina, paginas: 1 });
         const unidas = partes.join(' UNION ALL ');
 
-        const [filas, [{ total }]] = await Promise.all([
+        const [filas, [{ total, totalMontoUsd }]] = await Promise.all([
             consultar(`SELECT * FROM (${unidas}) x ORDER BY ${orden} ${dir}, x."id" LIMIT :limite OFFSET :salto`),
-            consultar(`SELECT COUNT(*)::int AS total FROM (${unidas}) x`),
+            consultar(`SELECT COUNT(*)::int AS total, COALESCE(SUM(x."totalUsd"), 0)::float AS "totalMontoUsd" FROM (${unidas}) x`),
         ]);
 
         // Facturas y notas de vendedores que esperan aprobación (no se imprimen todavía)
@@ -113,7 +121,7 @@ export async function GET(request) {
             const porImprimir = ordenControl.has(String(f.id)) && f.estado !== 'Cancelado' && f.estado !== 'Anulada';
             return { ...f, ...(porAprobar ? { porAprobar: true } : {}), ...(porImprimir ? { porImprimir: true } : {}) };
         });
-        return NextResponse.json({ ventas, total, pagina, paginas: Math.max(1, Math.ceil(total / TAMANO)) });
+        return NextResponse.json({ ventas, total, totalMontoUsd, pagina, paginas: Math.max(1, Math.ceil(total / limite)) });
     } catch (error) {
         console.error('Lista de ventas:', error);
         return NextResponse.json({ error: 'No se pudo cargar la lista de ventas' }, { status: 500 });
