@@ -394,16 +394,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     // ---- Días de crédito: arrancan con los del cliente; solo administración los cambia (de esta factura o también de las futuras del cliente)
     const esCredito = formVenta.values.condicionPago === 'Credito';
-    // La forma de cobro se ELIGE (sin opción predeterminada) cuando requiere empaque/despacho o para administración.
-    // Si un vendedor hace una venta con entrega inmediata en sitio, es siempre de contado.
-    const cobroEsEleccion = !esPresupuesto && (puedeEditarPrecio || (entregaElegida && entregaElegida !== 'sitio'));
+    // La forma de cobro siempre se elige (Contado o Crédito), incluso cuando el cliente retira en sitio en el momento.
+    const cobroEsEleccion = !esPresupuesto;
     const faltaCobro = cobroEsEleccion && !formVenta.values.condicionPago;
-    useEffect(() => {
-        if (!esPresupuesto && !faltaEntrega && !cobroEsEleccion && formVenta.values.condicionPago !== 'Contado') {
-            formVenta.setFieldValue('condicionPago', 'Contado');
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cobroEsEleccion, faltaEntrega, formVenta.values.condicionPago, esPresupuesto]);
     useEffect(() => {
         const c = clientes?.find((x) => x.id.toString() === formVenta.values.clienteId?.toString());
         setDatosCli({ direccion: c?.direccion || '', telefono: c?.telefono || '', email: c?.email || '', identificacion: esSinRif(c?.identificacion) ? '' : (c?.identificacion || '') });
