@@ -79,13 +79,35 @@ export default function HeroSection({ searchQuery, onSearch, onVerCatalogo }) {
     useEffect(() => {
         const video = videoRef.current;
         if (!video || sinVideo) return undefined;
+        video.defaultMuted = true;
+        video.muted = true;
+        video.playsInline = true;
         if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { video.pause(); return undefined; }
+
+        let visible = true;
+        const intentarPlay = () => {
+            if (!visible) return;
+            video.muted = true;
+            video.play().catch(() => {});
+        };
+        const alTocar = () => {
+            if (video.paused && visible) intentarPlay();
+        };
+
         const observador = new IntersectionObserver(([entrada]) => {
-            if (entrada.isIntersecting) video.play().catch(() => {});
+            visible = entrada.isIntersecting;
+            if (visible) intentarPlay();
             else video.pause();
         }, { threshold: 0.15 });
         observador.observe(video);
-        return () => observador.disconnect();
+        video.addEventListener('canplay', intentarPlay);
+        window.addEventListener('touchstart', alTocar, { passive: true, once: true });
+
+        return () => {
+            observador.disconnect();
+            video.removeEventListener('canplay', intentarPlay);
+            window.removeEventListener('touchstart', alTocar);
+        };
     }, [sinVideo]);
 
     useEffect(() => {
@@ -144,7 +166,7 @@ export default function HeroSection({ searchQuery, onSearch, onVerCatalogo }) {
                 <video
                     ref={videoRef} className={classes.heroVideo}
                     src="/tenants/mediquir/hero-video.mp4?v=2" poster="/tenants/mediquir/hero-video-poster.jpg?v=2"
-                    autoPlay loop muted playsInline preload="metadata" aria-hidden="true"
+                    autoPlay loop muted playsInline preload="auto" aria-hidden="true"
                     onError={() => setSinVideo(true)}
                 />
             )}

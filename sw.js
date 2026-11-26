@@ -5,12 +5,14 @@ precacheAndRoute(self.__WB_MANIFEST || []);
 console.log('[SW personalizado] cargado');
 
 // =================================================================
-// CORRECCIÓN AGREGADA: BLINDAJE PARA LA API
+// CORRECCIÓN AGREGADA: BLINDAJE PARA LA API Y VIDEOS (RANGE 206)
 // =================================================================
 self.addEventListener('fetch', (event) => {
   if (
-    event.request.url.includes('/api/') || 
-    event.request.method === 'POST'
+    event.request.url.includes('/api/') ||
+    event.request.method === 'POST' ||
+    event.request.headers.has('range') ||
+    /\.(mp4|webm)(\?|$)/i.test(event.request.url)
   ) {
     event.respondWith(fetch(event.request));
     return;

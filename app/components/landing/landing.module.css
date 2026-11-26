@@ -279,7 +279,7 @@ video.heroVideo {
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background: linear-gradient(180deg, rgba(5, 14, 38, 0.84) 0%, rgba(6, 18, 48, 0.66) 55%, rgba(5, 14, 38, 0.90) 100%);
+    background: linear-gradient(180deg, rgba(5, 14, 38, 0.78) 0%, rgba(6, 18, 48, 0.46) 52%, rgba(5, 14, 38, 0.82) 100%);
 }
 
 /* Resplandor ambiental sutil para dar profundidad clínica moderna */
