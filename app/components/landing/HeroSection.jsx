@@ -143,7 +143,7 @@ export default function HeroSection({ searchQuery, onSearch, onVerCatalogo }) {
             ) : (
                 <video
                     ref={videoRef} className={classes.heroVideo}
-                    src="/tenants/mediquir/hero-video.mp4" poster="/tenants/mediquir/hero-video-poster.jpg"
+                    src="/tenants/mediquir/hero-video.mp4?v=2" poster="/tenants/mediquir/hero-video-poster.jpg?v=2"
                     autoPlay loop muted playsInline preload="metadata" aria-hidden="true"
                     onError={() => setSinVideo(true)}
                 />

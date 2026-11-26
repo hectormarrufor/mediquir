@@ -260,6 +260,11 @@
     object-fit: cover;
 }
 
+video.heroVideo {
+    filter: saturate(0.82) contrast(1.06) brightness(0.84) blur(0.6px);
+    transform: scale(1.03);
+}
+
 .escenaFoto {
     opacity: 0;
     transition: opacity 1.4s ease-in-out;
@@ -274,7 +279,7 @@
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background: linear-gradient(180deg, rgba(5, 14, 38, 0.88) 0%, rgba(6, 18, 48, 0.74) 55%, rgba(5, 14, 38, 0.94) 100%);
+    background: linear-gradient(180deg, rgba(5, 14, 38, 0.84) 0%, rgba(6, 18, 48, 0.66) 55%, rgba(5, 14, 38, 0.90) 100%);
 }
 
 /* Resplandor ambiental sutil para dar profundidad clínica moderna */
@@ -1195,7 +1200,7 @@
     }
 
     .heroFondo {
-        background: linear-gradient(96deg, rgba(5, 14, 38, 0.94) 0%, rgba(6, 18, 48, 0.78) 52%, rgba(6, 18, 48, 0.34) 100%);
+        background: linear-gradient(96deg, rgba(5, 14, 38, 0.92) 0%, rgba(6, 18, 48, 0.72) 50%, rgba(6, 18, 48, 0.34) 100%);
     }
 
     .heroGrid {
