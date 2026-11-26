@@ -7,6 +7,8 @@ import { CONFIG_FISCAL } from '@/app/constants/empresa';
 import { lineasDeRenglon } from '@/app/constants/lineasFactura';
 import { numeroALetras } from '@/app/utils/numeroALetras';
 import { useZoomHoja } from '@/app/components/ui/useZoomHoja';
+import CompartirWhatsappModal from '@/app/superuser/presupuestos/_components/CompartirWhatsapp';
+import { generarPdfDeFormaLibre } from '@/app/superuser/presupuestos/_components/pdfPresupuesto';
 
 // Factura impresa SOBRE LA FORMA LIBRE PREIMPRESA (media carta horizontal: 8 in x 5.5 in).
 // La forma ya trae el logo, el membrete, el N° de control en rojo, la marca de agua y, abajo, la franja de la imprenta:
@@ -55,6 +57,7 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
     // Papel de la impresión: CARTA vertical por defecto (la hoja va centrada arriba); MEDIA CARTA = la hoja completa en horizontal.
     // Se recuerda la última elección en este navegador.
     const [papel, setPapel] = useState('carta');
+    const [compartiendo, setCompartiendo] = useState(false);
     useEffect(() => { try { const g = localStorage.getItem('papelFormaLibre'); if (g === 'carta' || g === 'media') setPapel(g); } catch { /* sin almacenamiento */ } }, []);
     const elegirPapel = (v) => { setPapel(v); try { localStorage.setItem('papelFormaLibre', v); } catch { /* sin almacenamiento */ } };
     const esCarta = papel === 'carta';
@@ -89,12 +92,18 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
     const totalFilas = detalles.reduce((a, d) => a + lineasDeRenglon(nombreDe(d)), 0) + lineasExtra.length;
     const demasiados = totalFilas > capacidad;
 
+    const nombreArchivo = `${titulo.replace(/\s+/g, '-')}-${String(numeroImpreso || 'Mediquir').replace(/[^\w-]+/g, '')}.pdf`;
+    const mensajeWhatsapp = `Hola${venta.cliente?.nombre ? ` ${venta.cliente.nombre}` : ''}, ¡un gusto saludarte! 👋\n\n`
+        + `Te comparto tu ${titulo.toLowerCase()} *${numeroImpreso}* de *Mediquir* por un total de *Bs. ${fmt(totalBs)}* ($ ${fmt(totalUsd)}).\n\n`
+        + `Cualquier duda quedo atento. ¡Gracias por preferirnos! 🙌\n\n— Equipo Mediquir`;
+
     return (
         <div className="fl-envoltura">
             <div className="fl-barra">
                 <span>{titulo} {venta.numeroDocumento} · media carta 8 × 5.5 in{guia ? (vistaPrevia ? ' · GUÍA de la forma preimpresa (se imprime)' : ' · GUÍA de la forma preimpresa (no se imprime)') : ''}{vistaPrevia ? ' · VISTA PREVIA: no es un documento emitido' : ''}</span>
                 <span>
                     <button type="button" onClick={() => window.print()}>Imprimir</button>{' '}
+                    {!vistaPrevia && <><button type="button" style={{ background: '#22a55a', color: '#fff', border: 0, borderRadius: 4 }} onClick={() => setCompartiendo(true)}>WhatsApp PDF</button>{' '}</>}
                     <button type="button" className={esCarta ? 'fl-papel fl-papel-on' : 'fl-papel'} onClick={() => elegirPapel('carta')}>Carta vertical</button>
                     <button type="button" className={!esCarta ? 'fl-papel fl-papel-on' : 'fl-papel'} onClick={() => elegirPapel('media')}>Media carta horizontal</button>{' '}
                     {onReasignarControl && <><button type="button" onClick={onReasignarControl}>Forma dañada: siguiente N° de control</button>{' '}</>}
@@ -104,6 +113,15 @@ export default function FacturaFormaLibre({ venta, guia = false, titulo = 'Factu
                 </span>
             </div>
             {demasiados && <div className="fl-aviso">Esta hoja ocupa {totalFilas} líneas (una descripción larga ocupa 2) y la forma libre admite {capacidad} en este documento: lo que sobra se saldrá de la hoja.</div>}
+
+            <CompartirWhatsappModal
+                opened={compartiendo}
+                onClose={() => setCompartiendo(false)}
+                mensajeInicial={mensajeWhatsapp}
+                telefonoInicial={venta.cliente?.telefono || ''}
+                nombreArchivo={nombreArchivo}
+                generarPdf={() => generarPdfDeFormaLibre(document.getElementById('print-section'))}
+            />
 
             <div id="print-section" className="fl-hoja" style={{ zoom }}>
                 {guia && <img className={vistaPrevia ? 'fl-guia fl-guia-imprime' : 'fl-guia'} src="/tenants/mediquir/forma-libre.png" alt="" />}

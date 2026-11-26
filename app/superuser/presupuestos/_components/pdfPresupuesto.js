@@ -46,3 +46,46 @@ export async function generarPdfDeHojas(origen, claseFuente) {
         contenedor.remove();
     }
 }
+
+/**
+ * Genera un PDF media carta horizontal (8 x 5.5 in) a partir de #print-section de FacturaFormaLibre.
+ * Incluye el fondo de la forma preimpresa para que el PDF compartido por WhatsApp muestre membrete y casillas.
+ */
+export async function generarPdfDeFormaLibre(hoja) {
+    if (!hoja) throw new Error('No hay documento para generar el PDF');
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
+
+    const anchoPx = 768; // 8 in a 96 dpi
+    const altoPx = 528;  // 5.5 in a 96 dpi
+    const contenedor = document.createElement('div');
+    contenedor.className = 'fl-envoltura';
+    Object.assign(contenedor.style, {
+        position: 'fixed', left: '-10000px', top: '0', width: `${anchoPx}px`, height: `${altoPx}px`,
+        background: '#fff', padding: '0', minHeight: '0', overflow: 'hidden', zIndex: '-1',
+    });
+
+    const copia = hoja.cloneNode(true);
+    Object.assign(copia.style, { zoom: '1', margin: '0', boxShadow: 'none', width: `${anchoPx}px`, height: `${altoPx}px` });
+    let guiaImg = copia.querySelector('.fl-guia');
+    if (!guiaImg) {
+        guiaImg = document.createElement('img');
+        guiaImg.className = 'fl-guia fl-guia-imprime';
+        guiaImg.src = '/tenants/mediquir/forma-libre.png';
+        guiaImg.alt = '';
+        copia.prepend(guiaImg);
+    }
+    guiaImg.style.opacity = '0.85';
+    contenedor.appendChild(copia);
+    document.body.appendChild(contenedor);
+
+    try {
+        if (document.fonts?.ready) await document.fonts.ready;
+        await esperarImagenes(contenedor);
+        const lienzo = await html2canvas(copia, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false, windowWidth: anchoPx });
+        const pdf = new jsPDF({ unit: 'in', format: [8, 5.5], orientation: 'landscape', compress: true });
+        pdf.addImage(lienzo.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 8, 5.5, undefined, 'FAST');
+        return pdf.output('blob');
+    } finally {
+        contenedor.remove();
+    }
+}

@@ -1,34 +1,27 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { nombreConMarca } from '@/app/constants/nombreConMarca';
 import { useParams } from 'next/navigation';
-import { MEMBRETE_MEDIQUIR } from '@/app/constants/empresa';
-import { numeroALetras } from '@/app/utils/numeroALetras';
 import FacturaFormaLibre from './FacturaFormaLibre';
+import NotaEntregaImprimible from './NotaEntregaImprimible';
 import ControlFiscalPaso from '../../_components/ControlFiscalPaso';
 import ConfirmarFormaControl, { useControlPrevisto } from '../../_components/ConfirmarFormaControl';
 import { useControlFiscal, usePausaListo } from '../../_lib/useControlFiscal';
 import { useAuth } from '@/hooks/useAuth';
-import { formatearFecha } from '@/app/constants/hora';
-import { useZoomHoja } from '@/app/components/ui/useZoomHoja';
 
 export default function ImprimirRecibo() {
     const params = useParams();
     const [venta, setVenta] = useState(null);
     const [cargando, setCargando] = useState(true);
     const { rolUsuario } = useAuth();
-    const zoom = useZoomHoja(816); // hoja carta: en el teléfono se achica al ancho de la pantalla
     const guia = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('guia') === '1';
-    // A la factura se le asigna el número de control de la forma libre (correlativo compartido con las notas) al imprimirla
-    const pendiente = Boolean(venta?.aprobacionPendiente); // factura de un vendedor por aprobar: no se imprime ni se le asigna control todavía
+    const pendiente = Boolean(venta?.aprobacionPendiente);
     const necesitaControl = Boolean(venta && venta.tipoDocumento === 'FACTURA' && venta.statusDespacho !== 'Cancelado' && !guia && !pendiente);
-    // El control se asigna AL IMPRIMIR y solo después de que quien imprime verifica que la forma en la impresora lleva ese mismo número
-    const [confirmado, setConfirmado] = useState(null); // el control que se confirmó
-    const [decisionHueco, setDecisionHueco] = useState(null); // lo que se decidió ante un número de control hueco
+    const [confirmado, setConfirmado] = useState(null);
+    const [decisionHueco, setDecisionHueco] = useState(null);
     const previsto = useControlPrevisto(necesitaControl && !venta?.numeroControl);
     const ctl = useControlFiscal({ origen: 'VENTA', id: venta?.id, activo: necesitaControl && confirmado !== null, decision: decisionHueco });
-    const listoVisto = usePausaListo(necesitaControl && ctl.estado === 'listo' && ctl.control === confirmado); // «¡Listo! Número de control asignado»
+    const listoVisto = usePausaListo(necesitaControl && ctl.estado === 'listo' && ctl.control === confirmado);
     const controlAVerificar = ctl.estado === 'listo' ? ctl.control : (venta?.numeroControl || previsto);
     const hayQueConfirmar = necesitaControl && (confirmado === null || (ctl.estado === 'listo' && ctl.control !== confirmado));
 
@@ -47,19 +40,16 @@ export default function ImprimirRecibo() {
         fetchVenta();
     }, [params.id]);
 
-    // Con ?guia=1 solo se revisa cómo cae la factura sobre la forma preimpresa: no se asigna número de control ni se imprime sola
     useEffect(() => {
         if (!venta || cargando || guia || pendiente) return undefined;
-        if (necesitaControl && (confirmado === null || ctl.estado !== 'listo' || ctl.control !== confirmado || !listoVisto)) return undefined; // primero se verifica la forma, se asigna el control y se muestra
+        if (necesitaControl && (confirmado === null || ctl.estado !== 'listo' || ctl.control !== confirmado || !listoVisto)) return undefined;
         const temporizador = setTimeout(() => {
-            // Desde que se manda a imprimir, la factura ya no se corrige ni se elimina (solo con notas de crédito o débito)
             if (venta.tipoDocumento === 'FACTURA' && venta.statusDespacho !== 'Cancelado') fetch(`/api/ventas/${venta.id}/impresa`, { method: 'POST' }).catch(() => {});
             window.print();
         }, 800);
         return () => clearTimeout(temporizador);
     }, [venta, cargando, guia, pendiente, necesitaControl, ctl.estado, ctl.control, confirmado, listoVisto]);
 
-    // Título del navegador/PDF acorde al documento
     useEffect(() => {
         if (!venta) return;
         const esFac = venta.tipoDocumento === 'FACTURA';
@@ -78,7 +68,6 @@ export default function ImprimirRecibo() {
 
     if (pendiente) return <div style={{ padding: '2rem', textAlign: 'center' }}>Esta factura está por aprobar: se podrá imprimir cuando la apruebe Jolexi.</div>;
     const esFactura = venta.tipoDocumento === 'FACTURA';
-    // Las facturas se imprimen sobre la forma libre preimpresa (media carta): sin membrete, logo ni franja legal
     if (esFactura) {
         if (hayQueConfirmar) return <ConfirmarFormaControl tipo="Factura" documento={venta.numeroDocumento} origen="VENTA" idDocumento={venta.id} control={controlAVerificar} nuevo={!venta.numeroControl} onConfirmar={(c, d) => { setDecisionHueco(d || null); setConfirmado(c); }} onCancelar={() => { if (window.history.length > 1) window.history.back(); else window.close(); }} />;
         if (necesitaControl && ctl.estado !== 'listo') return <ControlFiscalPaso estado={ctl.estado} mensaje={ctl.mensaje} onReintentar={() => ctl.asignar(false)} />;
@@ -88,397 +77,6 @@ export default function ImprimirRecibo() {
             : null;
         return <FacturaFormaLibre venta={ctl.control ? { ...venta, numeroControl: ctl.control } : venta} guia={guia} onReasignarControl={reasignar} />;
     }
-    const esNotaEntrega = venta.tipoDocumento === 'NOTA_ENTREGA' || /^NE-/i.test(String(venta.numeroDocumento || ''));
-    const tituloDocumento = esFactura ? 'Factura' : (esNotaEntrega ? 'Nota de Entrega' : 'Recibo de Venta');
-    // Correlativo de Nota de Entrega en PDF: NE-00-00010 (5 dígitos con serie 00-)
-    const numeroImpreso = esNotaEntrega
-        ? (/^NE-\d{2}-/i.test(String(venta.numeroDocumento || ''))
-            ? String(venta.numeroDocumento).toUpperCase()
-            : `NE-00-${String(venta.numeroDocumento || '').replace(/^NE-/i, '').replace(/\D/g, '').padStart(5, '0')}`)
-        : venta.numeroDocumento;
-    
-    let totalBs = venta.moneda === 'BS' ? Number(venta.totalFinal) : Number(venta.totalFinal) * Number(venta.tasaCambio);
-    let totalUsd = venta.moneda === 'USD' ? Number(venta.totalFinal) : Number(venta.totalFinal) / Number(venta.tasaCambio);
-    
-    // En la nota de entrega las líneas se guardan sin IVA (aplicaIva=false): el IVA referencial sale de la alícuota de cada producto. En la planilla impresa se muestra como una factura: base imponible, IVA y total con IVA (en el sistema la nota guarda y cobra solo la base)
-    // Nota de entrega y venta rápida sin IVA cobrado: se muestran como una factura (IVA referencial y total con IVA), pero no fiscales
-    const referencial = (esNotaEntrega || venta.tipoDocumento === 'VENTA_RAPIDA') && Number(venta.montoIva) === 0;
-    const ivaReferencial = referencial
-        ? Math.round((venta.detalles || []).reduce((a, d) => a + Number(d.subtotal) * (d.isFicticio ? (d.aplicaIva ? 16 : 0) : Number(d.producto?.porcentajeIva ?? 16)) / 100, 0) * 100) / 100
-        : 0;
-    const ivaDoc = referencial ? ivaReferencial : Number(venta.montoIva);
-    const ivaBs = venta.moneda === 'BS' ? ivaDoc : ivaDoc * Number(venta.tasaCambio);
-    const ivaUsd = venta.moneda === 'USD' ? ivaDoc : ivaDoc / Number(venta.tasaCambio);
 
-    // El total de la nota guardada es la base: en la planilla se le suma el IVA
-    if (referencial) { totalBs += ivaBs; totalUsd += ivaUsd; }
-
-    // Recibo de venta (V-) de la tienda: desglosa el IVA cobrado, pero NO es un documento fiscal
-    const conIva = ivaDoc > 0;
-    const fleteBs = venta.moneda === 'BS' ? Number(venta.costoFlete || 0) : Number(venta.costoFlete || 0) * Number(venta.tasaCambio);
-    const fleteUsd = venta.moneda === 'USD' ? Number(venta.costoFlete || 0) : Number(venta.costoFlete || 0) / Number(venta.tasaCambio);
-    const baseBs = totalBs - ivaBs - fleteBs;
-    const baseUsd = totalUsd - ivaUsd - fleteUsd;
-    const noFiscal = venta.tipoDocumento === 'VENTA_RAPIDA' || esNotaEntrega;
-
-    const formatoNumero = (num) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
-    const fechaEmision = formatearFecha(venta.fechaEmision || venta.createdAt);
-    const fechaVence = venta.fechaVencimiento ? formatearFecha(venta.fechaVencimiento) : fechaEmision;
-
-    // 🔥 MAGIA DINÁMICA: EVALUAMOS LA CANTIDAD DE ARTÍCULOS 🔥
-    const limiteMediaCarta = 8; // Hasta 8 artículos caben perfecto en Media Carta
-    const cantidadArticulos = venta.detalles?.length || 0;
-    const altoPapel = cantidadArticulos <= limiteMediaCarta ? '5.5in' : '10.5in'; // Media Carta vs Carta Completa
-
-    return (
-        <div className="print-wrapper">
-            {/* Si se cerró el diálogo de impresión (o en el teléfono no salió solo), se vuelve a abrir desde aquí. No se imprime. */}
-            <div className="print-barra">
-                <span>{tituloDocumento} {numeroImpreso}</span>
-                <button type="button" onClick={() => window.print()}>Imprimir</button>
-            </div>
-            <div id="print-section" className="print-container" style={{ zoom }}>
-                
-                <img src="/tenants/mediquir/logo.png" alt="Fondo Mediquir" className="watermark" />
-
-                <header className="header-grid">
-                    <div className="logo-section">
-                        <img src="/tenants/mediquir/logo.png" alt="Logo" className="logo" />
-                    </div>
-                    <div className="membrete-section">
-                        <h3>{MEMBRETE_MEDIQUIR.nombre}</h3>
-                        <p className="rif">RIF.: {MEMBRETE_MEDIQUIR.rif}</p>
-                        <p className="direccion">{MEMBRETE_MEDIQUIR.direccion}</p>
-                        <p className="telefonos">TELF.: {MEMBRETE_MEDIQUIR.telefonos}, E-mail: {MEMBRETE_MEDIQUIR.email}</p>
-                    </div>
-                </header>
-
-                <section className="info-grid">
-                    <div className="cliente-box">
-                        <div className="line-item">
-                            <span className="label-red">CLIENTE:</span>
-                            <span className="value-line">{venta.cliente?.nombre || 'Cliente Genérico'}</span>
-                        </div>
-                        <div className="line-item">
-                            <span className="label-red">RIF:</span>
-                            <span className="value-line">{venta.cliente?.identificacion || 'N/A'}</span>
-                        </div>
-                        <div className="line-item">
-                            <span className="label-red">DOMICILIO FISCAL:</span>
-                            <span className="value-line">{venta.cliente?.direccion || 'N/A'}</span>
-                        </div>
-                    </div>
-                    
-                    <div className="doc-box">
-                        <h2 className="doc-title">{tituloDocumento}</h2>
-                        {noFiscal && <div className="label-red text-center" style={{ fontSize: '0.7rem', fontWeight: 700 }}>{esNotaEntrega ? 'DOCUMENTO NO FISCAL' : 'COMPROBANTE NO FISCAL'}</div>}
-                        <h1 className="doc-number">{numeroImpreso}</h1>
-                        <table className="doc-meta">
-                            <tbody>
-                                <tr>
-                                    <td className="text-right fw-bold" style={{ width: '60%' }}>ORDEN DE COMPRA</td>
-                                    <td>Emisión: {fechaEmision}</td>
-                                </tr>
-                                <tr>
-                                    <td className="text-right">Condiciones de la Transacción<br/><strong>{venta.condicionPago}</strong></td>
-                                    <td className="valign-bottom">Vence: {fechaVence}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-
-                <table className="items-table">
-                    <thead>
-                        <tr>
-                            <th style={{width: '10%'}}>CÓDIGO</th>
-                            <th style={{width: '50%', textAlign: 'left'}}>NOMBRE DEL ARTÍCULO</th>
-                            <th style={{width: '15%', textAlign: 'right'}}>PRECIO UNIT</th>
-                            <th style={{width: '10%', textAlign: 'center'}}>CANTIDAD</th>
-                            <th style={{width: '15%', textAlign: 'right'}}>TOTAL NETO</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {venta.detalles?.map((d, index) => {
-                            const pu = venta.moneda === 'BS' ? d.precioUnitario : d.precioUnitario * venta.tasaCambio;
-                            const sub = venta.moneda === 'BS' ? d.subtotal : d.subtotal * venta.tasaCambio;
-                            
-                            return (
-                                <tr key={index}>
-                                    <td>{d.isFicticio ? 'S/C' : (d.producto?.codigo || 'S/C')}</td>
-                                    <td style={{textAlign: 'left'}}>{d.isFicticio ? d.nombreFicticio : nombreConMarca(d.producto?.nombre || d.nombreFicticio, d.producto?.marca?.nombre)}</td>
-                                    <td style={{textAlign: 'right'}}>{formatoNumero(pu)}</td>
-                                    <td style={{textAlign: 'center'}}>{formatoNumero(d.cantidad)}</td>
-                                    <td style={{textAlign: 'right'}}>{formatoNumero(sub)}</td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-
-                {/* 🔥 FOOTER CON PUSH AUTOMÁTICO HACIA ABAJO (FLEXBOX) 🔥 */}
-                <footer className="footer-section">
-                    <table className="totals-table">
-                        <tbody>
-                            <tr>
-                                <td className="total-cell border-right text-center">
-                                    {conIva ? (
-                                        <>
-                                            <span className="label-red">TOTAL IMPUESTO: 16%</span><br/>
-                                            <div className="monto-split">
-                                                <strong>{formatoNumero(ivaBs)} <span className="label-red">Bs.</span></strong>
-                                                <strong>{formatoNumero(ivaUsd)} <span className="label-red">USD</span></strong>
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <span className="label-red">OPERACIÓN NO GRAVADA (SIN IVA)</span>
-                                    )}
-                                </td>
-                                <td className="total-cell border-right text-center">
-                                    <span className="label-red">{fleteBs > 0 ? 'EXENTO (DELIVERY):' : 'TOTAL EXENTO:'}</span><br/>
-                                    <div className="monto-split">
-                                        <strong>{formatoNumero(fleteBs)} <span className="label-red">Bs.</span></strong>
-                                        <strong>{formatoNumero(fleteUsd)} <span className="label-red">USD</span></strong>
-                                    </div>
-                                </td>
-                                <td className="total-cell text-center" style={{ backgroundColor: '#f9f9f9' }}>
-                                    <span className="label-red">TOTAL GENERAL Bs.</span><br/>
-                                    <strong style={{fontSize: '1.1rem'}}>{formatoNumero(totalBs)}</strong>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td className="total-cell border-right text-center">
-                                    {conIva ? (
-                                        <>
-                                            <span className="label-red">BASE IMPONIBLE:</span><br/>
-                                            <div className="monto-split">
-                                                <strong>{formatoNumero(baseBs)} <span className="label-red">Bs.</span></strong>
-                                                <strong>{formatoNumero(baseUsd)} <span className="label-red">USD</span></strong>
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <span>-</span>
-                                    )}
-                                </td>
-                                <td className="total-cell border-right text-center">
-                                    <span className="text-black">Monto de Operación segun Tasa BCV</span><br/>
-                                    <strong>{formatoNumero(venta.tasaCambio)} <span className="label-red">Bs.</span></strong>
-                                </td>
-                                <td className="total-cell text-center" style={{ backgroundColor: '#f9f9f9' }}>
-                                    <span className="label-red">TOTAL GENERAL USD$</span><br/>
-                                    <strong style={{fontSize: '1.1rem'}}>{formatoNumero(totalUsd)}</strong>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-
-                    <div className="monto-letras">
-                        <span className="label-blue">Son: Bs. </span>
-                        <span className="text-black">{numeroALetras(totalBs)}</span>
-                    </div>
-
-                    {noFiscal && <div className="label-red text-center" style={{ fontWeight: 700, letterSpacing: 1 }}>{esNotaEntrega ? 'DOCUMENTO NO FISCAL' : 'COMPROBANTE NO FISCAL'}</div>}
-                    <div className="original-label label-red text-center">ORIGINAL - CLIENTE</div>
-
-                    {esFactura && (
-                        <div className="legal-box">
-                            <div className="legal-left"><strong>FORMA LIBRE</strong></div>
-                            <div className="legal-mid">
-                                IMPRENTA AUTORIZADA RIF: J-XXXXXXX-X <br/>
-                                FECHA 11-12-2025
-                            </div>
-                            <div className="legal-right">
-                                MATERIALES Y EQUIPOS QUIRURGICOS C.A.
-                            </div>
-                        </div>
-                    )}
-                </footer>
-            </div>
-
-            {/* 🔥 CSS 100% BLINDADO Y A PRUEBA DE SOLAPAMIENTOS 🔥 */}
-            <style dangerouslySetInnerHTML={{ __html: `
-                * { box-sizing: border-box; }
-
-                /* CONTENEDOR EN PANTALLA MÓVIL/DESKTOP: la barra arriba y la hoja centrada debajo */
-                .print-wrapper {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    padding: 20px;
-                    background: #525659;
-                    min-height: 100vh;
-                    overflow: auto;
-                }
-                .print-barra { width: 100%; max-width: 8.5in; display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; color: #fff; font: 600 13px Arial, Helvetica, sans-serif; }
-                .print-barra button { padding: 8px 18px; font-weight: 700; font-size: 14px; border: 0; border-radius: 6px; background: #fff; color: #0b1b3d; cursor: pointer; }
-
-                /* LA HOJA FÍSICA Y VISUAL */
-                .print-container {
-                    background: white;
-                    color: black;
-                    width: 8.5in;
-                    min-height: ${altoPapel}; /* Tamaño estricto si hay pocos renglones */
-                    height: max-content; /* Crecerá naturalmente si metes 15 renglones */
-                    padding: 0.2in 0.3in;
-                    position: relative;
-                    font-family: Arial, Helvetica, sans-serif;
-                    font-size: 11px;
-                    box-shadow: 0 0 10px rgba(0,0,0,0.5);
-                    display: flex;
-                    flex-direction: column; /* Activa el empuje del footer */
-                    flex-shrink: 0;
-                }
-
-                /* TELÉFONO: la hoja se achica con zoom (calculado al ancho de la pantalla), sin desplazarse de lado */
-                @media (max-width: 850px) {
-                    .print-wrapper { padding: 8px; }
-                }
-
-                /* REGLAS ESTRICTAS QUE EL NAVEGADOR DEBE OBEDECER AL IMPRIMIR */
-                @media print {
-                    @page {
-                        size: letter portrait;
-                        margin: 0 !important;
-                    }
-
-                    body * { visibility: hidden !important; }
-                    #print-section, #print-section * { visibility: visible !important; }
-                    
-                    #print-section {
-                        position: absolute !important;
-                        left: 0 !important;
-                        top: 0 !important;
-                        width: 8.5in !important;
-                        min-height: ${altoPapel} !important;
-                        height: max-content !important;
-                        margin: 0 !important;
-                        padding: 0.2in 0.3in !important;
-                        box-shadow: none !important;
-                        border: none !important;
-                        zoom: 1 !important; /* el achicado es solo para verla en el teléfono */
-                    }
-                    .print-barra { display: none !important; }
-                    
-                    html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
-                    .print-wrapper { padding: 0 !important; background: transparent !important; display: block; }
-                    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                }
-
-                .label-red { color: #d32f2f !important; font-weight: bold; }
-                .label-blue { color: #1976d2 !important; font-weight: bold; }
-                .text-black { color: #000 !important; }
-                .text-right { text-align: right; }
-                .text-center { text-align: center; }
-                .fw-bold { font-weight: bold; }
-                .valign-bottom { vertical-align: bottom; }
-
-                .watermark {
-                    position: absolute !important;
-                    top: 50% !important;
-                    left: 50% !important;
-                    transform: translate(-50%, -50%) !important;
-                    width: 50% !important; 
-                    opacity: 0.08 !important; 
-                    z-index: 0 !important;
-                    pointer-events: none !important;
-                }
-
-                .header-grid, .info-grid, .items-table, .footer-section {
-                    position: relative;
-                    z-index: 1; 
-                }
-
-                .header-grid {
-                    display: grid;
-                    grid-template-columns: 25% 75%;
-                    align-items: center;
-                    border-bottom: 2px solid #ccc;
-                    padding-bottom: 2px;
-                    margin-bottom: 2px;
-                }
-
-                /* 🔥 TUS CORRECCIONES EXACTAS 🔥 */
-                .logo { padding: 0; margin-left: 15px; max-width: 100%; max-height: 100px; object-fit: contain; }
-                .membrete-section { text-align: left; padding-left: 0px; margin-left: 0px; }
-                
-                .membrete-section h3 { color: #1976d2 !important; margin: 0 0 2px 0; font-size: 13px; }
-                .membrete-section p { margin: 0; font-size: 8.5px; font-weight: bold; }
-                .membrete-section .rif { font-size: 11px; }
-                
-                .info-grid {
-                    display: grid;
-                    grid-template-columns: 60% 40%;
-                    margin-bottom: 5px;
-                }
-                .cliente-box { padding-right: 15px; }
-                .line-item { margin-bottom: 2px; display: flex; align-items: flex-end; border-bottom: 1px solid #000; padding-bottom: 2px; }
-                .line-item .label-red { width: 120px; flex-shrink: 0; }
-                .value-line { flex-grow: 1; font-weight: bold; font-size: 11px; }
-
-                .doc-box { text-align: right; }
-                .doc-title { font-size: 16px; margin: 0; font-weight: 900; color: #222; text-transform: uppercase; }
-                .doc-number { color: #d32f2f !important; font-size: 14px; margin: 0 0 2px 0; letter-spacing: 1px; }
-                .doc-meta { width: 100%; font-size: 9.5px; }
-                .doc-meta td { padding: 1px 4px; }
-
-                .items-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-bottom: 5px;
-                }
-                .items-table th {
-                    border-top: 2px solid #000;
-                    border-bottom: 2px solid #000;
-                    padding: 3px 2px;
-                    font-size: 9.5px;
-                }
-                .items-table td {
-                    padding: 3px 2px;
-                    font-size: 9.5px;
-                    vertical-align: top;
-                    border-bottom: 1px dashed #eee;
-                }
-
-                /* 🔥 FOOTER CON PUSH AUTOMÁTICO (FLEXBOX) 🔥 */
-                .footer-section {
-                    margin-top: auto; 
-                    position: relative;
-                }
-
-                .totals-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    border: 1.5px solid #000;
-                    margin-bottom: 5px;
-                }
-                .totals-table td {
-                    padding: 2px;
-                    border-bottom: 1px solid #000;
-                    font-size: 9.5px;
-                }
-                .border-right { border-right: 1px solid #000; }
-                .monto-split { display: flex; justify-content: space-around; margin-top: 2px; font-size: 10px; }
-
-                .monto-letras {
-                    font-size: 9px;
-                    margin-bottom: 4px;
-                    padding-left: 5px;
-                }
-                .original-label { font-size: 10px; margin-bottom: 2px; font-weight: bold; }
-
-                .legal-box {
-                    display: flex;
-                    justify-content: space-between;
-                    border: 1px solid #1976d2 !important;
-                    border-radius: 8px;
-                    padding: 4px 8px;
-                    font-size: 7px;
-                    color: #1976d2 !important;
-                    text-align: center;
-                    align-items: center;
-                }
-                .legal-left { font-size: 9px; }
-            `}} />
-        </div>
-    );
+    return <NotaEntregaImprimible venta={venta} />;
 }
