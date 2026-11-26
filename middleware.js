@@ -47,6 +47,11 @@ const VENDEDOR_API = [
     ['POST', /^\/api\/ventas$/],
     ['GET', /^\/api\/ventas\/[^/]+$/],
     ['PUT', /^\/api\/ventas\/[^/]+$/],       // solo las acciones de firma (lo valida la ruta)
+    ['POST', /^\/api\/ventas\/despachos$/],                      // entregar paquetes a agencias de envío y generar acta PDF
+    ['GET', /^\/api\/ventas\/despachos\/[^/]+$/],                // ver / imprimir acta de despacho PDF
+    ['POST', /^\/api\/ventas\/choferes$/],                       // guardar chofer habitual al entregar a una agencia
+    ['GET', /^\/api\/ventas\/[^/]+\/empaque\/resolver-nc$/],     // revisar y resolver cajas retenidas por NC antes de despachar
+    ['POST', /^\/api\/ventas\/[^/]+\/empaque\/resolver-nc$/],
     ['GET', /^\/api\/comisiones\/vendedores$/],       // solo nombres: el POS avisa de quién es el vendedor externo del cliente
     ['GET', /^\/api\/numeracion$/],                  // solo lectura: la consulta al hacer una nota de crédito o débito
     ['GET', /^\/api\/ventas\/[^/]+\/anular$/],         // la nota de crédito de un vendedor usa el mismo formulario que la de administración

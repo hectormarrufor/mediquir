@@ -154,7 +154,9 @@ export async function GET(request, { params }) {
         // Un vendedor solo ve lo suyo y sin datos financieros (movimientos, cuentas por cobrar, abonos, costos)
         if (rolDe(acceso.sesion) === 'vendedor') {
             const yo = Number(acceso.sesion.id);
-            if (![venta.vendedorId, venta.empacadorId, venta.etiquetadorId].map(Number).includes(yo)) {
+            const esSuyo = [venta.vendedorId, venta.empacadorId, venta.etiquetadorId, venta.entregadoPorId].map(Number).includes(yo);
+            const pendienteDespacho = Boolean(venta.empacadoAt) && !['Cancelado', 'Completado'].includes(venta.statusDespacho) && venta.tipoEntrega !== 'sitio';
+            if (!esSuyo && !pendienteDespacho) {
                 return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
             }
             const j = venta.toJSON();
@@ -518,8 +520,13 @@ export async function PUT(request, { params }) {
 
             if (accion === 'DESPACHAR' && rol === 'vendedor') {
                 if (venta.tipoEntrega !== 'pickup') throw new ErrorLogistica('Este pedido lo retira un chofer: usa la entrega al chofer con sus datos y firma', 409);
-                if (![venta.empacadorId, venta.etiquetadorId, venta.vendedorId].some((x) => Number(x) === yo)) throw new ErrorLogistica('Este pedido no es tuyo', 403);
                 if (!venta.empacadoAt) throw new ErrorLogistica('El pedido debe estar empacado antes de despacharlo', 409);
+                const usuario = await User.findByPk(yo, { include: [{ model: Empleado, as: 'empleado', attributes: ['nombre', 'apellido'] }], transaction: t });
+                venta.entregadoPorId = yo;
+                venta.entregadoPorNombre = (usuario?.empleado
+                    ? `${usuario.empleado.nombre || ''} ${usuario.empleado.apellido || ''}`.trim()
+                    : (usuario?.user || [acceso.sesion.nombre, acceso.sesion.apellido].filter(Boolean).join(' '))
+                ).slice(0, 120) || 'Personal Mediquir';
                 costoFlete = 0;
             }
 
