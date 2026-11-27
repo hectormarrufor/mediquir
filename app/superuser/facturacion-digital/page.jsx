@@ -3,14 +3,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Accordion, ActionIcon, Alert, Badge, Box, Button, Card, Code, Divider, Group,
-    Loader, Modal, NumberInput, Paper, Select, SimpleGrid, Stack, Switch, Table, Tabs,
+    Loader, Menu, Modal, NumberInput, Paper, Select, SimpleGrid, Stack, Switch, Table, Tabs,
     Text, Textarea, TextInput, Title, Tooltip,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import {
     IconAlertTriangle, IconArrowLeft, IconBan, IconCheck, IconCode, IconExternalLink,
     IconFileCertificate, IconFileTypePdf, IconHelpCircle, IconHistory, IconMail, IconPlugConnected,
-    IconPlus, IconRefresh, IconSend, IconTestPipe, IconTrash,
+    IconPlus, IconReceiptRefund, IconRefresh, IconSend, IconTestPipe, IconTrash,
 } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useVolver } from '@/app/helpers/useVolver';
@@ -424,6 +424,71 @@ export default function FacturacionDigitalPage() {
         }
     };
 
+    const prepararNotaDesdeFactura = (em, modo) => {
+        const doc = em?.payloadEnviado?.documentoElectronico || null;
+        const comp = doc?.encabezado?.comprador || null;
+        const fechaFac = String(em?.fechaEmision || '').slice(0, 10) || fechaHoy;
+        const esDebito = modo === 'ND';
+
+        setVentaIdOrigen(em.ventaId || null);
+        setTipoDocumento(esDebito ? '03' : '02');
+        setSerie(em.serie || '');
+        setNumeroDocumento('');
+        setFechaEmision(fechaHoy || fechaFac);
+        if (Number(em.tasaCambio) > 0) setTasaCambio(Number(em.tasaCambio));
+        else if (tasaHoy) setTasaCambio(Number(tasaHoy));
+
+        setSerieFacturaAfectada(em.serie || '');
+        setNumeroFacturaAfectada(String(em.numeroDocumento || '').replace(/\D/g, ''));
+        setFechaFacturaAfectada(fechaFac);
+        setMontoFacturaAfectada(String(Number(em.totalBs || 0).toFixed(2)));
+
+        if (modo === 'NC_TOTAL') setComentarioFacturaAfectada('ANULACION TOTAL DE FACTURA');
+        else if (modo === 'NC_PARCIAL') setComentarioFacturaAfectada('DEVOLUCION / AJUSTE PARCIAL');
+        else setComentarioFacturaAfectada('CARGO ADICIONAL / DIFERENCIAL CAMBIARIO');
+
+        if (comp) {
+            setTipoIdentificacion(comp.tipoIdentificacion || 'J');
+            setNumeroIdentificacion(comp.numeroIdentificacion || '');
+            setRazonSocial(comp.razonSocial || '');
+            setDireccion(comp.direccion || 'CIUDAD OJEDA, ESTADO ZULIA');
+            setTelefono(Array.isArray(comp.telefono) ? (comp.telefono[0] || '') : (comp.telefono || ''));
+            setCorreo(Array.isArray(comp.correo) ? (comp.correo[0] || '') : (comp.correo || ''));
+        } else {
+            const parsed = parsearRifLocal(em.clienteRif);
+            setTipoIdentificacion(parsed.tipo);
+            setNumeroIdentificacion(parsed.numero);
+            setRazonSocial(em.clienteNombre || '');
+        }
+
+        if (esDebito) {
+            setItems([
+                { codigo: 'ND-001', descripcion: 'CARGO ADICIONAL / DIFERENCIAL CAMBIARIO', cantidad: 1, precioUnitario: 100, aplicaIva: true },
+            ]);
+        } else if (Array.isArray(doc?.detallesItems) && doc.detallesItems.length > 0) {
+            setItems(doc.detallesItems.map((d) => ({
+                codigo: d.codigoPLU || '',
+                descripcion: d.descripcion || 'Artículo',
+                cantidad: Number(d.cantidad) || 1,
+                precioUnitario: Number(d.precioUnitario) || 0,
+                aplicaIva: Number(d.tasaIVA) > 0,
+            })));
+        }
+
+        setUltimoResultado(null);
+        setTab('emitir');
+        const etiqueta = modo === 'NC_TOTAL'
+            ? 'Anulación total con Nota de Crédito (02)'
+            : modo === 'NC_PARCIAL'
+                ? 'Nota de Crédito parcial (02) — ajusta cantidades o renglones'
+                : 'Nota de Débito (03) — indica el monto o cargo adicional';
+        notifications.show({
+            title: `Factura Doc ${em.numeroDocumento} cargada`,
+            message: etiqueta,
+            color: esDebito ? 'grape' : 'orange',
+        });
+    };
+
     const facturasEmitidasOpciones = useMemo(() => (
         emisiones
             .filter((e) => e.tipoDocumento === '01' && (e.estado === 'EMITIDO' || e.estado === 'DUPLICADO') && e.numeroDocumento)
@@ -796,9 +861,18 @@ export default function FacturacionDigitalPage() {
                                                         const fac = emisiones.find((x) => x.id === eid);
                                                         if (!fac) return;
                                                         setSerieFacturaAfectada(fac.serie || '');
-                                                        setNumeroFacturaAfectada(fac.numeroDocumento || '');
-                                                        setFechaFacturaAfectada(fac.fechaEmision || fechaHoy);
-                                                        setMontoFacturaAfectada(String(fac.totalBs || ''));
+                                                        setNumeroFacturaAfectada(String(fac.numeroDocumento || '').replace(/\D/g, ''));
+                                                        setFechaFacturaAfectada(String(fac.fechaEmision || '').slice(0, 10) || fechaHoy);
+                                                        setMontoFacturaAfectada(String(Number(fac.totalBs || 0).toFixed(2)));
+                                                        const comp = fac.payloadEnviado?.documentoElectronico?.encabezado?.comprador;
+                                                        if (comp) {
+                                                            setTipoIdentificacion(comp.tipoIdentificacion || 'J');
+                                                            setNumeroIdentificacion(comp.numeroIdentificacion || '');
+                                                            setRazonSocial(comp.razonSocial || '');
+                                                            setDireccion(comp.direccion || 'CIUDAD OJEDA, ESTADO ZULIA');
+                                                            setTelefono(Array.isArray(comp.telefono) ? (comp.telefono[0] || '') : (comp.telefono || ''));
+                                                            setCorreo(Array.isArray(comp.correo) ? (comp.correo[0] || '') : (comp.correo || ''));
+                                                        }
                                                     }}
                                                 />
                                             )}
@@ -1173,8 +1247,43 @@ export default function FacturacionDigitalPage() {
                                                                                 <IconCheck size={15} />
                                                                             </ActionIcon>
                                                                         </Tooltip>
-                                                                        {em.estado !== 'ANULADO' && (
-                                                                            <Tooltip label="Anular en TFHKA">
+                                                                        {em.estado !== 'ANULADO' && em.tipoDocumento === '01' && (
+                                                                            <Menu withinPortal position="bottom-end" shadow="md">
+                                                                                <Menu.Target>
+                                                                                    <Tooltip label="Anular con Nota de Crédito / Emitir Nota de Débito">
+                                                                                        <ActionIcon color="orange" variant="light">
+                                                                                            <IconReceiptRefund size={15} />
+                                                                                        </ActionIcon>
+                                                                                    </Tooltip>
+                                                                                </Menu.Target>
+                                                                                <Menu.Dropdown>
+                                                                                    <Menu.Label>Acciones sobre Factura {em.numeroDocumento}</Menu.Label>
+                                                                                    <Menu.Item
+                                                                                        color="red"
+                                                                                        leftSection={<IconReceiptRefund size={15} />}
+                                                                                        onClick={() => prepararNotaDesdeFactura(em, 'NC_TOTAL')}
+                                                                                    >
+                                                                                        Anular total (Nota de Crédito 02)
+                                                                                    </Menu.Item>
+                                                                                    <Menu.Item
+                                                                                        color="orange"
+                                                                                        leftSection={<IconReceiptRefund size={15} />}
+                                                                                        onClick={() => prepararNotaDesdeFactura(em, 'NC_PARCIAL')}
+                                                                                    >
+                                                                                        Nota de Crédito parcial (02)
+                                                                                    </Menu.Item>
+                                                                                    <Menu.Item
+                                                                                        color="grape"
+                                                                                        leftSection={<IconPlus size={15} />}
+                                                                                        onClick={() => prepararNotaDesdeFactura(em, 'ND')}
+                                                                                    >
+                                                                                        Nota de Débito (03)
+                                                                                    </Menu.Item>
+                                                                                </Menu.Dropdown>
+                                                                            </Menu>
+                                                                        )}
+                                                                        {em.estado !== 'ANULADO' && em.tipoDocumento !== '01' && (
+                                                                            <Tooltip label="Anular documento en TFHKA">
                                                                                 <ActionIcon color="orange" variant="subtle" onClick={() => { setModalAnular(em); setMotivoAnulacion('Prueba de anulación en ambiente DEMO'); setErrorAnulacion(null); }}>
                                                                                     <IconBan size={15} />
                                                                                 </ActionIcon>
