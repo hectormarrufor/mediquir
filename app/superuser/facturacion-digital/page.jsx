@@ -438,18 +438,29 @@ export default function FacturacionDigitalPage() {
 
     return (
         <Box maw={1380} mx="auto" p={{ base: 'xs', sm: 'md' }}>
+            <Paper
+                withBorder
+                radius="lg"
+                p={{ base: 'sm', sm: 'lg' }}
+                shadow="sm"
+                style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.97)',
+                    borderColor: '#dce4ef',
+                    color: '#0f172a',
+                }}
+            >
             <Stack gap="md">
                 {/* Cabecera */}
                 <Group justify="space-between" align="center" wrap="wrap">
                     <Group gap="sm">
-                        <Button variant="subtle" color="gray" leftSection={<IconArrowLeft size={16} />} onClick={volver}>
+                        <Button variant="light" color="gray" leftSection={<IconArrowLeft size={16} />} onClick={volver}>
                             Volver
                         </Button>
                         <Group gap="xs">
-                            <IconFileCertificate size={26} color="#e8590c" />
+                            <IconFileCertificate size={28} color="#e8590c" />
                             <div>
-                                <Title order={3}>Facturación Digital SENIAT · The Factory HKA</Title>
-                                <Text size="xs" c="dimmed">Módulo aislado de pruebas (Fase 1) — paralelo a Forma Libre</Text>
+                                <Title order={3} c="#0f172a">Facturación Digital SENIAT · The Factory HKA</Title>
+                                <Text size="xs" c="gray.7">Módulo aislado de pruebas (Fase 1) — paralelo a Forma Libre</Text>
                             </div>
                         </Group>
                     </Group>
@@ -465,15 +476,16 @@ export default function FacturacionDigitalPage() {
                         variant="light"
                         icon={<IconTestPipe size={20} />}
                         title="ENTORNO DE PRUEBAS (DEMO) ACTIVADO — NO AFECTA PRODUCCIÓN NI FORMA LIBRE"
+                        styles={{ message: { color: '#1e293b' } }}
                     >
-                        <Text size="sm">
+                        <Text size="sm" c="#1e293b">
                             Todo lo emitido desde aquí viaja al servidor de pruebas de The Factory HKA (<b>{config?.baseUrl}</b>) y se guarda únicamente en la tabla aislada <Code>EmisionesDigitales</Code>.
                             No consume números de control de forma libre, no mueve inventario, no crea cuentas por cobrar y no entra al Libro de Ventas.
                         </Text>
                     </Alert>
                 ) : (
                     <Alert color="teal" variant="light" title="Ambiente de Producción configurado">
-                        <Text size="sm">Conectado a <b>{config?.baseUrl}</b>.</Text>
+                        <Text size="sm" c="#1e293b">Conectado a <b>{config?.baseUrl}</b>.</Text>
                     </Alert>
                 )}
 
@@ -484,16 +496,16 @@ export default function FacturacionDigitalPage() {
                 )}
 
                 {!config?.configurado && (
-                    <Alert color="red" variant="outline" icon={<IconAlertTriangle />} title="Faltan variables de entorno en el servidor (Vercel / .env.local)">
+                    <Alert color="red" variant="light" icon={<IconAlertTriangle />} title="Faltan variables de entorno en el servidor (Vercel / .env.local)" styles={{ message: { color: '#1e293b' } }}>
                         <Stack gap={6}>
-                            <Text size="sm">Configura estas variables en Vercel (Settings → Environment Variables) con las credenciales de <b>SERVICIOS WEB (API)</b> del correo de The Factory HKA y redespliega:</Text>
+                            <Text size="sm" c="#1e293b">Configura estas variables en Vercel (Settings → Environment Variables) con las credenciales de <b>SERVICIOS WEB (API)</b> del correo de The Factory HKA y redespliega:</Text>
                             <Code block>{`TFHKA_ENV=demo\nTFHKA_BASE_URL=https://demoemisionv2.thefactoryhka.com.ve\nTFHKA_USUARIO=tu_usuario_api_tfhka\nTFHKA_CLAVE=tu_clave_api_tfhka`}</Code>
                         </Stack>
                     </Alert>
                 )}
 
-                <Tabs value={tab} onChange={setTab} variant="outline" radius="md">
-                    <Tabs.List>
+                <Tabs value={tab} onChange={setTab} variant="pills" color="orange" radius="md">
+                    <Tabs.List bg="gray.1" p={6} style={{ borderRadius: 10 }}>
                         <Tabs.Tab value="conexion" leftSection={<IconPlugConnected size={16} />}>Conexión y Numeraciones</Tabs.Tab>
                         <Tabs.Tab value="emitir" leftSection={<IconSend size={16} />}>Emitir Prueba</Tabs.Tab>
                         <Tabs.Tab value="historial" leftSection={<IconHistory size={16} />}>
@@ -1162,6 +1174,7 @@ export default function FacturacionDigitalPage() {
                     </Tabs.Panel>
                 </Tabs>
             </Stack>
+            </Paper>
 
             {/* Modal JSON */}
             <Modal opened={Boolean(modalJson)} onClose={() => setModalJson(null)} title={`Detalle técnico · Doc ${modalJson?.numeroDocumento || 'S/N'}`} size="xl">
