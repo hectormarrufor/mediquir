@@ -127,6 +127,7 @@ export default function FacturacionDigitalPage() {
     const [modalAnular, setModalAnular] = useState(null);
     const [motivoAnulacion, setMotivoAnulacion] = useState('Prueba de anulación en ambiente DEMO');
     const [anulando, setAnulando] = useState(false);
+    const [errorAnulacion, setErrorAnulacion] = useState(null);
 
     const cargarHistorial = useCallback(async () => {
         setCargandoHistorial(true);
@@ -359,9 +360,11 @@ export default function FacturacionDigitalPage() {
             });
             cargarHistorial();
         } else {
+            const vals = Array.isArray(data?.respuestaTfhka?.validaciones) ? data.respuestaTfhka.validaciones.filter(Boolean) : [];
+            const msg = data?.error || data?.respuestaTfhka?.mensaje || 'Error de consulta';
             notifications.show({
                 title: 'No se pudo consultar',
-                message: data?.error || data?.respuestaTfhka?.mensaje || 'Error de consulta',
+                message: vals.length ? `${msg} (${vals.join(' · ')})` : msg,
                 color: 'red',
             });
         }
@@ -380,7 +383,9 @@ export default function FacturacionDigitalPage() {
                 notifications.show({ title: 'Correo enviado', message: `TFHKA envió el PDF a ${correosDestino}`, color: 'teal' });
                 setModalCorreo(null);
             } else {
-                notifications.show({ title: 'No se envió', message: data?.error || data?.respuestaTfhka?.mensaje || 'Error enviando correo', color: 'red' });
+                const vals = Array.isArray(data?.respuestaTfhka?.validaciones) ? data.respuestaTfhka.validaciones.filter(Boolean) : [];
+                const msg = data?.error || data?.respuestaTfhka?.mensaje || 'Error enviando correo';
+                notifications.show({ title: 'No se envió', message: vals.length ? `${msg} (${vals.join(' · ')})` : msg, color: 'red' });
             }
         } finally {
             setEnviandoCorreo(false);
@@ -390,6 +395,7 @@ export default function FacturacionDigitalPage() {
     const confirmarAnulacion = async () => {
         if (!modalAnular) return;
         setAnulando(true);
+        setErrorAnulacion(null);
         try {
             const { ok, data } = await pedirJson(`/api/facturacion-digital/emisiones/${modalAnular.id}/anular`, {
                 method: 'POST',
@@ -399,9 +405,19 @@ export default function FacturacionDigitalPage() {
             if (ok) {
                 notifications.show({ title: 'Documento anulado en TFHKA', message: `Doc ${modalAnular.numeroDocumento} marcado como ANULADO`, color: 'teal' });
                 setModalAnular(null);
+                setErrorAnulacion(null);
                 cargarHistorial();
             } else {
-                notifications.show({ title: 'No se anuló', message: data?.error || data?.respuestaTfhka?.mensaje || 'Error al anular', color: 'red' });
+                const resp = data?.respuestaTfhka || null;
+                const vals = Array.isArray(resp?.validaciones) ? resp.validaciones.filter(Boolean) : [];
+                const msg = data?.error || resp?.mensaje || 'Error al anular';
+                setErrorAnulacion({
+                    codigo: resp?.codigo ?? null,
+                    mensaje: msg,
+                    validaciones: vals,
+                    cruda: resp || data,
+                });
+                notifications.show({ title: 'No se anuló en TFHKA', message: msg, color: 'red' });
             }
         } finally {
             setAnulando(false);
@@ -1159,7 +1175,7 @@ export default function FacturacionDigitalPage() {
                                                                         </Tooltip>
                                                                         {em.estado !== 'ANULADO' && (
                                                                             <Tooltip label="Anular en TFHKA">
-                                                                                <ActionIcon color="orange" variant="subtle" onClick={() => { setModalAnular(em); setMotivoAnulacion('Prueba de anulación en ambiente DEMO'); }}>
+                                                                                <ActionIcon color="orange" variant="subtle" onClick={() => { setModalAnular(em); setMotivoAnulacion('Prueba de anulación en ambiente DEMO'); setErrorAnulacion(null); }}>
                                                                                     <IconBan size={15} />
                                                                                 </ActionIcon>
                                                                             </Tooltip>
@@ -1220,10 +1236,13 @@ export default function FacturacionDigitalPage() {
             </Modal>
 
             {/* Modal Anulación */}
-            <Modal opened={Boolean(modalAnular)} onClose={() => setModalAnular(null)} title={`Anular en TFHKA · Doc ${modalAnular?.numeroDocumento || ''}`}>
+            <Modal opened={Boolean(modalAnular)} onClose={() => { setModalAnular(null); setErrorAnulacion(null); }} title={`Anular en TFHKA · Doc ${modalAnular?.numeroDocumento || ''}`} size="lg">
                 <Stack gap="sm">
                     <Alert color="orange" variant="light">
-                        Esta acción llama a <Code>/api/Anular</Code> en el ambiente <b>{String(modalAnular?.ambiente || 'demo').toUpperCase()}</b> de TFHKA.
+                        <Text size="xs">
+                            Esta acción llama a <Code>/api/Anular</Code> en el ambiente <b>{String(modalAnular?.ambiente || 'demo').toUpperCase()}</b> de TFHKA.
+                            Nota: en SENIAT/TFHKA algunas cuentas restringen la anulación directa de facturas ya emitidas (en esos casos se revierte emitiendo una <b>Nota de Crédito 02</b>).
+                        </Text>
                     </Alert>
                     <Textarea
                         label="Motivo de anulación"
@@ -1231,8 +1250,27 @@ export default function FacturacionDigitalPage() {
                         onChange={(e) => setMotivoAnulacion(e.currentTarget.value)}
                         minRows={2}
                     />
+                    {errorAnulacion && (
+                        <Alert color="red" title={`TFHKA rechazó la anulación${errorAnulacion.codigo ? ` (Código ${errorAnulacion.codigo})` : ''}`}>
+                            <Stack gap={6}>
+                                <Text size="xs">{errorAnulacion.mensaje}</Text>
+                                {errorAnulacion.validaciones?.length > 0 && (
+                                    <Stack gap={2}>
+                                        {errorAnulacion.validaciones.map((v, i) => (
+                                            <Text key={i} size="xs" fw={600}>• {v}</Text>
+                                        ))}
+                                    </Stack>
+                                )}
+                                {errorAnulacion.cruda && (
+                                    <Code block mah={180} style={{ overflow: 'auto' }}>
+                                        {JSON.stringify(errorAnulacion.cruda, null, 2)}
+                                    </Code>
+                                )}
+                            </Stack>
+                        </Alert>
+                    )}
                     <Group justify="flex-end">
-                        <Button variant="subtle" onClick={() => setModalAnular(null)}>Cancelar</Button>
+                        <Button variant="subtle" onClick={() => { setModalAnular(null); setErrorAnulacion(null); }}>Cancelar</Button>
                         <Button color="red" loading={anulando} onClick={confirmarAnulacion}>Confirmar anulación</Button>
                     </Group>
                 </Stack>

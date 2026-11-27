@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/models';
 import { requerirAdmin } from '@/app/api/_lib/acceso';
-import { anularDocumentoTfhka, formatearFechaTfhka, horaTfhkaCaracas } from '@/app/api/_lib/tfhka';
-import { fechaCaracas } from '@/app/constants/hora';
+import { anularDocumentoTfhka } from '@/app/api/_lib/tfhka';
 
 export const dynamic = 'force-dynamic';
 const { EmisionDigital } = db;
@@ -32,8 +31,6 @@ export async function POST(request, { params }) {
             tipoDocumento: emision.tipoDocumento,
             numeroDocumento: emision.numeroDocumento,
             motivoAnulacion,
-            fechaAnulacion: formatearFechaTfhka(fechaCaracas()),
-            horaAnulacion: horaTfhkaCaracas(),
         });
 
         const ok = String(data?.codigo) === '200';
@@ -44,9 +41,15 @@ export async function POST(request, { params }) {
                 anuladoAt: new Date(),
                 respuestaCruda: data,
             });
+            return NextResponse.json({ ok: true, emision, respuestaTfhka: data }, { status: 200 });
         }
 
-        return NextResponse.json({ ok, emision, respuestaTfhka: data }, { status: ok ? 200 : 422 });
+        const validaciones = Array.isArray(data?.validaciones) ? data.validaciones.filter(Boolean) : [];
+        const baseMsg = data?.mensaje || data?.rawText || 'TFHKA rechazó la anulación';
+        const codigoStr = data?.codigo !== undefined && data?.codigo !== null ? `Código ${data.codigo}: ` : '';
+        const error = `${codigoStr}${baseMsg}${validaciones.length ? ` (${validaciones.join(' · ')})` : ''}`;
+
+        return NextResponse.json({ ok: false, error, emision, respuestaTfhka: data }, { status: 422 });
     } catch (error) {
         console.error('Error anulando documento TFHKA:', error);
         return NextResponse.json({ error: error.message || 'No se pudo anular el documento' }, { status: 500 });
