@@ -9,7 +9,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import {
     IconAlertTriangle, IconArrowLeft, IconBan, IconCheck, IconCode, IconExternalLink,
-    IconFileCertificate, IconFileTypePdf, IconHistory, IconMail, IconPlugConnected,
+    IconFileCertificate, IconFileTypePdf, IconHelpCircle, IconHistory, IconMail, IconPlugConnected,
     IconPlus, IconRefresh, IconSend, IconTestPipe, IconTrash,
 } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -639,6 +639,24 @@ export default function FacturacionDigitalPage() {
                     {/* TAB 2: EMITIR PRUEBA */}
                     <Tabs.Panel value="emitir" pt="md">
                         <Stack gap="md">
+                            {/* Guía rápida cerrada por defecto para no frenar el llenado */}
+                            <Accordion variant="contained" radius="md">
+                                <Accordion.Item value="guia">
+                                    <Accordion.Control icon={<IconHelpCircle size={18} color="#e8590c" />}>
+                                        <Text size="sm" fw={600}>¿Cómo funciona la Facturación Digital? (Guía rápida)</Text>
+                                    </Accordion.Control>
+                                    <Accordion.Panel>
+                                        <Stack gap={6} fz="xs" c="gray.8">
+                                            <Text size="xs">• <b>Nº de Documento:</b> es el correlativo consecutivo de tus facturas o notas (1, 2, 3...). El sistema lo asigna solo automáticamente; déjalo vacío para facturar rápido.</Text>
+                                            <Text size="xs">• <b>Nº de Control:</b> lo genera automáticamente la Imprenta Digital (The Factory HKA) al emitir. Es el equivalente digital al número de control de la forma libre (<Code>00-XXXXXX</Code>).</Text>
+                                            <Text size="xs">• <b>Serie:</b> solo se llena si Mediquir maneja varias series o cajas separadas en TFHKA; en caso contrario se deja vacío (serie principal).</Text>
+                                            <Text size="xs">• <b>Fecha y Tasa BCV:</b> por defecto usa hoy y la tasa BCV vigente en Mediquir; si cambias la fecha (hasta 45 días atrás), carga la tasa BCV de ese día.</Text>
+                                            <Text size="xs">• <b>Dirección del cliente:</b> es obligatoria en TFHKA/SENIAT para emitir el documento.</Text>
+                                        </Stack>
+                                    </Accordion.Panel>
+                                </Accordion.Item>
+                            </Accordion>
+
                             {/* Cargar plantilla */}
                             <Card withBorder radius="md" p="md" bg="gray.0">
                                 <Group justify="space-between" align="flex-end" wrap="wrap" gap="sm">
@@ -684,13 +702,27 @@ export default function FacturacionDigitalPage() {
                                         onChange={(v) => setTipoDocumento(v || '01')}
                                     />
                                     <TextInput
-                                        label="Serie (vacío = principal)"
+                                        label={
+                                            <Group gap={4} wrap="nowrap">
+                                                <span>Serie (vacío = principal)</span>
+                                                <Tooltip multiline w={280} label="Solo se llena si Mediquir usa varias series o cajas separadas en TFHKA. Normalmente se deja vacío para usar la serie principal.">
+                                                    <IconHelpCircle size={14} style={{ color: '#64748b', cursor: 'help' }} />
+                                                </Tooltip>
+                                            </Group>
+                                        }
                                         placeholder="Ej: A o vacío"
                                         value={serie}
                                         onChange={(e) => setSerie(e.currentTarget.value)}
                                     />
                                     <TextInput
-                                        label="Nº Documento (automático)"
+                                        label={
+                                            <Group gap={4} wrap="nowrap">
+                                                <span>Nº Documento (automático)</span>
+                                                <Tooltip multiline w={280} label="Es el número consecutivo de tu factura o nota (1, 2, 3...). Déjalo vacío y el sistema consultará el último emitido en TFHKA para asignar el siguiente automáticamente.">
+                                                    <IconHelpCircle size={14} style={{ color: '#64748b', cursor: 'help' }} />
+                                                </Tooltip>
+                                            </Group>
+                                        }
                                         description="Déjalo vacío: el sistema asigna el correlativo"
                                         placeholder="Automático"
                                         value={numeroDocumento}
