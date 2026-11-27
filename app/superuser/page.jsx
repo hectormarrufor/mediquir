@@ -16,7 +16,7 @@ import {
     IconPackage,
     IconBuildingStore,
     IconReceipt,
-    IconShieldCheck, IconTargetArrow, IconBuildingWarehouse } from '@tabler/icons-react';
+    IconShieldCheck, IconTargetArrow, IconBuildingWarehouse, IconFileCertificate } from '@tabler/icons-react';
 import './superuser.css';
 import { useAuth } from '@/hooks/useAuth';
 import TareasPanel from '../components/tareas/TareasPanel';
@@ -53,6 +53,7 @@ const menuOptions = [
     { title: 'Recibos', href: '/superuser/recibos', description: 'Recibos de pago (hemos pagado a / he recibido de) con correlativo propio.', icon: IconReceipt, color: 'cyan' },
     { title: 'Numeración', href: '/superuser/correlativos', description: 'Qué número sigue en facturas, notas, control y recibos, y cambiarlo (administración).', icon: IconReceipt, color: 'gray' },
     { title: 'Pagos Moviles recibidos', href: '/superuser/pagos-recibidos', description: 'Gestión de pagos móviles recibidos.', icon: IconCurrencyDollar, color: 'blue' },
+    { title: 'Facturación Digital (TFHKA · DEMO)', href: '/superuser/facturacion-digital', description: 'Pruebas de Imprenta Digital SENIAT (The Factory HKA). Entorno DEMO, no afecta forma libre ni libros.', icon: IconFileCertificate, color: 'orange' },
 ];
 
 // Permisos que no son una pantalla del menú, pero se administran en el mismo panel de Control de Accesos.

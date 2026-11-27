@@ -28,6 +28,7 @@ const db = {
     NotaFiscal: require('./facturacion/NotaFiscal'),
     NotaFiscalDetalle: require('./facturacion/NotaFiscalDetalle'),
     FormaAnulada: require('./facturacion/FormaAnulada'),
+    EmisionDigital: require('./facturacion/EmisionDigital'),
     Cliente: require('./Cliente'),
     Presupuesto: require('./Presupuesto'),
     Tag: require('./inventario/Tag'),
