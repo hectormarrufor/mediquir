@@ -219,6 +219,12 @@ export async function probarConexionTfhka() {
 
 export const emitirDocumentoTfhka = (payload) => llamarTfhka('/api/Emision', payload);
 
+export const ultimoDocumentoTfhka = ({ serie = '', tipoDocumento }) =>
+    llamarTfhka('/api/UltimoDocumento', {
+        serie: serie ?? '',
+        tipoDocumento: String(tipoDocumento || '01'),
+    });
+
 export const descargarArchivoTfhka = ({ serie = '', tipoDocumento, numeroDocumento, tipoArchivo = 'pdf' }) =>
     llamarTfhka('/api/DescargaArchivo', {
         serie: serie ?? '',
@@ -332,14 +338,14 @@ export function construirDocumentoTfhka(input) {
         : fechaEmision;
     const horaEmision = horaTfhkaCaracas();
 
-    const modoNumeracion = input?.modoNumeracion === 'MANUAL' ? 'MANUAL' : 'AUTO';
+    const modoNumeracion = input?.modoNumeracion === 'TFHKA_AUTO' ? 'TFHKA_AUTO' : 'MANUAL';
     let numeroDocumento = null;
     let transaccionId = null;
 
     if (modoNumeracion === 'MANUAL') {
         const limpio = String(input?.numeroDocumento || '').replace(/\D/g, '');
         if (!limpio || Number(limpio) <= 0 || limpio.length > 19) {
-            throw new Error('En numeración manual debes indicar un NumeroDocumento numérico (1 a 19 dígitos, mayor que 0).');
+            throw new Error('No se pudo determinar un NumeroDocumento numérico válido (1 a 19 dígitos, mayor que 0).');
         }
         numeroDocumento = limpio;
     } else {

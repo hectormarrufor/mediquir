@@ -88,9 +88,7 @@ export default function FacturacionDigitalPage() {
     const [ventaIdOrigen, setVentaIdOrigen] = useState(null);
     const [tipoDocumento, setTipoDocumento] = useState('01');
     const [serie, setSerie] = useState('');
-    const [modoNumeracion, setModoNumeracion] = useState('AUTO');
     const [numeroDocumento, setNumeroDocumento] = useState('');
-    const [transaccionId, setTransaccionId] = useState('');
     const [fechaEmision, setFechaEmision] = useState('');
     const [tasaCambio, setTasaCambio] = useState(0);
     const [cargandoTasa, setCargandoTasa] = useState(false);
@@ -252,8 +250,7 @@ export default function FacturacionDigitalPage() {
     const cargarPruebaRapida = () => {
         setVentaIdOrigen(null);
         setTipoDocumento('01');
-        setModoNumeracion('AUTO');
-        setTransaccionId('');
+        setNumeroDocumento('');
         setTipoIdentificacion('J');
         setNumeroIdentificacion('312172194');
         setRazonSocial('CLINICA DE PRUEBA SAN JOSE C.A.');
@@ -299,9 +296,7 @@ export default function FacturacionDigitalPage() {
                     ventaId: ventaIdOrigen,
                     tipoDocumento,
                     serie,
-                    modoNumeracion,
-                    numeroDocumento,
-                    transaccionId,
+                    numeroDocumento: numeroDocumento || undefined,
                     fechaEmision,
                     tasaCambio: Number(tasaCambio) || 0,
                     incluirEquivalenteUsd,
@@ -694,30 +689,19 @@ export default function FacturacionDigitalPage() {
                                         value={serie}
                                         onChange={(e) => setSerie(e.currentTarget.value)}
                                     />
-                                    <Select
-                                        label="Numeración de documento"
-                                        data={[
-                                            { value: 'AUTO', label: 'Automática (TransaccionId)' },
-                                            { value: 'MANUAL', label: 'Manual (NumeroDocumento)' },
-                                        ]}
-                                        value={modoNumeracion}
-                                        onChange={(v) => setModoNumeracion(v || 'AUTO')}
+                                    <TextInput
+                                        label="Nº Documento (automático)"
+                                        description="Déjalo vacío: el sistema asigna el correlativo"
+                                        placeholder="Automático"
+                                        value={numeroDocumento}
+                                        onChange={(e) => setNumeroDocumento(e.currentTarget.value.replace(/\D/g, ''))}
                                     />
-                                    {modoNumeracion === 'MANUAL' ? (
-                                        <TextInput
-                                            label="NumeroDocumento (solo dígitos)"
-                                            placeholder="Ej: 1"
-                                            value={numeroDocumento}
-                                            onChange={(e) => setNumeroDocumento(e.currentTarget.value.replace(/\D/g, ''))}
-                                        />
-                                    ) : (
-                                        <TextInput
-                                            label="TransaccionId (opcional)"
-                                            placeholder="Auto si lo dejas vacío"
-                                            value={transaccionId}
-                                            onChange={(e) => setTransaccionId(e.currentTarget.value.replace(/[^A-Za-z0-9]/g, ''))}
-                                        />
-                                    )}
+                                    <Select
+                                        label="Forma de pago (TFHKA)"
+                                        data={FORMAS_PAGO}
+                                        value={formaPago}
+                                        onChange={(v) => setFormaPago(v || '02')}
+                                    />
 
                                     <TextInput
                                         type="date"
@@ -740,12 +724,6 @@ export default function FacturacionDigitalPage() {
                                         data={[{ value: 'Contado', label: 'Contado (Inmediato)' }, { value: 'Credito', label: 'Crédito' }]}
                                         value={condicionPago}
                                         onChange={(v) => setCondicionPago(v || 'Contado')}
-                                    />
-                                    <Select
-                                        label="Forma de pago (TFHKA)"
-                                        data={FORMAS_PAGO}
-                                        value={formaPago}
-                                        onChange={(v) => setFormaPago(v || '02')}
                                     />
                                 </SimpleGrid>
 
