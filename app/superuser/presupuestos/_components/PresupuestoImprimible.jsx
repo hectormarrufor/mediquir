@@ -22,21 +22,17 @@ const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-VE', { timeZone: 'A
 const sumarDias = (v, dias) => { const d = v ? new Date(v) : new Date(); d.setDate(d.getDate() + Number(dias || 0)); return d; };
 const dos = (n) => String(n).padStart(2, '0');
 
-// Línea de pulso (como la del logo) que cruza la hoja de lado a lado
+// Línea de pulso (como la del logo) que cruza la hoja de lado a lado (sin linearGradient ni non-scaling-stroke para que html2canvas la dibuje completa en PDF)
 function Pulso({ mini = false }) {
     return (
-        <svg className={mini ? 'pp-pulso pp-pulso-mini' : 'pp-pulso'} viewBox="0 0 1000 40" preserveAspectRatio="none" aria-hidden="true">
-            <defs>
-                <linearGradient id="pp-grad-pulso" x1="0" x2="1" y1="0" y2="0">
-                    <stop offset="0" stopColor="#0b2a6f" />
-                    <stop offset="0.55" stopColor="#0ea5e9" />
-                    <stop offset="1" stopColor="#22a55a" />
-                </linearGradient>
-            </defs>
+        <svg className={mini ? 'pp-pulso pp-pulso-mini' : 'pp-pulso'} viewBox="0 0 710 26" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <polyline fill="none" stroke="#0b2a6f" strokeWidth="2" strokeLinecap="round" points="0,18 220,18" />
+            <polyline fill="none" stroke="#1d4ed8" strokeWidth="2" strokeLinecap="round" points="220,18 426,18" />
             <polyline
-                fill="none" stroke="url(#pp-grad-pulso)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"
-                points="0,28 600,28 618,28 626,20 634,28 652,28 662,33 676,2 690,38 700,28 722,28 736,18 750,28 1000,28"
+                fill="none" stroke="#0ea5e9" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
+                points="426,18 439,18 444.5,13 450,18 463,18 470,21.5 480,1.5 490,24.5 497,18 513,18 522.5,11.5 532.5,18 570,18"
             />
+            <polyline fill="none" stroke="#22a55a" strokeWidth="2" strokeLinecap="round" points="570,18 710,18" />
         </svg>
     );
 }
