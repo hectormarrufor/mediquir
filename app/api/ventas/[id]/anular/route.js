@@ -4,7 +4,7 @@ import { Venta } from '@/models';
 import { rolDe } from '@/app/api/_lib/acceso';
 import { requerirStaff } from '@/app/api/inventario/_lib';
 import { aprobacionDisponible, marcarPorAprobar, avisarPorAprobar, nombreDeUsuario, efectosDiferidosDisponible, leerEfectosPendientes } from '@/app/api/_lib/aprobacion';
-import { planAnulacion, anularFactura, ErrorAnulacion } from '@/app/api/_lib/anularFactura';
+import { planAnulacion, anularFactura, anularFacturaDirecta, ErrorAnulacion } from '@/app/api/_lib/anularFactura';
 import { ErrorNota } from '@/app/api/_lib/notasFiscales';
 import { asegurarColumnasEmpaqueNotas, notificarCajaRetenidaPorNc } from '@/app/api/_lib/empaqueNotas';
 
@@ -58,6 +58,21 @@ export async function POST(request, { params }) {
         // La nota de un vendedor no mueve inventario ni cuentas por cobrar hasta que jolexi la aprueba
         const diferir = esVend && (await efectosDiferidosDisponible());
         const b = await request.json();
+        if (b.tipo === 'DIRECTA') {
+            if (!acceso.sesion.isAdmin) {
+                throw new ErrorAnulacion('Solo un administrador puede anular una factura sin Nota de Crédito', 403);
+            }
+            const r = await anularFacturaDirecta({
+                venta,
+                motivo: b.motivo,
+                tieneOriginalYCopias: b.tieneOriginalYCopias === true,
+                usuarioId: Number(acceso.sesion.id) || null,
+                transaction: t,
+            });
+            await t.commit();
+            return NextResponse.json({ success: true, ...r });
+        }
+
         const r = await anularFactura({
             venta, tipo: b.tipo, renglones: b.renglones, afectaCxc: typeof b.afectaCxc === 'boolean' ? b.afectaCxc : null, motivo: b.motivo,
             documentos: b.documentos && typeof b.documentos === 'object' ? b.documentos : {}, notas: Array.isArray(b.notas) ? b.notas : null, fecha: b.fecha || null, confirmarPagada: b.confirmarPagada === true, modificarPago: b.modificarPago === true,usuarioId: Number(acceso.sesion.id) || null, diferir, permitirControl: !esVend && b.huecoControl === true, transaction: t,

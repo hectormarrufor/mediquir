@@ -21,8 +21,9 @@ import { emitirNotaVenta, notasDeVenta, ErrorNota } from './notasFiscales.js';
 import { controlesLibres, reservarControl, ErrorNumeracion } from './numeracion.js';
 import { recalcularCobro, hoyCaracas } from './retencionesVenta.js';
 import { sincronizarLogisticaTrasNota } from './empaqueNotas.js';
+import { fechaCaracas } from '../../constants/hora.js';
 
-const { sequelize, Venta, CuentaPorCobrar, Abono, ComisionVenta, RetencionIva, NotaFiscal, Correlativo, Cliente, MovimientoFinanciero, CategoriaFinanciera } = db;
+const { sequelize, Venta, VentaDetalle, Producto, SalidaInventario, VentaEmpaqueItem, PagoSms, CuentaPorCobrar, Abono, ComisionVenta, RetencionIva, NotaFiscal, Correlativo, Cliente, MovimientoFinanciero, CategoriaFinanciera } = db;
 const { Op } = db.Sequelize;
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const METODO_NC = 'Nota de crédito';
@@ -148,6 +149,21 @@ export async function planAnulacion({ venta, transaction }) {
         if (comisionesPagadas) bloqueosNotas.push('Al vendedor ya se le pagó la comisión de esta factura');
         if (pagos.length && grupo.notas.length > 1) bloqueosNotas.push('Las facturas tienen abonos y salieron de varias notas de entrega: no hay una sola forma de repartir esos pagos entre las notas');
     }
+    const bloqueosDirecta = [];
+    const mesVenta = fechaCaracas(venta.fechaEmision || venta.createdAt).slice(0, 7);
+    const mesActual = hoyCaracas().slice(0, 7);
+    if (mesVenta !== mesActual) {
+        bloqueosDirecta.push('Esta factura es de un mes anterior (período cerrado): ante el SENIAT debe anularse con Nota de Crédito.');
+    }
+    if (deNotas) bloqueosDirecta.push('Esta factura agrupa Notas de Entrega: anúlala con Nota de Crédito para devolver la deuda a las notas de entrega.');
+    if (retenciones) bloqueosDirecta.push('La factura tiene retención de IVA registrada: debe anularse con Nota de Crédito o anular primero la retención.');
+    if (notasEmitidas) bloqueosDirecta.push('La factura ya tiene notas de crédito o débito emitidas.');
+    if (comisionesPagadas) bloqueosDirecta.push('La comisión de esta factura ya fue pagada al vendedor.');
+    if (pagos.length) bloqueosDirecta.push('La factura tiene abonos registrados: usa Nota de Crédito o revierte el abono primero.');
+    if (venta.facturaEntregadaChofer || (venta.statusDespacho === 'Completado' && venta.tipoEntrega !== 'sitio' && venta.firmaChoferUrl)) {
+        bloqueosDirecta.push('La factura ya fue despachada/entregada al chofer o cliente: debe anularse con Nota de Crédito.');
+    }
+
     const facturas = await Promise.all(grupo.facturas.map(async (f) => {
         const n = f.id === venta.id ? propia : await notasDeVenta(f, transaction);
         return { id: f.id, numero: f.numeroDocumento, moneda: f.moneda, total: Number(f.totalFinal), acreditable: n.acreditable, notas: numerosAnteriores(f.numeroDocumentoAnterior).filter((x) => x.startsWith('NE-')) };
@@ -165,9 +181,69 @@ export async function planAnulacion({ venta, transaction }) {
         facturas: deNotas ? facturas.filter((f) => f.acreditable > 0.005) : facturas.filter((f) => f.id === venta.id),
         abonosUsd: r2(pagos.reduce((a, x) => a + Number(x.montoUsd), 0)),
         bloqueosNotas,
+        anulacionDirecta: { permitida: bloqueosDirecta.length === 0, bloqueos: bloqueosDirecta },
         siguienteNc: await siguienteNcTexto(transaction),
         // Varias notas de crédito sobre la misma factura: hacen falta controles de sobra (el formulario pregunta cuántas son)
         controlesSugeridos: await controlesLibres((deNotas ? Math.max(1, facturas.length) : 1) + MAX_NOTAS, transaction),
+    };
+}
+
+/**
+ * Anulación directa de una factura física (forma libre / talonario) SIN Nota de Crédito (normativa SENIAT):
+ * solo cuando la empresa conserva el original y todas las copias físicas, nunca salió/se entregó al cliente,
+ * pertenece al mismo período fiscal y no tiene retenciones, notas ni abonos. Conserva F-XXXXX y 00-XXXXXX
+ * para dejarla asentada como ANULADA (tipoTrans '03', en cero) en el Libro de Ventas y revierte inventario, CxC e ingresos.
+ */
+export async function anularFacturaDirecta({ venta, motivo, tieneOriginalYCopias = false, usuarioId = null, transaction: t }) {
+    if (!tieneOriginalYCopias) {
+        throw new ErrorAnulacion('Debes confirmar que tienes el original y las copias físicas de la factura', 400);
+    }
+    const motivoTxt = String(motivo || '').trim();
+    if (motivoTxt.length < 5) {
+        throw new ErrorAnulacion('Explica el motivo de la anulación (mínimo 5 caracteres)');
+    }
+    const plan = await planAnulacion({ venta, transaction: t });
+    if (!plan.anulacionDirecta.permitida) {
+        throw new ErrorAnulacion(plan.anulacionDirecta.bloqueos[0], 409);
+    }
+
+    let unidadesDevueltas = 0;
+    if (yaSalio(venta)) {
+        const detalles = await VentaDetalle.findAll({ where: { ventaId: venta.id }, transaction: t });
+        for (const item of detalles) {
+            if (item.isFicticio || item.afectaInventario === false || !item.productoId) continue;
+            const cant = Number(item.cantidad) || 0;
+            if (cant <= 0) continue;
+            const producto = await Producto.findByPk(item.productoId, { transaction: t, lock: t.LOCK.UPDATE });
+            if (!producto) continue;
+            if (producto.inventarioAuditado) {
+                producto.stockAlmacen = Number(producto.stockAlmacen) + cant;
+            }
+            producto.nroVentas = Math.max(0, (Number(producto.nroVentas) || 0) - cant);
+            await producto.save({ transaction: t });
+            unidadesDevueltas += cant;
+        }
+    }
+
+    await SalidaInventario.update({ estado: 'Cancelada' }, { where: { ventaId: venta.id }, transaction: t });
+    await CuentaPorCobrar.destroy({ where: { ventaId: venta.id }, transaction: t });
+    await MovimientoFinanciero.destroy({ where: { ventaId: venta.id }, transaction: t });
+    await PagoSms.update({ procesado: false, ventaId: null }, { where: { ventaId: venta.id }, transaction: t });
+    await ComisionVenta.destroy({ where: { ventaId: venta.id, estatusComision: { [Op.ne]: 'PAGADA' } }, transaction: t });
+    await VentaEmpaqueItem.destroy({ where: { ventaId: venta.id }, transaction: t });
+
+    venta.statusDespacho = 'Cancelado';
+    venta.tipoTransaccion = '03';
+    venta.statusPago = 'Pendiente';
+    venta.revisionNota = `ANULADA SIN NC (original y copias en archivo): ${motivoTxt}`.slice(0, 1000);
+    await venta.save({ transaction: t });
+
+    return {
+        anulacionDirecta: true,
+        factura: venta.numeroDocumento,
+        control: venta.numeroControl,
+        unidadesDevueltas,
+        usuarioId,
     };
 }
 

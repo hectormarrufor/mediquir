@@ -22,7 +22,7 @@ function descargar(blob, nombre) {
 }
 
 // Tipo de documento como lo escribe el contador
-const TIPO_DOC = { FAC: 'FACTURA', NC: 'N/CREDITO', ND: 'N/DEBITO', RET: 'COM.RET' };
+const TIPO_DOC = { FAC: 'FACTURA', NC: 'N/CREDITO', ND: 'N/DEBITO', RET: 'COM.RET', ANULADA: 'ANULADA' };
 // El comprobante de retención (AAAAMM + 8 dígitos) se escribe 2026-04-00006613
 const documento = (f) => {
     const d = String(f.documento || '');

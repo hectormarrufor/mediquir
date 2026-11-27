@@ -129,8 +129,13 @@ async function libroVentas(q) {
         q(`SELECT r.*, v."moneda"::text AS "monedaDoc", v."tasaCambio"::float AS "tasaDoc", v."totalFinal"::float AS "totalDoc"
            FROM "RetencionesIva" r LEFT JOIN "Ventas" v ON v."id" = r."ventaId"
            WHERE r."tipo" = 'VENTA' AND r."estado" = 'REGISTRADA' AND r."fecha" BETWEEN :desde AND :hasta ORDER BY r."fecha", r."id"`),
-        q(`SELECT v."moneda"::text AS moneda, v."tasaCambio"::float AS tasa, v."totalFinal"::float AS total, v."montoIva"::float AS iva FROM "Ventas" v
-           WHERE v."tipoDocumento" = 'FACTURA' AND v."statusDespacho" = 'Cancelado' AND (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta`),
+        q(`SELECT v."moneda"::text AS moneda, v."tasaCambio"::float AS tasa, v."totalFinal"::float AS total, v."montoIva"::float AS iva,
+                  (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date AS emision,
+                  v."numeroDocumento" AS numero, v."numeroControl" AS control
+             FROM "Ventas" v
+            WHERE v."tipoDocumento" = 'FACTURA' AND v."statusDespacho" = 'Cancelado'
+              AND (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta
+            ORDER BY COALESCE(v."fechaEmision", v."createdAt"), v."numeroDocumento"`),
         q(`SELECT v."moneda"::text AS moneda, v."tasaCambio"::float AS tasa, v."totalFinal"::float AS total FROM "Ventas" v
            WHERE v."tipoDocumento" <> 'FACTURA' AND v."statusDespacho" <> 'Cancelado' AND (COALESCE(v."fechaEmision", v."createdAt") AT TIME ZONE 'America/Caracas')::date BETWEEN :desde AND :hasta`),
         // Retenciones calculadas al facturar a las que aún les falta el comprobante del cliente: no entran al libro hasta tenerlo
@@ -154,7 +159,11 @@ async function libroVentas(q) {
             total, base, alicuota: iva > 0 ? REGLAS.alicuotaGeneral : 0, exento: r2(total - base - iva), iva, ivaRetenido: null,
         };
     });
-    const filas = [...filasFac, ...notas.map(filaNota), ...retenciones.map(filaRetencion)].map((f, i) => ({ n: i + 1, ...f }));
+    const filasAnuladas = anuladas.map((v) => ({
+        tipo: 'ANULADA', fecha: iso(v.emision), rif: '', nombre: 'ANULADA', documento: v.numero, facturaAfectada: '',
+        control: v.control || '', tipoTrans: '03', total: 0, base: 0, alicuota: 0, exento: 0, iva: 0, ivaRetenido: null,
+    }));
+    const filas = [...filasFac, ...filasAnuladas, ...notas.map(filaNota), ...retenciones.map(filaRetencion)].map((f, i) => ({ n: i + 1, ...f }));
     const anul = { monto: r2(anuladas.reduce((a, v) => a + aBs(v.total, v.moneda, v.tasa), 0)), iva: r2(anuladas.reduce((a, v) => a + aBs(v.iva, v.moneda, v.tasa), 0)), cant: anuladas.length };
 
     return {

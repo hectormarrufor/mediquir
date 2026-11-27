@@ -9,6 +9,7 @@ import { notifications } from '@mantine/notifications';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { PANTALLA_COMPLETA_MOVIL } from '@/app/components/ui/modalMovil';
 import { calcularFactura } from '@/app/constants/facturacion';
+import { useAuth } from '@/hooks/useAuth';
 
 const nf = (v) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v) || 0);
 const MAX_NOTAS = 20;
@@ -34,7 +35,9 @@ import { avisarNotaEmitida } from './avisoNota';
 
 export default function AnularFacturaModal({ opened, onClose, pedido, onListo, controlInicial = null }) {
     const queryClient = useQueryClient();
+    const { isAdmin } = useAuth();
     const [tipo, setTipo] = useState('TOTAL');
+    const [tieneOriginalYCopias, setTieneOriginalYCopias] = useState(false);
     const [cantidades, setCantidades] = useState({});
     const [afecta, setAfecta] = useState(null); // 'si' | 'no'
     const [motivo, setMotivo] = useState(MOTIVOS[0]);
@@ -85,15 +88,41 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
         return lineas.length ? calcularFactura({ renglones: lineas }).totalFinal : 0;
     }, [plan, tipo, cantidades]);
 
+    const esDirecta = !varias && tipo === 'DIRECTA';
     const motivoFinal = motivo === 'Otro' ? detalle.trim() : `${motivo}${detalle.trim() ? `: ${detalle.trim()}` : ''}`;
     // Nota PARCIAL sobre una factura ya pagada: no toca cuentas por cobrar, ingresos, inventario ni saldo a favor (se pide confirmación al emitirla)
-    const parcialPagada = Boolean(plan?.factura.pagada) && (varias ? !completaVarias : tipo === 'PARCIAL');
-    const faltaAfecta = !deNotas && !parcialPagada && !afecta;
+    const parcialPagada = !esDirecta && Boolean(plan?.factura.pagada) && (varias ? !completaVarias : tipo === 'PARCIAL');
+    const faltaAfecta = !esDirecta && !deNotas && !parcialPagada && !afecta;
     const faltaControl = false; // el control se asigna al imprimir
-    const sinRenglones = varias ? Array.from({ length: cuantas }, (_, k) => k).some((k) => !(montoNota(k) > 0)) : tipo === 'PARCIAL' && !(montoParcial > 0);
-    const bloqueado = !plan || faltaAfecta || faltaControl || sinRenglones || motivoFinal.length < 5 || (deNotas && plan.bloqueosNotas.length > 0);
+    const sinRenglones = !esDirecta && (varias ? Array.from({ length: cuantas }, (_, k) => k).some((k) => !(montoNota(k) > 0)) : tipo === 'PARCIAL' && !(montoParcial > 0));
+    const bloqueadoDirecta = !plan?.anulacionDirecta?.permitida || !tieneOriginalYCopias || motivoFinal.length < 5;
+    const bloqueado = !plan || (esDirecta ? bloqueadoDirecta : (faltaAfecta || faltaControl || sinRenglones || motivoFinal.length < 5 || (deNotas && plan.bloqueosNotas.length > 0)));
 
     const anular = async () => {
+        if (esDirecta) {
+            setEnviando(true);
+            try {
+                const r = await pedir(`/api/ventas/${pedido.id}/anular`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'DIRECTA', motivo: motivoFinal, tieneOriginalYCopias }),
+                });
+                notifications.show({
+                    color: 'green',
+                    title: 'Factura anulada sin Nota de Crédito',
+                    message: `${r.factura}${r.control ? ` (control ${r.control})` : ''} quedó marcada como ANULADA para el Libro de Ventas. Archiva el original y todas las copias rayadas con «ANULADA».`,
+                });
+                queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+                queryClient.invalidateQueries({ queryKey: ['vendedor'] });
+                queryClient.invalidateQueries({ queryKey: ['ventas', 'despachos-pendientes'] });
+                queryClient.invalidateQueries({ queryKey: ['empaque', pedido.id] });
+                onClose();
+                onListo?.();
+            } catch (e) {
+                notifications.show({ color: 'red', title: 'No se anuló', message: e.message });
+            } finally { setEnviando(false); }
+            return;
+        }
         const pagoRebajar = parcialPagada && modificarPago;
         const aviso = pagoRebajar
             ? 'Esta factura ya está pagada. Se emitirá la nota de crédito parcial y se REBAJARÁ el pago ya registrado por el monto de la nota; no afectará las cuentas por cobrar, no dejará saldo a favor y no moverá el inventario. ¿Confirmas?'
@@ -134,9 +163,47 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
             {isLoading ? <Group justify="center" py="md"><Loader /></Group> : error ? <Alert color="red">{error.message}</Alert> : (
                 <Stack gap="sm">
                     <Text size="sm">La factura no se borra: se emite una <b>nota de crédito</b> con el siguiente número ({plan.siguienteNc || 'NC'}) y su propio número de control, que la compensa en el libro de ventas.</Text>
-                    <NumberInput label="¿En cuántas notas de crédito se anula esta factura?" description="Si una nota no alcanza para todos los renglones, reparte la factura en varias: se emiten juntas, cada una con su número y su control."
-                        min={1} max={MAX_NOTAS} allowDecimal={false} value={cuantas} onChange={(v) => setCuantas(Math.min(MAX_NOTAS, Math.max(1, Number(v) || 1)))} w={140} />
-                    {!varias && <SegmentedControl fullWidth value={tipo} onChange={setTipo} data={[{ value: 'TOTAL', label: `Total (${simbolo} ${nf(plan.factura.acreditable)})` }, { value: 'PARCIAL', label: 'Parcial' }]} />}
+                    {!esDirecta && (
+                        <NumberInput label="¿En cuántas notas de crédito se anula esta factura?" description="Si una nota no alcanza para todos los renglones, reparte la factura en varias: se emiten juntas, cada una con su número y su control."
+                            min={1} max={MAX_NOTAS} allowDecimal={false} value={cuantas} onChange={(v) => setCuantas(Math.min(MAX_NOTAS, Math.max(1, Number(v) || 1)))} w={140} />
+                    )}
+                    {!varias && (
+                        <SegmentedControl
+                            fullWidth
+                            value={tipo}
+                            onChange={setTipo}
+                            data={[
+                                { value: 'TOTAL', label: `Total NC (${simbolo} ${nf(plan.factura.acreditable)})` },
+                                { value: 'PARCIAL', label: 'Parcial NC' },
+                                ...(isAdmin && !controlInicial ? [{ value: 'DIRECTA', label: 'Anular sin NC (física)' }] : []),
+                            ]}
+                        />
+                    )}
+
+                    {esDirecta && (
+                        <Stack gap="sm">
+                            <Alert color="blue" variant="light" title="Anulación directa en forma libre (sin Nota de Crédito · SENIAT)">
+                                <Text size="sm">
+                                    Aplica únicamente cuando la factura física <b>nunca se entregó al cliente</b> y conservas el <b>original y todas las copias</b>.
+                                    Conservará su número ({plan.factura.numero}) y su control para salir como <b>ANULADA</b> (tipo 03, en cero) en el Libro de Ventas, y revertirá inventario, cuenta por cobrar e ingresos de contado.
+                                </Text>
+                            </Alert>
+                            {!plan.anulacionDirecta?.permitida ? (
+                                <Alert color="red" icon={<IconAlertTriangle size={18} />} title="No se puede anular sin Nota de Crédito">
+                                    <Stack gap={4}>
+                                        {(plan.anulacionDirecta?.bloqueos || []).map((b) => <Text key={b} size="sm">• {b}</Text>)}
+                                    </Stack>
+                                </Alert>
+                            ) : (
+                                <Checkbox
+                                    color="red"
+                                    checked={tieneOriginalYCopias}
+                                    onChange={(e) => setTieneOriginalYCopias(e.currentTarget.checked)}
+                                    label="Confirmo que tengo en mi poder el original y todas las copias físicas de esta factura, que nunca fue entregada al cliente y que se archivarán rayadas con «ANULADA»."
+                                />
+                            )}
+                        </Stack>
+                    )}
 
                     {varias && (
                         <Stack gap="sm">
@@ -205,7 +272,7 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                         </Paper>
                     )}
 
-                    {deNotas ? (
+                    {!esDirecta && (deNotas ? (
                         <Alert color="blue" title={`Esta factura salió de ${plan.notasEntrega.map((n) => n.numero).join(', ')}`}>
                             <Text size="sm">Al anularla, {plan.notasEntrega.length > 1 ? 'esas notas vuelven' : 'la nota vuelve'} a ser el documento principal y la deuda vuelve a {plan.notasEntrega.length > 1 ? 'ellas' : 'ella'} ({plan.notasEntrega.map((n) => `${n.numero}: $ ${nf(n.totalUsd)}`).join(' · ')}){plan.abonosUsd > 0 ? `, con los $ ${nf(plan.abonosUsd)} que ya se abonaron` : ''}. El inventario no se mueve.</Text>
                             {plan.facturas.length > 1 && <Text size="sm" mt={6}><b>{plan.notasEntrega.length > 1 ? 'Esas notas también están' : 'Esa nota también está'} en {plan.facturas.filter((f) => f.id !== plan.factura.id).map((f) => f.numero).join(', ')}:</b> se anulan juntas, una nota de crédito por cada factura.</Text>}
@@ -223,9 +290,9 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                                 <Radio value="no" label={tipo === 'TOTAL' ? 'No: la deuda queda igual' : 'No: no toca la deuda ni el inventario'} />
                             </Stack>
                         </Radio.Group>
-                    )}
-                    {!varias && tipo === 'TOTAL' && !deNotas && <Text size="xs" c="dimmed">{plan.factura.yaSalio ? 'Todo lo facturado vuelve al inventario.' : 'El pedido aún no salió del almacén: no hay mercancía que devolver al inventario.'}</Text>}
-                    {plan?.factura && !plan.factura.despachado && plan.factura.tipoEntrega !== 'sitio' && (() => {
+                    ))}
+                    {!esDirecta && !varias && tipo === 'TOTAL' && !deNotas && <Text size="xs" c="dimmed">{plan.factura.yaSalio ? 'Todo lo facturado vuelve al inventario.' : 'El pedido aún no salió del almacén: no hay mercancía que devolver al inventario.'}</Text>}
+                    {!esDirecta && plan?.factura && !plan.factura.despachado && plan.factura.tipoEntrega !== 'sitio' && (() => {
                         const esTotalVista = varias ? completaVarias : tipo === 'TOTAL';
                         const afectaReal = deNotas ? false : parcialPagada ? false : afecta === 'si';
                         const empacado = Boolean(plan.factura.empacado);
@@ -249,8 +316,9 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                         }
                         return null;
                     })()}
-                    {deNotas && plan.bloqueosNotas.map((b) => <Alert key={b} color="red" icon={<IconAlertTriangle size={18} />}>{b}</Alert>)}
+                    {!esDirecta && deNotas && plan.bloqueosNotas.map((b) => <Alert key={b} color="red" icon={<IconAlertTriangle size={18} />}>{b}</Alert>)}
 
+                    {!esDirecta && (
                     <Stack gap={6}>
                         {!varias && (
                             <Card withBorder radius="md" p="xs">
@@ -275,14 +343,15 @@ export default function AnularFacturaModal({ opened, onClose, pedido, onListo, c
                             </Card>
                         ))}
                     </Stack>
+                    )}
 
                     <Select label="Motivo" data={MOTIVOS} value={motivo} allowDeselect={false} onChange={(v) => setMotivo(v || MOTIVOS[0])} />
                     <Textarea label={motivo === 'Otro' ? 'Explica el motivo' : 'Detalle (opcional)'} autosize minRows={2} value={detalle} onChange={(e) => setDetalle(e.currentTarget.value)} />
-                    <TextInput type="date" label="Fecha de la nota" description="Vacía = hoy" max={new Date().toISOString().slice(0, 10)} value={fecha} onChange={(e) => setFecha(e.currentTarget.value)} />
+                    {!esDirecta && <TextInput type="date" label="Fecha de la nota" description="Vacía = hoy" max={new Date().toISOString().slice(0, 10)} value={fecha} onChange={(e) => setFecha(e.currentTarget.value)} />}
                     <Button color="red" loading={enviando} disabled={bloqueado} onClick={anular}>
-                        {facturasNc.length > 0 ? `Anular las ${facturasNc.length + 1} facturas` : varias ? `Emitir las ${cuantas} notas de crédito` : tipo === 'TOTAL' ? 'Anular la factura' : 'Emitir la nota de crédito'}
+                        {esDirecta ? 'Anular factura física (sin NC)' : facturasNc.length > 0 ? `Anular las ${facturasNc.length + 1} facturas` : varias ? `Emitir las ${cuantas} notas de crédito` : tipo === 'TOTAL' ? 'Anular la factura' : 'Emitir la nota de crédito'}
                     </Button>
-                    <Text size="xs" c="dimmed">Esta acción no se puede deshacer desde aquí: para revertirla hay que anular la nota de crédito.</Text>
+                    <Text size="xs" c="dimmed">{esDirecta ? 'La factura queda como ANULADA en el Libro de Ventas conservando su número y su control.' : 'Esta acción no se puede deshacer desde aquí: para revertirla hay que anular la nota de crédito.'}</Text>
                 </Stack>
             )}
         </Modal>
