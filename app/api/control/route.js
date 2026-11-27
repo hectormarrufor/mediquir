@@ -51,11 +51,10 @@ export async function POST(request) {
             return NextResponse.json({ success: true, anotado: texto });
         }
         if (esVend) {
-            const suyo = !reasignar && UUID.test(String(id || '')) && (origen === 'VENTA' ? await esFacturaAprobadaDe(id, sesion.sesion.id) : origen === 'NOTA' && await esNotaAprobadaDe(id, sesion.sesion.id));
+            const suyo = UUID.test(String(id || '')) && (origen === 'VENTA' ? await esFacturaAprobadaDe(id, sesion.sesion.id) : origen === 'NOTA' && await esNotaAprobadaDe(id, sesion.sesion.id));
             if (!suyo) throw new ErrorNumeracion('Solo puedes imprimir tus facturas y notas ya aprobadas', 403);
         }
         if (!UUID.test(String(id || ''))) throw new ErrorNumeracion('Documento no encontrado', 404);
-        if (reasignar && rolDe(acceso.sesion) !== 'admin') throw new ErrorNumeracion('Solo un administrador puede reasignar el número de control', 403);
 
         if (accion === 'DANAR_SIGUIENTE') {
             // La forma que iba a usarse se dañó antes de imprimir: ese número queda anotado como forma anulada y el siguiente pasa a ser el que se asigna
@@ -76,6 +75,10 @@ export async function POST(request) {
         // Decidir sobre un hueco de control es de administración: un vendedor nunca manda `hueco` ni `ignorarHuecos`
         const r = await asignarControl({ origen, id, reasignar: Boolean(reasignar), hueco: esVend ? null : (hueco || null), ignorarHuecos: esVend ? false : Boolean(ignorarHuecos), transaction: t });
         await t.commit();
+        if (reasignar && esVend) {
+            const quien = await nombreDeUsuario(sesion.sesion.id).catch(() => null);
+            await notificarAdmins({ title: 'Forma dañada 🧾', body: `${quien || 'Un vendedor'} reportó forma dañada al imprimir y tomó el siguiente control (${r.control || ''}).`, url: '/superuser/ventas/controles', tipo: 'Info' }).catch(() => {});
+        }
         return NextResponse.json({ success: true, ...r });
     } catch (error) {
         if (!t.finished) await t.rollback();

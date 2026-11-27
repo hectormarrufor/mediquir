@@ -457,11 +457,9 @@ export default function VentasDashboard() {
                                         Cierre
                                     </Button>
                                 )}
-                                {!esVendedor && (
-                                    <Button size="xs" h={38} radius="md" variant="light" color="gray" leftSection={<IconListNumbers size={15} />} px={8} onClick={() => router.push('/superuser/ventas/controles')}>
-                                        Controles
-                                    </Button>
-                                )}
+                                <Button size="xs" h={38} radius="md" variant="light" color="gray" leftSection={<IconListNumbers size={15} />} px={8} onClick={() => router.push('/superuser/ventas/controles')}>
+                                    Controles
+                                </Button>
                             </SimpleGrid>
                         </Stack>
                     ) : (
@@ -470,7 +468,7 @@ export default function VentasDashboard() {
                             {porAprobar.data && <Button size="md" variant="filled" color={porAprobar.data.total ? 'orange' : 'gray'} leftSection={<IconFileInvoice size={18} />} onClick={() => router.push('/superuser/ventas/por-aprobar')}>Facturas por aprobar{porAprobar.data.total ? ` (${porAprobar.data.total})` : ''}</Button>}
                             <Button size="md" variant="light" color="grape" leftSection={<IconTruckDelivery size={18} />} onClick={() => router.push('/superuser/ventas/despachos')}>Despachos por agencia</Button>
                             {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconCashRegister size={18} />} onClick={() => router.push('/superuser/ventas/cierre')}>Cierre de caja</Button>}
-                            {!esVendedor && <Button size="md" variant="light" color="gray" leftSection={<IconListNumbers size={18} />} onClick={() => router.push('/superuser/ventas/controles')}>Números de control</Button>}
+                            <Button size="md" variant="light" color="gray" leftSection={<IconListNumbers size={18} />} onClick={() => router.push('/superuser/ventas/controles')}>Números de control</Button>
                             <Button size="md" variant="light" color="teal" leftSection={<IconFileInvoice size={18} />} onClick={() => router.push('/superuser/presupuestos')}>Presupuestos</Button>
                             <Button size="md" color="accent.6" leftSection={<IconPlus size={18} />} onClick={() => setPosAbierto(true)}>Nueva venta o pedido</Button>
                         </Group>

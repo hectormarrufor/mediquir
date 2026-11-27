@@ -64,7 +64,7 @@ export default function ImprimirNota() {
     };
     // Facturas que afecta (las notas anteriores a las "varias facturas" solo tienen la principal)
     const facturas = nota.facturasAfectadas?.length ? nota.facturasAfectadas : [{ numeroDocumento: nota.venta?.numeroDocumento, fecha: fechaCaracas(nota.venta?.createdAt) }];
-    const reasignar = rolUsuario === 'admin' && !guia
+    const reasignar = !guia
         ? () => { if (window.confirm('¿La forma libre se dañó? Se toma el siguiente número de control y el actual queda sin usar.')) ctl.asignar(true); }
         : null;
 

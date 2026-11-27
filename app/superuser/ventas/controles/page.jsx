@@ -143,7 +143,9 @@ export default function NumerosDeControlPage() {
         if (f.estado === 'FALTA') return (
             <Group gap={6} wrap="nowrap" justify="space-between">
                 <Group gap={4} wrap="nowrap"><IconAlertTriangle size={16} color="var(--mantine-color-red-7)" /><Text size="sm" c="red.8" fw={600}>Falta registro en este número de control</Text></Group>
-                {isAdmin && <MenuFaltante fila={f} onAccion={accion} />}
+                {isAdmin ? <MenuFaltante fila={f} onAccion={accion} /> : (
+                    <Button size="xs" color="orange" variant="light" leftSection={<IconFileOff size={14} />} onClick={() => accion('ANULAR', f)}>Forma dañada</Button>
+                )}
             </Group>
         );
         if (f.estado === 'ANULADA') return (

@@ -72,7 +72,7 @@ export default function ImprimirRecibo() {
         if (hayQueConfirmar) return <ConfirmarFormaControl tipo="Factura" documento={venta.numeroDocumento} origen="VENTA" idDocumento={venta.id} control={controlAVerificar} nuevo={!venta.numeroControl} onConfirmar={(c, d) => { setDecisionHueco(d || null); setConfirmado(c); }} onCancelar={() => { if (window.history.length > 1) window.history.back(); else window.close(); }} />;
         if (necesitaControl && ctl.estado !== 'listo') return <ControlFiscalPaso estado={ctl.estado} mensaje={ctl.mensaje} onReintentar={() => ctl.asignar(false)} />;
         if (necesitaControl && !listoVisto) return <ControlFiscalPaso estado="listo" control={ctl.control} nuevo={ctl.nuevo} />;
-        const reasignar = rolUsuario === 'admin' && !guia
+        const reasignar = !guia
             ? () => { if (window.confirm('¿La forma libre se dañó? Se toma el siguiente número de control y el actual queda sin usar.')) ctl.asignar(true); }
             : null;
         return <FacturaFormaLibre venta={ctl.control ? { ...venta, numeroControl: ctl.control } : venta} guia={guia} onReasignarControl={reasignar} />;

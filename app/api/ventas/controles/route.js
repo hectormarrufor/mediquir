@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import sequelize from '@/sequelize';
 import db from '@/models';
-import { requerirAdmin, requerirNoVendedor } from '@/app/api/_lib/acceso';
+import { requerirAdmin } from '@/app/api/_lib/acceso';
+import { requerirStaff } from '@/app/api/inventario/_lib';
+import { rolDe } from '@/app/constants/roles';
+import { notificarAdmins } from '@/app/handlers/notificar';
+import { nombreDeUsuario } from '@/app/api/_lib/aprobacion';
 
 export const dynamic = 'force-dynamic';
 const { FormaAnulada, Correlativo, Venta } = db;
@@ -34,7 +38,7 @@ async function documentosEntre(desde, hasta) {
 //   ?cantidad=150 (los últimos N números)  ó  ?desde=122501&hasta=122700
 //   ?factura=146870 -> { id } de esa factura (para emitirle una nota de crédito o débito con un control que faltaba)
 export async function GET(request) {
-    const acceso = await requerirNoVendedor();
+    const acceso = await requerirStaff();
     if (acceso.error) return acceso.error;
     try {
         const p = new URL(request.url).searchParams;
@@ -86,7 +90,7 @@ export async function GET(request) {
 
 // Marca un número de control como forma anulada (dañada, rota o nunca usada): { numero, motivo }
 export async function POST(request) {
-    const acceso = await requerirAdmin();
+    const acceso = await requerirStaff();
     if (acceso.error) return acceso.error;
     try {
         const b = await request.json();
@@ -97,6 +101,10 @@ export async function POST(request) {
         if ((await documentosEntre(n, n)).length) return NextResponse.json({ error: 'Ese número de control ya tiene un documento registrado' }, { status: 409 });
         const [fila, creada] = await FormaAnulada.findOrCreate({ where: { numero: n }, defaults: { motivo, usuarioId: Number(acceso.sesion.id) || null } });
         if (!creada) return NextResponse.json({ error: 'Ese número de control ya está marcado como forma anulada' }, { status: 409 });
+        if (rolDe(acceso.sesion) === 'vendedor') {
+            const quien = await nombreDeUsuario(acceso.sesion.id).catch(() => null);
+            await notificarAdmins({ title: 'Forma dañada 🧾', body: `${quien || 'Un vendedor'} marcó la forma ${String(b.numero || n)} como anulada: ${motivo}`, url: '/superuser/ventas/controles', tipo: 'Info' }).catch(() => {});
+        }
         return NextResponse.json({ ok: true, numero: fila.numero }, { status: 201 });
     } catch (error) {
         console.error('Anular forma libre:', error);
