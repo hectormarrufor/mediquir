@@ -48,6 +48,98 @@ const ETIQUETA_DOC = {
     '04': 'Guía / NE',
 };
 
+const CORREO_PRUEBAS = 'mediquirca@gmail.com';
+
+const ITEMS_LARGA_25 = [
+    { codigo: 'MED-001', descripcion: 'GUANTES DE EXAMEN NITRILO TALLA M CAJA X 100', cantidad: 4, precioUnitario: 320, aplicaIva: true },
+    { codigo: 'MED-002', descripcion: 'SOLUCION FISIOLOGICA 0.9% 500ML', cantidad: 12, precioUnitario: 95, aplicaIva: false },
+    { codigo: 'MED-003', descripcion: 'JERINGA DESCARTABLE 5CC CON AGUJA 21G X 100', cantidad: 2, precioUnitario: 480, aplicaIva: false },
+    { codigo: 'MED-004', descripcion: 'BATA QUIRURGICA ESTERIL DESECHABLE', cantidad: 6, precioUnitario: 210, aplicaIva: true },
+    { codigo: 'MED-005', descripcion: 'GASA ESTERIL 4X4 SOBRE X 10 UNIDADES', cantidad: 10, precioUnitario: 75, aplicaIva: false },
+    { codigo: 'MED-006', descripcion: 'TAPABOCA QUIRURGICO TRICAPA CAJA X 50', cantidad: 5, precioUnitario: 180, aplicaIva: true },
+    { codigo: 'MED-007', descripcion: 'CATETER INTRAVENOSO 20G ROSADO', cantidad: 20, precioUnitario: 38, aplicaIva: false },
+    { codigo: 'MED-008', descripcion: 'GORRO QUIRURGICO DESECHABLE CAJA X 100', cantidad: 2, precioUnitario: 240, aplicaIva: true },
+    { codigo: 'MED-009', descripcion: 'EQUIPO DE MACROGOTEO EN Y ESTERIL', cantidad: 15, precioUnitario: 62, aplicaIva: false },
+    { codigo: 'MED-010', descripcion: 'CUBREBOTAS DESECHABLES PAR X 50', cantidad: 3, precioUnitario: 260, aplicaIva: true },
+    { codigo: 'MED-011', descripcion: 'SUTURA NYLON MONOFILAMENTO 3-0 CAJA X 12', cantidad: 1, precioUnitario: 1150, aplicaIva: false },
+    { codigo: 'MED-012', descripcion: 'ALCOHOL ISOPROPILICO 70% GALON', cantidad: 2, precioUnitario: 490, aplicaIva: true },
+    { codigo: 'MED-013', descripcion: 'VENDA ELASTICA 10CM X 4.5M', cantidad: 8, precioUnitario: 85, aplicaIva: false },
+    { codigo: 'MED-014', descripcion: 'ADHESIVO MICROPOROSO 2.5CM CAJA X 12', cantidad: 2, precioUnitario: 410, aplicaIva: true },
+    { codigo: 'MED-015', descripcion: 'SONDA FOLEY 2 VIAS 16FR SILICONADA', cantidad: 6, precioUnitario: 145, aplicaIva: false },
+    { codigo: 'MED-016', descripcion: 'GEL CONDUCTOR PARA ULTRASONIDO 5L', cantidad: 1, precioUnitario: 780, aplicaIva: true },
+    { codigo: 'MED-017', descripcion: 'AGUA OXIGENADA 10 VOLUMENES LITRO', cantidad: 4, precioUnitario: 120, aplicaIva: false },
+    { codigo: 'MED-018', descripcion: 'CAMPO QUIRURGICO ESTERIL 75X90CM', cantidad: 5, precioUnitario: 190, aplicaIva: true },
+    { codigo: 'MED-019', descripcion: 'HOJA DE BISTURI NRO 15 CAJA X 100', cantidad: 1, precioUnitario: 640, aplicaIva: false },
+    { codigo: 'MED-020', descripcion: 'SABANA DESECHABLE PARA CAMILLA PAQUETE X 10', cantidad: 3, precioUnitario: 350, aplicaIva: true },
+    { codigo: 'MED-021', descripcion: 'TUBO ENDOTRAQUEAL CON BALON 7.5MM', cantidad: 4, precioUnitario: 165, aplicaIva: false },
+    { codigo: 'MED-022', descripcion: 'BOLSA RECOLECTORA DE ORINA 2000ML', cantidad: 10, precioUnitario: 92, aplicaIva: false },
+    { codigo: 'MED-023', descripcion: 'TERMOMETRO DIGITAL FLEXIBLE', cantidad: 3, precioUnitario: 295, aplicaIva: true },
+    { codigo: 'MED-024', descripcion: 'POVIDONA YODADA SOLUCION 10% LITRO', cantidad: 2, precioUnitario: 520, aplicaIva: false },
+    { codigo: 'MED-025', descripcion: 'LANCETA ESTERIL PARA GLUCOMETRO CAJA X 100', cantidad: 2, precioUnitario: 270, aplicaIva: false },
+];
+
+const ESCENARIOS_PRUEBA = {
+    EXENTA: {
+        titulo: 'Factura 100% Exenta',
+        comprador: {
+            tipoIdentificacion: 'J',
+            numeroIdentificacion: '312172194',
+            razonSocial: 'CLINICA PRUEBA EXENTA C.A.',
+            direccion: 'AV. BOLIVAR, CIUDAD OJEDA, ESTADO ZULIA',
+            telefono: '04141680773',
+            correo: CORREO_PRUEBAS,
+        },
+        items: [
+            { codigo: 'EX-001', descripcion: 'SOLUCION FISIOLOGICA 0.9% 500ML (EXENTO)', cantidad: 10, precioUnitario: 120, aplicaIva: false },
+            { codigo: 'EX-002', descripcion: 'JERINGA DESCARTABLE 5CC CAJA X 100 (EXENTO)', cantidad: 2, precioUnitario: 540, aplicaIva: false },
+            { codigo: 'EX-003', descripcion: 'GASA ESTERIL 4X4 PAQUETE X 100 (EXENTO)', cantidad: 4, precioUnitario: 210, aplicaIva: false },
+        ],
+    },
+    PURO_IVA: {
+        titulo: 'Factura Puro IVA (16%)',
+        comprador: {
+            tipoIdentificacion: 'J',
+            numeroIdentificacion: '312172194',
+            razonSocial: 'DISTRIBUIDORA MEDICA IVA C.A.',
+            direccion: 'CALLE VENEZUELA, CASCO CENTRAL, CIUDAD OJEDA',
+            telefono: '04141680773',
+            correo: CORREO_PRUEBAS,
+        },
+        items: [
+            { codigo: 'IV-001', descripcion: 'BATA QUIRURGICA DESECHABLE (GRAVADO 16%)', cantidad: 5, precioUnitario: 280, aplicaIva: true },
+            { codigo: 'IV-002', descripcion: 'GORRO QUIRURGICO CAJA X 100 (GRAVADO 16%)', cantidad: 3, precioUnitario: 310, aplicaIva: true },
+            { codigo: 'IV-003', descripcion: 'CUBREBOTAS DESECHABLES PAR X 50 (GRAVADO 16%)', cantidad: 2, precioUnitario: 260, aplicaIva: true },
+        ],
+    },
+    LARGA: {
+        titulo: 'Factura Larga (25 renglones)',
+        comprador: {
+            tipoIdentificacion: 'J',
+            numeroIdentificacion: '312172194',
+            razonSocial: 'CENTRO MEDICO INTEGRAL ZULIA C.A.',
+            direccion: 'AV. ALONSO DE OJEDA, EDIF. MEDICO, CIUDAD OJEDA',
+            telefono: '04141680773',
+            correo: CORREO_PRUEBAS,
+        },
+        items: ITEMS_LARGA_25,
+    },
+    MIXTA: {
+        titulo: 'Ejemplo rápido (Mixta)',
+        comprador: {
+            tipoIdentificacion: 'J',
+            numeroIdentificacion: '312172194',
+            razonSocial: 'CLINICA DE PRUEBA SAN JOSE C.A.',
+            direccion: 'AV. BOLIVAR, CIUDAD OJEDA, ESTADO ZULIA',
+            telefono: '04141680773',
+            correo: CORREO_PRUEBAS,
+        },
+        items: [
+            { codigo: 'MED-101', descripcion: 'SUTURA NYLON 3-0 CAJA X 12 (GRAVADO)', cantidad: 2, precioUnitario: 1000, aplicaIva: true },
+            { codigo: 'MED-202', descripcion: 'SOLUCION FISIOLOGICA 500ML (EXENTO)', cantidad: 3, precioUnitario: 250, aplicaIva: false },
+        ],
+    },
+};
+
 async function pedirJson(url, opciones) {
     const res = await fetch(url, opciones);
     const data = await res.json().catch(() => ({}));
@@ -109,7 +201,7 @@ export default function FacturacionDigitalPage() {
     const [razonSocial, setRazonSocial] = useState('CLIENTE DE PRUEBA MEDIQUIR C.A.');
     const [direccion, setDireccion] = useState('CIUDAD OJEDA, ESTADO ZULIA');
     const [telefono, setTelefono] = useState('04141680773');
-    const [correo, setCorreo] = useState('');
+    const [correo, setCorreo] = useState(CORREO_PRUEBAS);
 
     // Renglones
     const [items, setItems] = useState([
@@ -118,6 +210,8 @@ export default function FacturacionDigitalPage() {
 
     const [emitiendo, setEmitiendo] = useState(false);
     const [ultimoResultado, setUltimoResultado] = useState(null);
+    const [corriendoBateria, setCorriendoBateria] = useState(false);
+    const [resultadoBateria, setResultadoBateria] = useState([]);
 
     // Modales del historial
     const [modalJson, setModalJson] = useState(null);
@@ -248,22 +342,86 @@ export default function FacturacionDigitalPage() {
         });
     };
 
-    const cargarPruebaRapida = () => {
+    const cargarEscenario = (clave) => {
+        const esc = ESCENARIOS_PRUEBA[clave] || ESCENARIOS_PRUEBA.MIXTA;
         setVentaIdOrigen(null);
         setTipoDocumento('01');
         setNumeroDocumento('');
-        setTipoIdentificacion('J');
-        setNumeroIdentificacion('312172194');
-        setRazonSocial('CLINICA DE PRUEBA SAN JOSE C.A.');
-        setDireccion('AV. BOLIVAR, CIUDAD OJEDA, ESTADO ZULIA');
-        setTelefono('04141680773');
-        setCorreo('');
-        setItems([
-            { codigo: 'MED-101', descripcion: 'SUTURA NYLON 3-0 CAJA X 12 (GRAVADO)', cantidad: 2, precioUnitario: 1000, aplicaIva: true },
-            { codigo: 'MED-202', descripcion: 'SOLUCION FISIOLOGICA 500ML (EXENTO)', cantidad: 3, precioUnitario: 250, aplicaIva: false },
-        ]);
+        setTipoIdentificacion(esc.comprador.tipoIdentificacion);
+        setNumeroIdentificacion(esc.comprador.numeroIdentificacion);
+        setRazonSocial(esc.comprador.razonSocial);
+        setDireccion(esc.comprador.direccion);
+        setTelefono(esc.comprador.telefono);
+        setCorreo(esc.comprador.correo);
+        setItems(esc.items.map((it) => ({ ...it })));
         if (fechaHoy) setFechaEmision(fechaHoy);
         if (tasaHoy) setTasaCambio(Number(tasaHoy));
+        setUltimoResultado(null);
+        notifications.show({
+            title: `Escenario cargado: ${esc.titulo}`,
+            message: `${esc.items.length} renglones · correo destino ${esc.comprador.correo}`,
+            color: 'blue',
+        });
+    };
+
+    const ejecutarBateriaPruebas = async () => {
+        setCorriendoBateria(true);
+        setResultadoBateria([]);
+        const claves = ['EXENTA', 'PURO_IVA', 'LARGA'];
+        const resultados = [];
+        const fechaDoc = fechaEmision || fechaHoy;
+        const tasaDoc = Number(tasaCambio) || Number(tasaHoy) || 0;
+
+        try {
+            for (const clave of claves) {
+                const esc = ESCENARIOS_PRUEBA[clave];
+                const { ok, data } = await pedirJson('/api/facturacion-digital/emitir', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tipoDocumento: '01',
+                        serie,
+                        fechaEmision: fechaDoc,
+                        tasaCambio: tasaDoc,
+                        incluirEquivalenteUsd,
+                        condicionPago: 'Contado',
+                        formaPago: '02',
+                        comprador: esc.comprador,
+                        items: esc.items.map((it) => ({
+                            codigo: it.codigo,
+                            descripcion: it.descripcion,
+                            cantidad: it.cantidad,
+                            precioUnitario: it.precioUnitario,
+                            aplicaIva: it.aplicaIva,
+                            alicuota: it.aplicaIva ? 16 : 0,
+                        })),
+                    }),
+                });
+                resultados.push({
+                    clave,
+                    titulo: esc.titulo,
+                    renglones: esc.items.length,
+                    ok: Boolean(ok),
+                    emisionId: data?.emision?.id || null,
+                    estado: data?.emision?.estado || 'ERROR',
+                    numeroDocumento: data?.emision?.numeroDocumento || null,
+                    numeroControl: data?.emision?.numeroControl || null,
+                    totalBs: data?.emision?.totalBs || null,
+                    mensaje: data?.emision?.mensajeRespuesta || data?.error || '',
+                    validaciones: data?.emision?.validaciones || [],
+                });
+                setResultadoBateria([...resultados]);
+            }
+            cargarHistorial();
+            const exitos = resultados.filter((r) => r.ok).length;
+            notifications.show({
+                title: `Batería completada (${exitos}/${resultados.length} exitosas)`,
+                message: `Documentos enviados a TFHKA (DEMO) con notificación a ${CORREO_PRUEBAS}.`,
+                color: exitos === resultados.length ? 'teal' : 'orange',
+            });
+        } finally {
+            setCorriendoBateria(false);
+        }
     };
 
     const totalesVivos = useMemo(() => {
@@ -740,36 +898,97 @@ export default function FacturacionDigitalPage() {
 
                             {/* Cargar plantilla */}
                             <Card withBorder radius="md" p="md" bg="gray.0">
-                                <Group justify="space-between" align="flex-end" wrap="wrap" gap="sm">
-                                    <Group align="flex-end" wrap="wrap" style={{ flex: 1 }}>
-                                        <TextInput
-                                            label="Buscar venta real de Mediquir como plantilla (solo lectura)"
-                                            placeholder="F-015420, RIF o cliente..."
-                                            value={busquedaVenta}
-                                            onChange={(e) => setBusquedaVenta(e.currentTarget.value)}
-                                            style={{ minWidth: 220 }}
-                                        />
-                                        <Button variant="light" loading={cargandoVentas} onClick={() => buscarVentasMuestra(busquedaVenta)}>
-                                            Buscar
-                                        </Button>
-                                        <Select
-                                            label="Cargar datos de venta existente"
-                                            placeholder="Elige una venta para clonar al formulario..."
-                                            data={ventasMuestra.map((v) => ({
-                                                value: v.id,
-                                                label: `${v.numeroDocumento} · ${v.cliente?.nombre || 'Cliente'} (${nf(v.totalFinal)} ${v.moneda})`,
-                                            }))}
-                                            value={ventaIdOrigen}
-                                            onChange={cargarDesdeVenta}
-                                            searchable
-                                            clearable
-                                            style={{ minWidth: 320, flex: 1 }}
-                                        />
+                                <Stack gap="sm">
+                                    <Group justify="space-between" align="flex-end" wrap="wrap" gap="sm">
+                                        <Group align="flex-end" wrap="wrap" style={{ flex: 1 }}>
+                                            <TextInput
+                                                label="Buscar venta real de Mediquir como plantilla (solo lectura)"
+                                                placeholder="F-015420, RIF o cliente..."
+                                                value={busquedaVenta}
+                                                onChange={(e) => setBusquedaVenta(e.currentTarget.value)}
+                                                style={{ minWidth: 220 }}
+                                            />
+                                            <Button variant="light" loading={cargandoVentas} onClick={() => buscarVentasMuestra(busquedaVenta)}>
+                                                Buscar
+                                            </Button>
+                                            <Select
+                                                label="Cargar datos de venta existente"
+                                                placeholder="Elige una venta para clonar al formulario..."
+                                                data={ventasMuestra.map((v) => ({
+                                                    value: v.id,
+                                                    label: `${v.numeroDocumento} · ${v.cliente?.nombre || 'Cliente'} (${nf(v.totalFinal)} ${v.moneda})`,
+                                                }))}
+                                                value={ventaIdOrigen}
+                                                onChange={cargarDesdeVenta}
+                                                searchable
+                                                clearable
+                                                style={{ minWidth: 320, flex: 1 }}
+                                            />
+                                        </Group>
                                     </Group>
-                                    <Button variant="outline" color="orange" onClick={cargarPruebaRapida}>
-                                        Cargar ejemplo rápido
-                                    </Button>
-                                </Group>
+
+                                    <Divider label="Escenarios rápidos de prueba (correo destino: mediquirca@gmail.com)" labelPosition="left" />
+                                    <Group justify="space-between" align="center" wrap="wrap" gap="xs">
+                                        <Group gap="xs" wrap="wrap">
+                                            <Button size="xs" variant="outline" color="orange" onClick={() => cargarEscenario('MIXTA')}>
+                                                Mixta (2 ítems)
+                                            </Button>
+                                            <Button size="xs" variant="light" color="teal" onClick={() => cargarEscenario('EXENTA')}>
+                                                100% Exenta
+                                            </Button>
+                                            <Button size="xs" variant="light" color="blue" onClick={() => cargarEscenario('PURO_IVA')}>
+                                                Puro IVA (16%)
+                                            </Button>
+                                            <Button size="xs" variant="light" color="grape" onClick={() => cargarEscenario('LARGA')}>
+                                                Larga (25 renglones)
+                                            </Button>
+                                        </Group>
+                                        <Button
+                                            size="xs"
+                                            color="orange"
+                                            leftSection={<IconTestPipe size={15} />}
+                                            loading={corriendoBateria}
+                                            disabled={!config?.configurado}
+                                            onClick={ejecutarBateriaPruebas}
+                                        >
+                                            Emitir las 3 pruebas (Exenta + IVA + Larga) → mediquirca@gmail.com
+                                        </Button>
+                                    </Group>
+
+                                    {resultadoBateria.length > 0 && (
+                                        <Paper withBorder p="xs" radius="sm" bg="white">
+                                            <Text size="xs" fw={700} mb={6}>Resultado de la batería de pruebas</Text>
+                                            <Stack gap={6}>
+                                                {resultadoBateria.map((r) => (
+                                                    <Group key={r.clave} justify="space-between" wrap="wrap" gap="xs">
+                                                        <Group gap="xs" wrap="wrap">
+                                                            <Badge size="xs" color={r.ok ? 'teal' : 'red'}>{r.estado}</Badge>
+                                                            <Text size="xs" fw={700}>{r.titulo}</Text>
+                                                            <Text size="xs" c="dimmed">({r.renglones} renglones)</Text>
+                                                            {r.numeroDocumento && (
+                                                                <Text size="xs">Doc <b>{r.numeroDocumento}</b> · Ctrl <b>{r.numeroControl || '-'}</b> · {nf(r.totalBs)} Bs</Text>
+                                                            )}
+                                                            {!r.ok && <Text size="xs" c="red">{r.mensaje}</Text>}
+                                                        </Group>
+                                                        {r.ok && r.emisionId && (
+                                                            <Button
+                                                                size="compact-xs"
+                                                                color="red"
+                                                                variant="light"
+                                                                leftSection={<IconFileTypePdf size={13} />}
+                                                                component="a"
+                                                                href={`/api/facturacion-digital/emisiones/${r.emisionId}/archivo?tipo=pdf`}
+                                                                target="_blank"
+                                                            >
+                                                                Abrir PDF
+                                                            </Button>
+                                                        )}
+                                                    </Group>
+                                                ))}
+                                            </Stack>
+                                        </Paper>
+                                    )}
+                                </Stack>
                             </Card>
 
                             {/* Datos del documento */}
