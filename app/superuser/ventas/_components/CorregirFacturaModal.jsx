@@ -63,6 +63,9 @@ export default function CorregirFacturaModal({ opened, onClose, pedido, onListo,
             return calcularFactura({ renglones: renglones.map((r) => ({ precioUnitario: r.precioUnitario, cantidad: r.cantidad, aplicaIva: r.aplicaIva, porcentajeIva: 16 })), costoFlete: Number(pedido.costoFlete) || 0 });
         } catch { return null; }
     }, [renglones, completos, pedido.costoFlete]);
+    const esNotaEntrega = pedido.tipoDocumento === 'NOTA_ENTREGA';
+    const etiquetaDoc = esNotaEntrega ? 'nota de entrega' : 'factura';
+    const sinLimiteRenglones = esNotaEntrega;
     const simbolo = pedido.moneda === 'BS' ? 'Bs ' : '$';
     const bloqueado = Boolean(estado?.bloqueo);
     const cambiaPago = condicion !== pedido.condicionPago;
@@ -78,7 +81,7 @@ export default function CorregirFacturaModal({ opened, onClose, pedido, onListo,
                     detalles: renglones.map((x) => ({ productoId: x.aMano ? null : Number(x.productoId), isFicticio: x.aMano, nombreFicticio: x.aMano ? x.nombre : undefined, cantidad: Number(x.cantidad), precioUnitario: Number(x.precioUnitario), aplicaIva: x.aplicaIva, afectaInventario: x.afectaInventario })),
                 }),
             });
-            notifications.show({ title: 'Factura corregida', message: `${r.numeroDocumento}: ${r.condicionPago === 'Credito' ? `a crédito, vence el ${r.fechaVencimiento}` : 'de contado'} · total ${simbolo}${nf(r.totalFinal)}`, color: 'green', autoClose: 7000 });
+            notifications.show({ title: esNotaEntrega ? 'Nota de entrega corregida' : 'Factura corregida', message: `${r.numeroDocumento}: ${r.condicionPago === 'Credito' ? `a crédito, vence el ${r.fechaVencimiento}` : 'de contado'} · total ${simbolo}${nf(r.totalFinal)}`, color: 'green', autoClose: 7000 });
             onListo?.();
             onClose();
         } catch (e) {
@@ -114,7 +117,7 @@ export default function CorregirFacturaModal({ opened, onClose, pedido, onListo,
     );
 
     return (
-        <Modal {...PANTALLA_COMPLETA_MOVIL} opened={opened} onClose={onClose} size="xl" title={<Text fw={700}>Corregir factura {pedido.numeroDocumento}</Text>}>
+        <Modal {...PANTALLA_COMPLETA_MOVIL} opened={opened} onClose={onClose} size="xl" title={<Text fw={700}>Corregir {etiquetaDoc} {pedido.numeroDocumento}</Text>}>
             {isLoading ? <Group justify="center" p="xl"><Loader /></Group> : error ? <Alert color="red">{error.message}</Alert> : bloqueado ? (
                 <Stack gap="sm">
                     <Alert color="orange" icon={<IconAlertTriangle size={18} />} title="No se puede corregir">{estado.bloqueo}</Alert>
@@ -129,7 +132,9 @@ export default function CorregirFacturaModal({ opened, onClose, pedido, onListo,
             ) : (
                 <Stack gap="md">
                     <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={18} />}>
-                        Solo se puede corregir mientras la factura no se haya impreso en la forma libre. Al guardar se rehacen los totales, el inventario, el ingreso en caja o la cuenta por cobrar y la comisión del vendedor.
+                        {esNotaEntrega
+                            ? 'Al guardar se rehacen los totales, el inventario, el ingreso en caja o la cuenta por cobrar y la comisión del vendedor.'
+                            : 'Solo se puede corregir mientras la factura no se haya impreso en la forma libre. Al guardar se rehacen los totales, el inventario, el ingreso en caja o la cuenta por cobrar y la comisión del vendedor.'}
                     </Alert>
 
                     <div>
@@ -146,11 +151,11 @@ export default function CorregirFacturaModal({ opened, onClose, pedido, onListo,
                     </div>
 
                     <div>
-                        <Group justify="space-between" mb={6}>
-                            <Text size="sm" fw={600}>Renglones ({renglones.length}/{CONFIG_FISCAL.maxRenglonesFactura})</Text>
+                        <Group justify="space-between" mb={6} wrap="wrap" gap="xs">
+                            <Text size="sm" fw={600}>Renglones ({renglones.length}{sinLimiteRenglones ? '' : `/${CONFIG_FISCAL.maxRenglonesFactura}`})</Text>
                             <Group gap="xs">
-                                <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} disabled={renglones.length >= CONFIG_FISCAL.maxRenglonesFactura} onClick={() => setRenglones((l) => [...l, { clave: clave(), productoId: null, aMano: false, nombre: '', cantidad: 1, precioUnitario: '', aplicaIva: true, afectaInventario: true }])}>Agregar producto</Button>
-                                <Button size="xs" variant="subtle" disabled={renglones.length >= CONFIG_FISCAL.maxRenglonesFactura} onClick={() => setRenglones((l) => [...l, { clave: clave(), productoId: null, aMano: true, nombre: '', cantidad: 1, precioUnitario: '', aplicaIva: true, afectaInventario: false }])}>Renglón a mano</Button>
+                                <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} disabled={!sinLimiteRenglones && renglones.length >= CONFIG_FISCAL.maxRenglonesFactura} onClick={() => setRenglones((l) => [...l, { clave: clave(), productoId: null, aMano: false, nombre: '', cantidad: 1, precioUnitario: '', aplicaIva: !esNotaEntrega, afectaInventario: true }])}>Agregar producto</Button>
+                                <Button size="xs" variant="subtle" disabled={!sinLimiteRenglones && renglones.length >= CONFIG_FISCAL.maxRenglonesFactura} onClick={() => setRenglones((l) => [...l, { clave: clave(), productoId: null, aMano: true, nombre: '', cantidad: 1, precioUnitario: '', aplicaIva: !esNotaEntrega, afectaInventario: false }])}>Renglón a mano</Button>
                             </Group>
                         </Group>
                         <Stack gap={6}>
@@ -160,7 +165,7 @@ export default function CorregirFacturaModal({ opened, onClose, pedido, onListo,
                                         {r.aMano
                                             ? <TextInput size="xs" style={{ flex: '1 1 220px' }} label="Descripción (a mano)" value={r.nombre} onChange={(e) => poner(r.clave, { nombre: e.currentTarget.value })} />
                                             : <Select size="xs" style={{ flex: '1 1 220px' }} label="Producto" placeholder={r.etiqueta || 'Busca por nombre o código'} searchable data={opciones} filter={filtro} limit={30} nothingFoundMessage="Sin coincidencias"
-                                                value={r.productoId} onChange={(v) => { const p = productos.find((x) => String(x.id) === v); poner(r.clave, { productoId: v, etiqueta: p ? `${p.codigo || ''} · ${p.nombre}` : r.etiqueta, aplicaIva: p ? Number(p.porcentajeIva) > 0 : r.aplicaIva }); }} />}
+                                                value={r.productoId} onChange={(v) => { const p = productos.find((x) => String(x.id) === v); poner(r.clave, { productoId: v, etiqueta: p ? `${p.codigo || ''} · ${p.nombre}` : r.etiqueta, aplicaIva: esNotaEntrega ? false : (p ? Number(p.porcentajeIva) > 0 : r.aplicaIva) }); }} />}
                                         <NumberInput size="xs" w={80} label="Cantidad" min={1} allowDecimal={false} value={r.cantidad} onChange={(v) => poner(r.clave, { cantidad: v })} />
                                         <NumberInput size="xs" w={110} label={`Precio ${pedido.moneda === 'BS' ? 'Bs' : '$'}`} min={0} decimalScale={4} value={r.precioUnitario} onChange={(v) => poner(r.clave, { precioUnitario: v })} />
                                         <Checkbox size="xs" mb={6} label="Con IVA" checked={r.aplicaIva} onChange={(e) => poner(r.clave, { aplicaIva: e.currentTarget.checked })} />
@@ -175,8 +180,8 @@ export default function CorregirFacturaModal({ opened, onClose, pedido, onListo,
                     </div>
 
                     {alertaBorrar}
-                    <Group justify="space-between" mt="sm">
-                        <Button color="red" variant="outline" leftSection={<IconTrash size={16} />} loading={enviando} onClick={() => (pedido.numeroControl ? setBorrando(true) : eliminar())}>Eliminar factura</Button>
+                    <Group justify="space-between" mt="sm" wrap="wrap" gap="xs">
+                        <Button color="red" variant="outline" leftSection={<IconTrash size={16} />} loading={enviando} onClick={() => (pedido.numeroControl ? setBorrando(true) : eliminar())}>Eliminar {etiquetaDoc}</Button>
                         <Group>
                             <Button variant="default" onClick={onClose}>Cancelar</Button>
                             <Button loading={enviando} disabled={!completos || (condicion === 'Credito' && dias === '')} onClick={guardar}>Guardar cambios</Button>

@@ -53,12 +53,12 @@ export async function marcarImpresa(ventaId) {
 
 /** Mensaje de por qué la factura no se puede corregir (null si se puede). Bloquea las filas con FOR UPDATE si hay transacción. */
 export async function bloqueoCorreccion(venta, transaction, { paraEliminar = false } = {}) {
-    if (venta.tipoDocumento !== 'FACTURA') return 'Solo se corrigen facturas';
-    if (venta.statusDespacho === 'Cancelado') return 'La factura está anulada';
+    if (!['FACTURA', 'NOTA_ENTREGA'].includes(venta.tipoDocumento)) return 'Solo se corrigen facturas y notas de entrega';
+    if (venta.statusDespacho === 'Cancelado') return 'El documento está anulado';
     // Mientras no tenga número de control (se asigna en la primera impresión) se puede corregir o eliminar; con control ya no (la de talonario trae el suyo escrito a mano)
     // Eliminar sí se permite con control: quien elimina dice si la forma física se usó (queda anotada como anulada) o no (el control se recupera), por si se dañó o falló la impresión
-    if (!paraEliminar && venta.numeroControl && !venta.facturaTalonario) return `Esta factura ya tiene número de control (${venta.numeroControl}): se asignó al imprimirla por primera vez. Para corregirla usa una nota de crédito o débito`;
-    if (!paraEliminar && await estaImpresa(venta.id, transaction)) return 'Esta factura ya se imprimió en la forma libre: para corregirla usa una nota de crédito o débito';
+    if (venta.tipoDocumento === 'FACTURA' && !paraEliminar && venta.numeroControl && !venta.facturaTalonario) return `Esta factura ya tiene número de control (${venta.numeroControl}): se asignó al imprimirla por primera vez. Para corregirla usa una nota de crédito o débito`;
+    if (venta.tipoDocumento === 'FACTURA' && !paraEliminar && await estaImpresa(venta.id, transaction)) return 'Esta factura ya se imprimió en la forma libre: para corregirla usa una nota de crédito o débito';
     if (venta.numeroDocumentoAnterior) return `Esta factura salió de otro documento (${venta.numeroDocumentoAnterior}): para corregirla usa la anulación con nota de crédito`;
     const where = { ventaId: venta.id };
     const [abonos, retenciones, notas, pagos, pagadas] = await Promise.all([
@@ -93,8 +93,8 @@ export async function modificarFactura({ venta, condicionPago, diasCredito, meto
     let factura = null;
     let nuevos = null;
     if (Array.isArray(detalles)) {
-        if (!detalles.length) throw new ErrorCorreccion('La factura necesita al menos un renglón');
-        if (detalles.length > CONFIG_FISCAL.maxRenglonesFactura) throw new ErrorCorreccion(`Una factura admite hasta ${CONFIG_FISCAL.maxRenglonesFactura} renglones (la forma libre no da para más)`);
+        if (!detalles.length) throw new ErrorCorreccion('El documento necesita al menos un renglón');
+        if (venta.tipoDocumento === 'FACTURA' && detalles.length > CONFIG_FISCAL.maxRenglonesFactura) throw new ErrorCorreccion(`Una factura admite hasta ${CONFIG_FISCAL.maxRenglonesFactura} renglones (la forma libre no da para más)`);
         const productos = new Map();
         for (const d of detalles) {
             if (d.isFicticio) { if (!String(d.nombreFicticio || '').trim()) throw new ErrorCorreccion('Un renglón escrito a mano necesita su descripción'); continue; }

@@ -188,8 +188,8 @@ export async function GET(request, { params }) {
               WHERE cv."ventaId" = :v AND cv.concepto = 'FACTURA' ORDER BY cv.id LIMIT 1`,
             { replacements: { v: venta.id }, type: sequelize.QueryTypes.SELECT },
         );
-        // Corregir o eliminar la factura (solo usuario 1 y jolexi); si está impresa o tiene otros impedimentos, el modal lo explica
-        const puedeCorregir = venta.tipoDocumento === 'FACTURA' && venta.statusDespacho !== 'Cancelado' && await puedeCorregirFacturas(acceso.sesion);
+        // Corregir o eliminar la factura o nota de entrega (solo usuario 1 y jolexi); si está impresa o tiene otros impedimentos, el modal lo explica
+        const puedeCorregir = ['FACTURA', 'NOTA_ENTREGA'].includes(venta.tipoDocumento) && venta.statusDespacho !== 'Cancelado' && await puedeCorregirFacturas(acceso.sesion);
         // Factura de un vendedor por aprobar: no se imprime hasta que jolexi (o el usuario 1) la apruebe
         const aprobacionPendiente = venta.tipoDocumento === 'FACTURA' && await estaPorAprobar('VENTA', venta.id);
         const puedeAprobarla = aprobacionPendiente && await puedeAprobar(acceso.sesion);
