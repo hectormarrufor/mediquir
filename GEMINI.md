@@ -1,5 +1,9 @@
 # Instrucciones del proyecto (Mediquir)
 
+## ⛔ NUNCA ejecutar `yarn build` / `next build` sin que Hector lo pida
+- **NO correr `yarn build` después de cada cambio.** Se pierde mucho tiempo.
+- Solo ejecutar `yarn build` cuando Hector lo solicite expresamente.
+
 ## ⛔ NUNCA hacer `git push` sin autorización
 - **NUNCA hacer `git push` sin autorización expresa de Hector en ese momento.** Cada push a `main` despliega en producción.
 - Después de cada cambio, hacer solo **commit local** y acumular commits hasta que Hector diga «sube» (entonces hacer un solo push).
