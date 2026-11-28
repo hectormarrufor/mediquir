@@ -16,7 +16,7 @@ import {
     IconTrash, IconPlus, IconMinus, IconExchange,
     IconPackage, IconReceiptTax, IconCheck, IconTag,
     IconZoomIn, IconZoomOut, IconEdit, IconArrowBackUp, IconFileInvoice,
-    IconSearch, IconShoppingCart, IconChevronRight, IconPrinter
+    IconSearch, IconShoppingCart, IconChevronRight, IconPrinter, IconSparkles
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import PrecioVisual from '../ui/PrecioVisual'; 
@@ -33,6 +33,70 @@ import { fechaCaracas, formatearFecha } from '@/app/constants/hora';
 import { CONTENIDO_SIN_RELLENO } from '@/app/components/ui/modalMovil';
 import CantidadProductoModal from '@/app/components/ui/CantidadProductoModal';
 import { esSinRif, formatearIdentificacion } from '@/app/constants/identificacion';
+import ImportarPresupuestoIA from './ImportarPresupuestoIA';
+
+function NombreFicticioEditable({ valor, onCommit, compact = false }) {
+    const [editando, setEditando] = useState(false);
+    const [txt, setTxt] = useState(valor);
+    useEffect(() => { setTxt(valor); }, [valor]);
+
+    const confirmar = () => {
+        const limpio = String(txt || '').trim();
+        setEditando(false);
+        if (limpio && limpio !== valor) onCommit(limpio);
+        else setTxt(valor);
+    };
+
+    if (editando) {
+        return (
+            <Group gap={4} wrap="nowrap" style={{ flex: 1, minWidth: 140 }}>
+                <TextInput
+                    size="xs"
+                    value={txt}
+                    onChange={(e) => setTxt(e.currentTarget.value)}
+                    onBlur={confirmar}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); confirmar(); }
+                        if (e.key === 'Escape') { e.preventDefault(); setTxt(valor); setEditando(false); }
+                    }}
+                    autoFocus
+                    onFocus={(e) => e.currentTarget.select()}
+                    style={{ flex: 1, minWidth: 0 }}
+                    aria-label="Editar nombre del renglón ficticio"
+                />
+                <ActionIcon
+                    size="xs"
+                    color="teal"
+                    variant="light"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={confirmar}
+                    aria-label="Guardar nombre"
+                >
+                    <IconCheck size={13} />
+                </ActionIcon>
+            </Group>
+        );
+    }
+
+    return (
+        <UnstyledButton
+            onClick={() => setEditando(true)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, maxWidth: '100%', flex: '0 1 auto' }}
+            title="Haz clic para modificar el nombre del renglón ficticio"
+        >
+            <Text
+                fw={compact ? 700 : 600}
+                fz={compact ? 12.5 : 'sm'}
+                lineClamp={compact ? 2 : 1}
+                lh={1.2}
+                style={{ minWidth: 0 }}
+            >
+                {valor}
+            </Text>
+            <IconEdit size={compact ? 13 : 14} color="var(--mantine-color-grape-6)" style={{ flexShrink: 0 }} />
+        </UnstyledButton>
+    );
+}
 
 // Precio unitario editable de un renglón (solo administración). Se confirma al salir del campo o con Enter; no cambia el precio del producto,
 // solo el de esta venta. Resaltado en naranja cuando difiere del precio del sistema.
@@ -87,6 +151,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const [previewAbierto, setPreviewAbierto] = useState(false);
     
     const [modalFicticio, setModalFicticio] = useState(false);
+    const [modalImportarIA, setModalImportarIA] = useState(false);
     const formFicticio = useForm({
         initialValues: { nombre: 'Producto Genérico', precio: '', cantidad: 1, aplicaIva: true }
     });
@@ -220,7 +285,25 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         setVista('productos');
     };
     const botonCero = hayAlgoQueBorrar && (
-        <Button size="compact-sm" variant="light" color="red" leftSection={<IconTrash size={14} />} onClick={empezarDeCero}>Empezar de cero</Button>
+        (isMobile && esPresupuesto) ? (
+            <ActionIcon size="md" variant="light" color="red" onClick={empezarDeCero} title="Empezar de cero" aria-label="Empezar de cero">
+                <IconTrash size={15} />
+            </ActionIcon>
+        ) : (
+            <Button size="compact-sm" variant="light" color="red" leftSection={<IconTrash size={14} />} onClick={empezarDeCero}>Empezar de cero</Button>
+        )
+    );
+    const botonImportarIA = esPresupuesto && (
+        <Button
+            size={isMobile ? 'xs' : 'compact-sm'}
+            variant="light"
+            color="indigo"
+            leftSection={<IconSparkles size={isMobile ? 14 : 15} />}
+            onClick={() => setModalImportarIA(true)}
+            style={{ flexShrink: 0 }}
+        >
+            {isMobile ? 'Importar PDF / Excel' : 'Importar PDF / Excel (IA)'}
+        </Button>
     );
 
     // Abierto desde «Números de control»: es una factura (con IVA) y lleva ese número de control
@@ -559,6 +642,107 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         setCarrito(carrito.map(item => item.clave === clave ? { ...item, afectaInventario: value } : item));
     };
 
+    const fijarNombreFicticio = (clave, nombre) => {
+        const limpio = String(nombre || '').trim();
+        if (!limpio) return;
+        setCarrito((prev) => prev.map((i) => (i.clave === clave && i.isFicticio ? { ...i, nombre: limpio } : i)));
+    };
+
+    const aplicarImportacionIA = (renglones = []) => {
+        if (!Array.isArray(renglones) || renglones.length === 0) return;
+        const tarifaEfectiva = formVenta.values.tipoPrecio || 'precio7';
+        if (!formVenta.values.tipoPrecio) {
+            formVenta.setFieldValue('tipoPrecio', tarifaEfectiva);
+        }
+        const esBsEfectiva = ['precio1', 'precio4', 'precio5'].includes(tarifaEfectiva);
+
+        setCarrito((prev) => {
+            const lista = [...prev];
+            renglones.forEach((r, idx) => {
+                if (r.modo === 'catalogo' && r.producto) {
+                    const prod = r.producto;
+                    const info = calcularPrecioInfo(prod, tarifaEfectiva);
+                    const pres = presentacionDe(prod, r.presentacion) || presentacionDe(prod, 'UNIDAD');
+                    const clave = `${prod.id}:${pres.clave}`;
+                    const imgProducto = getImageUrl(prod.imagen);
+                    const imgMarca = getImageUrl(prod.marca?.imagen);
+                    const n = Math.max(1, Math.floor(Number(r.cantidad) || 1));
+                    const conPrecio = puedeFijarPrecio && Number(r.precioElegido) > 0;
+                    const manualElegido = conPrecio && Math.abs(Number(r.precioElegido) - Number(info.precio)) >= 0.0005;
+                    const existenteIdx = lista.findIndex((item) => item.clave === clave);
+                    if (existenteIdx >= 0) {
+                        const actual = lista[existenteIdx];
+                        const nuevaCantPres = actual.cantidadPres + n;
+                        lista[existenteIdx] = {
+                            ...actual,
+                            cantidadPres: nuevaCantPres,
+                            cantidad: nuevaCantPres * pres.unidades,
+                            precio: conPrecio ? Number(r.precioElegido) : (actual.precioManual ? actual.precio : info.precio),
+                            precioManual: conPrecio ? manualElegido : actual.precioManual,
+                            simbolo: info.simbolo,
+                            tieneDescuento: info.tieneDescuento,
+                            porcentajeDescuento: info.porcentajeDescuento,
+                            porcentajeIva: Number(prod.porcentajeIva) || 0,
+                            imagen: imgProducto,
+                            marcaImagen: imgMarca,
+                            marcaNombre: prod.marca?.nombre,
+                        };
+                    } else {
+                        lista.push({
+                            id: prod.id,
+                            nombre: prod.nombre,
+                            codigo: prod.codigo,
+                            precio: conPrecio ? Number(r.precioElegido) : info.precio,
+                            precioManual: manualElegido,
+                            simbolo: info.simbolo,
+                            tieneDescuento: info.tieneDescuento,
+                            porcentajeDescuento: info.porcentajeDescuento,
+                            porcentajeIva: Number(prod.porcentajeIva) || 0,
+                            clave,
+                            presentacion: pres.clave,
+                            presentacionEtiqueta: pres.etiqueta,
+                            unidadesPorPres: pres.unidades,
+                            cantidadPres: n,
+                            cantidad: n * pres.unidades,
+                            imagen: imgProducto,
+                            marcaImagen: imgMarca,
+                            marcaNombre: prod.marca?.nombre,
+                            isFicticio: false,
+                            afectaInventario: true,
+                        });
+                    }
+                } else if (r.modo === 'ficticio') {
+                    const n = Math.max(1, Math.floor(Number(r.cantidad) || 1));
+                    const uniq = `ficticio-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`;
+                    lista.push({
+                        id: uniq,
+                        clave: uniq,
+                        presentacion: 'UNIDAD',
+                        unidadesPorPres: 1,
+                        cantidadPres: n,
+                        isFicticio: true,
+                        codigo: '1010',
+                        nombre: r.nombre || 'Producto Genérico',
+                        precio: Number(r.precio),
+                        simbolo: esBsEfectiva ? 'Bs' : '$',
+                        cantidad: n,
+                        aplicaIva: Boolean(r.aplicaIva),
+                        tieneDescuento: false,
+                        afectaInventario: false,
+                    });
+                }
+            });
+            return lista;
+        });
+
+        notifications.show({
+            color: 'teal',
+            title: 'Importación completada',
+            message: `Se agregaron ${renglones.length} ${renglones.length === 1 ? 'renglón' : 'renglones'} al presupuesto.`,
+        });
+        if (isMobile) setVista('carrito');
+    };
+
     // Precio solo de esta venta: el del producto no cambia
     const fijarPrecio = (clave, valor) => setCarrito((prev) => prev.map((i) => (i.clave === clave ? { ...i, precio: valor, precioManual: true } : i)));
     const restablecerPrecio = (clave) => setCarrito((prev) => prev.map((i) => {
@@ -867,7 +1051,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     const altoPapel = cantidadArticulos <= limiteMediaCarta ? '5.5in' : '10.5in';
 
     // ---------------- Piezas de la pantalla (las mismas en el teléfono y en la computadora) ----------------
-    const tamCampo = isMobile ? 'md' : 'sm'; // en el teléfono, campos más altos (se tocan con el dedo y la letra no obliga a acercar)
+    const tamCampo = (isMobile && !esPresupuesto) ? 'md' : 'sm'; // en venta móvil campos altos; en presupuesto compacto para ver más renglones
     // Los vendedores, al VENDER, solo trabajan y ven bolívares (tarifas P4/P5); los dólares son solo de los presupuestos y de administración.
     // (la nota de entrega y la venta rápida sí pueden ir en dólares; la restricción es de la factura y, por derivar de ella, de sus notas de crédito y débito)
     const soloBs = esVendedor && !esPresupuesto && esFactura;
@@ -905,44 +1089,68 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     const buscador = (
         <>
-            <Group wrap="nowrap" gap={6} mb={isMobile ? 2 : 'sm'}>
-                <TextInput
-                    style={{ flex: 1, minWidth: 0 }} size={isMobile ? 'sm' : tamCampo} placeholder="Buscar producto…" inputMode="search" enterKeyHint="search" autoComplete="off"
-                    leftSection={<IconSearch size={16} />} value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.currentTarget.value)}
-                    rightSectionPointerEvents="all"
-                    rightSection={busquedaProducto ? <CloseButton size="sm" onClick={() => setBusquedaProducto('')} aria-label="Borrar la búsqueda" /> : null}
-                    // En el teléfono no se enfoca solo: el teclado taparía media pantalla apenas se abre la venta
-                    data-autofocus={isMobile ? undefined : true}
-                />
-                {/* El producto genérico (precio escrito a mano): también lo agrega un vendedor; Jolexi lo revisa al aprobar la factura */}
-                <Button color="grape" variant="light" size={isMobile ? 'sm' : tamCampo} px={isMobile ? 'xs' : 'sm'} onClick={() => setModalFicticio(true)} title="Agregar ítem ficticio (1010)" style={{ flexShrink: 0 }}>
-                    + Ficticio
-                </Button>
-            </Group>
-            {/* No se agrega nada hasta elegir el documento, el método de entrega y la tarifa */}
-            {motivoSinAgregar && (
-                <Alert
-                    color="red"
-                    variant="light"
-                    p="xs"
-                    mb={isMobile ? 0 : 'sm'}
-                    mt={isMobile ? 6 : 0}
-                    onClick={isMobile ? () => setVista('datos') : undefined}
-                    style={isMobile ? { cursor: 'pointer' } : undefined}
-                >
-                    <Group justify="space-between" wrap="nowrap" gap="xs">
-                        <Text size="xs" fw={700}>{motivoSinAgregar}.</Text>
-                        {isMobile && <Text size="xs" fw={800} c="red.9" style={{ flexShrink: 0 }}>Ir a datos →</Text>}
+            {isMobile && esPresupuesto ? (
+                <Stack gap={6} mb={4}>
+                    <TextInput
+                        style={{ width: '100%' }} size="xs" placeholder="Buscar producto, código o marca…" inputMode="search" enterKeyHint="search" autoComplete="off"
+                        leftSection={<IconSearch size={15} />} value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.currentTarget.value)}
+                        rightSectionPointerEvents="all"
+                        rightSection={busquedaProducto ? <CloseButton size="xs" onClick={() => setBusquedaProducto('')} aria-label="Borrar la búsqueda" /> : null}
+                    />
+                    <SimpleGrid cols={2} spacing={6}>
+                        <Button color="grape" variant="light" size="xs" leftSection={<IconPlus size={14} />} onClick={() => setModalFicticio(true)} title="Agregar ítem ficticio (1010)">
+                            Ficticio (1010)
+                        </Button>
+                        {botonImportarIA}
+                    </SimpleGrid>
+                    {motivoSinAgregar && (
+                        <Text fz={11} c="red.7" fw={700} ta="center">Toca una tarifa arriba para habilitar los precios</Text>
+                    )}
+                </Stack>
+            ) : (
+                <>
+                    <Group wrap="nowrap" gap={6} mb={isMobile ? 2 : 'sm'}>
+                        <TextInput
+                            style={{ flex: 1, minWidth: 0 }} size={isMobile ? 'sm' : tamCampo} placeholder="Buscar producto…" inputMode="search" enterKeyHint="search" autoComplete="off"
+                            leftSection={<IconSearch size={16} />} value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.currentTarget.value)}
+                            rightSectionPointerEvents="all"
+                            rightSection={busquedaProducto ? <CloseButton size="sm" onClick={() => setBusquedaProducto('')} aria-label="Borrar la búsqueda" /> : null}
+                            // En el teléfono no se enfoca solo: el teclado taparía media pantalla apenas se abre la venta
+                            data-autofocus={isMobile ? undefined : true}
+                        />
+                        {/* El producto genérico (precio escrito a mano): también lo agrega un vendedor; Jolexi lo revisa al aprobar la factura */}
+                        <Button color="grape" variant="light" size={isMobile ? 'sm' : tamCampo} px={isMobile ? 'xs' : 'sm'} onClick={() => setModalFicticio(true)} title="Agregar ítem ficticio (1010)" style={{ flexShrink: 0 }}>
+                            + Ficticio
+                        </Button>
                     </Group>
-                </Alert>
+                    {/* No se agrega nada hasta elegir el documento, el método de entrega y la tarifa */}
+                    {motivoSinAgregar && (
+                        <Alert
+                            color="red"
+                            variant="light"
+                            p="xs"
+                            mb={isMobile ? 0 : 'sm'}
+                            mt={isMobile ? 6 : 0}
+                            onClick={isMobile ? () => setVista('datos') : undefined}
+                            style={isMobile ? { cursor: 'pointer' } : undefined}
+                        >
+                            <Group justify="space-between" wrap="nowrap" gap="xs">
+                                <Text size="xs" fw={700}>{motivoSinAgregar}.</Text>
+                                {isMobile && <Text size="xs" fw={800} c="red.9" style={{ flexShrink: 0 }}>Ir a datos →</Text>}
+                            </Group>
+                        </Alert>
+                    )}
+                </>
             )}
         </>
     );
 
     const filaProducto = (prod) => {
+        const compactoPres = isMobile && esPresupuesto;
         const info = calcularPrecioInfo(prod, formVenta.values.tipoPrecio);
         const imgFinal = getImageUrl(prod.imagen) || getImageUrl(prod.marca?.imagen);
         const enCarrito = unidadesEnCarrito.get(prod.id) || 0;
+        const stockProd = Number(prod.stockAlmacen) || 0;
         const botonesPresentacion = presentacionesDe(prod).filter((p) => p.clave !== 'UNIDAD').map((p) => (
             <Button key={p.clave} size={isMobile ? 'compact-sm' : 'compact-xs'} color="grape" variant="light" onClick={(e) => { e.stopPropagation(); pedirProducto(prod, p.clave); }}>
                 + {p.etiqueta}
@@ -950,23 +1158,28 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         ));
         return (
             <Paper
-                key={prod.id} p={isMobile ? 6 : 'sm'} withBorder radius={isMobile ? 'sm' : 'md'} role="button" tabIndex={0}
+                key={prod.id} p={compactoPres ? '5px 8px' : (isMobile ? 6 : 'sm')} withBorder radius={isMobile ? 'sm' : 'md'} role="button" tabIndex={0}
                 onClick={() => pedirProducto(prod)} onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) pedirProducto(prod); }}
                 style={{ cursor: motivoSinAgregar ? 'not-allowed' : 'pointer', opacity: motivoSinAgregar ? 0.6 : 1, ...(enCarrito ? { borderColor: 'var(--mantine-color-blue-4)', background: 'var(--mantine-color-blue-0)' } : {}) }}
             >
-                <Group wrap="nowrap" justify="space-between" gap={isMobile ? 8 : 'sm'} align="center">
-                    <Group wrap="nowrap" gap={isMobile ? 8 : 'sm'} style={{ minWidth: 0, flex: 1 }}>
-                        <Avatar src={imgFinal} size={isMobile ? 36 : 'md'} radius="sm" color="blue">
-                            <IconPackage size={isMobile ? 14 : 16} />
+                <Group wrap="nowrap" justify="space-between" gap={compactoPres ? 6 : (isMobile ? 8 : 'sm')} align="center">
+                    <Group wrap="nowrap" gap={compactoPres ? 6 : (isMobile ? 8 : 'sm')} style={{ minWidth: 0, flex: 1 }}>
+                        <Avatar src={imgFinal} size={compactoPres ? 30 : (isMobile ? 36 : 'md')} radius="sm" color="blue">
+                            <IconPackage size={compactoPres ? 13 : (isMobile ? 14 : 16)} />
                         </Avatar>
                         <Box style={{ minWidth: 0 }}>
                             <Group gap={4} wrap="nowrap" align="flex-start">
-                                <Text fw={600} fz={isMobile ? 13 : 'sm'} lineClamp={2} lh={1.2}>{prod.nombre}</Text>
+                                <Text fw={600} fz={compactoPres ? 12.5 : (isMobile ? 13 : 'sm')} lineClamp={2} lh={1.2}>{prod.nombre}</Text>
                                 {info.tieneDescuento && <IconTag size={13} color="#FF6B6B" style={{ flexShrink: 0, marginTop: 2 }} />}
                             </Group>
-                            <Group gap={6} wrap="nowrap" mt={1}>
-                                <Text fz={isMobile ? 11 : 'xs'} c="dimmed" lineClamp={1}>
+                            <Group gap={5} wrap="nowrap" mt={1}>
+                                <Text fz={11} c="dimmed" lineClamp={1}>
                                     {prod.codigo}{prod.marca?.nombre ? ` · ${prod.marca.nombre}` : ''}
+                                    {compactoPres && (
+                                        <Text span fw={600} c={stockProd > 0 ? 'teal.7' : 'red.6'}>
+                                            {` · Disp: ${stockProd}`}
+                                        </Text>
+                                    )}
                                 </Text>
                                 {enCarrito > 0 && <Badge size="xs" color="blue" variant="filled" tt="none" style={{ flexShrink: 0 }}>{enCarrito} und</Badge>}
                             </Group>
@@ -975,9 +1188,9 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
                     <Stack gap={4} align="flex-end" style={{ flexShrink: 0 }}>
                         {faltaTarifa ? (
-                            <Badge color="gray" variant="light" size={isMobile ? 'md' : 'lg'} px={6} tt="none">Elige tarifa</Badge>
+                            <Badge color="gray" variant="light" size={compactoPres ? 'sm' : (isMobile ? 'md' : 'lg')} px={6} tt="none">Elige tarifa</Badge>
                         ) : (
-                            <Badge color={info.simbolo === 'Bs' ? 'teal' : 'blue'} variant="light" size={isMobile ? 'md' : 'lg'} px={6}>
+                            <Badge color={info.simbolo === 'Bs' ? 'teal' : 'blue'} variant="light" size={compactoPres ? 'sm' : (isMobile ? 'md' : 'lg')} px={6}>
                                 <PrecioVisual valor={info.precio} simbolo={info.simbolo} size={isMobile ? 'xs' : 'sm'} fw={700} />
                             </Badge>
                         )}
@@ -1009,16 +1222,16 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
     );
 
     const bloqueDocumento = esPresupuesto ? (
-        <Paper p={isMobile ? 'xs' : 'sm'} mb={isMobile ? 6 : 'sm'} bg="teal.0" radius={isMobile ? 'sm' : 'md'} withBorder>
+        <Paper p={isMobile ? '6px 8px' : 'sm'} mb={isMobile ? 6 : 'sm'} bg="teal.0" radius={isMobile ? 'sm' : 'md'} withBorder>
             <Group justify="space-between" align="center" wrap="nowrap" gap="xs">
                 <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
-                    <ThemeIcon size={isMobile ? 'md' : 'lg'} variant="light" color="teal"><IconFileInvoice size={isMobile ? 16 : 20} /></ThemeIcon>
+                    <ThemeIcon size={isMobile ? 'sm' : 'lg'} variant="light" color="teal"><IconFileInvoice size={isMobile ? 15 : 20} /></ThemeIcon>
                     <Box style={{ minWidth: 0 }}>
-                        <Text size={isMobile ? 'md' : 'lg'} fw={800} c="teal.9">PRESUPUESTO</Text>
-                        <Text size="xs" c="dimmed" lh={1.2}>Con IVA · no es documento fiscal ni toca el inventario</Text>
+                        <Text size={isMobile ? 'sm' : 'lg'} fw={800} c="teal.9">PRESUPUESTO</Text>
+                        <Text fz={isMobile ? 10.5 : 'xs'} c="dimmed" lh={1.2}>Con IVA · no es documento fiscal ni toca el inventario</Text>
                     </Box>
                 </Group>
-                <NumberInput label="Válido (días)" size={tamCampo} w={isMobile ? 96 : 110} min={1} max={365} allowDecimal={false} allowNegative={false} inputMode="numeric" style={{ flexShrink: 0 }} {...formVenta.getInputProps('validoDias')} />
+                <NumberInput label="Válido (días)" size={isMobile ? 'xs' : tamCampo} w={isMobile ? 82 : 110} min={1} max={365} allowDecimal={false} allowNegative={false} inputMode="numeric" style={{ flexShrink: 0 }} {...formVenta.getInputProps('validoDias')} />
             </Group>
         </Paper>
     ) : (
@@ -1275,39 +1488,76 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
         </>
     );
 
-    // Carrito del teléfono: tarjetas compactas con botones táctiles claros
+    // Carrito del teléfono: tarjetas compactas con botones táctiles claros (más compactas en Presupuestos)
     const tarjetasCarrito = (
         <Stack gap={4}>
             {carrito.map((item, idxItem) => (
-                <Paper key={item.clave} withBorder radius="sm" p={8} bg="white" style={{ borderLeft: `3px solid ${!item.isFicticio && item.presentacion !== 'UNIDAD' ? '#7048e8' : '#1971c2'}` }}>
+                <Paper
+                    key={item.clave}
+                    withBorder
+                    radius="sm"
+                    p={esPresupuesto ? '6px 8px' : 8}
+                    bg="white"
+                    style={{ borderLeft: `3px solid ${item.isFicticio ? '#ae3ec9' : (item.presentacion !== 'UNIDAD' ? '#7048e8' : '#1971c2')}` }}
+                >
                     <Group wrap="nowrap" align="flex-start" gap={6}>
-                        {item.isFicticio ? <Avatar color="grape" size={32} radius="sm"><IconEdit size={14} /></Avatar> : <Avatar src={item.imagen || item.marcaImagen} size={32} radius="sm"><IconPackage size={14} /></Avatar>}
+                        {!esPresupuesto && (
+                            item.isFicticio
+                                ? <Avatar color="grape" size={32} radius="sm"><IconEdit size={14} /></Avatar>
+                                : <Avatar src={item.imagen || item.marcaImagen} size={32} radius="sm"><IconPackage size={14} /></Avatar>
+                        )}
                         <Box style={{ flex: 1, minWidth: 0 }}>
-                            <Text fw={700} fz={13} lineClamp={2} lh={1.2}>{item.nombre}</Text>
-                            <Group gap={4} mt={2}>
+                            {item.isFicticio ? (
+                                <NombreFicticioEditable valor={item.nombre} compact onCommit={(n) => fijarNombreFicticio(item.clave, n)} />
+                            ) : (
+                                <Text fw={700} fz={esPresupuesto ? 12.5 : 13} lineClamp={2} lh={1.2}>{item.nombre}</Text>
+                            )}
+                            <Group gap={4} mt={2} wrap="wrap">
                                 {etiquetasRenglon(item)}
                                 {!item.isFicticio && item.presentacion !== 'UNIDAD' && <Badge size="xs" color="grape.7" variant="filled" tt="none">{item.presentacionEtiqueta} · {item.cantidad} und</Badge>}
                                 {item.isFicticio && <Badge size="xs" color="grape" variant="light">Ficticio 1010</Badge>}
                                 {!item.isFicticio && item.marcaNombre && <Text fz={11} c="dimmed">{item.marcaNombre}</Text>}
                             </Group>
                         </Box>
-                        <ActionIcon size="sm" color="red" variant="subtle" onClick={() => eliminarItem(item.clave)} aria-label="Quitar del carrito"><IconTrash size={16} /></ActionIcon>
+                        <ActionIcon size={esPresupuesto ? 'xs' : 'sm'} color="red" variant="subtle" onClick={() => eliminarItem(item.clave)} aria-label="Quitar del carrito">
+                            <IconTrash size={esPresupuesto ? 15 : 16} />
+                        </ActionIcon>
                     </Group>
-                    <Group justify="space-between" align="center" mt={6} wrap="nowrap" gap={6}>
-                        <Group gap={4} wrap="nowrap">
-                            <ActionIcon size={32} radius="sm" color="gray" variant="light" onClick={() => cambiarCantidad(item.clave, -1)} aria-label="Uno menos"><IconMinus size={15} /></ActionIcon>
-                            <NumberInput value={item.cantidadPres} onChange={(val) => setCantidadAbsoluta(item.clave, val)} min={1} allowDecimal={false} allowNegative={false} size="xs" w={52} hideControls inputMode="numeric"
-                                aria-label="Cantidad" styles={{ input: { textAlign: 'center', fontWeight: 900, color: '#1971c2', backgroundColor: '#f8f9fa', paddingInline: 2 } }} />
-                            <ActionIcon size={32} radius="sm" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)} aria-label="Uno más"><IconPlus size={15} /></ActionIcon>
+                    <Group justify="space-between" align="center" mt={esPresupuesto ? 4 : 6} wrap="nowrap" gap={6}>
+                        <Group gap={esPresupuesto ? 3 : 4} wrap="nowrap">
+                            <ActionIcon size={esPresupuesto ? 26 : 32} radius="sm" color="gray" variant="light" onClick={() => cambiarCantidad(item.clave, -1)} aria-label="Uno menos">
+                                <IconMinus size={esPresupuesto ? 13 : 15} />
+                            </ActionIcon>
+                            <NumberInput
+                                value={item.cantidadPres}
+                                onChange={(val) => setCantidadAbsoluta(item.clave, val)}
+                                min={1} allowDecimal={false} allowNegative={false} size="xs" w={esPresupuesto ? 44 : 52} hideControls inputMode="numeric"
+                                aria-label="Cantidad"
+                                styles={{ input: { textAlign: 'center', fontWeight: 900, color: '#1971c2', backgroundColor: '#f8f9fa', paddingInline: 2, ...(esPresupuesto ? { height: 26, minHeight: 26 } : {}) } }}
+                            />
+                            <ActionIcon size={esPresupuesto ? 26 : 32} radius="sm" color="blue" variant="light" onClick={() => cambiarCantidad(item.clave, 1)} aria-label="Uno más">
+                                <IconPlus size={esPresupuesto ? 13 : 15} />
+                            </ActionIcon>
                         </Group>
-                        <Box ta="right" style={{ minWidth: 0 }}>
-                            {puedeFijarPrecio ? (
-                                <PrecioEditable valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)} size="xs" onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)} />
-                            ) : (
-                                <Text fz={11} c="dimmed">c/u <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="xs" fw={600} /></Text>
-                            )}
-                            <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="md" fw={800} />
-                        </Box>
+                        {esPresupuesto ? (
+                            <Group gap={6} align="center" wrap="nowrap" style={{ minWidth: 0 }}>
+                                {puedeFijarPrecio ? (
+                                    <PrecioEditable valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)} size="xs" onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)} />
+                                ) : (
+                                    <Text fz={11} c="dimmed"><PrecioVisual valor={item.precio} simbolo={item.simbolo} size="xs" fw={600} /></Text>
+                                )}
+                                <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="sm" fw={800} />
+                            </Group>
+                        ) : (
+                            <Box ta="right" style={{ minWidth: 0 }}>
+                                {puedeFijarPrecio ? (
+                                    <PrecioEditable valor={item.precio} simbolo={item.simbolo} editado={Boolean(item.precioManual)} size="xs" onCommit={(n) => fijarPrecio(item.clave, n)} onRestablecer={() => restablecerPrecio(item.clave)} />
+                                ) : (
+                                    <Text fz={11} c="dimmed">c/u <PrecioVisual valor={item.precio} simbolo={item.simbolo} size="xs" fw={600} /></Text>
+                                )}
+                                <PrecioVisual valor={montoRenglonDe(idxItem)} simbolo={item.simbolo} size="md" fw={800} />
+                            </Box>
+                        )}
                     </Group>
                     {!item.isFicticio && !esPresupuesto && (
                         <Checkbox size="xs" mt={6} color="teal" label="Afectar inventario" checked={item.afectaInventario} onChange={(e) => toggleAfectaInventario(item.clave, e.currentTarget.checked)} />
@@ -1340,7 +1590,11 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                                 ) : (
                                     <Avatar src={item.imagen || item.marcaImagen} size={24} radius="sm"><IconPackage size={13} /></Avatar>
                                 )}
-                                <Text fw={600} size="sm" lineClamp={1} title={item.nombre} style={{ minWidth: 0, flex: '0 1 auto' }}>{item.nombre}</Text>
+                                {item.isFicticio ? (
+                                    <NombreFicticioEditable valor={item.nombre} onCommit={(n) => fijarNombreFicticio(item.clave, n)} />
+                                ) : (
+                                    <Text fw={600} size="sm" lineClamp={1} title={item.nombre} style={{ minWidth: 0, flex: '0 1 auto' }}>{item.nombre}</Text>
+                                )}
                                 {etiquetasRenglon(item)}
                                 {!item.isFicticio && item.presentacion !== 'UNIDAD' && (
                                     <Badge size="xs" color="grape" variant="filled" tt="none" style={{ flexShrink: 0 }}>{item.presentacionEtiqueta} · {item.cantidad} und</Badge>
@@ -1501,7 +1755,7 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                         </Badge>
                         {origen && <Badge size="lg" color="teal" variant="light">{origen.numero ? `Presupuesto ${origen.numero}` : 'Venta dividida'}{origen.de > 1 ? ` · factura ${origen.parte} de ${origen.de}` : ''}</Badge>}
                     </Group>
-                    {botonCero}
+                    <Group gap="xs">{botonImportarIA}{botonCero}</Group>
                 </Group>
             </Paper>
 
@@ -1589,23 +1843,48 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
     const contenidoTelefono = (
         <Box style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: '#f1f3f7' }}>
-            <Box style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', borderBottom: '1px solid #e3e7ee', padding: 'calc(6px + env(safe-area-inset-top, 0px)) 8px 6px', boxShadow: '0 4px 12px -8px rgba(0,0,0,0.25)' }}>
-                <Group justify="space-between" wrap="nowrap" gap="xs" mb={6}>
-                    <Box style={{ minWidth: 0 }}>
-                        <Text fw={800} size="md" c="blue.9" lh={1.15} truncate="end">{esPresupuesto ? (editando ? `Modificar ${editando.numero}` : 'Nuevo presupuesto') : 'Nueva venta'}</Text>
-                        <Group gap={4} wrap="nowrap">
-                            <IconExchange size={13} color={sinTasaFecha ? '#e03131' : (usaFechaAnterior ? '#7048e8' : '#1971C2')} />
-                            <Text size="xs" c={sinTasaFecha ? 'red.8' : (usaFechaAnterior ? 'grape.8' : 'dimmed')} lh={1.15}>
-                                BCV{usaFechaAnterior ? ` (${fechaEmision})` : ''}: <b>{cargandoTasaFecha ? 'Cargando…' : (sinTasaFecha ? 'Sin tasa' : (tasaActiva ? `${tasaActiva} Bs/$` : '…'))}</b>
+            <Box style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 20,
+                background: '#fff',
+                borderBottom: '1px solid #e3e7ee',
+                padding: esPresupuesto ? 'calc(4px + env(safe-area-inset-top, 0px)) 8px 5px' : 'calc(6px + env(safe-area-inset-top, 0px)) 8px 6px',
+                boxShadow: '0 4px 12px -8px rgba(0,0,0,0.25)',
+            }}>
+                {esPresupuesto ? (
+                    <Group justify="space-between" wrap="nowrap" gap={6} mb={5}>
+                        <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+                            <Text fw={800} size="sm" c="blue.9" lh={1.1} truncate="end">
+                                {editando ? `Modif. ${editando.numero}` : 'Nuevo presupuesto'}
                             </Text>
+                            <Badge size="xs" color={sinTasaFecha ? 'red' : 'blue'} variant="light" style={{ flexShrink: 0 }}>
+                                {cargandoTasaFecha ? '…' : (sinTasaFecha ? 'Sin BCV' : (tasaActiva ? `${tasaActiva} Bs` : 'BCV…'))}
+                            </Badge>
                         </Group>
-                    </Box>
-                    <Group gap={4} wrap="nowrap">{botonCero}<CloseButton size="lg" onClick={onClose} aria-label="Cerrar" /></Group>
-                </Group>
+                        <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+                            {botonCero}
+                            <CloseButton size="md" onClick={onClose} aria-label="Cerrar" />
+                        </Group>
+                    </Group>
+                ) : (
+                    <Group justify="space-between" wrap="nowrap" gap="xs" mb={6}>
+                        <Box style={{ minWidth: 0 }}>
+                            <Text fw={800} size="md" c="blue.9" lh={1.15} truncate="end">Nueva venta</Text>
+                            <Group gap={4} wrap="nowrap">
+                                <IconExchange size={13} color={sinTasaFecha ? '#e03131' : (usaFechaAnterior ? '#7048e8' : '#1971C2')} />
+                                <Text size="xs" c={sinTasaFecha ? 'red.8' : (usaFechaAnterior ? 'grape.8' : 'dimmed')} lh={1.15}>
+                                    BCV{usaFechaAnterior ? ` (${fechaEmision})` : ''}: <b>{cargandoTasaFecha ? 'Cargando…' : (sinTasaFecha ? 'Sin tasa' : (tasaActiva ? `${tasaActiva} Bs/$` : '…'))}</b>
+                                </Text>
+                            </Group>
+                        </Box>
+                        <Group gap={4} wrap="nowrap">{botonCero}<CloseButton size="lg" onClick={onClose} aria-label="Cerrar" /></Group>
+                    </Group>
+                )}
                 <SegmentedControl
                     fullWidth size="xs" value={vista} onChange={setVista} color="blue.8"
                     data={[
-                        { value: 'productos', label: 'Productos' },
+                        { value: 'productos', label: esPresupuesto ? 'Buscar' : 'Productos' },
                         { value: 'carrito', label: carrito.length ? `Carrito (${carrito.length})` : 'Carrito' },
                         { value: 'datos', label: esPresupuesto ? 'Datos' : 'Datos y pago' },
                     ]}
@@ -1614,24 +1893,59 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
             <Box p={6} style={{ flex: 1 }}>
                 {vista === 'productos' && (
-                    <Stack gap={4}>
-                        {/* Qué se va a emitir, método de entrega y cliente: se cambia en «Datos y pago» */}
-                        <UnstyledButton onClick={() => setVista('datos')} px={8} py={6} bg="white" style={{ borderRadius: 6, border: `1px solid ${(faltaDocumento || faltaEntrega || faltaTarifa || faltaCliente) ? 'var(--mantine-color-red-4)' : '#dee2e6'}` }}>
-                            <Group justify="space-between" wrap="nowrap" gap="xs">
-                                <Box style={{ minWidth: 0 }}>
-                                    <Text size="xs" fw={700} lh={1.25} truncate="end">
-                                        {esPresupuesto ? 'Presupuesto' : (faltaDocumento ? 'Falta documento' : `${tipoDocumentoActual} ${formVenta.values.numeroDocumento}`)} · {etiquetaTarifa || 'Falta tarifa'}
-                                    </Text>
-                                    <Text fz={11} lh={1.25} c={(faltaEntrega || faltaCliente) ? 'red.7' : 'dimmed'} fw={(faltaEntrega || faltaCliente) ? 700 : 400} truncate="end">
-                                        {!esPresupuesto && `${etiquetaEntregaCorta || 'Falta método de entrega'} · `}{clienteSeleccionado ? clienteSeleccionado.nombre : (faltaCliente ? 'Falta elegir el cliente' : 'Sin cliente')}
-                                    </Text>
-                                </Box>
-                                <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
-                                    <Text size="xs" fw={700} c="blue.7">Cambiar</Text>
-                                    <IconChevronRight size={15} color="var(--mantine-color-blue-7)" />
+                    <Stack gap={esPresupuesto ? 6 : 4}>
+                        {esPresupuesto ? (
+                            <Paper withBorder p={6} radius="sm" bg="white">
+                                <Group justify="space-between" wrap="nowrap" gap={6} mb={5}>
+                                    <UnstyledButton onClick={() => setVista('datos')} style={{ minWidth: 0, flex: 1 }}>
+                                        <Text fz={11} truncate="end" lh={1.2}>
+                                            Cliente: <b>{clienteSeleccionado ? clienteSeleccionado.nombre : 'Sin cliente'}</b>{' '}
+                                            <Text span c="blue.7" fw={700}>· Cambiar →</Text>
+                                        </Text>
+                                    </UnstyledButton>
+                                    <Badge size="xs" color="teal" variant="light" style={{ flexShrink: 0 }}>
+                                        {formVenta.values.validoDias || 15}d
+                                    </Badge>
                                 </Group>
-                            </Group>
-                        </UnstyledButton>
+                                {tarifaBloqueada ? (
+                                    <Group justify="space-between" gap={6} wrap="nowrap">
+                                        <Badge size="sm" color={esMonedaBs ? 'teal' : 'blue'} variant="light">{etiquetaTarifa}</Badge>
+                                        <Text fz={10.5} c="dimmed" truncate="end">Vacía carrito para cambiar tarifa</Text>
+                                    </Group>
+                                ) : (
+                                    <SegmentedControl
+                                        fullWidth
+                                        size="xs"
+                                        color={esMonedaBs ? 'teal' : 'blue'}
+                                        value={formVenta.values.tipoPrecio || ''}
+                                        onChange={cambiarTarifa}
+                                        style={faltaTarifa ? { outline: '2px solid #e03131', outlineOffset: 1, borderRadius: 4 } : undefined}
+                                        data={opcionesTarifa.map((o) => ({
+                                            value: o.value,
+                                            label: { precio7: 'P7 $', precio6: 'P6 $', precio4: 'P4 Bs', precio5: 'P5 Bs', precio1: 'P1 Bs' }[o.value] || o.label,
+                                        }))}
+                                    />
+                                )}
+                            </Paper>
+                        ) : (
+                            /* Qué se va a emitir, método de entrega y cliente: se cambia en «Datos y pago» */
+                            <UnstyledButton onClick={() => setVista('datos')} px={8} py={6} bg="white" style={{ borderRadius: 6, border: `1px solid ${(faltaDocumento || faltaEntrega || faltaTarifa || faltaCliente) ? 'var(--mantine-color-red-4)' : '#dee2e6'}` }}>
+                                <Group justify="space-between" wrap="nowrap" gap="xs">
+                                    <Box style={{ minWidth: 0 }}>
+                                        <Text size="xs" fw={700} lh={1.25} truncate="end">
+                                            {faltaDocumento ? 'Falta documento' : `${tipoDocumentoActual} ${formVenta.values.numeroDocumento}`} · {etiquetaTarifa || 'Falta tarifa'}
+                                        </Text>
+                                        <Text fz={11} lh={1.25} c={(faltaEntrega || faltaCliente) ? 'red.7' : 'dimmed'} fw={(faltaEntrega || faltaCliente) ? 700 : 400} truncate="end">
+                                            {`${etiquetaEntregaCorta || 'Falta método de entrega'} · `}{clienteSeleccionado ? clienteSeleccionado.nombre : (faltaCliente ? 'Falta elegir el cliente' : 'Sin cliente')}
+                                        </Text>
+                                    </Box>
+                                    <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
+                                        <Text size="xs" fw={700} c="blue.7">Cambiar</Text>
+                                        <IconChevronRight size={15} color="var(--mantine-color-blue-7)" />
+                                    </Group>
+                                </Group>
+                            </UnstyledButton>
+                        )}
                         {buscador}
                         {!productos && <Text c="dimmed" ta="center" size="sm" py="lg">Cargando productos…</Text>}
                         {productosFiltrados.map(filaProducto)}
@@ -1641,16 +1955,22 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
 
                 {vista === 'carrito' && (
                     carrito.length === 0 ? (
-                        <Stack align="center" gap="sm" py={40}>
-                            <ThemeIcon size={50} radius="xl" variant="light" color="blue"><IconShoppingCart size={26} /></ThemeIcon>
+                        <Stack align="center" gap="sm" py={32}>
+                            <ThemeIcon size={46} radius="xl" variant="light" color="blue"><IconShoppingCart size={24} /></ThemeIcon>
                             <Text fw={700}>El carrito está vacío</Text>
-                            <Button variant="light" onClick={() => setVista('productos')}>Agregar productos</Button>
+                            <Group gap="xs" justify="center" wrap="wrap">
+                                <Button size="sm" variant="light" onClick={() => setVista('productos')}>Agregar productos</Button>
+                                {botonImportarIA}
+                            </Group>
                         </Stack>
                     ) : (
                         <Stack gap={6}>
                             <Group justify="space-between" px={2}>
                                 <Text size="xs" fw={700} c="blue.9">{carrito.length} {carrito.length === 1 ? 'producto' : 'productos'} · {unidadesCarrito} und</Text>
-                                <Button size="compact-xs" variant="subtle" leftSection={<IconPlus size={13} />} onClick={() => setVista('productos')}>Agregar más</Button>
+                                <Group gap={4}>
+                                    {botonImportarIA}
+                                    <Button size="compact-xs" variant="subtle" leftSection={<IconPlus size={13} />} onClick={() => setVista('productos')}>Agregar</Button>
+                                </Group>
                             </Group>
                             {tarjetasCarrito}
                         </Stack>
@@ -1682,30 +2002,62 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
             </Box>
 
             {/* Total y botones siempre a la vista */}
-            <Box style={{ position: 'sticky', bottom: 0, zIndex: 15, background: '#fff', padding: '6px 8px calc(8px + env(safe-area-inset-bottom, 0px))', boxShadow: '0 -6px 16px rgba(0,0,0,0.12)', borderTop: '1px solid #e9ecef' }}>
-                <Group justify="space-between" align="flex-end" wrap="nowrap" gap="xs" mb={6}>
-                    <Box style={{ minWidth: 0 }}>
-                        <Text fz={11} c="dimmed" lh={1.25}>Subt. <PrecioVisual valor={subtotal} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} /></Text>
-                        <Text fz={11} c="dimmed" lh={1.25}>IVA <PrecioVisual valor={montoIva} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} />{costoFleteNum > 0 && <> · Flete <PrecioVisual valor={costoFleteNum} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} /></>}</Text>
-                    </Box>
-                    <Box ta="right" style={{ flexShrink: 0 }}>
-                        <Text fz={10} fw={800} c="blue.9" tt="uppercase" lh={1}>Total</Text>
-                        <PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="lg" fw={900} c="blue.9" />
-                        {equivalenteTotal && <Text fz={11} c="dimmed" lh={1.1}>{equivalenteTotal}</Text>}
-                    </Box>
-                </Group>
+            <Box style={{
+                position: 'sticky',
+                bottom: 0,
+                zIndex: 15,
+                background: '#fff',
+                padding: esPresupuesto ? '6px 8px calc(6px + env(safe-area-inset-bottom, 0px))' : '6px 8px calc(8px + env(safe-area-inset-bottom, 0px))',
+                boxShadow: '0 -6px 16px rgba(0,0,0,0.12)',
+                borderTop: '1px solid #e9ecef',
+            }}>
                 {esPresupuesto ? (
-                    <Button fullWidth size="sm" h={40} color="teal" leftSection={<IconFileInvoice size={18} />} onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}>{editando ? 'Guardar cambios' : 'Guardar presupuesto'}</Button>
-                ) : (
-                    <Group gap={6} wrap="nowrap">
-                        <Button size="sm" h={40} px="sm" variant="light" color="teal" onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}
-                            title="Guarda el carrito como presupuesto (con IVA, cliente opcional) sin registrar la venta" style={{ flexShrink: 0 }}>
-                            Presupuesto
-                        </Button>
-                        <Button size="sm" h={40} style={{ flex: 1 }} color="blue.8" leftSection={<IconReceiptTax size={17} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>
-                            Revisar venta
+                    <Group justify="space-between" align="center" wrap="nowrap" gap="xs">
+                        <Box style={{ minWidth: 0 }}>
+                            <Group gap={6} align="baseline" wrap="nowrap">
+                                <Text fz={10} fw={800} c="blue.9" tt="uppercase">Total</Text>
+                                <PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="md" fw={900} c="blue.9" />
+                            </Group>
+                            <Text fz={10} c="dimmed" lh={1.15} truncate="end">
+                                Subt. {simboloMoneda}{formatoNumero(subtotal)} · IVA {simboloMoneda}{formatoNumero(montoIva)}{equivalenteTotal ? ` · ${equivalenteTotal}` : ''}
+                            </Text>
+                        </Box>
+                        <Button
+                            size="sm"
+                            h={36}
+                            color="teal"
+                            leftSection={<IconFileInvoice size={16} />}
+                            onClick={guardarPresupuesto}
+                            loading={guardandoPresupuesto}
+                            disabled={carrito.length === 0}
+                            style={{ flexShrink: 0 }}
+                        >
+                            {editando ? 'Actualizar' : 'Guardar'}
                         </Button>
                     </Group>
+                ) : (
+                    <>
+                        <Group justify="space-between" align="flex-end" wrap="nowrap" gap="xs" mb={6}>
+                            <Box style={{ minWidth: 0 }}>
+                                <Text fz={11} c="dimmed" lh={1.25}>Subt. <PrecioVisual valor={subtotal} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} /></Text>
+                                <Text fz={11} c="dimmed" lh={1.25}>IVA <PrecioVisual valor={montoIva} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} />{costoFleteNum > 0 && <> · Flete <PrecioVisual valor={costoFleteNum} simbolo={simboloMoneda} size="xs" c="dimmed" fw={600} /></>}</Text>
+                            </Box>
+                            <Box ta="right" style={{ flexShrink: 0 }}>
+                                <Text fz={10} fw={800} c="blue.9" tt="uppercase" lh={1}>Total</Text>
+                                <PrecioVisual valor={totalFinal} simbolo={simboloMoneda} size="lg" fw={900} c="blue.9" />
+                                {equivalenteTotal && <Text fz={11} c="dimmed" lh={1.1}>{equivalenteTotal}</Text>}
+                            </Box>
+                        </Group>
+                        <Group gap={6} wrap="nowrap">
+                            <Button size="sm" h={40} px="sm" variant="light" color="teal" onClick={guardarPresupuesto} loading={guardandoPresupuesto} disabled={carrito.length === 0}
+                                title="Guarda el carrito como presupuesto (con IVA, cliente opcional) sin registrar la venta" style={{ flexShrink: 0 }}>
+                                Presupuesto
+                            </Button>
+                            <Button size="sm" h={40} style={{ flex: 1 }} color="blue.8" leftSection={<IconReceiptTax size={17} />} onClick={handleRevisarVenta} disabled={carrito.length === 0}>
+                                Revisar venta
+                            </Button>
+                        </Group>
+                    </>
                 )}
             </Box>
         </Box>
@@ -2037,6 +2389,31 @@ export default function PosModal({ opened, onClose, tasaBcv = 1, modo = 'venta',
                     .original-label { font-size: 10px; margin-bottom: 2px; font-weight: bold;}
                 `}} />
             </Modal>
+
+            {esPresupuesto && (
+                <ImportarPresupuestoIA
+                    opened={modalImportarIA}
+                    onClose={() => setModalImportarIA(false)}
+                    productos={productos || []}
+                    clientes={clientes || []}
+                    tarifaActual={formVenta.values.tipoPrecio}
+                    opcionesTarifa={opcionesTarifa}
+                    tarifaBloqueada={tarifaBloqueada}
+                    onCambiarTarifa={cambiarTarifa}
+                    calcularPrecioInfo={calcularPrecioInfo}
+                    esMonedaBs={esMonedaBs}
+                    tasaActiva={tasaActiva}
+                    isMobile={isMobile}
+                    clienteActualId={formVenta.values.clienteId}
+                    onSeleccionarCliente={(id) => formVenta.setFieldValue('clienteId', String(id))}
+                    onAplicar={(renglones, meta) => {
+                        aplicarImportacionIA(renglones);
+                        if (!formVenta.values.notas && meta?.notasGenerales) {
+                            formVenta.setFieldValue('notas', meta.notasGenerales);
+                        }
+                    }}
+                />
+            )}
         </>
     );
 }
